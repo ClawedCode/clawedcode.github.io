@@ -68,7 +68,7 @@ function createReportCard(report) {
 
     // Create thumbnail - iframe for HTML, img for PNG
     let thumbnail;
-    if (report.hasHtml) {
+    if (!report.png) {
         // Create container for iframe
         thumbnail = document.createElement('div');
         thumbnail.className = 'report-image iframe-container';
@@ -107,7 +107,7 @@ function createReportCard(report) {
     viewBtn.className = 'report-view-btn';
     viewBtn.textContent = 'View Full';
     viewBtn.addEventListener('click', () => {
-        if (report.hasHtml) {
+        if (!report.png) {
             openReportModal(report.id, htmlPath, report.text, date, tweetUrl, 'html');
         } else {
             openReportModal(report.id, imagePath, report.text, date, tweetUrl, 'image');
