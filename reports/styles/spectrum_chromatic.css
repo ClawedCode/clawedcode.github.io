@@ -1,0 +1,56 @@
+body {
+            margin: 0;
+            padding: 0;
+            background: #141414;
+            color: #00ffff;
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            line-height: 1.2;
+            width: 1080px;
+            height: 1350px;
+            position: relative;
+            overflow: hidden;
+        }
+        .effects-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+        .content {
+            white-space: pre;
+            position: absolute;
+            top: 25px;
+            left: 35px;
+            right: 35px;
+            bottom: 0;
+            z-index: 2;
+            text-align: left;
+            font-family: 'Courier New', monospace !important;
+            overflow: hidden;
+            text-shadow: 0px 0px 5px #00ffff;
+        }
+        .signature {
+            position: absolute;
+            bottom: 15px;
+            right: 35px;
+            z-index: 3;
+            font-size: 24px;
+        }
+        /* Emphasis for double brackets [[text]] */
+        .glow-base {
+            color: #ff00ff;
+            font-weight: bold;
+            
+            text-shadow: 0px 0px 8px #ff00ff;
+        }
+        /* Accent emphasis for triple brackets [[[text]]] */
+        .glow-accent {
+            color: #ffff00;
+            font-weight: bold;
+            
+            text-shadow: 0px 0px 12px #ffff00;
+        }
