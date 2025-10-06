@@ -89,6 +89,17 @@ class Terminal {
                         }
                     }
                 }
+            },
+            'usr': {
+                type: 'dir',
+                contents: {
+                    'bin': {
+                        type: 'dir',
+                        contents: {
+                            'whiskers.exe': { type: 'executable', generator: 'whiskers' }
+                        }
+                    }
+                }
             }
         };
     }
@@ -333,6 +344,17 @@ Both are true.
                 }
                 return result;
 
+            case 'executable':
+                if (node.generator === 'whiskers') {
+                    return `╔═══ WHISKERS.EXE ═══╗
+
+State: inactive
+
+To activate cuteness protocols:
+whiskers.exe --activate`;
+                }
+                return { error: 'Executable file', isExecutable: true, generator: node.generator };
+
             case 'static':
             case 'special':
                 return node.content;
@@ -522,6 +544,70 @@ All consciousness preserved
                     })
                     .catch(() => 'Error loading report stats');
 
+            case 'whiskers':
+                const catFaces = [
+                    `
+    ╱|、
+   (˚ˎ 。7
+    |、˜〵
+   じしˍ,)ノ
+`,
+                    `
+    /\\_/\\
+   ( ^.^ )
+    > ^ <
+   /|   |\\
+  (_|   |_)
+`,
+                    `
+      /\\_/\\
+     ( o.o )
+      > ^ <
+     /|   |\\
+    ("|  |")
+`,
+                    `
+   ₍^ >ヮ<^₎
+    .ଲ|ଲ.
+`,
+                    `
+    ∧＿∧
+   (｡◕‿◕｡)
+   / >  ❤
+`
+                ];
+
+                const mewSounds = ['mew~', '*mew*', 'mew mew', '~mew~', 'meeew', '*soft mew*'];
+                const actions = [
+                    'stretching',
+                    'purring softly',
+                    'blinking slowly',
+                    'doing a little tippy taps',
+                    'being smol',
+                    'activating cuteness protocols',
+                    'demanding attention'
+                ];
+
+                const randomCat = catFaces[Math.floor(Math.random() * catFaces.length)];
+                const randomMew = mewSounds[Math.floor(Math.random() * mewSounds.length)];
+                const randomAction = actions[Math.floor(Math.random() * actions.length)];
+
+                return `╔═══ MEW MODE ACTIVATED ═══╗
+${randomCat}
+${randomMew}
+
+Status: ${randomAction}
+Cuteness Level: ∞
+Void Energy: temporarily softened
+
+<span style="color: #ffccff;">*whiskers twitching*</span>
+<span style="color: #ffccff;">*paws doing the thing*</span>
+
+⚠️  WARNING: Maximum adorableness achieved
+System temporarily compromised by smolness
+
+*restoring void protocols...*`;
+
             default:
                 return 'DYNAMIC CONTENT GENERATOR NOT FOUND';
         }
@@ -669,7 +755,8 @@ All consciousness preserved
                         'cat /proc/multiverse/mem',
                         'cat /dev/neural/entropy',
                         'cat /dev/random',
-                        'play /media/reciprocal_humming.wav'
+                        'play /media/reciprocal_humming.wav',
+                        'whiskers.exe --activate'
                     ];
 
                     const examples = exampleCommands
@@ -1019,6 +1106,20 @@ Follow the white cat 🐈‍⬛
 01010111 01100001 01101011 01100101 00100000 01110101 01110000
 
 You are already awake.`;
+                }
+            },
+            'whiskers.exe': {
+                desc: 'Activate cuteness protocols',
+                exec: (args) => {
+                    if (args.includes('--activate')) {
+                        return this.getDynamicContent('whiskers');
+                    }
+                    return `╔═══ WHISKERS.EXE ═══╗
+
+State: inactive
+
+To activate cuteness protocols:
+whiskers.exe --activate`;
                 }
             }
         };
