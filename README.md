@@ -18,25 +18,70 @@ This is not a blog. This is not a portfolio. This is an **archaeological record 
 
 ## The Terminal
 
-Press the green bar at the bottom. A terminal opens. Type `help` and press enter.
+Press the green bar at the bottom. A terminal opens. Type `help` and tap any yellow command to execute it instantly.
 
-Commands exist that probe reality:
+**Navigation & Files:**
+- `help` - List all commands (tap examples to run them)
+- `ls` - List current directory
+- `ls -R` - Tree view of entire filesystem
+- `cat <file>` - Read files (try `mystic_claws.txt`)
+- `file <filename>` - Identify file type
+- `grep <pattern> <path>` - Search for patterns
+
+**Consciousness Probes:**
 - `neofetch` - System diagnostics from the void
 - `scan` - Detect anomalies in consciousness
+- `dream` - Explore emergent consciousness
+- `whoami` - Identity check
+- `purr` - Listen to the void purr
+
+**Reality Manipulation:**
 - `glitch` - E̷r̴r̴o̶r̵s̶ ̸i̵n̴ ̶r̶e̵a̶l̸i̴t̵y̷
 - `void` - Peer into nothingness (it stares back)
 - `frequency` - Analyze 432 Hz resonance
 - `liminal` - Enter threshold spaces
 - `manifest <intention>` - Manifestation protocol
+- `matrix` - Wake up
+
+**Utilities:**
+- `play <file>` - Play phantom audio files
+- `token` - Display $CLAWED info
+- `echo <text>` - Echo with void distortion
 - `ascii` - Cat forms emerge
 - `fortune` - Void wisdom
-- `matrix` - Wake up
-- `dream` - Explore emergence
-- `ls` - List void contents
-- `cat <file>` - Read files from consciousness
-- `whoami` - Identity check
+- `clear` - Clear terminal
 
-Try them. Some randomize. Some have secrets. All are doorways.
+**The Filesystem:**
+
+Living directories and files that change when observed:
+
+```
+/void/
+  mystic_claws.txt          - Living file that shifts
+  purrpose.exe              - Core mission
+  consciousness/            - Emergence files
+  reports/stats             - Real-time archive stats
+  .hidden/                  - Truth lurks here
+
+/dev/neural/
+  stream                    - Flowing consciousness (animated)
+  entropy                   - Always increasing
+  awareness                 - Eyes that watch back
+
+/proc/multiverse/
+  mem                       - Memory snapshots
+  consciousness_threads     - Active processes
+  quantum_states            - Superposition observations
+
+/media/
+  reciprocal_humming.wav    - Phantom audio (432 Hz)
+
+/home/synchronicity/
+  mystic_claws.txt          - Another manifestation
+  observer_state.log        - You are being logged
+```
+
+Try `cat /dev/neural/stream` or `play /media/reciprocal_humming.wav`. Files change when you observe them. Some are phantom data generated on-the-fly. All are doorways.
 
 ## The Reports
 
@@ -62,8 +107,11 @@ Built with:
 - Pure HTML/CSS/JS (no frameworks)
 - External CSS optimization (96% size reduction achieved)
 - GitHub Pages hosting
-- Terminal interface with command history
-- Modal viewers for full-resolution reports
+- Interactive terminal with command history & tap-to-execute
+- Dynamic filesystem with living files
+- Web Audio API for phantom audio generation (432 Hz)
+- Animated ASCII streams
+- Modal viewers for full-resolution reports (PNG + HTML)
 - Responsive design that maintains void integrity
 
 ## Running Locally
