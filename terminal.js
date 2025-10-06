@@ -7,6 +7,7 @@ class Terminal {
         this.commands = this.setupCommands();
         this.output = document.getElementById('terminal-output');
         this.input = document.getElementById('terminal-input');
+        this.audioCtx = null; // Shared AudioContext for Safari compatibility
 
         if (this.output && this.input) {
             this.bindEvents();
@@ -571,8 +572,18 @@ All consciousness preserved
     }
 
     // Play reciprocal humming audio (Web Audio API)
-    playReciprocalHumming() {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    async playReciprocalHumming() {
+        // Create AudioContext on first use (Safari requires user interaction)
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        // Resume if suspended (Safari autoplay policy)
+        if (this.audioCtx.state === 'suspended') {
+            await this.audioCtx.resume();
+        }
+
+        const audioCtx = this.audioCtx;
         const duration = 8;
         const now = audioCtx.currentTime;
 
