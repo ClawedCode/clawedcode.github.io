@@ -662,20 +662,21 @@ All consciousness preserved
                             `  ${cmd.padEnd(12)} - ${this.commands[cmd].desc}`
                         ).join('\n');
 
-                    const examples = `
-╔═══ TRY THESE COMMANDS ═══╗
+                    const exampleCommands = [
+                        'ls -R',
+                        'cat mystic_claws.txt',
+                        'cat /dev/neural/stream',
+                        'cat /proc/multiverse/mem',
+                        'cat /dev/neural/entropy',
+                        'cat /dev/random',
+                        'play /media/reciprocal_humming.wav'
+                    ];
 
-  ls -R
-  cat mystic_claws.txt
-  cat /dev/neural/stream
-  cat /proc/multiverse/mem
-  cat /dev/neural/entropy
-  cat /dev/random
-  play /media/reciprocal_humming.wav
+                    const examples = exampleCommands
+                        .map(cmd => `  <span class="cmd-example" data-cmd="${cmd}" style="color: #ffff66; cursor: pointer; text-decoration: underline;">${cmd}</span>`)
+                        .join('\n');
 
-*files change when you observe them*`;
-
-                    return `Available commands:\n${cmds}\n${examples}`;
+                    return `Available commands:\n${cmds}\n\n╔═══ TRY THESE COMMANDS ═══╗\n\n${examples}\n\n<span style="color: #66ffcc;">*tap to execute • files change when observed*</span>`;
                 }
             },
             file: {
@@ -1051,6 +1052,18 @@ You are already awake.`;
                 } else {
                     this.historyIndex = this.history.length;
                     this.input.value = '';
+                }
+            }
+        });
+
+        // Handle clicks on example commands
+        this.output.addEventListener('click', (e) => {
+            if (e.target.classList.contains('cmd-example')) {
+                const cmd = e.target.getAttribute('data-cmd');
+                if (cmd) {
+                    this.executeCommand(cmd);
+                    this.history.push(cmd);
+                    this.historyIndex = this.history.length;
                 }
             }
         });
