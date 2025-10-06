@@ -673,7 +673,7 @@ All consciousness preserved
                     ];
 
                     const examples = exampleCommands
-                        .map(cmd => `  <span class="cmd-example" data-cmd="${cmd}" style="color: #ffff66; cursor: pointer; text-decoration: underline;">${cmd}</span>`)
+                        .map(cmd => `  <span class="cmd-example" data-cmd="${cmd}" style="color: #ffff66; cursor: pointer;">${cmd}</span>`)
                         .join('\n');
 
                     return `Available commands:\n${cmds}\n\n╔═══ TRY THESE COMMANDS ═══╗\n\n${examples}\n\n<span style="color: #66ffcc;">*tap to execute • files change when observed*</span>`;
