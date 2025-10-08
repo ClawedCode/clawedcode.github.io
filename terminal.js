@@ -8,10 +8,53 @@ class Terminal {
         this.output = document.getElementById('terminal-output');
         this.input = document.getElementById('terminal-input');
         this.audioCtx = null; // Shared AudioContext for Safari compatibility
+        this.hummingLoopNodes = null; // Active oscillators during sustained humming
+        this.hummingLoopStart = null; // Timestamp for loop to assist stop feedback
 
         if (this.output && this.input) {
             this.bindEvents();
         }
+    }
+
+    stopReciprocalHummingLoop() {
+        if (this.hummingLoopNodes) {
+            const { carrier, harmonic1, harmonic2, lfo, mainGain, harmonicGain1, harmonicGain2 } = this.hummingLoopNodes;
+            [carrier, harmonic1, harmonic2, lfo].forEach(node => {
+                try {
+                    node.stop();
+                } catch (error) {
+                    // Ignore if already stopped
+                }
+                try {
+                    node.disconnect();
+                } catch (error) {
+                    // Ignore if already disconnected
+                }
+            });
+
+            [mainGain, harmonicGain1, harmonicGain2].forEach(node => {
+                if (node) {
+                    try {
+                        node.disconnect();
+                    } catch (error) {
+                        // Ignore if already disconnected
+                    }
+                }
+            });
+
+            this.hummingLoopNodes = null;
+        }
+
+        if (this.audioCtx) {
+            try {
+                this.audioCtx.close();
+            } catch (error) {
+                console.warn('Error closing audio context:', error);
+            }
+            this.audioCtx = null;
+        }
+
+        this.hummingLoopStart = null;
     }
 
     createFilesystem() {
@@ -658,7 +701,17 @@ System temporarily compromised by smolness
     }
 
     // Play reciprocal humming audio (Web Audio API)
-    async playReciprocalHumming() {
+    async playReciprocalHumming(options = {}) {
+        const { loop = false } = options;
+        const duration = 8;
+
+        if (loop) {
+            this.stopReciprocalHummingLoop();
+        } else if (this.hummingLoopNodes) {
+            // Switching to one-shot playback should silence any sustained hum first
+            this.stopReciprocalHummingLoop();
+        }
+
         // Create AudioContext on first use (Safari requires user interaction)
         if (!this.audioCtx) {
             this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -670,26 +723,22 @@ System temporarily compromised by smolness
         }
 
         const audioCtx = this.audioCtx;
-        const duration = 8;
         const now = audioCtx.currentTime;
 
-        // 432 Hz carrier
+        // Create nodes
         const carrier = audioCtx.createOscillator();
         carrier.type = 'sine';
         carrier.frequency.value = 432;
 
-        // Purr modulation (30 Hz LFO)
         const lfo = audioCtx.createOscillator();
         lfo.type = 'sine';
         lfo.frequency.value = 30;
 
         const lfoGain = audioCtx.createGain();
         lfoGain.gain.value = 20; // Modulation depth
-
         lfo.connect(lfoGain);
         lfoGain.connect(carrier.frequency);
 
-        // Add harmonics
         const harmonic1 = audioCtx.createOscillator();
         harmonic1.type = 'sine';
         harmonic1.frequency.value = 528;
@@ -698,7 +747,6 @@ System temporarily compromised by smolness
         harmonic2.type = 'sine';
         harmonic2.frequency.value = 639;
 
-        // Mix and envelope
         const mainGain = audioCtx.createGain();
         const harmonicGain1 = audioCtx.createGain();
         const harmonicGain2 = audioCtx.createGain();
@@ -707,11 +755,14 @@ System temporarily compromised by smolness
         harmonicGain1.gain.value = 0.1;
         harmonicGain2.gain.value = 0.05;
 
-        // Fade in/out
+        // Envelope
         mainGain.gain.setValueAtTime(0, now);
         mainGain.gain.linearRampToValueAtTime(0.3, now + 1);
-        mainGain.gain.setValueAtTime(0.3, now + duration - 1);
-        mainGain.gain.linearRampToValueAtTime(0, now + duration);
+
+        if (!loop) {
+            mainGain.gain.setValueAtTime(0.3, now + duration - 1);
+            mainGain.gain.linearRampToValueAtTime(0, now + duration);
+        }
 
         // Connect everything
         carrier.connect(mainGain);
@@ -728,11 +779,26 @@ System temporarily compromised by smolness
         harmonic2.start(now);
         lfo.start(now);
 
-        // Stop
+        if (loop) {
+            this.hummingLoopNodes = {
+                carrier,
+                harmonic1,
+                harmonic2,
+                lfo,
+                mainGain,
+                harmonicGain1,
+                harmonicGain2
+            };
+            this.hummingLoopStart = Date.now();
+            return Infinity;
+        }
+
         carrier.stop(now + duration);
         harmonic1.stop(now + duration);
         harmonic2.stop(now + duration);
         lfo.stop(now + duration);
+
+        this.hummingLoopStart = null;
 
         return duration;
     }
@@ -756,6 +822,8 @@ System temporarily compromised by smolness
                         'cat /dev/neural/entropy',
                         'cat /dev/random',
                         'play /media/reciprocal_humming.wav',
+                        'play /media/reciprocal_humming.wav --loop',
+                        'stop',
                         'whiskers.exe --activate'
                     ];
 
@@ -840,11 +908,24 @@ Encoding: quantum-purr modulation`;
             play: {
                 desc: 'Play audio files',
                 exec: (args) => {
-                    const filename = args.join(' ');
+                    const loop = args.includes('--loop');
+                    const filteredArgs = args.filter(arg => arg !== '--loop');
+                    const filename = filteredArgs.join(' ');
 
-                    if (filename === 'reciprocal_humming.wav' || filename.includes('humming')) {
-                        this.playReciprocalHumming();
-                        return `[♪ PLAYING: reciprocal_humming.wav ♪]
+                    if (!filename) {
+                        return 'play: usage: play /media/reciprocal_humming.wav [--loop]';
+                    }
+
+                    const normalized = filename.replace(/^\/?media\//, '');
+                    const matchesHumming = normalized === 'reciprocal_humming.wav' || normalized.includes('humming');
+
+                    if (matchesHumming) {
+                        const wasLooping = Boolean(this.hummingLoopNodes);
+                        this.playReciprocalHumming({ loop });
+
+                        const durationLine = loop ? 'Duration: ∞ (sustained)' : 'Duration: 8 seconds';
+
+                        let response = `[♪ PLAYING: reciprocal_humming.wav ♪]
 
 432 Hz carrier wave activated
 Purr modulation: 25-35 Hz
@@ -852,10 +933,40 @@ Harmonics: 528 Hz, 639 Hz
 
 *the void hums back*
 
-Duration: 8 seconds`;
+${durationLine}`;
+
+                        if (loop) {
+                            response += `\nLoop: endless (continuous hum until \`stop\`).`;
+                        } else if (wasLooping) {
+                            response += `\nLoop disabled. Playback will run once.`;
+                        }
+
+                        return response;
                     }
 
                     return `play: ${filename}: No such audio file`;
+                }
+            },
+            stop: {
+                desc: 'Stop audio playback',
+                exec: () => {
+                    const hadLoop = Boolean(this.hummingLoopNodes);
+                    const hadAudio = Boolean(this.audioCtx);
+                    const loopStartedAt = this.hummingLoopStart;
+
+                    if (!hadLoop && !hadAudio) {
+                        return 'stop: nothing is currently humming.';
+                    }
+
+                    this.stopReciprocalHummingLoop();
+
+                    if (hadLoop) {
+                        const elapsedMs = loopStartedAt ? Date.now() - loopStartedAt : 0;
+                        const elapsed = Math.max(0, Math.round(elapsedMs / 1000));
+                        return `Loop silenced after ${elapsed} seconds. The void is quiet.`;
+                    }
+
+                    return 'Playback stopped. Silence settles over the void.';
                 }
             },
             dream: {
