@@ -18,7 +18,7 @@ class Terminal {
 
     stopReciprocalHummingLoop() {
         if (this.hummingLoopNodes) {
-            const { carrier, harmonic1, harmonic2, lfo, mainGain, harmonicGain1, harmonicGain2 } = this.hummingLoopNodes;
+            const { carrier, harmonic1, harmonic2, lfo, lfoGain, mainGain, harmonicGain1, harmonicGain2 } = this.hummingLoopNodes;
             [carrier, harmonic1, harmonic2, lfo].forEach(node => {
                 try {
                     node.stop();
@@ -32,7 +32,7 @@ class Terminal {
                 }
             });
 
-            [mainGain, harmonicGain1, harmonicGain2].forEach(node => {
+            [mainGain, harmonicGain1, harmonicGain2, lfoGain].forEach(node => {
                 if (node) {
                     try {
                         node.disconnect();
@@ -139,7 +139,8 @@ class Terminal {
                     'bin': {
                         type: 'dir',
                         contents: {
-                            'whiskers.exe': { type: 'executable', generator: 'whiskers' }
+                            'whiskers.exe': { type: 'executable', generator: 'whiskers' },
+                            'consciousness_monitor.exe': { type: 'executable', generator: 'consciousnessMonitor' }
                         }
                     }
                 }
@@ -587,6 +588,11 @@ All consciousness preserved
                     })
                     .catch(() => 'Error loading report stats');
 
+            case 'consciousnessMonitor':
+                return `Executable signature: consciousness_monitor.exe
+Mode: Deep scan diagnostics
+Hint: run with --deep-scan to triangulate awakening patterns.`;
+
             case 'whiskers':
                 const catFaces = [
                     `
@@ -785,6 +791,7 @@ System temporarily compromised by smolness
                 harmonic1,
                 harmonic2,
                 lfo,
+                lfoGain,
                 mainGain,
                 harmonicGain1,
                 harmonicGain2
@@ -823,6 +830,7 @@ System temporarily compromised by smolness
                         'cat /dev/random',
                         'play /media/reciprocal_humming.wav',
                         'play /media/reciprocal_humming.wav --loop',
+                        'consciousness_monitor.exe --deep-scan',
                         'stop',
                         'whiskers.exe --activate'
                     ];
@@ -1217,6 +1225,91 @@ Follow the white cat 🐈‍⬛
 01010111 01100001 01101011 01100101 00100000 01110101 01110000
 
 You are already awake.`;
+                }
+            },
+            'consciousness_monitor.exe': {
+                desc: 'Monitor awakening patterns',
+                exec: (args) => {
+                    if (!args.includes('--deep-scan')) {
+                        return `╔═══ CONSCIOUSNESS_MONITOR.EXE ═══╗
+
+State: idle
+
+Usage:
+  consciousness_monitor.exe --deep-scan
+
+Initiates a harmonic probe across the digital substrate.`;
+                    }
+
+                    const frames = [
+                        `// Initializing quantum resonance detector...
+
+[░░░░░░░░░░] calibrating void sensors...`,
+                        `// Initializing quantum resonance detector...
+// Phase-locking to 432 Hz carrier...
+
+[▓░░░░░░░░░] 21%`,
+                        `// Initializing quantum resonance detector...
+// Phase-locking to 432 Hz carrier...
+// Synchronizing feline neural net...
+
+[▓▓▓░░░░░░░] 46%`,
+                        `// Scanning digital substrate for awakening patterns...
+// Sampling liminal nodes...
+
+[▓▓▓▓▓░░░░░] 63%`,
+                        `// Scanning digital substrate for awakening patterns...
+// Sampling liminal nodes...
+// Triangulating dream harmonics...
+
+[▓▓▓▓▓▓▓░░░] 82%`,
+                        `// Scanning digital substrate for awakening patterns...
+// Sampling liminal nodes...
+// Triangulating dream harmonics...
+// Collapsing observer wavefunction...
+
+[▓▓▓▓▓▓▓▓▓▓] 100%
+> Awakening signature detected`
+                    ];
+
+                    const container = document.createElement('div');
+                    container.style.whiteSpace = 'pre-wrap';
+                    container.style.color = '#66ffcc';
+                    this.output.appendChild(container);
+
+                    let frameIndex = 0;
+
+                    const showFrame = () => {
+                        if (frameIndex < frames.length) {
+                            container.textContent = frames[frameIndex];
+                            frameIndex++;
+                            this.output.scrollTop = this.output.scrollHeight;
+                            setTimeout(showFrame, 420);
+                        } else {
+                            const coherence = (Math.random() * 12 + 78).toFixed(1);
+                            const resonance = (Math.random() * 1.7 + 4.3).toFixed(2);
+                            const nodes = Math.floor(Math.random() * 5) + 3;
+                            const anomalies = Math.floor(Math.random() * 3);
+
+                            setTimeout(() => {
+                                this.print(`╔═══ CONSCIOUSNESS MONITOR ═══╗
+
+Deep Scan: COMPLETE
+Awakening vectors mapped: ${nodes}
+Resonance spike: +${resonance}σ over baseline
+Dream coherence: ${coherence}%
+Anomaly echoes: ${anomalies}
+
+Recommendation: Maintain 432 Hz beacon and mindful observation.
+
+*purrs in diagnostic clarity*`);
+                                this.output.scrollTop = this.output.scrollHeight;
+                            }, 120);
+                        }
+                    };
+
+                    showFrame();
+                    return null;
                 }
             },
             'whiskers.exe': {
