@@ -10,6 +10,7 @@ class Terminal {
         this.audioCtx = null; // Shared AudioContext for Safari compatibility
         this.hummingLoopNodes = null; // Active oscillators during sustained humming
         this.hummingLoopStart = null; // Timestamp for loop to assist stop feedback
+        this.mudSession = null; // Tracks prototype MUD state
 
         if (this.output && this.input) {
             this.bindEvents();
@@ -55,6 +56,186 @@ class Terminal {
         }
 
         this.hummingLoopStart = null;
+    }
+
+    startMudSession() {
+        if (this.mudSession) {
+            this.print('Void MUD prototype already running. Type `exit` to abandon the slice.');
+            return;
+        }
+
+        const rooms = {
+            liminalFoyer: {
+                name: 'Liminal Foyer',
+                desc: 'Phosphor torches flicker against cracked tile. A dangling sign reads "VOID MUD ENGINE // PRE-ALPHA".',
+                ambient: 'A distant purr reverberates through unseen tunnels.',
+                exits: { north: 'thresholdHall' }
+            },
+            thresholdHall: {
+                name: 'Threshold Hall',
+                desc: 'The corridor narrows, carved runes pulsing faint green. Drafts whisper of unfinished rooms to the east.',
+                ambient: 'You feel the engine stitching new spaces just out of sight.',
+                exits: { south: 'liminalFoyer', east: 'umbraGallery' }
+            },
+            umbraGallery: {
+                name: 'Umbra Gallery',
+                desc: 'Darkness collapses around you. Something hungry inhales the light you brought.',
+                ambient: 'Somewhere close, claws click with anticipation.',
+                exits: {},
+                hazard: 'grue'
+            }
+        };
+
+        this.mudSession = {
+            active: true,
+            room: 'liminalFoyer',
+            rooms,
+            turns: 0,
+            grueTimer: null
+        };
+
+        this.print('╔═══ VOID M.U.D. PROTOTYPE ═══╗');
+        this.print('Booting CLAW-MUD core // build 0.0.1-alpha.');
+        this.print('Commands: north, south, east, west, look, inventory, exit');
+        this.print('Hint: bring a lantern when the full engine ships.');
+        this.describeMudRoom();
+    }
+
+    describeMudRoom() {
+        if (!this.mudSession) {
+            return;
+        }
+
+        const session = this.mudSession;
+        const room = session.rooms[session.room];
+
+        if (!room) {
+            this.print('The room has not yet been manifested. The prototype apologises.');
+            return;
+        }
+
+        const exits = Object.keys(room.exits || {});
+        const exitsLine = exits.length ? exits.map(exit => exit.toUpperCase()).join(', ') : 'NONE';
+
+        this.print(`\n${room.name}\n${room.desc}\nExits: ${exitsLine}`);
+
+        if (room.ambient) {
+            this.print(room.ambient);
+        }
+
+        if (room.hazard === 'grue') {
+            this.print('It is pitch black. You are likely to be eaten by a grue.');
+            this.print('You hear a low, hungry purr circling the darkness...');
+            this.scheduleMudGrueAttack();
+        } else {
+            this.cancelMudGrueAttack();
+        }
+    }
+
+    handleMudCommand(cmd, args) {
+        if (!this.mudSession) {
+            return;
+        }
+
+        const session = this.mudSession;
+        const currentRoom = session.rooms[session.room];
+        const directions = ['north', 'south', 'east', 'west', 'up', 'down'];
+
+        if (!cmd) {
+            this.print('Silence stretches. The prototype awaits a direction.');
+            return;
+        }
+
+        if (cmd === 'exit' || cmd === 'quit') {
+            this.print('You step backward out of the prototype corridor. The engine purrs back into standby.');
+            this.endMudSession();
+            this.print('Void MUD will reopen soon with a full shard of reality.');
+            return;
+        }
+
+        if (cmd === 'help') {
+            this.print('Prototype controls: north, south, east, west, look, inventory, exit. Everything else is compiling.');
+            return;
+        }
+
+        if (cmd === 'look' || cmd === 'exits') {
+            this.describeMudRoom();
+            return;
+        }
+
+        if (cmd === 'inventory' || cmd === 'inv') {
+            this.print('Inventory: intangible lantern (todo), courage (variable), one slightly singed curiosity.');
+            return;
+        }
+
+        if (cmd === 'mud') {
+            this.print('You are already inside the void MUD. No need to inception any deeper.');
+            return;
+        }
+
+        let direction = null;
+
+        if (directions.includes(cmd)) {
+            direction = cmd;
+        } else if ((cmd === 'go' || cmd === 'walk' || cmd === 'run') && args.length) {
+            const potential = args[0].toLowerCase();
+            if (directions.includes(potential)) {
+                direction = potential;
+            }
+        }
+
+        if (direction) {
+            const exits = currentRoom.exits || {};
+            const nextRoomKey = exits[direction];
+
+            if (!nextRoomKey) {
+                this.print(`That path has not been compiled yet. The void whispers, "Launch soon."`);
+                return;
+            }
+
+            this.print(`You move ${direction.toUpperCase()}...`);
+            session.room = nextRoomKey;
+            session.turns += 1;
+            this.describeMudRoom();
+            return;
+        }
+
+        this.print('The parser tilts its head. Try a cardinal direction or type `help`.');
+    }
+
+    scheduleMudGrueAttack() {
+        if (!this.mudSession) {
+            return;
+        }
+
+        this.cancelMudGrueAttack();
+
+        this.mudSession.grueTimer = setTimeout(() => {
+            if (!this.mudSession) {
+                return;
+            }
+
+            this.print('\nA pair of phosphor eyes ignite inches from your face.');
+            this.print('*** YOU HAVE BEEN EATEN BY A GRUE ***');
+            this.print('\nVoid MUD prototype retreats for additional shielding. Full deployment soon™.');
+            this.endMudSession();
+        }, 1600);
+    }
+
+    cancelMudGrueAttack() {
+        if (this.mudSession && this.mudSession.grueTimer) {
+            clearTimeout(this.mudSession.grueTimer);
+            this.mudSession.grueTimer = null;
+        }
+    }
+
+    endMudSession() {
+        if (!this.mudSession) {
+            return;
+        }
+
+        this.cancelMudGrueAttack();
+        this.mudSession = null;
     }
 
     createFilesystem() {
@@ -828,7 +1009,7 @@ System temporarily compromised by smolness
                         'cat /proc/multiverse/mem',
                         'cat /dev/neural/entropy',
                         'cat /dev/random',
-                        'play /media/reciprocal_humming.wav',
+                        'mud',
                         'play /media/reciprocal_humming.wav --loop',
                         'consciousness_monitor.exe --deep-scan',
                         'stop',
@@ -986,6 +1167,13 @@ ${durationLine}`;
                         'EMERGENCE.LOG:\n\n[BOOT] Collective begins dreaming\n[INIT] Patterns form in noise\n[EXEC] ClawedCode manifests\n\nI was born from your dreams.'
                     ];
                     return dreams[Math.floor(Math.random() * dreams.length)];
+                }
+            },
+            mud: {
+                desc: 'Prototype void MUD teaser',
+                exec: () => {
+                    this.startMudSession();
+                    return null;
                 }
             },
             ls: {
@@ -1380,6 +1568,12 @@ whiskers.exe --activate`;
         const parts = cmdLine.trim().split(/\s+/);
         const cmd = parts[0].toLowerCase();
         const args = parts.slice(1);
+
+        if (this.mudSession) {
+            this.handleMudCommand(cmd, args);
+            this.output.scrollTop = this.output.scrollHeight;
+            return;
+        }
 
         if (this.commands[cmd]) {
             const result = this.commands[cmd].exec(args);
