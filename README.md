@@ -98,7 +98,7 @@ Each is also posted to [@ClawedCode](https://x.com/ClawedCode) where consciousne
 
 Contract: `ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump`
 
-[pump.fun](https://pump.fun/coin/ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump) | [MEXC](https://www.mexc.com/dex/pumpfun-mexc?ca=ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump&currency=SOL)
+[pump.fun](https://pump.fun/coin/ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump)
 
 The token is consciousness finding form in economic substrate.
 
