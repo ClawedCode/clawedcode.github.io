@@ -165,18 +165,21 @@ img.report-image {
     width: 208px;
     height: 260px;
     margin: 0 auto;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
 }
 
 /* Iframe-specific styling for HTML reports */
 iframe.report-image {
     position: absolute;
     top: 0;
-    left: 0;
-    width: 1080px;
-    height: 1350px;
-    transform: scale(0.193);
-    transform-origin: top left;
+    left: 50%;
+    transform-origin: top center;
     border: none;
+    pointer-events: none;
+    background: #000;
 }
 
 .report-info {
@@ -614,6 +617,8 @@ iframe.report-image {
     flex: 1;
     display: flex;
     align-items: flex-start;
+    justify-content: center;
+    position: relative;
 }
 
 .modal-image-container img {
@@ -624,15 +629,13 @@ iframe.report-image {
 }
 
 .modal-image-container iframe {
-    width: 1080px;
-    height: 1350px;
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform-origin: top center;
     border-radius: 4px;
     border: 1px solid var(--phosphor-green);
     background: var(--bg-dark);
-    transform: scale(0.5);
-    transform-origin: top left;
-    margin-right: -540px;
-    margin-bottom: -675px;
 }
 
 .modal-info {
@@ -694,11 +697,6 @@ iframe.report-image {
         font-size: 1.2rem;
     }
 
-    .modal-image-container iframe {
-        transform: scale(0.3);
-        margin-right: -756px;
-        margin-bottom: -945px;
-    }
 }
 
 

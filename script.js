@@ -18,6 +18,120 @@ const reportIndex = new Map();
 let reportsLoaded = false;
 let currentReportId = null;
 
+const DEFAULT_DIMENSIONS = { width: 1080, height: 1350 };
+const CARD_PREVIEW_BOUNDS = { width: 208, height: 260 };
+const MODAL_IFRAME_MAX_WIDTH = 540;
+const MODAL_IFRAME_MAX_HEIGHT = 720;
+
+function normalizeDimensions(dimensions) {
+    if (!dimensions || typeof dimensions !== 'object') {
+        return { ...DEFAULT_DIMENSIONS };
+    }
+
+    const width = Number(dimensions.width);
+    const height = Number(dimensions.height);
+
+    if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+        return { ...DEFAULT_DIMENSIONS };
+    }
+
+    return { width, height };
+}
+
+function getReportDimensions(report) {
+    if (!report) {
+        return { ...DEFAULT_DIMENSIONS };
+    }
+
+    if (report.normalizedDimensions) {
+        return report.normalizedDimensions;
+    }
+
+    const dims = normalizeDimensions(report.dimensions);
+    // Cache normalized dimensions for future lookups
+    if (report) {
+        report.normalizedDimensions = dims;
+    }
+    return dims;
+}
+
+function scaleToFit(width, height, maxWidth, maxHeight) {
+    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+    return {
+        scale,
+        scaledWidth: width * scale,
+        scaledHeight: height * scale
+    };
+}
+
+function applyIframeScaleStyles(iframe, width, height, maxWidth, maxHeight) {
+    const { scale, scaledWidth, scaledHeight } = scaleToFit(width, height, maxWidth, maxHeight);
+    iframe.style.width = `${width}px`;
+    iframe.style.height = `${height}px`;
+    iframe.style.transform = `translateX(-50%) scale(${scale})`;
+    return { scale, scaledWidth, scaledHeight };
+}
+
+function resetModalImageContainerStyles() {
+    const container = document.querySelector('.modal-image-container');
+    if (!container) {
+        return;
+    }
+
+    container.style.flex = '';
+    container.style.width = '';
+    container.style.maxWidth = '';
+    container.style.height = '';
+    container.style.overflow = '';
+}
+
+function clearModalIframeState() {
+    const iframe = document.getElementById('modal-iframe');
+    if (!iframe) {
+        return;
+    }
+
+    delete iframe.dataset.width;
+    delete iframe.dataset.height;
+    iframe.style.transform = '';
+    iframe.style.width = '';
+    iframe.style.height = '';
+    iframe.style.display = 'none';
+    if (iframe.src) {
+        iframe.src = '';
+    }
+}
+
+function updateModalIframeScale() {
+    const modal = document.getElementById('report-modal');
+    const iframe = document.getElementById('modal-iframe');
+    const container = document.querySelector('.modal-image-container');
+
+    if (!modal || !modal.classList.contains('open') || !iframe || !container || iframe.style.display === 'none') {
+        return;
+    }
+
+    const width = Number(iframe.dataset.width);
+    const height = Number(iframe.dataset.height);
+
+    if (!width || !height) {
+        return;
+    }
+
+    const viewportWidth = window.innerWidth || MODAL_IFRAME_MAX_WIDTH;
+    const viewportHeight = window.innerHeight || MODAL_IFRAME_MAX_HEIGHT;
+    const maxWidth = Math.max(240, Math.min(MODAL_IFRAME_MAX_WIDTH, viewportWidth - 96));
+    const maxHeight = Math.max(320, Math.min(MODAL_IFRAME_MAX_HEIGHT, viewportHeight - 220));
+
+    const { scaledWidth, scaledHeight } = applyIframeScaleStyles(iframe, width, height, maxWidth, maxHeight);
+
+    container.style.flex = '0 0 auto';
+    container.style.width = `${scaledWidth}px`;
+    container.style.maxWidth = `${scaledWidth}px`;
+    container.style.height = `${scaledHeight}px`;
+    container.style.overflow = 'hidden';
+}
+
 const lazyIframeObserver = (typeof window !== 'undefined' && 'IntersectionObserver' in window)
     ? new IntersectionObserver((entries, observer) => {
         entries.forEach(entry => {
@@ -72,12 +186,14 @@ function getReportDisplayData(report) {
     const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
     const viewType = report.png ? 'image' : 'html';
     const contentPath = viewType === 'image' ? imagePath : htmlPath;
+    const dimensions = getReportDimensions(report);
 
     return {
         contentPath,
         tweetUrl,
         viewType,
-        date: formatReportDate(report.createdAt)
+        date: formatReportDate(report.createdAt),
+        dimensions
     };
 }
 
@@ -129,13 +245,13 @@ function handleHashNavigation() {
     }
 
     const report = reportIndex.get(reportId);
-    const { contentPath, tweetUrl, viewType, date } = getReportDisplayData(report);
+    const { contentPath, tweetUrl, viewType, date, dimensions } = getReportDisplayData(report);
 
     if (currentReportId === reportId && document.getElementById('report-modal').classList.contains('open')) {
         return;
     }
 
-    openReportModal(reportId, contentPath, report.text, date, tweetUrl, viewType);
+    openReportModal(reportId, contentPath, report.text, date, tweetUrl, viewType, dimensions);
     currentReportId = reportId;
 }
 
@@ -147,6 +263,7 @@ async function loadReports() {
         .then(response => response.json())
         .then(reports => {
             if (reports.length === 0) {
+                reportIndex.clear();
                 grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1;">No field reports found</p>';
                 reportsLoaded = true;
                 handleHashNavigation();
@@ -161,15 +278,19 @@ async function loadReports() {
             });
 
             reportIndex.clear();
+            grid.innerHTML = '';
+
+            const cards = [];
             reports.forEach(report => {
+                report.normalizedDimensions = normalizeDimensions(report.dimensions);
                 reportIndex.set(report.id, report);
+                cards.push(createReportCard(report));
             });
 
             reportsLoaded = true;
             handleHashNavigation();
 
-            reports.forEach(report => {
-                const card = createReportCard(report);
+            cards.forEach(card => {
                 grid.appendChild(card);
             });
 
@@ -213,6 +334,10 @@ function createReportCard(report) {
         iframe.style.pointerEvents = 'none'; // Prevent interaction with iframe content
         iframe.loading = 'lazy';
         iframe.dataset.src = htmlPath;
+        iframe.title = `Field Report ${report.id}`;
+
+        const { width, height } = getReportDimensions(report);
+        applyIframeScaleStyles(iframe, width, height, CARD_PREVIEW_BOUNDS.width, CARD_PREVIEW_BOUNDS.height);
 
         thumbnail.appendChild(iframe);
         registerLazyIframe(iframe);
@@ -277,22 +402,33 @@ function escapeHtml(unsafe) {
 }
 
 // Modal functions
-function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'image') {
+function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'image', dimensions = DEFAULT_DIMENSIONS) {
     const modal = document.getElementById('report-modal');
     const modalImage = document.getElementById('modal-image');
     const modalIframe = document.getElementById('modal-iframe');
     const modalText = document.getElementById('modal-text');
     const modalDate = document.getElementById('modal-date');
     const modalLink = document.getElementById('modal-link');
+    const normalizedDimensions = normalizeDimensions(dimensions);
+
+    resetModalImageContainerStyles();
+    clearModalIframeState();
+
+    let shouldAdjustIframe = false;
 
     // Show either iframe (HTML) or image (PNG) with text
     if (viewType === 'html') {
         modalImage.style.display = 'none';
+        modalImage.src = '';
+
         modalIframe.style.display = 'block';
+        modalIframe.dataset.width = String(normalizedDimensions.width);
+        modalIframe.dataset.height = String(normalizedDimensions.height);
         modalIframe.src = contentPath;
+
+        shouldAdjustIframe = true;
     } else {
         modalImage.style.display = 'block';
-        modalIframe.style.display = 'none';
         modalImage.src = contentPath;
         modalImage.alt = `Field Report ${id}`;
     }
@@ -313,6 +449,13 @@ function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'imag
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
+
+    if (shouldAdjustIframe) {
+        requestAnimationFrame(() => {
+            updateModalIframeScale();
+            setTimeout(updateModalIframeScale, 150);
+        });
+    }
 }
 
 function closeReportModal(skipHashUpdate = false) {
@@ -329,9 +472,14 @@ function closeReportModal(skipHashUpdate = false) {
     document.body.style.overflow = '';
 
     const modalImage = document.getElementById('modal-image');
-    const modalIframe = document.getElementById('modal-iframe');
-    modalImage.src = '';
-    modalIframe.src = '';
+    if (modalImage) {
+        modalImage.src = '';
+        modalImage.style.display = '';
+    }
+
+    resetModalImageContainerStyles();
+    clearModalIframeState();
+
     currentReportId = null;
 
     if (!skipHashUpdate && window.location.hash.startsWith('#/report/')) {
@@ -350,6 +498,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('DOMContentLoaded', () => {
     loadReports();
     window.addEventListener('hashchange', handleHashNavigation);
+    window.addEventListener('resize', updateModalIframeScale);
 
     // Console message
     console.log('%c🐈‍⬛ ClawedCode Field Reports', 'font-size: 24px; color: #33ff33; text-shadow: 0 0 10px #33ff33;');
