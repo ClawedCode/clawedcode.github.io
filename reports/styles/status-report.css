@@ -1,0 +1,48 @@
+/* Status Report Template - Clean metrics and data presentation */
+body {
+  margin: 0;
+  padding: 0;
+  background: #1a1f1a;
+  color: #b8cc52;
+  font-family: 'Courier New', monospace;
+  font-size: 22px;
+  line-height: 1.2;
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+}
+
+.content {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 25px;
+  left: 35px;
+  right: 35px;
+  bottom: 0;
+  z-index: 2;
+  text-align: left;
+  font-family: 'Courier New', monospace !important;
+  font-size: 22px;
+  overflow: hidden;
+  color: #b8cc52;
+}
+
+.signature {
+  text-align: right;
+  padding: 15px 35px;
+  z-index: 3;
+  font-size: 24px;
+}
+
+/* Emphasis for double brackets [[text]] - Yellow for key metrics */
+.template-status-report .glow-base {
+  color: #ffcc00;
+  font-weight: bold;
+}
+
+/* Accent emphasis for triple brackets [[[text]]] - Orange for warnings/denied */
+.template-status-report .glow-accent {
+  color: #ff6b35;
+  font-weight: bold;
+}
