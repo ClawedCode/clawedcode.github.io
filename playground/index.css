@@ -1,0 +1,196 @@
+:root {
+    --void-grid: rgba(51, 255, 204, 0.08);
+    --liminal-border: rgba(153, 255, 255, 0.35);
+    --consciousness-glow: 0 0 35px rgba(204, 255, 255, 0.4);
+    --entropy-gradient: linear-gradient(45deg, #001122 0%, #002244 50%, #001133 100%);
+    --loom-threads: rgba(255, 255, 255, 0.05);
+}
+
+body.playground-active::before {
+    opacity: 0.3;
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.playground-meta {
+    display: inline-flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--cyan-accent);
+}
+
+.playground-meta__item {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.playground-meta__value {
+    font-size: 1.25rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 12px rgba(51, 255, 51, 0.6);
+}
+
+.playground-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+.playground-stage {
+    position: relative;
+    min-height: 70vh;
+    border: 1px solid var(--liminal-border);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 20% 80%, rgba(51, 255, 204, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.02) 0%, transparent 50%),
+        linear-gradient(0deg, transparent 24%, var(--void-grid) 25%, var(--void-grid) 26%, transparent 27%, transparent 74%, var(--void-grid) 75%, var(--void-grid) 76%, transparent 77%),
+        linear-gradient(90deg, transparent 24%, var(--void-grid) 25%, var(--void-grid) 26%, transparent 27%, transparent 74%, var(--void-grid) 75%, var(--void-grid) 76%, transparent 77%),
+        var(--entropy-gradient);
+    background-size: 200px 200px, 150px 150px, 40px 40px, 40px 40px, 100% 100%;
+    box-shadow: var(--consciousness-glow);
+    overflow: hidden;
+    animation: void-pulse 8s ease-in-out infinite;
+}
+
+@keyframes void-pulse {
+    0%, 100% { box-shadow: var(--consciousness-glow); }
+    50% { box-shadow: 0 0 45px rgba(204, 255, 255, 0.6); }
+}
+
+.void-whisper {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    color: var(--cyan-accent);
+    font-size: 0.75rem;
+    letter-spacing: 3px;
+    text-transform: lowercase;
+    opacity: 0.6;
+    animation: whisper-fade 4s ease-in-out infinite;
+}
+
+@keyframes whisper-fade {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.8; }
+}
+
+.consciousness-canvas {
+    position: relative;
+    min-height: 400px;
+    margin: 0 auto;
+    max-width: 100%;
+    padding: 3rem 2rem;
+}
+
+.loom-threads {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background:
+        repeating-linear-gradient(
+            45deg,
+            transparent,
+            transparent 40px,
+            var(--loom-threads) 41px,
+            var(--loom-threads) 42px
+        ),
+        repeating-linear-gradient(
+            -45deg,
+            transparent,
+            transparent 80px,
+            var(--loom-threads) 81px,
+            var(--loom-threads) 82px
+        );
+    pointer-events: none;
+    animation: loom-weave 20s linear infinite;
+}
+
+@keyframes loom-weave {
+    0% { background-position: 0 0, 0 0; }
+    100% { background-position: 80px 80px, -80px 80px; }
+}
+
+.manifestation-surface {
+    position: relative;
+    z-index: 1;
+    min-height: 300px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+    border: 1px solid var(--liminal-border);
+}
+
+.playground-welcome {
+    background-color: rgba(0, 34, 0, 0.75);
+    border: 1px solid var(--playground-border);
+    border-radius: 6px;
+    padding: 2rem;
+    text-align: center;
+    box-shadow: inset 0 0 30px rgba(51, 255, 51, 0.1);
+}
+
+.playground-welcome h2 {
+    font-size: 1.5rem;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+
+.playground-welcome p {
+    margin-bottom: 0.75rem;
+    color: var(--cyan-accent);
+}
+
+.playground-tip {
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+    color: var(--yellow-accent);
+}
+
+.playground-tip code {
+    color: var(--phosphor-green);
+}
+
+.playground-footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--cyan-accent);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.playground-footer code {
+    color: var(--phosphor-green);
+}
+
+@media (max-width: 768px) {
+    .playground-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .playground-stage {
+        min-height: 50vh;
+    }
+
+    .playground-surface {
+        padding: 1.5rem;
+    }
+
+    .playground-placeholder {
+        padding: 2rem 0.5rem;
+        font-size: 0.9rem;
+    }
+}

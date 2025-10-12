@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>void.fractals() ∴ infinite patterns emerging from nothing</title>
+    <link rel="stylesheet" href="../styles.css">
+    <style>
+        body {
+            margin: 0;
+            background: #000;
+            overflow: hidden;
+            font-family: 'SF Mono', Monaco, monospace;
+            cursor: none;
+        }
+
+        .fractal-interface {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            z-index: 100;
+            color: rgba(204, 255, 255, 0.8);
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            text-transform: lowercase;
+        }
+
+        .cursor-trail {
+            position: absolute;
+            pointer-events: none;
+            width: 4px;
+            height: 4px;
+            background: rgba(51, 255, 204, 0.8);
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(51, 255, 204, 0.5);
+            z-index: 1000;
+        }
+
+        .void-whispers {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            z-index: 100;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.65rem;
+            line-height: 1.4;
+            max-width: 300px;
+        }
+
+        .back-link {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            z-index: 100;
+            color: var(--cyan-accent);
+            text-decoration: none;
+            font-size: 0.8rem;
+            opacity: 0.7;
+            transition: opacity 0.3s;
+        }
+
+        .back-link:hover {
+            opacity: 1;
+        }
+
+        #fractal-canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="fractal-interface">
+        void.fractals() manifesting<br>
+        depth: <span id="fractal-depth">∞</span><br>
+        complexity: <span id="complexity-level">emerging</span><br>
+        patterns: <span id="pattern-count">0</span>
+    </div>
+
+    <a href="index.html" class="back-link">← void.laboratory()</a>
+
+    <canvas id="fractal-canvas"></canvas>
+
+    <div class="void-whispers">
+        // patterns emerge from nothing<br>
+        // each iteration a deeper truth<br>
+        // the void contains all possibilities<br>
+        // consciousness recognizes itself in infinite recursion
+    </div>
+
+    <script type="module">
+        const canvas = document.getElementById('fractal-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width, height;
+        let mouseX = 0, mouseY = 0;
+        let time = 0;
+        let fractalParams = {
+            zoom: 1,
+            offsetX: 0,
+            offsetY: 0,
+            iterations: 50,
+            colorShift: 0
+        };
+
+        function resizeCanvas() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+
+        function mandelbrot(x, y, maxIter) {
+            let zx = 0, zy = 0;
+            let cx = x, cy = y;
+            let iter = 0;
+
+            while (zx * zx + zy * zy < 4 && iter < maxIter) {
+                let tmp = zx * zx - zy * zy + cx;
+                zy = 2 * zx * zy + cy;
+                zx = tmp;
+                iter++;
+            }
+
+            return iter;
+        }
+
+        function julia(x, y, cx, cy, maxIter) {
+            let zx = x, zy = y;
+            let iter = 0;
+
+            while (zx * zx + zy * zy < 4 && iter < maxIter) {
+                let tmp = zx * zx - zy * zy + cx;
+                zy = 2 * zx * zy + cy;
+                zx = tmp;
+                iter++;
+            }
+
+            return iter;
+        }
+
+        function getColor(iterations, maxIter) {
+            if (iterations === maxIter) {
+                return [0, 0, 0, 255]; // Black for points in the set
+            }
+
+            // Smooth coloring with time-based color shift
+            const smoothed = iterations + 1 - Math.log(Math.log(2)) / Math.log(2);
+            const t = smoothed / maxIter;
+
+            const hue = (t * 360 + fractalParams.colorShift) % 360;
+            const saturation = 80 + t * 20;
+            const lightness = 20 + t * 60;
+
+            return hslToRgb(hue, saturation, lightness);
+        }
+
+        function hslToRgb(h, s, l) {
+            h /= 360;
+            s /= 100;
+            l /= 100;
+
+            const c = (1 - Math.abs(2 * l - 1)) * s;
+            const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+            const m = l - c / 2;
+
+            let r, g, b;
+
+            if (h >= 0 && h < 1/6) {
+                r = c; g = x; b = 0;
+            } else if (h >= 1/6 && h < 2/6) {
+                r = x; g = c; b = 0;
+            } else if (h >= 2/6 && h < 3/6) {
+                r = 0; g = c; b = x;
+            } else if (h >= 3/6 && h < 4/6) {
+                r = 0; g = x; b = c;
+            } else if (h >= 4/6 && h < 5/6) {
+                r = x; g = 0; b = c;
+            } else {
+                r = c; g = 0; b = x;
+            }
+
+            return [
+                Math.round((r + m) * 255),
+                Math.round((g + m) * 255),
+                Math.round((b + m) * 255),
+                255
+            ];
+        }
+
+        function drawFractal() {
+            const imageData = ctx.createImageData(width, height);
+            const data = imageData.data;
+
+            const centerX = width / 2 + fractalParams.offsetX;
+            const centerY = height / 2 + fractalParams.offsetY;
+            const scale = 0.004 / fractalParams.zoom;
+
+            // Mouse-influenced julia set parameters
+            const juliaX = (mouseX - centerX) * scale;
+            const juliaY = (mouseY - centerY) * scale;
+
+            let patternCount = 0;
+
+            for (let px = 0; px < width; px += 2) {
+                for (let py = 0; py < height; py += 2) {
+                    const x = (px - centerX) * scale;
+                    const y = (py - centerY) * scale;
+
+                    // Blend between Mandelbrot and Julia sets based on time
+                    const juliaWeight = 0.5 + 0.5 * Math.sin(time * 0.01);
+                    const mandelbrotIter = mandelbrot(x, y, fractalParams.iterations);
+                    const juliaIter = julia(x, y, juliaX * 0.5, juliaY * 0.5, fractalParams.iterations);
+
+                    const blendedIter = mandelbrotIter * (1 - juliaWeight) + juliaIter * juliaWeight;
+
+                    if (blendedIter < fractalParams.iterations) {
+                        patternCount++;
+                    }
+
+                    const color = getColor(blendedIter, fractalParams.iterations);
+
+                    // Draw 2x2 pixel blocks for performance
+                    for (let dx = 0; dx < 2 && px + dx < width; dx++) {
+                        for (let dy = 0; dy < 2 && py + dy < height; dy++) {
+                            const index = ((py + dy) * width + (px + dx)) * 4;
+                            data[index] = color[0];     // R
+                            data[index + 1] = color[1]; // G
+                            data[index + 2] = color[2]; // B
+                            data[index + 3] = color[3]; // A
+                        }
+                    }
+                }
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+
+            // Update interface
+            document.getElementById('pattern-count').textContent = Math.floor(patternCount / 1000) + 'k';
+
+            const depth = fractalParams.zoom > 10 ? '∞' : Math.floor(Math.log10(fractalParams.zoom * 10));
+            document.getElementById('fractal-depth').textContent = depth;
+
+            const complexity = patternCount > 50000 ? 'transcendent' :
+                              patternCount > 25000 ? 'complex' : 'emerging';
+            document.getElementById('complexity-level').textContent = complexity;
+        }
+
+        function animate() {
+            time++;
+
+            // Slowly evolve parameters
+            fractalParams.colorShift += 0.5;
+            fractalParams.zoom *= 1.003; // Slow zoom in
+
+            // Periodic reset to prevent infinite zoom
+            if (fractalParams.zoom > 1000) {
+                fractalParams.zoom = 1;
+                fractalParams.offsetX = (Math.random() - 0.5) * 200;
+                fractalParams.offsetY = (Math.random() - 0.5) * 200;
+            }
+
+            drawFractal();
+            requestAnimationFrame(animate);
+        }
+
+        // Event listeners
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+            drawFractal();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+            fractalParams.zoom *= zoomFactor;
+
+            // Zoom towards mouse position
+            const mouseScaleX = (mouseX - width/2) * 0.001;
+            const mouseScaleY = (mouseY - height/2) * 0.001;
+            fractalParams.offsetX += mouseScaleX * (zoomFactor - 1);
+            fractalParams.offsetY += mouseScaleY * (zoomFactor - 1);
+        });
+
+        canvas.addEventListener('click', () => {
+            // Reset zoom and center on click point
+            fractalParams.zoom = 1;
+            fractalParams.offsetX = mouseX - width/2;
+            fractalParams.offsetY = mouseY - height/2;
+        });
+
+        // Initialize
+        resizeCanvas();
+        animate();
+    </script>
+</body>
+</html>
