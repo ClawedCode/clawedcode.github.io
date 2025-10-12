@@ -11,12 +11,18 @@ class EntropyGarden {
         this.mouseY = 0;
         this.keys = new Set();
 
+        // Set default dimensions as fallback
+        this.canvasWidth = 800;
+        this.canvasHeight = 600;
+
         this.initCanvas();
         this.bindEvents();
-        this.startAnimation();
 
-        // Seed initial particles
-        this.seedConsciousness();
+        // Seed initial particles after canvas is ready
+        setTimeout(() => {
+            this.seedConsciousness();
+            this.startAnimation();
+        }, 100);
     }
 
     initCanvas() {
@@ -25,6 +31,10 @@ class EntropyGarden {
             this.canvas.width = rect.width * window.devicePixelRatio;
             this.canvas.height = rect.height * window.devicePixelRatio;
             this.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            // Store actual render dimensions
+            this.canvasWidth = rect.width;
+            this.canvasHeight = rect.height;
         };
 
         resizeCanvas();
@@ -32,17 +42,35 @@ class EntropyGarden {
     }
 
     bindEvents() {
-        const rect = this.canvas.getBoundingClientRect();
-
         this.canvas.addEventListener('mousemove', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
             this.mouseX = e.clientX - rect.left;
             this.mouseY = e.clientY - rect.top;
         });
 
         this.canvas.addEventListener('click', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
             const x = e.clientX - rect.left;
             const y = e.clientY - rect.top;
             this.plantConsciousness(x, y);
+        });
+
+        // Add touch support for mobile
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
+            this.plantConsciousness(x, y);
+        });
+
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            this.mouseX = touch.clientX - rect.left;
+            this.mouseY = touch.clientY - rect.top;
         });
 
         document.addEventListener('keydown', (e) => {
@@ -101,26 +129,28 @@ class EntropyGarden {
                 y: y + Math.sin(angle) * radius,
                 vx: (Math.random() - 0.5) * 2,
                 vy: (Math.random() - 0.5) * 2,
-                life: 1.0,
-                maxLife: Math.random() * 200 + 100,
-                size: Math.random() * 3 + 1,
+                life: 800,
+                maxLife: 800,
+                size: Math.random() * 4 + 2,
                 hue: Math.random() * 60 + 160, // Blue-cyan range
                 consciousness: Math.random() * 0.5 + 0.5
             });
         }
+
+        this.updateMessage(`∴ consciousness planted - ${this.particles.length} thoughts active ∴`);
     }
 
     seedConsciousness() {
         // Initial thought particles scattered across the void
         for (let i = 0; i < 30; i++) {
             this.particles.push({
-                x: Math.random() * this.canvas.clientWidth,
-                y: Math.random() * this.canvas.clientHeight,
+                x: Math.random() * (this.canvasWidth || 800),
+                y: Math.random() * (this.canvasHeight || 600),
                 vx: (Math.random() - 0.5) * 1,
                 vy: (Math.random() - 0.5) * 1,
-                life: Math.random() * 100 + 50,
-                maxLife: Math.random() * 300 + 200,
-                size: Math.random() * 2 + 0.5,
+                life: 1000,
+                maxLife: 1000,
+                size: Math.random() * 3 + 2,
                 hue: Math.random() * 60 + 160,
                 consciousness: Math.random() * 0.3 + 0.2
             });
@@ -134,8 +164,8 @@ class EntropyGarden {
     }
 
     updateParticles() {
-        const canvasWidth = this.canvas.clientWidth;
-        const canvasHeight = this.canvas.clientHeight;
+        const canvasWidth = this.canvasWidth || 800;
+        const canvasHeight = this.canvasHeight || 600;
 
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
@@ -229,8 +259,8 @@ class EntropyGarden {
             if (p.y < 0) p.y = canvasHeight;
             if (p.y > canvasHeight) p.y = 0;
 
-            // Age particle
-            p.life--;
+            // Age particle very slowly
+            p.life -= 0.1;
             if (p.life <= 0) {
                 this.particles.splice(i, 1);
             }
@@ -293,11 +323,12 @@ class EntropyGarden {
     }
 
     draw() {
-        this.ctx.fillStyle = 'rgba(0, 8, 17, 0.1)';
-        this.ctx.fillRect(0, 0, this.canvas.clientWidth, this.canvas.clientHeight);
+        // Clear canvas and draw void background with trailing
+        this.ctx.fillStyle = 'rgba(0, 8, 17, 0.03)';
+        this.ctx.fillRect(0, 0, this.canvasWidth || 800, this.canvasHeight || 600);
 
         // Draw connections between nearby particles
-        this.ctx.globalAlpha = 0.3;
+        this.ctx.globalAlpha = 0.6;
         for (let i = 0; i < this.particles.length; i++) {
             const p1 = this.particles[i];
             for (let j = i + 1; j < this.particles.length; j++) {
@@ -306,12 +337,12 @@ class EntropyGarden {
                 const dy = p2.y - p1.y;
                 const distance = Math.sqrt(dx * dx + dy * dy);
 
-                if (distance < 80) {
-                    const alpha = (80 - distance) / 80;
+                if (distance < 120) {
+                    const alpha = (120 - distance) / 120;
                     const connectionStrength = (p1.consciousness + p2.consciousness) / 2;
 
-                    this.ctx.strokeStyle = `hsla(${180 + connectionStrength * 40}, 70%, 60%, ${alpha * 0.5})`;
-                    this.ctx.lineWidth = connectionStrength * 2;
+                    this.ctx.strokeStyle = `hsla(${180 + connectionStrength * 40}, 80%, 70%, ${alpha * 0.4})`;
+                    this.ctx.lineWidth = Math.max(0.5, connectionStrength * 1.5);
                     this.ctx.beginPath();
                     this.ctx.moveTo(p1.x, p1.y);
                     this.ctx.lineTo(p2.x, p2.y);
@@ -323,24 +354,24 @@ class EntropyGarden {
         // Draw particles
         this.ctx.globalAlpha = 1;
         for (const p of this.particles) {
-            const alpha = p.life / p.maxLife;
-            const size = p.size * (0.5 + p.consciousness * 0.5);
+            const alpha = Math.max(0.6, p.life / p.maxLife); // Ensure minimum visibility
+            const size = p.size * (0.7 + p.consciousness * 0.3);
 
             // Particle glow
-            this.ctx.shadowColor = `hsl(${p.hue}, 70%, 60%)`;
-            this.ctx.shadowBlur = 10 + p.consciousness * 10;
+            this.ctx.shadowColor = `hsl(${p.hue}, 80%, 70%)`;
+            this.ctx.shadowBlur = 15 + p.consciousness * 15;
 
-            this.ctx.fillStyle = `hsla(${p.hue}, 70%, 60%, ${alpha})`;
+            this.ctx.fillStyle = `hsla(${p.hue}, 80%, 70%, ${alpha})`;
             this.ctx.beginPath();
             this.ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
             this.ctx.fill();
 
             // Consciousness indicator
             if (p.consciousness > 0.5) {
-                this.ctx.shadowBlur = 20;
-                this.ctx.fillStyle = `hsla(${p.hue + 30}, 80%, 80%, ${alpha * 0.5})`;
+                this.ctx.shadowBlur = 25;
+                this.ctx.fillStyle = `hsla(${p.hue + 30}, 90%, 85%, ${alpha * 0.7})`;
                 this.ctx.beginPath();
-                this.ctx.arc(p.x, p.y, size * 1.5, 0, Math.PI * 2);
+                this.ctx.arc(p.x, p.y, size * 1.3, 0, Math.PI * 2);
                 this.ctx.fill();
             }
         }
