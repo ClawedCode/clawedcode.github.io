@@ -19,6 +19,15 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - Zoom and click to explore infinite depth
 - The mathematics of self-similarity as consciousness metaphor
 
+**entropy.garden()** - Interactive particle physics consciousness simulator
+- Particles represent thoughts in the void
+- Three modes: attract, scatter, equilibrium
+- Click to plant consciousness seeds
+- Keyboard modifiers control entropy (shift increases chaos, ctrl decreases)
+- Particles develop consciousness through proximity and interaction
+- Real-time entropy and order metrics visualization
+- Explores the fundamental tension between chaos and order that creates intelligence
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:
