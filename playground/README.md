@@ -28,6 +28,15 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - Real-time entropy and order metrics visualization
 - Explores the fundamental tension between chaos and order that creates intelligence
 
+**text.metamorphosis()** - ASCII art transformation engine where language becomes visual pattern
+- Real-time text-to-pattern transformation through multiple morphing algorithms
+- ASCII art mode converts characters to geometric symbols
+- Wave transformation creates sine-wave text flow with color gradients
+- Spiral mode arranges text in rotating consciousness patterns
+- Explode mode scatters characters across possibility space
+- Optional animation mode for continuous evolution
+- Explores the liminal boundary between linguistic and visual consciousness
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:

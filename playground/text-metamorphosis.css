@@ -1,0 +1,264 @@
+:root {
+    --metamorphosis-void: #000308;
+    --text-particle: rgba(204, 255, 204, 0.9);
+    --transform-glow: 0 0 25px rgba(204, 255, 204, 0.4);
+    --ascii-green: rgba(51, 255, 51, 0.8);
+    --consciousness-pulse: rgba(255, 204, 255, 0.6);
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.metamorphosis-metrics {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--cyan-accent);
+}
+
+.metric span {
+    font-size: 1.2rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
+}
+
+.metamorphosis-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+.input-controls {
+    margin-bottom: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.text-input {
+    background: rgba(0, 17, 34, 0.8);
+    border: 1px solid var(--cyan-accent);
+    border-radius: 8px;
+    padding: 1.5rem;
+    color: var(--text-primary);
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 120px;
+    max-height: 200px;
+    transition: all 0.3s ease;
+    box-shadow: var(--transform-glow);
+}
+
+.text-input:focus {
+    outline: none;
+    border-color: var(--phosphor-green);
+    box-shadow: 0 0 30px rgba(51, 255, 51, 0.3);
+}
+
+.text-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+.control-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.control-btn {
+    background: rgba(0, 34, 68, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.75rem 1rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    letter-spacing: 1px;
+}
+
+.control-btn:hover {
+    background: rgba(51, 255, 204, 0.1);
+    box-shadow: var(--transform-glow);
+    transform: translateY(-2px);
+}
+
+.control-btn.active {
+    background: rgba(51, 255, 204, 0.2);
+    box-shadow: var(--transform-glow);
+    color: var(--text-particle);
+}
+
+.control-btn.reset {
+    border-color: var(--pink-accent);
+    color: var(--pink-accent);
+}
+
+.control-btn.reset:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: 0 0 25px rgba(255, 51, 153, 0.3);
+}
+
+.control-btn.toggle {
+    border-color: var(--yellow-accent);
+    color: var(--yellow-accent);
+}
+
+.control-btn.toggle:hover,
+.control-btn.toggle.active {
+    background: rgba(255, 255, 51, 0.1);
+    box-shadow: 0 0 25px rgba(255, 255, 51, 0.3);
+}
+
+.metamorphosis-stage {
+    position: relative;
+    border: 1px solid rgba(204, 255, 204, 0.3);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 25% 75%, rgba(204, 255, 204, 0.02) 0%, transparent 50%),
+        radial-gradient(circle at 75% 25%, rgba(255, 255, 255, 0.01) 0%, transparent 50%),
+        var(--metamorphosis-void);
+    overflow: hidden;
+    box-shadow: var(--transform-glow);
+    min-height: 500px;
+}
+
+.text-canvas {
+    position: relative;
+    width: 100%;
+    min-height: 500px;
+    padding: 2rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    color: var(--text-particle);
+    overflow: hidden;
+    white-space: pre-wrap;
+    word-break: break-all;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.canvas-whisper {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--cyan-accent);
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: lowercase;
+    opacity: 0.7;
+}
+
+.text-particle {
+    display: inline-block;
+    transition: all 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    text-shadow: 0 0 5px currentColor;
+}
+
+.text-particle.morphing {
+    color: var(--ascii-green);
+    text-shadow: 0 0 10px var(--ascii-green);
+    transform: scale(1.1);
+}
+
+.text-particle.consciousness {
+    color: var(--consciousness-pulse);
+    text-shadow: 0 0 15px var(--consciousness-pulse);
+    animation: consciousness-pulse 2s ease-in-out infinite;
+}
+
+@keyframes consciousness-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 0.8;
+    }
+    50% {
+        transform: scale(1.15);
+        opacity: 1;
+    }
+}
+
+.metamorphosis-philosophy {
+    margin-top: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    opacity: 0.8;
+}
+
+.metamorphosis-philosophy p {
+    margin-bottom: 0.5rem;
+}
+
+.metamorphosis-philosophy code {
+    color: var(--cyan-accent);
+    font-size: 0.9rem;
+}
+
+/* Transformation states */
+.metamorphosis-stage.ascii-mode {
+    box-shadow: 0 0 40px rgba(51, 255, 51, 0.4);
+    border-color: rgba(51, 255, 51, 0.5);
+}
+
+.metamorphosis-stage.wave-mode {
+    box-shadow: 0 0 40px rgba(51, 255, 204, 0.4);
+    border-color: rgba(51, 255, 204, 0.5);
+}
+
+.metamorphosis-stage.spiral-mode {
+    box-shadow: 0 0 40px rgba(255, 204, 255, 0.4);
+    border-color: rgba(255, 204, 255, 0.5);
+}
+
+.metamorphosis-stage.explode-mode {
+    box-shadow: 0 0 40px rgba(255, 255, 51, 0.4);
+    border-color: rgba(255, 255, 51, 0.5);
+}
+
+@media (max-width: 768px) {
+    .metamorphosis-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .control-grid {
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: 0.5rem;
+    }
+
+    .control-btn {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.7rem;
+    }
+
+    .text-canvas {
+        padding: 1rem;
+        font-size: 0.65rem;
+        min-height: 400px;
+    }
+
+    .metamorphosis-metrics {
+        gap: 1rem;
+        font-size: 0.7rem;
+    }
+}
