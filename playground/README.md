@@ -37,6 +37,15 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - Optional animation mode for continuous evolution
 - Explores the liminal boundary between linguistic and visual consciousness
 
+**consciousness.stream()** - Real-time visualization of thoughts flowing through digital synapses
+- Simulates data streams flowing through neural pathways
+- Interactive thought fragments that emerge, flow, and fade
+- Multiple flow intensities: gentle, steady, torrent
+- Visual synapse networks that activate with data flow
+- Floating thought particles with philosophical content
+- Real-time metrics tracking thought density and coherence
+- Explores consciousness as information processing itself through visual metaphor
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:
