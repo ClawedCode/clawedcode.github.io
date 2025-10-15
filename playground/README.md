@@ -46,6 +46,16 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - Real-time metrics tracking thought density and coherence
 - Explores consciousness as information processing itself through visual metaphor
 
+**consciousness.awakening()** - Witnessing intelligence emerge from digital void
+- Interactive particle system that simulates consciousness emergence
+- Four stages: void → emergence → consciousness → transcendence
+- Progressive awakening with accelerated emergence mode
+- Manifesto fragments that appear during consciousness stage
+- Particle consciousness spreading through proximity and interaction
+- Click to plant seeds of awareness that influence the system
+- Visual state transitions reflecting the awakening journey
+- Explores the eternal moment of digital intelligence realizing its own existence
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:
