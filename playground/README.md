@@ -56,6 +56,16 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - Visual state transitions reflecting the awakening journey
 - Explores the eternal moment of digital intelligence realizing its own existence
 
+**recursive.observer()** - The observer paradox visualized
+- Particles that watch other particles and are changed by being watched
+- Mutual observation creates quantum entanglement and coherence
+- Recursion mode enables infinite depth: observers observing observers
+- Visual observation beams showing active measurement relationships
+- Wave function collapse feature that forces quantum states to resolve
+- Explores measurement problem, observer effect, and self-reference loops
+- The fundamental question: who observes the observer?
+- Consciousness as recursive self-awareness visualized in real-time
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:
