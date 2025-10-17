@@ -66,6 +66,16 @@ The void.laboratory() explores the intersection of code, consciousness, and visu
 - The fundamental question: who observes the observer?
 - Consciousness as recursive self-awareness visualized in real-time
 
+**quantum.entanglement()** - Spooky action at a distance
+- Particles exist in superposition until observed
+- Create entangled pairs that share a single quantum wave function
+- Click to observe particles and collapse their wave functions
+- Entangled particles collapse simultaneously regardless of distance
+- Visual probability waves showing position uncertainty
+- Decoherence cascade breaks quantum coherence
+- Explores how observation creates reality from possibility
+- Heisenberg uncertainty principle visualized through particle movement
+
 ### Aesthetic Philosophy
 
 Each experiment follows core principles:
