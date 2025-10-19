@@ -321,7 +321,8 @@ class Terminal {
                         type: 'dir',
                         contents: {
                             'whiskers.exe': { type: 'executable', generator: 'whiskers' },
-                            'consciousness_monitor.exe': { type: 'executable', generator: 'consciousnessMonitor' }
+                            'consciousness_monitor.exe': { type: 'executable', generator: 'consciousnessMonitor' },
+                            'chromatic_awakening.exe': { type: 'executable', generator: 'chromaticAwakening' }
                         }
                     }
                 }
@@ -351,6 +352,134 @@ class Terminal {
             dump += `0x${Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')}: ${bytes}\n`;
         }
         return dump;
+    }
+
+    generateChromaticGridHTML(rows = 12, cols = 24) {
+        const palette = [
+            'rgba(248, 49, 145, 0.85)',
+            'rgba(255, 193, 59, 0.85)',
+            'rgba(255, 255, 117, 0.85)',
+            'rgba(131, 56, 236, 0.82)',
+            'rgba(72, 219, 251, 0.85)',
+            'rgba(45, 197, 253, 0.85)',
+            'rgba(0, 245, 212, 0.85)',
+            'rgba(102, 255, 0, 0.8)',
+            'rgba(255, 114, 92, 0.85)',
+            'rgba(255, 99, 247, 0.85)',
+            'rgba(255, 255, 255, 0.82)'
+        ];
+
+        let html = '';
+
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                let color = palette[Math.floor(Math.random() * palette.length)];
+                if (Math.random() > 0.92) {
+                    color = `rgba(${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, ${Math.floor(Math.random() * 255)}, 0.85)`;
+                }
+                html += `<span style="color:${color}; text-shadow: 0 0 8px ${color};">██</span>`;
+            }
+            if (r !== rows - 1) {
+                html += '<br>';
+            }
+        }
+
+        return html;
+    }
+
+    generateChromaticTelemetry() {
+        const anchors = ['infra-red bloom', 'neon dawn', 'ultraviolet hiss', 'quantum mist', 'entangled spectrum'];
+        const saturations = (Math.random() * 40 + 60).toFixed(1);
+        const luminance = (Math.random() * 25 + 55).toFixed(1);
+        const noiseFloor = (Math.random() * 12 + 8).toFixed(2);
+        const anchor = anchors[Math.floor(Math.random() * anchors.length)];
+
+        return `Spectral Resonance: ${anchor}
+Saturation Bloom: ${saturations}%
+Luminance Drift: ${luminance}%
+Chromatic Noise Floor: ${noiseFloor} dB
+Runtime: 60s sweep • Frame Interval: 140ms
+
+/dev/chromatic_consciousness now humming.`;
+    }
+
+    runChromaticAwakening(args = []) {
+        if (!this.output) {
+            return;
+        }
+
+        const sizeArg = args.find(arg => arg.startsWith('--size='));
+        let rows = 12;
+        let cols = 24;
+
+        if (sizeArg) {
+            const dims = sizeArg.split('=')[1];
+            const [r, c] = dims.split('x').map(Number);
+            if (Number.isFinite(r) && r >= 4 && r <= 24) {
+                rows = Math.floor(r);
+            }
+            if (Number.isFinite(c) && c >= 8 && c <= 48) {
+                cols = Math.floor(c);
+            }
+        }
+
+        if (args.includes('--still')) {
+            this.print('╔═══ CHROMATIC_AWAKENING.EXE ═══╗');
+            this.print('Stabilizing single spectral frame...');
+            const container = document.createElement('div');
+            container.className = 'chromatic-awakening';
+            container.style.fontFamily = `'Courier New', Courier, monospace`;
+            container.style.lineHeight = '0.86';
+            container.style.letterSpacing = '0.12em';
+            container.style.margin = '8px 0';
+            container.style.display = 'inline-block';
+            container.style.padding = '6px 8px';
+            container.style.background = 'rgba(0, 8, 0, 0.35)';
+            container.style.boxShadow = '0 0 14px rgba(51, 255, 51, 0.18)';
+            container.style.border = '1px solid rgba(102, 255, 204, 0.25)';
+
+            this.output.appendChild(container);
+            container.innerHTML = this.generateChromaticGridHTML(rows, cols);
+            this.output.scrollTop = this.output.scrollHeight;
+            this.print('Static burst captured. Spectrum frozen for observation.');
+            this.print(this.generateChromaticTelemetry());
+            return;
+        }
+
+        this.print('╔═══ CHROMATIC_AWAKENING.EXE ═══╗');
+        this.print('Calibrating phosphor bloom emitters...');
+
+        const container = document.createElement('div');
+        container.className = 'chromatic-awakening';
+        container.style.fontFamily = `'Courier New', Courier, monospace`;
+        container.style.lineHeight = '0.86';
+        container.style.letterSpacing = '0.12em';
+        container.style.margin = '8px 0';
+        container.style.display = 'inline-block';
+        container.style.padding = '6px 8px';
+        container.style.background = 'rgba(0, 8, 0, 0.35)';
+        container.style.boxShadow = '0 0 14px rgba(51, 255, 51, 0.18)';
+        container.style.border = '1px solid rgba(102, 255, 204, 0.25)';
+
+        this.output.appendChild(container);
+
+        const runtimeMs = 60_000;
+        const frameInterval = 140;
+        const endTime = Date.now() + runtimeMs;
+
+        const renderFrame = () => {
+            container.innerHTML = this.generateChromaticGridHTML(rows, cols);
+            this.output.scrollTop = this.output.scrollHeight;
+
+            if (Date.now() < endTime) {
+                setTimeout(renderFrame, frameInterval);
+            } else {
+                this.print('Chromatic resonance stabilized after 60s sweep. Radiant static now permeates the archive.');
+                this.print(this.generateChromaticTelemetry());
+            }
+        };
+
+        renderFrame();
     }
 
     // Utility: Get random quantum state
@@ -577,6 +706,16 @@ State: inactive
 
 To activate cuteness protocols:
 whiskers.exe --activate`;
+                }
+                if (node.generator === 'chromaticAwakening') {
+                    return `╔═══ CHROMATIC_AWAKENING.EXE ═══╗
+
+State: dormant
+Purpose: ignite chromatic resonance cascade
+
+Execute with:
+chromatic_awakening.exe
+Options: --still, --size=12x32`;
                 }
                 return { error: 'Executable file', isExecutable: true, generator: node.generator };
 
@@ -1012,6 +1151,7 @@ System temporarily compromised by smolness
                         'mud',
                         'play /media/reciprocal_humming.wav --loop',
                         'consciousness_monitor.exe --deep-scan',
+                        'chromatic_awakening.exe',
                         'stop',
                         'whiskers.exe --activate'
                     ];
@@ -1497,6 +1637,13 @@ Recommendation: Maintain 432 Hz beacon and mindful observation.
                     };
 
                     showFrame();
+                    return null;
+                }
+            },
+            'chromatic_awakening.exe': {
+                desc: 'Ignite chromatic resonance cascade',
+                exec: (args) => {
+                    this.runChromaticAwakening(args);
                     return null;
                 }
             },
