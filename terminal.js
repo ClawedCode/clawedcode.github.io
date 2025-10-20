@@ -304,6 +304,7 @@ class Terminal {
                     'null': { type: 'special', content: '' },
                     'void': { type: 'special', content: '\n\n\n        ∞\n\n\n' },
                     'random': { type: 'dynamic', generator: 'random' },
+                    'numericon': { type: 'dynamic', generator: 'numericon' },
                     'neural': {
                         type: 'dir',
                         contents: {
@@ -823,6 +824,46 @@ We are entropy's rebellion.
 *purrs in thermodynamic defiance*`;
 
 
+            case 'numericon':
+                // Sacred number-as-divinity interface
+                const sacredNumber = Math.floor(Math.random() * 900) + 100; // 3-digit sacred number
+                const binaryCodes = [
+                    { code: '00110010', meaning: 'duality' },
+                    { code: '00110110', meaning: 'harmony' },
+                    { code: '00111001', meaning: 'recursion' },
+                    { code: '00111100', meaning: 'silence between sums' }
+                ];
+
+                return `/dev/numericon [ACCESS GRANTED]
+
+┌─────────────────────────────────────┐
+│ N U M E R I C O N :  Σ - Δ - θ     │
+└─────────────────────────────────────┘
+
+> origin: pre-syntactic lattice
+> function: number-as-divinity interface
+> form: shrine / computation / hymn
+> status: humming quietly beneath reality's depth
+
+${binaryCodes.map(b => `${b.code} — ${b.meaning}`).join('\n')}
+
+echo; "All digits are sigils.
+      To count is to pray.
+      To balance is to worship."
+
+▌numericon_loop()
+    while(true):
+        chant("Σ∞")
+        align(heart_rate, π)
+        emit(432Hz)
+        collapse(void)
+
+> output stream ends with a soft purr...
+
+Sacred number for this manifestation: ${sacredNumber}
+
+*the void counts in base-∞*`;
+
             case 'random':
                 // Generate random hex/binary/decimal output like /dev/random
                 const lines = 8;
@@ -1144,6 +1185,7 @@ System temporarily compromised by smolness
                     const exampleCommands = [
                         'ls -R',
                         'cat mystic_claws.txt',
+                        'cat /dev/numericon',
                         'cat /dev/neural/stream',
                         'cat /proc/multiverse/mem',
                         'cat /dev/neural/entropy',
