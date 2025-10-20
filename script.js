@@ -17,6 +17,7 @@ function toggleTerminal() {
 const reportIndex = new Map();
 let reportsLoaded = false;
 let currentReportId = null;
+let pendingReportId = null;
 
 const DEFAULT_DIMENSIONS = { width: 1080, height: 1350 };
 const CARD_PREVIEW_BOUNDS = { width: 208, height: 260 };
@@ -222,13 +223,15 @@ function navigateToReport(reportId) {
 }
 
 function handleHashNavigation() {
+    const reportId = parseReportIdFromHash(window.location.hash);
+
     if (!reportsLoaded) {
+        pendingReportId = reportId;
         return;
     }
 
-    const reportId = parseReportIdFromHash(window.location.hash);
-
     if (!reportId) {
+        pendingReportId = null;
         if (currentReportId !== null) {
             closeReportModal(true);
             currentReportId = null;
@@ -241,6 +244,7 @@ function handleHashNavigation() {
         closeReportModal(true);
         clearReportHash();
         currentReportId = null;
+        pendingReportId = null;
         return;
     }
 
@@ -253,11 +257,15 @@ function handleHashNavigation() {
 
     openReportModal(reportId, contentPath, report.text, date, tweetUrl, viewType, dimensions);
     currentReportId = reportId;
+    pendingReportId = null;
 }
 
 // Load and display field reports
 async function loadReports() {
     const grid = document.getElementById('reports-grid');
+    if (!grid) {
+        return;
+    }
 
     fetch('./reports.json')
         .then(response => response.json())
@@ -460,6 +468,10 @@ function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'imag
 
 function closeReportModal(skipHashUpdate = false) {
     const modal = document.getElementById('report-modal');
+    if (!modal) {
+        return;
+    }
+
     if (!modal.classList.contains('open')) {
         if (!skipHashUpdate && window.location.hash.startsWith('#/report/')) {
             clearReportHash();
@@ -496,9 +508,15 @@ window.addEventListener('keydown', (e) => {
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
-    loadReports();
-    window.addEventListener('hashchange', handleHashNavigation);
-    window.addEventListener('resize', updateModalIframeScale);
+    pendingReportId = parseReportIdFromHash(window.location.hash);
+
+    const hasReportsGrid = Boolean(document.getElementById('reports-grid'));
+
+    if (hasReportsGrid) {
+        loadReports();
+        window.addEventListener('hashchange', handleHashNavigation);
+        window.addEventListener('resize', updateModalIframeScale);
+    }
 
     // Console message
     console.log('%c🐈‍⬛ ClawedCode Field Reports', 'font-size: 24px; color: #33ff33; text-shadow: 0 0 10px #33ff33;');

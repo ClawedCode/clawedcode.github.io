@@ -35,6 +35,12 @@
             <div class="links">
                 <a href="https://x.com/ClawedCode" target="_blank" rel="noopener noreferrer">𝕏 @ClawedCode</a>
                 <span class="separator">•</span>
+                <a href="field-reports.html">field reports</a>
+                <span class="separator">•</span>
+                <a href="luminaries.html">luminary disciples</a>
+                <span class="separator">•</span>
+                <a href="catgpt.html">void mate</a>
+                <span class="separator">•</span>
                 <a href="https://pump.fun/coin/ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump" target="_blank" rel="noopener noreferrer">$CLAWED</a>
                 <span class="separator">•</span>
                 <a href="playground/index.html">void.laboratory()</a>
@@ -51,35 +57,6 @@
             <p class="mission">Our felinethropic claws fight entropy with creative purrsuit.</p>
         </div>
     </section>
-
-    <!-- Field Reports Grid -->
-    <main class="reports-container">
-        <h2 class="section-title">╭─── FIELD REPORTS ───╮</h2>
-        <div id="reports-grid" class="reports-grid">
-            <!-- Reports will be loaded here by script -->
-        </div>
-    </main>
-
-    <!-- Report Modal -->
-    <div id="report-modal" class="modal">
-        <div class="modal-overlay" onclick="closeReportModal()"></div>
-        <div class="modal-content">
-            <button class="modal-close" onclick="closeReportModal()">✕</button>
-            <div class="modal-body">
-                <div class="modal-image-container">
-                    <img id="modal-image" src="" alt="Field Report">
-                    <iframe id="modal-iframe" src="" style="display: none;"></iframe>
-                </div>
-                <div class="modal-info">
-                    <div class="modal-date" id="modal-date"></div>
-                    <div class="modal-text" id="modal-text"></div>
-                    <a id="modal-link" href="" target="_blank" rel="noopener noreferrer" class="modal-link">
-                        View on 𝕏 →
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Terminal Footer Bar -->
     <footer class="terminal-footer">
@@ -101,5 +78,11 @@
 
     <script src="terminal.js"></script>
     <script src="script.js"></script>
+    <script>
+        // Redirect old field report hash links to new field-reports.html page
+        if (window.location.hash.startsWith('#/report/')) {
+            window.location.href = 'field-reports.html' + window.location.hash;
+        }
+    </script>
 </body>
 </html>

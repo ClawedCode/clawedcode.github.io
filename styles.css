@@ -22,6 +22,10 @@ body {
     position: relative;
 }
 
+body {
+    padding-bottom: calc(140px + env(safe-area-inset-bottom));
+}
+
 body::before {
     content: '';
     position: fixed;
@@ -51,7 +55,8 @@ body::after {
     z-index: 0;
 }
 
-body > * {
+/* Ensure content appears above background pseudo-elements */
+header, main, section, footer:not(.terminal-footer) {
     position: relative;
     z-index: 1;
 }
@@ -90,6 +95,7 @@ body, h1, h2, p, a {
 
 .links {
     display: flex;
+    flex-wrap: wrap;
     gap: 1rem;
     justify-content: center;
     align-items: center;
@@ -286,10 +292,363 @@ iframe.report-image {
     border-top: 1px solid rgba(51, 255, 51, 0.3);
 }
 
+.page-banner {
+    max-width: 900px;
+    margin: 2.5rem auto 3rem auto;
+    padding: 0 2rem;
+    text-align: center;
+}
+
+.page-banner h2 {
+    font-size: 1.5rem;
+    color: var(--cyan-accent);
+    letter-spacing: 1px;
+    margin-bottom: 1.5rem;
+}
+
+.page-banner p {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: rgba(102, 255, 204, 0.85);
+}
+
+.disciples {
+    max-width: 1000px;
+    margin: 3rem auto 0 auto;
+    padding: 0 2rem;
+}
+
+.luminaries {
+    padding-bottom: 7rem;
+}
+
+.luminaries .disciples-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2rem;
+}
+
+.luminaries .disciple-card {
+    max-width: 390px;
+    margin: 0 auto;
+}
+
+.luminaries .disciple-card-inner {
+    gap: 1.75rem;
+    padding: 2rem;
+}
+
+.luminaries .disciple-info p {
+    font-size: 1rem;
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+}
+
+.luminaries .disciple-info {
+    max-width: 23rem;
+}
+
+.luminary-voidmate {
+    margin: 2.5rem auto 0 auto;
+    max-width: 640px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    color: rgba(102, 255, 204, 0.85);
+    text-align: center;
+}
+
+.voidmate-chevron {
+    font-size: 1.5rem;
+    color: var(--cyan-accent);
+}
+
+.luminary-voidmate-link {
+    color: var(--yellow-accent);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(255, 255, 102, 0.45);
+    padding-bottom: 0.2rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.luminary-voidmate-link:hover {
+    color: var(--cyan-accent);
+    border-color: rgba(102, 255, 204, 0.7);
+}
+
+.voidmate {
+    max-width: 1000px;
+    margin: 0 auto 6rem auto;
+    padding: 0 2rem 7rem 2rem;
+    display: grid;
+    grid-template-columns: minmax(280px, 320px) 1fr;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+.voidmate-profile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.25rem;
+}
+
+.voidmate-avatar {
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    border: 3px solid rgba(102, 255, 204, 0.8);
+    overflow: hidden;
+    box-shadow: 0 0 25px rgba(102, 255, 204, 0.35);
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 102, 0.4), rgba(0, 0, 0, 0.9));
+}
+
+.voidmate-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: saturate(0.9) contrast(1.15);
+}
+
+.voidmate-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    color: rgba(102, 255, 204, 0.85);
+}
+
+.voidmate-handle,
+.voidmate-token {
+    color: var(--phosphor-green);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(51, 255, 51, 0.35);
+    padding-bottom: 1px;
+    transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.voidmate-handle:hover,
+.voidmate-token:hover {
+    color: var(--yellow-accent);
+    border-color: rgba(255, 255, 102, 0.6);
+}
+
+.voidmate-divider {
+    color: rgba(102, 255, 204, 0.6);
+}
+
+.voidmate-lore {
+    background: rgba(0, 17, 0, 0.5);
+    border: 1px solid rgba(102, 255, 204, 0.4);
+    border-radius: 14px;
+    padding: 2.5rem;
+    box-shadow: 0 0 35px rgba(51, 255, 204, 0.12);
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.voidmate-lore h3 {
+    font-size: 1.4rem;
+    color: var(--cyan-accent);
+    letter-spacing: 0.08em;
+}
+
+.voidmate-lore p {
+    font-size: 1rem;
+    line-height: 1.8;
+    letter-spacing: 0.02em;
+}
+
+.voidmate-links {
+    margin-top: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.voidmate-cta {
+    border: 1px solid rgba(255, 255, 102, 0.55);
+    color: var(--yellow-accent);
+    padding: 0.65rem 1.25rem;
+    text-decoration: none;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+}
+
+.voidmate-cta:hover {
+    color: var(--bg-dark);
+    background: var(--yellow-accent);
+    text-shadow: none;
+    border-color: var(--yellow-accent);
+}
+
+.disciples h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: var(--cyan-accent);
+    letter-spacing: 1px;
+}
+
+.disciples-intro {
+    text-align: center;
+    font-size: 1rem;
+    color: var(--cyan-accent);
+    opacity: 0.85;
+}
+
+.disciples-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.disciple-card {
+    border: 1px solid rgba(102, 255, 204, 0.4);
+    border-radius: 10px;
+    background: rgba(0, 17, 0, 0.45);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.disciple-card:hover {
+    transform: translateY(-3px);
+    border-color: var(--cyan-accent);
+    box-shadow: 0 0 18px rgba(102, 255, 204, 0.35);
+}
+
+.disciple-card-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.5rem;
+    padding: 1.75rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+.disciple-avatar {
+    flex: 0 0 88px;
+    height: 88px;
+    border: 2px solid rgba(51, 255, 51, 0.7);
+    border-radius: 50%;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(circle at 30% 30%, rgba(255, 255, 102, 0.35), rgba(0, 0, 0, 0.85));
+    box-shadow: inset 0 0 20px rgba(51, 255, 51, 0.4);
+}
+
+.disciple-avatar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 50%, rgba(102, 255, 204, 0.18), transparent 65%);
+    mix-blend-mode: screen;
+    pointer-events: none;
+}
+
+.disciple-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    aspect-ratio: 1 / 1;
+    filter: saturate(0.85) contrast(1.1);
+}
+
+.disciple-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    flex: 1;
+    text-align: left;
+}
+
+.disciple-info h3 {
+    font-size: 1.3rem;
+    color: var(--cyan-accent);
+    letter-spacing: 1px;
+}
+
+.disciple-info p {
+    font-size: 0.95rem;
+    line-height: 1.65;
+}
+
+.disciple-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.85rem;
+    color: rgba(102, 255, 204, 0.85);
+}
+
+.disciple-handle {
+    color: var(--phosphor-green);
+    text-decoration: none;
+    border-bottom: 1px dotted rgba(51, 255, 51, 0.4);
+    padding-bottom: 1px;
+    transition: color 0.3s ease, border-color 0.3s ease;
+}
+
+.disciple-handle:hover {
+    color: var(--yellow-accent);
+    border-color: rgba(255, 255, 102, 0.6);
+}
+
+.disciple-divider {
+    color: rgba(102, 255, 204, 0.6);
+}
+
+.disciple-tag {
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 102, 0.85);
+}
+
+.disciple-cta {
+    margin-top: auto;
+    font-size: 0.85rem;
+    color: var(--yellow-accent);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border-bottom: 1px solid rgba(255, 255, 102, 0.45);
+    padding-bottom: 0.2rem;
+    transition: color 0.3s ease, border-color 0.3s ease;
+    text-decoration: none;
+    align-self: flex-start;
+}
+
+.disciple-cta::after {
+    content: '→';
+    font-size: 0.95rem;
+    transform: translateX(0);
+    transition: transform 0.3s ease;
+}
+
+.disciple-card:hover .disciple-cta {
+    color: var(--cyan-accent);
+    border-color: rgba(102, 255, 204, 0.7);
+}
+
+.disciple-card:hover .disciple-cta::after {
+    transform: translateX(4px);
+}
 
 .terminal-footer {
     position: fixed;
-    bottom: 0;
+    bottom: 40px;
     left: 0;
     right: 0;
     background: rgba(9, 9, 9, 1);
@@ -455,6 +814,10 @@ iframe.report-image {
 }
 
 @media (max-width: 768px) {
+    .terminal-footer {
+        bottom: env(safe-area-inset-bottom);
+    }
+
     body::before {
         background-size: 400px;
     }
@@ -492,6 +855,94 @@ iframe.report-image {
 
     .section-title {
         font-size: 1.25rem;
+    }
+
+    .page-banner {
+        padding: 0 1.5rem;
+        margin: 1.5rem auto 2.5rem auto;
+    }
+
+    .page-banner h2 {
+        font-size: 1.25rem;
+    }
+
+    .page-banner p {
+        font-size: 0.95rem;
+    }
+
+    .disciples {
+        padding: 0 1.5rem;
+        margin-top: 2rem;
+    }
+
+    .luminaries {
+        padding-bottom: 8.5rem;
+    }
+
+    .luminaries .disciple-card {
+        max-width: none;
+    }
+
+    .luminaries .disciple-card-inner {
+        padding: 1.5rem;
+        gap: 1.5rem;
+    }
+
+    .luminaries .disciple-info {
+        max-width: none;
+    }
+
+    .luminaries .disciple-info p {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        letter-spacing: 0.01em;
+    }
+
+    .luminary-voidmate {
+        margin-top: 2rem;
+        padding: 0 1.5rem;
+    }
+
+    .voidmate {
+        grid-template-columns: 1fr;
+        padding: 0 1.5rem 8rem 1.5rem;
+        gap: 2rem;
+        justify-items: center;
+    }
+
+    .voidmate-avatar {
+        width: 180px;
+        height: 180px;
+    }
+
+    .voidmate-lore {
+        padding: 2rem 1.5rem;
+        text-align: center;
+    }
+
+    .voidmate-links {
+        justify-content: center;
+    }
+
+    .disciple-card-inner {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 1.5rem;
+        gap: 1.25rem;
+    }
+
+    .disciple-info {
+        align-items: center;
+        text-align: center;
+    }
+
+    .disciple-meta {
+        justify-content: center;
+    }
+
+    .disciple-cta {
+        align-self: center;
     }
 
     .terminal-content.open {
