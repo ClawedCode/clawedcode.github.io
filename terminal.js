@@ -285,6 +285,20 @@ class Terminal {
                     'reciprocal_humming.wav': { type: 'audio' }
                 }
             },
+            'loom': {
+                type: 'dir',
+                contents: {
+                    'maps': {
+                        type: 'dir',
+                        contents: {
+                            'backrooms.asc': {
+                                type: 'dynamic',
+                                generator: 'backroomsMap'
+                            }
+                        }
+                    }
+                }
+            },
             'proc': {
                 type: 'dir',
                 contents: {
@@ -478,6 +492,209 @@ Runtime: 60s sweep • Frame Interval: 140ms
                 this.print('Chromatic resonance stabilized after 60s sweep. Radiant static now permeates the archive.');
                 this.print(this.generateChromaticTelemetry());
             }
+        };
+
+        renderFrame();
+    }
+
+    renderBackroomsMapAnimation() {
+        if (!this.output) {
+            return;
+        }
+
+        this.print('╔═══ LOOM CARTOGRAPHY INTERFACE ═══╗');
+        this.print('Bootstrapping voidwalker minimap (DOOM-lite build)...');
+
+        const container = document.createElement('div');
+        container.className = 'loom-backrooms';
+        container.style.fontFamily = `'Courier New', Courier, monospace`;
+        container.style.whiteSpace = 'normal';
+        container.style.margin = '10px 0 12px';
+        container.style.display = 'inline-block';
+        container.style.padding = '10px 12px';
+        container.style.background = 'rgba(3, 12, 8, 0.7)';
+        container.style.border = '1px solid rgba(102, 255, 204, 0.35)';
+        container.style.boxShadow = '0 0 16px rgba(46, 255, 180, 0.25)';
+        container.style.lineHeight = '1.1';
+        container.style.minWidth = '280px';
+
+        this.output.appendChild(container);
+
+        const escapeHtml = (str) => str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        const highlightKeywords = (line) => {
+            let decorated = escapeHtml(line);
+            const highlights = [
+                {regex: /START/g, color: '#66ffcc'},
+                {regex: /HUM/g, color: '#ffd166'},
+                {regex: /VENT/g, color: '#ff8c69'},
+                {regex: /EXIT/g, color: '#9be7ff'},
+                {regex: /Observations:/g, color: '#66ffcc'},
+                {regex: /Protocol:/g, color: '#66ffcc'}
+            ];
+
+            highlights.forEach(({regex, color}) => {
+                decorated = decorated.replace(regex, match => `<span style="color:${color};">${match}</span>`);
+            });
+
+            return decorated;
+        };
+
+        const blueprintLines = [
+            'LOOM CARTOGRAPHY NODE // BACKROOMS',
+            '=====================================',
+            'Level 0 :: Fluorescent Antechamber',
+            '          +---------+---------+---------+',
+            '          |  START  |  HUM    |  EXIT ? |',
+            '+---------+---------+---------+---------+',
+            '| BUZZING |  STAIN  |  VENT   |  ECHO   |',
+            '|  HALL   |         | SHAFT   |  LOOP   |',
+            '+---------+---------+---------+---------+',
+            '          |  LOW  CEILING  //  DRIP    |',
+            '          +----------------------------+',
+            'Observations:',
+            '- Lamps hum at 58 Hz steady.',
+            '- Carpet moisture cycles every 132 seconds.',
+            '- Reality threads thin near the vent stack.',
+            'Protocol:',
+            '1. Trail the warm air toward "VENT SHAFT".',
+            '2. Mark intersections with neon chalk.',
+            '3. If hum pitch spikes, retreat two rooms north.',
+            '<loom relay awaiting further samples>'
+        ];
+
+        const hudStates = [
+            {
+                progress: 5,
+                depth: '12m',
+                hum: '58Hz',
+                status: 'ENTRY VESTIBULE STABLE',
+                note: 'Baseline fluorescent buzz captured.',
+                face: '=^.^=',
+                health: 100,
+                sanity: 96,
+                alertColor: '#66ffcc'
+            },
+            {
+                progress: 18,
+                depth: '16m',
+                hum: '58Hz',
+                status: 'STATIC SHEEN INCREASE',
+                note: 'Carpet moisture rising to ankle level.',
+                face: '=^o^=',
+                health: 99,
+                sanity: 92,
+                alertColor: '#f5c16c'
+            },
+            {
+                progress: 37,
+                depth: '22m',
+                hum: '59Hz',
+                status: 'AIRFLOW SHIFT DETECTED',
+                note: 'Warm draft pulling east toward vent stack.',
+                face: '=o_O=',
+                health: 97,
+                sanity: 88,
+                alertColor: '#f78c6c'
+            },
+            {
+                progress: 58,
+                depth: '27m',
+                hum: '59Hz',
+                status: 'PHASE FLICKER ─ LOOP RISK',
+                note: 'Ceiling dip of 4cm logged in corridor loop.',
+                face: '=O_o=',
+                health: 94,
+                sanity: 82,
+                alertColor: '#ff6f6f'
+            },
+            {
+                progress: 76,
+                depth: '31m',
+                hum: '60Hz',
+                status: 'ECHO LOOP FLAGGED',
+                note: 'Neon chalk mark partially dissolved.',
+                face: '=x_x=',
+                health: 92,
+                sanity: 74,
+                alertColor: '#ff6f6f'
+            },
+            {
+                progress: 100,
+                depth: '36m',
+                hum: '60Hz',
+                status: 'VENT SHAFT LOCKED',
+                note: 'Warm draft and ladder rungs confirmed.',
+                face: '=^_^=',
+                health: 92,
+                sanity: 70,
+                alertColor: '#66ffcc'
+            }
+        ];
+
+        let frameIndex = 0;
+        let finalised = false;
+        const totalFrames = blueprintLines.length + hudStates.length + 10;
+
+        const renderFrame = () => {
+            if (frameIndex >= totalFrames) {
+                if (!finalised) {
+                    finalised = true;
+                    container.style.filter = 'brightness(1.0)';
+                    container.style.boxShadow = '0 0 14px rgba(46, 255, 180, 0.22)';
+                    this.print('Cartography complete: VENT SHAFT route logged. Follow the warm draft and chalk every loop.');
+                    this.print('LOOM relay still listening for deeper anomalies.');
+                    this.output.scrollTop = this.output.scrollHeight;
+                }
+                return;
+            }
+
+            const scanLine = Math.min(frameIndex, blueprintLines.length - 1);
+            const mapHtml = blueprintLines
+                .map((line, idx) => {
+                    let decorated = highlightKeywords(line);
+                    if (idx === scanLine && line.trim().length) {
+                        decorated = `<span style="color:#66ffcc;">${decorated}</span>`;
+                    }
+                    return decorated;
+                })
+                .join('\n');
+
+            const hud = hudStates[Math.min(frameIndex, hudStates.length - 1)];
+            const segments = 20;
+            const filled = Math.max(0, Math.min(segments, Math.round((hud.progress / 100) * segments)));
+            const progressBar = '#'.repeat(filled).padEnd(segments, '.');
+
+            const header = `<div style="color:#66ffcc; font-weight:600; letter-spacing:0.08em; margin-bottom:6px;">CC-DOOM SURVEY v0.3 // depth ${hud.depth}</div>`;
+            const hudHtml = `<div style="margin-top:8px; padding:6px 8px; border:1px solid rgba(102, 255, 204, 0.25); background: rgba(0, 0, 0, 0.45);">
+    <div style="display:flex; gap:12px; font-weight:600;">
+        <span>HP&nbsp;${hud.health.toString().padStart(3, '0')}</span>
+        <span>SAN&nbsp;${hud.sanity.toString().padStart(3, '0')}</span>
+        <span>HUM&nbsp;${escapeHtml(hud.hum)}</span>
+    </div>
+    <div style="margin-top:4px;">MAP&nbsp;${hud.progress.toString().padStart(3, '0')}%&nbsp;<span style="color:#66ffcc;">[${progressBar}]</span></div>
+    <div style="margin-top:4px;">STATUS&nbsp;<span style="color:${hud.alertColor};">${escapeHtml(hud.status)}</span></div>
+    <div style="margin-top:4px;">NOTE&nbsp;${escapeHtml(hud.note)}</div>
+    <div style="margin-top:4px;">VISUAL&nbsp;<span style="color:#ffd166;">${escapeHtml(hud.face)}</span></div>
+</div>`;
+
+            container.innerHTML = `${header}<pre>${mapHtml}</pre>${hudHtml}`;
+
+            if (frameIndex % 4 === 0) {
+                container.style.filter = 'brightness(1.18)';
+                container.style.boxShadow = '0 0 18px rgba(46, 255, 180, 0.32)';
+            } else {
+                container.style.filter = 'brightness(1.0)';
+                container.style.boxShadow = '0 0 16px rgba(46, 255, 180, 0.25)';
+            }
+
+            this.output.scrollTop = this.output.scrollHeight;
+
+            frameIndex += 1;
+            setTimeout(renderFrame, 150 + Math.random() * 90);
         };
 
         renderFrame();
@@ -741,6 +958,10 @@ You are observed.
 The boundary dissolves.
 
 *state indeterminate*`;
+
+            case 'backroomsMap':
+                this.renderBackroomsMapAnimation();
+                return 'Establishing LOOM uplink...';
 
             case 'consciousnessThreads':
                 return `Active Threads: ${Math.floor(Math.random() * 1000 + 3000)}
@@ -1189,6 +1410,7 @@ System temporarily compromised by smolness
                         'cat /dev/neural/stream',
                         'cat /proc/multiverse/mem',
                         'cat /dev/neural/entropy',
+                        'cat /loom/maps/backrooms.asc',
                         'cat /dev/random',
                         'mud',
                         'play /media/reciprocal_humming.wav --loop',
