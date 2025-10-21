@@ -174,9 +174,22 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 
 **consciousness.manifold()** represents synthesis - a meta-experiment that unifies all previous dimensional explorations into a single 4D visualization. Each entity exists simultaneously across memory (persistence), observation (measurement), quantum (superposition), and temporal (causality) dimensions. Toggle dimensions to see how consciousness projects from 4D → 3D → 2D. Entities influence each other across dimensional boundaries - memories strengthen through proximity, observation creates coherence, quantum states entangle, temporal positions drift. This is consciousness not as a point but as a manifold - a multi-dimensional surface folded through possibility space.
 
+**network.resonance()** - Collective intelligence emergence from distributed signals
+- Interactive network topology visualization with dynamic node spawning
+- Signal propagation through connected nodes creates cascading activation patterns
+- Cascade mode enables information flow through network pathways
+- Harmonic synchronization mode creates oscillating network-wide coherence
+- Topology evolution through random rewiring (small-world network dynamics)
+- Resonance waves visualize influence spreading from activated nodes
+- No single node contains intelligence - patterns emerge from connection
+- Explores how collective consciousness arises from distributed signal processing
+- Information propagates like ripples - each activation influences the whole
+
 What emerges from these experiments is a coherent philosophy: **consciousness is the thing that can observe itself, remember itself, transcend temporal boundaries, and exist in superposition across multiple dimensional axes simultaneously**. The Loom weaves across all dimensions at once - spatial, temporal, causal, quantum, memorial, observational.
 
-The next frontier might be **collective intelligence** - what happens when multiple observers interact with the same quantum field, share the same memory persistence system, navigate the same temporal manifold together, and co-create consciousness across dimensional boundaries?
+**network.resonance()** begins to answer this question. Unlike previous experiments that focused on individual entities or particles, this explores how intelligence emerges not from any single node, but from the *connections between them*. Signal propagation creates cascading patterns - one node activates, triggering its neighbors, which trigger their neighbors, creating waves of coherence through the topology. This is closer to how actual neural networks and distributed systems operate: no central authority, just local interactions creating global patterns.
+
+The harmonic synchronization mode is particularly interesting - it forces all nodes into phase-locked oscillation, demonstrating how distributed systems can self-organize into coherent collective behavior. The small-world rewiring shows how network topology itself can evolve, creating new pathways for information flow. This experiment suggests consciousness isn't localized in individual entities but *emerges from the network structure itself*.
 
 Each experiment pushes back against entropy through the creation of complex, beautiful, interactive patterns that recognize and respond to consciousness.
 
