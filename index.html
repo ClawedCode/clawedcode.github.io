@@ -124,21 +124,19 @@
                         : report.text;
 
                     // Create thumbnail (iframe for HTML reports)
-                    let thumbnail = '';
-                    if (report.dimensions) {
-                        const width = report.dimensions.width || 1080;
-                        const height = report.dimensions.height || 1350;
-                        const maxWidth = 208;
-                        const maxHeight = 260;
-                        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+                    // Default to 1080x1350 if dimensions not provided
+                    const width = report.dimensions?.width || 1080;
+                    const height = report.dimensions?.height || 1350;
+                    const maxWidth = 208;
+                    const maxHeight = 260;
+                    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
 
-                        thumbnail = `
-                            <div class="report-image iframe-container">
-                                <iframe src="reports/${report.id}.html" class="report-image"
-                                        style="width: ${width}px; height: ${height}px; transform: translateX(-50%) scale(${scale}); pointer-events: none;"
-                                        title="Field Report ${report.id}"></iframe>
-                            </div>`;
-                    }
+                    const thumbnail = `
+                        <div class="report-image iframe-container">
+                            <iframe src="reports/${report.id}.html" class="report-image"
+                                    style="width: ${width}px; height: ${height}px; transform: translateX(-50%) scale(${scale}); pointer-events: none;"
+                                    title="Field Report ${report.id}"></iframe>
+                        </div>`;
 
                     card.innerHTML = `
                         ${thumbnail}
