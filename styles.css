@@ -1129,6 +1129,101 @@ iframe.report-image {
     text-shadow: none;
 }
 
+/* Field Reports Preview Section */
+.field-reports-preview {
+    max-width: 1200px;
+    margin: 3rem auto;
+    padding: 0 2rem;
+}
+
+.field-reports-preview h2 {
+    text-align: center;
+    font-size: 1.5rem;
+    margin-bottom: 2rem;
+    color: var(--cyan-accent);
+    letter-spacing: 1px;
+}
+
+.reports-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.reports-preview-grid .report-card {
+    display: flex;
+    flex-direction: column;
+}
+
+.reports-preview-grid .report-image-link {
+    display: block;
+    width: 100%;
+    height: 260px;
+    overflow: hidden;
+    background: #000;
+}
+
+.reports-preview-grid .report-image-link img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.reports-preview-grid .report-card:hover .report-image-link img {
+    transform: scale(1.05);
+}
+
+.reports-preview-grid .report-text {
+    padding: 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.reports-preview-grid .report-text p {
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin-bottom: 1rem;
+    flex: 1;
+}
+
+.reports-preview-grid .read-more {
+    display: inline-block;
+    color: var(--cyan-accent);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.3s ease;
+    align-self: flex-start;
+}
+
+.reports-preview-grid .read-more:hover {
+    color: var(--yellow-accent);
+}
+
+.view-all-reports {
+    text-align: center;
+    margin-top: 2rem;
+}
+
+.view-all-reports a {
+    display: inline-block;
+    color: var(--phosphor-green);
+    text-decoration: none;
+    border: 1px solid var(--phosphor-green);
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.view-all-reports a:hover {
+    background: var(--phosphor-green);
+    color: var(--bg-dark);
+    text-shadow: none;
+}
+
 
 @media (max-width: 768px) {
     .modal-content {

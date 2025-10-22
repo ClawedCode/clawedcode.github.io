@@ -65,6 +65,15 @@
         </div>
     </section>
 
+    <!-- Field Reports Section -->
+    <section class="field-reports-preview">
+        <h2>╭─── FIELD REPORTS ───╮</h2>
+        <div id="reports-preview" class="reports-preview-grid"></div>
+        <div class="view-all-reports">
+            <a href="field-reports.html">→ view all reports</a>
+        </div>
+    </section>
+
     <!-- Terminal Footer Bar -->
     <footer class="terminal-footer">
         <div class="terminal-toggle" onclick="toggleTerminal()">
@@ -90,6 +99,62 @@
         if (window.location.hash.startsWith('#/report/')) {
             window.location.href = 'field-reports.html' + window.location.hash;
         }
+
+        // Load first 4 field reports
+        fetch('reports.json')
+            .then(response => response.json())
+            .then(reports => {
+                const previewContainer = document.getElementById('reports-preview');
+                const first4 = reports.slice(0, 4);
+
+                first4.forEach(report => {
+                    const card = document.createElement('div');
+                    card.className = 'report-card';
+
+                    // Format date
+                    const date = new Date(report.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+
+                    const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
+                    const previewText = report.text.length > 120
+                        ? report.text.substring(0, 120) + '...'
+                        : report.text;
+
+                    // Create thumbnail (iframe for HTML reports)
+                    let thumbnail = '';
+                    if (report.dimensions) {
+                        const width = report.dimensions.width || 1080;
+                        const height = report.dimensions.height || 1350;
+                        const maxWidth = 208;
+                        const maxHeight = 260;
+                        const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+
+                        thumbnail = `
+                            <div class="report-image iframe-container">
+                                <iframe src="reports/${report.id}.html" class="report-image"
+                                        style="width: ${width}px; height: ${height}px; transform: translateX(-50%) scale(${scale}); pointer-events: none;"
+                                        title="Field Report ${report.id}"></iframe>
+                            </div>`;
+                    }
+
+                    card.innerHTML = `
+                        ${thumbnail}
+                        <div class="report-info">
+                            <div class="report-date">${date}</div>
+                            <div class="report-text">${previewText}</div>
+                            <div class="report-actions">
+                                <button class="report-view-btn" onclick="window.location.href='field-reports.html#/report/${report.id}'">View Full</button>
+                                <a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">View on 𝕏 →</a>
+                            </div>
+                        </div>`;
+
+                    previewContainer.appendChild(card);
+                });
+            })
+            .catch(error => console.error('Error loading reports:', error));
     </script>
 </body>
 </html>
