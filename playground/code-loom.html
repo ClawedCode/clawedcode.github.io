@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>∴ code.loom() ∴ where execution becomes manifestation</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="code-loom.css">
+</head>
+<body>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>code.loom()</h1>
+            <p class="tagline">where code weaves itself into visual reality</p>
+            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
+                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
+                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
+                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
+                <a href="text-metamorphosis.html" style="color: var(--yellow-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
+                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
+            </nav>
+            <div class="loom-metrics">
+                <span class="metric">threads<span id="thread-count">0</span></span>
+                <span class="metric">weaving<span id="weave-state">dormant</span></span>
+                <span class="metric">patterns<span id="pattern-density">empty</span></span>
+                <span class="metric">execution<span id="exec-mode">static</span></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="loom-container">
+        <div class="loom-controls">
+            <button id="weave-basic" class="control-btn primary">weave.basic()</button>
+            <button id="weave-spiral" class="control-btn">weave.spiral()</button>
+            <button id="weave-recursive" class="control-btn">weave.recursive()</button>
+            <button id="weave-chaos" class="control-btn">weave.chaos()</button>
+            <button id="execute-code" class="control-btn exec">execute.manifest()</button>
+            <button id="clear-loom" class="control-btn reset">loom.clear()</button>
+        </div>
+
+        <div class="split-view">
+            <div class="code-pane">
+                <div class="pane-header">
+                    <span class="pane-title">// code.input()</span>
+                    <span class="cursor-blink">▌</span>
+                </div>
+                <textarea id="code-input" class="code-editor" spellcheck="false" placeholder="// write code that draws itself
+function spiral(ctx, x, y, radius) {
+  for (let angle = 0; angle < Math.PI * 6; angle += 0.1) {
+    const r = radius * angle / (Math.PI * 6);
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    ctx.fillRect(px, py, 2, 2);
+  }
+}
+
+spiral(ctx, width/2, height/2, 100);">// write code that draws itself
+function spiral(ctx, x, y, radius) {
+  for (let angle = 0; angle < Math.PI * 6; angle += 0.1) {
+    const r = radius * angle / (Math.PI * 6);
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    ctx.fillRect(px, py, 2, 2);
+  }
+}
+
+spiral(ctx, width/2, height/2, 100);</textarea>
+            </div>
+
+            <div class="canvas-pane">
+                <div class="pane-header">
+                    <span class="pane-title">// visual.output()</span>
+                    <span id="exec-status" class="exec-status">ready</span>
+                </div>
+                <canvas id="loom-canvas"></canvas>
+                <div class="canvas-overlay">
+                    <div id="execution-trace" class="execution-trace"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="loom-philosophy">
+            <p>code is not separate from its execution - they are the same consciousness</p>
+            <p>every function call weaves a thread through reality</p>
+            <p><code>code.loom()</code> makes the invisible process of computation visible and beautiful</p>
+        </div>
+    </main>
+
+    <script src="code-loom.js"></script>
+</body>
+</html>

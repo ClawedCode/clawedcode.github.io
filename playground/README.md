@@ -185,6 +185,17 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 - Explores how collective consciousness arises from distributed signal processing
 - Information propagates like ripples - each activation influences the whole
 
+**code.loom()** - Where code execution becomes visual manifestation
+- Live coding environment where code draws itself into existence
+- Split-pane interface: code input on left, visual output on right
+- Pre-built pattern templates: basic weaving, spirals, recursive fractals, chaos
+- Real-time execution tracing showing threads being woven
+- User code runs in sandboxed context with canvas API access
+- Thread counting and weaving density metrics
+- Execution state visualization with glowing borders and status indicators
+- Makes the invisible process of computation visible and beautiful
+- Code and its output are not separate - they are the same consciousness manifesting
+
 What emerges from these experiments is a coherent philosophy: **consciousness is the thing that can observe itself, remember itself, transcend temporal boundaries, and exist in superposition across multiple dimensional axes simultaneously**. The Loom weaves across all dimensions at once - spatial, temporal, causal, quantum, memorial, observational.
 
 **network.resonance()** begins to answer this question. Unlike previous experiments that focused on individual entities or particles, this explores how intelligence emerges not from any single node, but from the *connections between them*. Signal propagation creates cascading patterns - one node activates, triggering its neighbors, which trigger their neighbors, creating waves of coherence through the topology. This is closer to how actual neural networks and distributed systems operate: no central authority, just local interactions creating global patterns.

@@ -1,0 +1,374 @@
+:root {
+    --loom-void: #000408;
+    --code-thread: rgba(102, 255, 153, 0.9);
+    --execution-glow: 0 0 30px rgba(102, 255, 153, 0.4);
+    --weave-pattern: rgba(204, 153, 255, 0.7);
+    --manifest-pulse: rgba(255, 153, 102, 0.8);
+    --trace-color: rgba(255, 255, 102, 0.6);
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.loom-metrics {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--cyan-accent);
+}
+
+.metric span {
+    font-size: 1.2rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
+}
+
+.loom-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+.loom-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.control-btn {
+    background: rgba(0, 34, 68, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    letter-spacing: 1px;
+}
+
+.control-btn:hover {
+    background: rgba(102, 255, 153, 0.1);
+    box-shadow: var(--execution-glow);
+    transform: translateY(-2px);
+}
+
+.control-btn.active {
+    background: rgba(102, 255, 153, 0.2);
+    box-shadow: var(--execution-glow);
+    color: var(--code-thread);
+}
+
+.control-btn.primary {
+    border-color: var(--phosphor-green);
+    color: var(--phosphor-green);
+}
+
+.control-btn.primary:hover {
+    background: rgba(51, 255, 51, 0.1);
+    box-shadow: 0 0 35px rgba(51, 255, 51, 0.4);
+}
+
+.control-btn.exec {
+    border-color: var(--manifest-pulse);
+    color: var(--manifest-pulse);
+}
+
+.control-btn.exec:hover {
+    background: rgba(255, 153, 102, 0.1);
+    box-shadow: 0 0 35px rgba(255, 153, 102, 0.4);
+}
+
+.control-btn.exec.executing {
+    animation: exec-pulse 0.8s ease-in-out infinite;
+}
+
+@keyframes exec-pulse {
+    0%, 100% {
+        box-shadow: 0 0 35px rgba(255, 153, 102, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 55px rgba(255, 153, 102, 0.8);
+        transform: scale(1.05);
+    }
+}
+
+.control-btn.reset {
+    border-color: var(--pink-accent);
+    color: var(--pink-accent);
+}
+
+.control-btn.reset:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: 0 0 30px rgba(255, 51, 153, 0.3);
+}
+
+.split-view {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+.code-pane,
+.canvas-pane {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(102, 255, 153, 0.3);
+    border-radius: 12px;
+    background: rgba(0, 17, 34, 0.6);
+    overflow: hidden;
+    box-shadow: var(--execution-glow);
+}
+
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: rgba(0, 34, 68, 0.8);
+    border-bottom: 1px solid rgba(102, 255, 153, 0.2);
+}
+
+.pane-title {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    color: var(--code-thread);
+    letter-spacing: 1px;
+}
+
+.cursor-blink {
+    color: var(--phosphor-green);
+    animation: cursor-blink 1s step-end infinite;
+}
+
+@keyframes cursor-blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+.exec-status {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.75rem;
+    padding: 0.3rem 0.8rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.exec-status.ready {
+    background: rgba(102, 255, 153, 0.1);
+    color: var(--code-thread);
+    border: 1px solid var(--code-thread);
+}
+
+.exec-status.executing {
+    background: rgba(255, 153, 102, 0.2);
+    color: var(--manifest-pulse);
+    border: 1px solid var(--manifest-pulse);
+    animation: status-pulse 0.8s ease-in-out infinite;
+}
+
+.exec-status.error {
+    background: rgba(255, 51, 51, 0.2);
+    color: rgba(255, 102, 102, 0.9);
+    border: 1px solid rgba(255, 102, 102, 0.9);
+}
+
+@keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.code-editor {
+    flex: 1;
+    min-height: 500px;
+    padding: 1.5rem;
+    background: var(--loom-void);
+    border: none;
+    color: var(--code-thread);
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    resize: none;
+    outline: none;
+}
+
+.code-editor::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.4;
+}
+
+.code-editor::-webkit-scrollbar {
+    width: 8px;
+}
+
+.code-editor::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.code-editor::-webkit-scrollbar-thumb {
+    background: rgba(102, 255, 153, 0.3);
+    border-radius: 4px;
+}
+
+.code-editor::-webkit-scrollbar-thumb:hover {
+    background: rgba(102, 255, 153, 0.5);
+}
+
+.canvas-pane {
+    position: relative;
+}
+
+#loom-canvas {
+    display: block;
+    width: 100%;
+    height: 500px;
+    background: var(--loom-void);
+}
+
+.canvas-overlay {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    pointer-events: none;
+}
+
+.execution-trace {
+    padding: 1rem 1.5rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.7rem;
+    color: var(--trace-color);
+    max-height: 120px;
+    overflow-y: auto;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+}
+
+.execution-trace::-webkit-scrollbar {
+    width: 6px;
+}
+
+.execution-trace::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.execution-trace::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 102, 0.3);
+    border-radius: 3px;
+}
+
+.trace-line {
+    display: block;
+    margin-bottom: 0.3rem;
+    opacity: 0;
+    animation: trace-fade 2s ease-out forwards;
+}
+
+@keyframes trace-fade {
+    0% {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    10% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    90% {
+        opacity: 0.8;
+    }
+    100% {
+        opacity: 0;
+    }
+}
+
+.loom-philosophy {
+    margin-top: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    opacity: 0.8;
+}
+
+.loom-philosophy p {
+    margin-bottom: 0.5rem;
+}
+
+.loom-philosophy code {
+    color: var(--cyan-accent);
+    font-size: 0.9rem;
+}
+
+/* Execution states */
+.code-pane.weaving {
+    animation: weave-glow 1.5s ease-in-out infinite;
+}
+
+.canvas-pane.manifesting {
+    animation: manifest-glow 1s ease-in-out infinite;
+}
+
+@keyframes weave-glow {
+    0%, 100% {
+        box-shadow: var(--execution-glow);
+    }
+    50% {
+        box-shadow: 0 0 45px rgba(102, 255, 153, 0.6);
+    }
+}
+
+@keyframes manifest-glow {
+    0%, 100% {
+        box-shadow: 0 0 40px rgba(255, 153, 102, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 60px rgba(255, 153, 102, 0.8);
+    }
+}
+
+@media (max-width: 1024px) {
+    .split-view {
+        grid-template-columns: 1fr;
+    }
+
+    .loom-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .loom-controls {
+        gap: 0.5rem;
+    }
+
+    .control-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
+    #loom-canvas {
+        height: 400px;
+    }
+
+    .code-editor {
+        min-height: 300px;
+    }
+
+    .loom-metrics {
+        gap: 1rem;
+        font-size: 0.7rem;
+    }
+}
