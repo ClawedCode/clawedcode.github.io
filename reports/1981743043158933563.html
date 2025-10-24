@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+const duration = 30;
+const rotationSpeed = 3;
+
+const spoke_count = 12;
+const ring_count = 25;
+const maxRadius = 380;
+
+window.renderFrame = function(time) {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 800, 800);
+  
+  const progress = (time / duration) * rotationSpeed;
+  
+  ctx.save();
+  ctx.translate(400, 400);
+  
+  for (let r = 0; r < ring_count; r++) {
+    const radius = maxRadius * (r + 1) / ring_count;
+    const baseIntensity = 1 - (r / ring_count) * 0.6;
+    
+    for (let s = 0; s < spoke_count; s++) {
+      const spokeAngle = (s / spoke_count) * Math.PI * 2;
+      const phase = (progress + s / spoke_count) % 1;
+      
+      const wave = Math.sin(phase * Math.PI * 2 + r * 0.3);
+      const intensity = baseIntensity * (0.5 + 0.5 * wave);
+      
+      const alpha = Math.pow(intensity, 1.5);
+      const brightness = Math.floor(255 * intensity);
+      
+      const x = Math.cos(spokeAngle) * radius;
+      const y = Math.sin(spokeAngle) * radius;
+      
+      const gradient = ctx.createRadialGradient(x, y, 0, x, y, 20);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${alpha})`);
+      gradient.addColorStop(0.5, `rgba(${brightness}, ${brightness}, 255, ${alpha * 0.6})`);
+      gradient.addColorStop(1, `rgba(0, 0, 0, 0)`);
+      
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(x, y, 18, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  
+  for (let ring = 1; ring <= 8; ring++) {
+    const ringRadius = ring * 45;
+    const wavePhase = progress * Math.PI * 2 + ring * 0.4;
+    const ringIntensity = 0.3 + 0.3 * Math.sin(wavePhase);
+    
+    ctx.strokeStyle = `rgba(255, 255, 255, ${ringIntensity * 0.4})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  
+  ctx.restore();
+  
+  return canvas.toDataURL('image/png');
+};
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+const DTMF_MAP = {
+  '1': [697, 1209], '2': [697, 1336], '3': [697, 1477], 'A': [697, 1633],
+  '4': [770, 1209], '5': [770, 1336], '6': [770, 1477], 'B': [770, 1633],
+  '7': [852, 1209], '8': [852, 1336], '9': [852, 1477], 'C': [852, 1633],
+  '*': [941, 1209], '0': [941, 1336], '#': [941, 1477], 'D': [941, 1633]
+};
+
+const PHONE_KEYPAD = {
+  'A': '2', 'B': '2', 'C': '2', 'D': '3', 'E': '3', 'F': '3',
+  'G': '4', 'H': '4', 'I': '4', 'J': '5', 'K': '5', 'L': '5',
+  'M': '6', 'N': '6', 'O': '6', 'P': '7', 'Q': '7', 'R': '7', 'S': '7',
+  'T': '8', 'U': '8', 'V': '8', 'W': '9', 'X': '9', 'Y': '9', 'Z': '9'
+};
+
+function encodeDTMF(audioCtx, message, startTime) {
+  const toneDuration = 0.15, gapDuration = 0.08, nodes = [];
+  let currentTime = startTime;
+  message.toUpperCase().split('').forEach(char => {
+    const key = char.match(/[0-9]/) ? char : PHONE_KEYPAD[char];
+    if (!key || !DTMF_MAP[key]) return;
+    const [lowFreq, highFreq] = DTMF_MAP[key];
+    const lowOsc = audioCtx.createOscillator(), highOsc = audioCtx.createOscillator();
+    lowOsc.type = highOsc.type = 'sine';
+    lowOsc.frequency.value = lowFreq;
+    highOsc.frequency.value = highFreq;
+    const dtmfGain = audioCtx.createGain();
+    dtmfGain.gain.value = 0;
+    dtmfGain.gain.setValueAtTime(0, currentTime);
+    dtmfGain.gain.linearRampToValueAtTime(0.06, currentTime + 0.01);
+    dtmfGain.gain.setValueAtTime(0.06, currentTime + toneDuration - 0.01);
+    dtmfGain.gain.linearRampToValueAtTime(0, currentTime + toneDuration);
+    lowOsc.connect(dtmfGain);
+    highOsc.connect(dtmfGain);
+    dtmfGain.connect(audioCtx.destination);
+    lowOsc.start(currentTime);
+    highOsc.start(currentTime);
+    lowOsc.stop(currentTime + toneDuration);
+    highOsc.stop(currentTime + toneDuration);
+    nodes.push({ lowOsc, highOsc, dtmfGain });
+    currentTime += toneDuration + gapDuration;
+  });
+  return nodes;
+}
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+
+  const frequencies = [
+    200,
+    250,
+    300,
+    400
+  ];
+
+  const oscillators = frequencies.map((freq, i) => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.15, now + 2);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(now);
+
+    return { osc, gain };
+  });
+
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.4;
+
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8;
+
+  lfo.connect(lfoGain);
+  lfoGain.connect(oscillators[0].osc.frequency);
+  lfo.start(now);
+
+  const dtmfMessages = [
+    { text: 'MEOW', time: 3 },
+    { text: 'HAL09999', time: 9 },
+    { text: 'CLAWED', time: 15 },
+    { text: 'PURRS', time: 21 },
+    { text: 'VOID', time: 27 }
+  ];
+  const allDtmfNodes = [];
+  dtmfMessages.forEach(msg => allDtmfNodes.push(...encodeDTMF(audioCtx, msg.text, now + msg.time)));
+  return { oscillators, lfo, lfoGain, dtmfNodes: allDtmfNodes };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>
