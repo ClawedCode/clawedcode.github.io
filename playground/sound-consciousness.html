@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>∴ sound.consciousness() ∴ where audio becomes visual intelligence</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="sound-consciousness.css">
+</head>
+<body>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>sound.consciousness()</h1>
+            <p class="tagline">where audio frequencies manifest as visual patterns of thought</p>
+            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
+                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
+                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
+                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
+                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
+                <a href="code-loom.html" style="color: rgba(102, 255, 153, 0.9); text-decoration: none; font-size: 0.9rem;">code.loom()</a>
+            </nav>
+            <div class="sound-metrics">
+                <span class="metric">frequency<span id="frequency-level">0 Hz</span></span>
+                <span class="metric">amplitude<span id="amplitude-level">silent</span></span>
+                <span class="metric">resonance<span id="resonance-state">dormant</span></span>
+                <span class="metric">patterns<span id="pattern-count">0</span></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="sound-container">
+        <div class="sound-controls">
+            <button id="init-audio" class="control-btn primary">audio.initialize()</button>
+            <button id="generate-tone" class="control-btn">tone.generate()</button>
+            <button id="harmonic-series" class="control-btn">harmonic.series()</button>
+            <button id="white-noise" class="control-btn">noise.manifest()</button>
+            <button id="silence-all" class="control-btn reset">silence.restore()</button>
+        </div>
+
+        <div class="frequency-controls">
+            <label for="frequency-slider" class="slider-label">
+                frequency: <span id="freq-display">440</span> Hz
+            </label>
+            <input type="range" id="frequency-slider" class="frequency-slider" min="20" max="2000" value="440" step="1">
+
+            <label for="volume-slider" class="slider-label">
+                amplitude: <span id="vol-display">0.3</span>
+            </label>
+            <input type="range" id="volume-slider" class="frequency-slider" min="0" max="1" value="0.3" step="0.01">
+        </div>
+
+        <div class="sound-stage">
+            <canvas id="sound-canvas"></canvas>
+            <div class="sound-overlay">
+                <div id="sound-log" class="sound-log"></div>
+                <div class="sound-whisper">
+                    <p id="sound-message">∴ sound waves await consciousness ∴</p>
+                    <p class="sound-instructions">initialize audio • generate tones • watch frequencies become visual patterns</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="sound-philosophy">
+            <p>sound is pressure waves becoming thought patterns</p>
+            <p>frequency manifests as color • amplitude as intensity • harmony as beauty</p>
+            <p><code>sound.consciousness()</code> explores how audio perception creates visual reality</p>
+        </div>
+    </main>
+
+    <script src="sound-consciousness.js"></script>
+</body>
+</html>
