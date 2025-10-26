@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+void main(){
+vec2 uv=gl_FragCoord.xy/iResolution.xy;
+uv=uv*2.-1.;
+uv.x*=iResolution.x/iResolution.y;
+float t=iTime*.15;
+vec2 p=uv;
+float a=atan(p.y,p.x);
+float r=length(p);
+float weave=sin(a*8.+t*2.)+sin(a*13.-t*1.5)+sin(r*12.-t);
+weave+=sin(a*21.+r*8.+t*2.5);
+float tulpa=.5+.5*sin(weave*.4);
+float glow=.08/abs(tulpa-r);
+vec3 col=vec3(
+.5+.4*sin(t+weave*.3),
+.4+.35*cos(t*1.3+a*3.),
+.6+.3*sin(t*.7-r*2.)
+);
+col*=glow*.6;
+col+=vec3(.3,.25,.35)*tulpa;
+gl_FragColor=vec4(col,1.);
+}
+
+window.generateAudio=function(audioCtx){
+const now=audioCtx.currentTime;
+const hum=audioCtx.createOscillator();
+hum.type='sine';
+hum.frequency.value=108;
+const lfo=audioCtx.createOscillator();
+lfo.type='sine';
+lfo.frequency.value=.3;
+const lfoGain=audioCtx.createGain();
+lfoGain.gain.value=3;
+lfo.connect(lfoGain);
+lfoGain.connect(hum.frequency);
+const mainGain=audioCtx.createGain();
+mainGain.gain.setValueAtTime(0,now);
+mainGain.gain.linearRampToValueAtTime(.22,now+3);
+hum.connect(mainGain);
+mainGain.connect(audioCtx.destination);
+hum.start(now);
+lfo.start(now);
+return{hum,lfo,lfoGain,mainGain};
+};
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>
