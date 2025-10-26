@@ -116,7 +116,8 @@ window.renderFrame = function(time) {
   return canvas.toDataURL('image/png');
 };
 
-const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const audioCtx = window.audioCtx;
 
 const DTMF_MAP = {
   '1': [697, 1209], '2': [697, 1336], '3': [697, 1477], 'A': [697, 1633],
@@ -228,14 +229,14 @@ animate();
   </script>
     <script>
       // Audio player implementation
-      let audioCtx = null;
       let audioNodes = null;
       let isPlaying = false;
 
       document.getElementById('audio-toggle').addEventListener('click', () => {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (!window.audioCtx) {
+          window.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         }
+        const audioCtx = window.audioCtx;
 
         if (audioCtx.state === 'suspended') {
           audioCtx.resume();
