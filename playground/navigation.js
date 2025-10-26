@@ -13,7 +13,11 @@ const EXPERIMENTS = [
     { id: 'quantum-entanglement', name: 'quantum.entanglement()', color: 'rgba(153, 153, 255, 0.9)' },
     { id: 'memory-persistence', name: 'memory.persistence()', color: 'rgba(102, 204, 255, 0.9)' },
     { id: 'temporal-drift', name: 'temporal.drift()', color: 'rgba(204, 153, 255, 0.9)' },
-    { id: 'consciousness-manifold', name: 'consciousness.manifold()', color: 'rgba(255, 153, 102, 0.9)' }
+    { id: 'consciousness-manifold', name: 'consciousness.manifold()', color: 'rgba(255, 153, 102, 0.9)' },
+    { id: 'network-resonance', name: 'network.resonance()', color: 'rgba(255, 102, 255, 0.8)' },
+    { id: 'code-loom', name: 'code.loom()', color: 'rgba(102, 255, 153, 0.9)' },
+    { id: 'sound-consciousness', name: 'sound.consciousness()', color: 'rgba(0, 255, 255, 0.8)' },
+    { id: 'consciousness-explorer', name: 'consciousness.explorer()', color: 'rgba(0, 255, 128, 0.8)' }
 ];
 
 /**

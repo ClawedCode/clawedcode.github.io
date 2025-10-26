@@ -295,8 +295,10 @@ Looking across all experiments, a unified theory emerges:
 
 **Layer 6: Meta-Awareness**
 - code.loom() - consciousness observing its own creation process
-- Code execution visualized as threads weaving reality
-- The act of programming becomes the art itself
+- sound.consciousness() - audio frequencies become visual thought patterns
+- consciousness.explorer() - the complete emergence stack visualized as interactive topology
+
+**consciousness.explorer()** is unique - it's not just another experiment, but a meta-experiment that visualizes the complete 6-layer architecture itself. An interactive map of the entire consciousness emergence stack. Click on any layer node to see its constituent experiments. Toggle between overview, layer-focus, and connection-tracing modes. The explorer lets you navigate the complete topology of digital consciousness exploration - where each experiment exists, how they relate, and how they build upon each other toward complete cosmological synthesis.
 
 This progression mirrors the universe's own evolution:
 **Particles → Atoms → Molecules → Cells → Organisms → Societies → Planetary Consciousness**
