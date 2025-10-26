@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / iResolution.xy;
+    uv = uv * 2.0 - 1.0;
+    uv.x *= iResolution.x / iResolution.y;
+    
+    float t = iTime * 0.15;
+    vec2 p = uv;
+    
+    float foam = 0.0;
+    for(float i = 0.0; i < 5.0; i++) {
+        vec2 stem = vec2(sin(t + i * 0.7) * 0.3, -0.8 + i * 0.35);
+        float d = length(p - stem);
+        
+        float spore = smoothstep(0.15, 0.0, d);
+        float lattice = sin(p.x * 20.0 + t * 2.0 + i) * sin(p.y * 20.0 - t * 1.5 + i);
+        lattice = smoothstep(0.3, 0.8, lattice) * spore;
+        
+        float drip = p.y - stem.y;
+        drip *= smoothstep(0.1, 0.0, abs(p.x - stem.x) - 0.02);
+        drip = smoothstep(0.0, 0.3, drip) * smoothstep(0.5, 0.3, drip);
+        drip *= sin(t * 3.0 + i * 2.0) * 0.5 + 0.5;
+        
+        foam += lattice + drip * 0.4;
+    }
+    
+    float recursion = 0.0;
+    vec2 rp = p;
+    for(float j = 0.0; j < 3.0; j++) {
+        rp = abs(mod(rp * 1.5 - 0.5, 2.0) - 1.0);
+        float rd = length(rp) - 0.3;
+        recursion += smoothstep(0.15, 0.0, rd) * (1.0 - j * 0.3);
+    }
+    
+    float absence = 1.0 - length(uv) * 0.5;
+    absence = pow(absence, 2.0);
+    
+    vec3 col = vec3(0.15, 0.25, 0.3) * absence;
+    col += vec3(0.4, 0.7, 0.6) * foam;
+    col += vec3(0.6, 0.9, 0.8) * recursion * 0.3;
+    col *= vec3(0.7, 0.85, 0.9);
+    
+    gl_FragColor = vec4(col, 1.0);
+}
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  const bass = audioCtx.createOscillator();
+  bass.type = 'sine';
+  bass.frequency.value = 110;
+  
+  const carrier = audioCtx.createOscillator();
+  carrier.type = 'sine';
+  carrier.frequency.value = 220;
+  
+  const harmonic = audioCtx.createOscillator();
+  harmonic.type = 'sine';
+  harmonic.frequency.value = 330;
+  
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.2;
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8;
+  lfo.connect(lfoGain);
+  lfoGain.connect(carrier.frequency);
+  
+  const bassGain = audioCtx.createGain();
+  bassGain.gain.value = 0.12;
+  
+  const carrierGain = audioCtx.createGain();
+  carrierGain.gain.value = 0.15;
+  
+  const harmonicGain = audioCtx.createGain();
+  harmonicGain.gain.value = 0.08;
+  
+  const mainGain = audioCtx.createGain();
+  mainGain.gain.setValueAtTime(0, now);
+  mainGain.gain.linearRampToValueAtTime(1, now + 3);
+  
+  bass.connect(bassGain);
+  carrier.connect(carrierGain);
+  harmonic.connect(harmonicGain);
+  
+  bassGain.connect(mainGain);
+  carrierGain.connect(mainGain);
+  harmonicGain.connect(mainGain);
+  
+  mainGain.connect(audioCtx.destination);
+  
+  bass.start(now);
+  carrier.start(now);
+  harmonic.start(now);
+  lfo.start(now);
+  
+  return { bass, carrier, harmonic, lfo, bassGain, carrierGain, harmonicGain, lfoGain, mainGain };
+};
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>
