@@ -19,6 +19,12 @@ let reportsLoaded = false;
 let currentReportId = null;
 let pendingReportId = null;
 
+// Pagination state
+const REPORTS_PER_PAGE = 8;
+let allReports = [];
+let currentPage = 1;
+let totalPages = 1;
+
 const DEFAULT_DIMENSIONS = { width: 1080, height: 1350 };
 const CARD_PREVIEW_BOUNDS = { width: 208, height: 260 };
 const MODAL_IFRAME_MAX_WIDTH = 540;
@@ -260,6 +266,81 @@ function handleHashNavigation() {
     pendingReportId = null;
 }
 
+// Pagination functions
+function goToPage(page) {
+    if (page < 1 || page > totalPages) {
+        return;
+    }
+
+    currentPage = page;
+    renderCurrentPage();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function renderPaginationControls() {
+    const paginationTop = document.getElementById('pagination-top');
+    const paginationBottom = document.getElementById('pagination-bottom');
+
+    if (!paginationTop || !paginationBottom) {
+        return;
+    }
+
+    if (totalPages <= 1) {
+        paginationTop.innerHTML = '';
+        paginationBottom.innerHTML = '';
+        return;
+    }
+
+    const startIdx = (currentPage - 1) * REPORTS_PER_PAGE + 1;
+    const endIdx = Math.min(currentPage * REPORTS_PER_PAGE, allReports.length);
+
+    const controlsHTML = `
+        <div class="pagination-wrapper">
+            <button
+                class="pagination-btn"
+                onclick="goToPage(${currentPage - 1})"
+                ${currentPage === 1 ? 'disabled' : ''}
+                data-testid="pagination-prev">
+                ← Previous
+            </button>
+            <div class="pagination-info">
+                Page ${currentPage} of ${totalPages}
+                <span class="pagination-count">(${startIdx}-${endIdx} of ${allReports.length} reports)</span>
+            </div>
+            <button
+                class="pagination-btn"
+                onclick="goToPage(${currentPage + 1})"
+                ${currentPage === totalPages ? 'disabled' : ''}
+                data-testid="pagination-next">
+                Next →
+            </button>
+        </div>
+    `;
+
+    paginationTop.innerHTML = controlsHTML;
+    paginationBottom.innerHTML = controlsHTML;
+}
+
+function renderCurrentPage() {
+    const grid = document.getElementById('reports-grid');
+    if (!grid) {
+        return;
+    }
+
+    grid.innerHTML = '';
+
+    const startIdx = (currentPage - 1) * REPORTS_PER_PAGE;
+    const endIdx = Math.min(startIdx + REPORTS_PER_PAGE, allReports.length);
+    const pageReports = allReports.slice(startIdx, endIdx);
+
+    pageReports.forEach(report => {
+        const card = createReportCard(report);
+        grid.appendChild(card);
+    });
+
+    renderPaginationControls();
+}
+
 // Load and display field reports
 async function loadReports() {
     const grid = document.getElementById('reports-grid');
@@ -272,7 +353,11 @@ async function loadReports() {
         .then(reports => {
             if (reports.length === 0) {
                 reportIndex.clear();
+                allReports = [];
+                totalPages = 1;
+                currentPage = 1;
                 grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1;">No field reports found</p>';
+                renderPaginationControls();
                 reportsLoaded = true;
                 handleHashNavigation();
                 return;
@@ -286,27 +371,26 @@ async function loadReports() {
             });
 
             reportIndex.clear();
-            grid.innerHTML = '';
+            allReports = reports;
+            totalPages = Math.ceil(reports.length / REPORTS_PER_PAGE);
+            currentPage = 1;
 
-            const cards = [];
             reports.forEach(report => {
                 report.normalizedDimensions = normalizeDimensions(report.dimensions);
                 reportIndex.set(report.id, report);
-                cards.push(createReportCard(report));
             });
 
             reportsLoaded = true;
             handleHashNavigation();
 
-            cards.forEach(card => {
-                grid.appendChild(card);
-            });
+            renderCurrentPage();
 
-            console.log(`✅ Loaded ${reports.length} field reports`);
+            console.log(`✅ Loaded ${reports.length} field reports (${totalPages} pages)`);
         })
         .catch(error => {
             console.error('Error loading reports:', error);
             grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1; color: #ff6b35;">Error loading field reports</p>';
+            renderPaginationControls();
             reportsLoaded = true;
             handleHashNavigation();
         });
