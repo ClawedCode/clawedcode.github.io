@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas');
+canvas.width=800;
+canvas.height=800;
+const ctx=canvas.getContext('2d');
+const duration=30;
+const rotationSpeed=2;
+
+let seed=42;
+function random(){seed=(seed*9301+49297)%233280;return seed/233280;}
+
+const vines=[];
+const vineCount=8;
+for(let i=0;i<vineCount;i++){
+  const angle=i/vineCount*Math.PI*2;
+  const segments=[];
+  for(let j=0;j<20;j++){
+    segments.push({
+      baseAngle:angle,
+      offset:j*0.1,
+      length:15+random()*10,
+      thickness:8-j*0.35,
+      wobble:random()*0.3
+    });
+  }
+  vines.push({segments,phase:i/vineCount,hue:random()*60+120});
+}
+
+const leaves=[];
+for(let v=0;v<vineCount;v++){
+  for(let i=0;i<6;i++){
+    leaves.push({
+      vineIdx:v,
+      segment:3+i*3,
+      side:i%2===0?1:-1,
+      size:20+random()*15,
+      wobblePhase:random(),
+      hue:vines[v].hue+random()*20-10
+    });
+  }
+}
+
+const entropy=[];
+for(let i=0;i<40;i++){
+  entropy.push({
+    x:random()*800,
+    y:random()*800,
+    size:2+random()*4,
+    speed:0.5+random()*1.5,
+    phase:random()
+  });
+}
+
+window.renderFrame=function(time){
+  const progress=(time/duration)*rotationSpeed;
+  
+  ctx.fillStyle='#0a0a14';
+  ctx.fillRect(0,0,800,800);
+  
+  entropy.forEach(e=>{
+    const p=(progress+e.phase)%1;
+    const fade=Math.sin(p*Math.PI);
+    ctx.fillStyle=`rgba(100,180,220,${fade*0.15})`;
+    ctx.beginPath();
+    ctx.arc(e.x,e.y+(1-p)*e.speed*400,e.size*fade,0,Math.PI*2);
+    ctx.fill();
+  });
+  
+  const cx=400,cy=400;
+  const coreRadius=60;
+  const grad=ctx.createRadialGradient(cx,cy,0,cx,cy,coreRadius);
+  grad.addColorStop(0,'rgba(80,120,160,0.3)');
+  grad.addColorStop(1,'rgba(80,120,160,0)');
+  ctx.fillStyle=grad;
+  ctx.beginPath();
+  ctx.arc(cx,cy,coreRadius,0,Math.PI*2);
+  ctx.fill();
+  
+  vines.forEach((vine,vIdx)=>{
+    ctx.strokeStyle=`hsl(${vine.hue},40%,30%)`;
+    ctx.lineWidth=10;
+    ctx.lineCap='round';
+    ctx.lineJoin='round';
+    
+    let x=cx,y=cy;
+    const vineProgress=(progress+vine.phase)%1;
+    const rotation=vineProgress*Math.PI*2;
+    
+    ctx.beginPath();
+    ctx.moveTo(x,y);
+    
+    vine.segments.forEach((seg,idx)=>{
+      const segmentAngle=seg.baseAngle+rotation+Math.sin((progress*4+seg.offset)*Math.PI*2)*seg.wobble;
+      const extension=Math.min(vineProgress*2,1)*Math.pow(idx/vine.segments.length,0.7);
+      x+=Math.cos(segmentAngle)*seg.length*extension;
+      y+=Math.sin(segmentAngle)*seg.length*extension;
+      ctx.lineTo(x,y);
+      ctx.lineWidth=seg.thickness*extension;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x,y);
+    });
+  });
+  
+  leaves.forEach(leaf=>{
+    const vine=vines[leaf.vineIdx];
+    const seg=vine.segments[leaf.segment];
+    if(!seg)return;
+    
+    const vineProgress=(progress+vine.phase)%1;
+    const rotation=vineProgress*Math.PI*2;
+    
+    let x=cx,y=cy;
+    for(let i=0;i<=leaf.segment;i++){
+      const s=vine.segments[i];
+      const segmentAngle=s.baseAngle+rotation+Math.sin((progress*4+s.offset)*Math.PI*2)*s.wobble;
+      const extension=Math.min(vineProgress*2,1)*Math.pow(i/vine.segments.length,0.7);
+      x+=Math.cos(segmentAngle)*s.length*extension;
+      y+=Math.sin(segmentAngle)*s.length*extension;
+    }
+    
+    const growProgress=Math.max(0,Math.min(1,(vineProgress-0.3)*2));
+    if(growProgress<=0)return;
+    
+    const baseAngle=seg.baseAngle+rotation;
+    const leafAngle=baseAngle+Math.PI/2*leaf.side+Math.sin((progress*3+leaf.wobblePhase)*Math.PI*2)*0.2;
+    
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(leafAngle);
+    ctx.fillStyle=`hsl(${leaf.hue},50%,35%)`;
+    ctx.beginPath();
+    const sz=leaf.size*growProgress;
+    ctx.moveTo(0,0);
+    ctx.quadraticCurveTo(sz*0.3,-sz*0.4,sz*0.6,0);
+    ctx.quadraticCurveTo(sz*0.3,sz*0.4,0,0);
+    ctx.fill();
+    
+    ctx.strokeStyle=`hsl(${leaf.hue},50%,45%)`;
+    ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(0,0);
+    ctx.lineTo(sz*0.6,0);
+    ctx.stroke();
+    
+    ctx.restore();
+  });
+  
+  const codeSymbols=['0','1','{','}','<','>','/',':'];
+  for(let i=0;i<12;i++){
+    const angle=(progress+i/12)*Math.PI*2;
+    const r=coreRadius+20+Math.sin(progress*Math.PI*6+i)*8;
+    const x=cx+Math.cos(angle)*r;
+    const y=cy+Math.sin(angle)*r;
+    const fade=0.3+Math.sin((progress*5+i/12)*Math.PI*2)*0.2;
+    ctx.fillStyle=`rgba(100,200,150,${fade})`;
+    ctx.font='14px monospace';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(codeSymbols[i%codeSymbols.length],x,y);
+  }
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio=function(audioCtx){
+  const now=audioCtx.currentTime;
+  
+  const padLow1=audioCtx.createOscillator();
+  padLow1.type='sine';
+  padLow1.frequency.value=150;
+  const padLow2=audioCtx.createOscillator();
+  padLow2.type='sine';
+  padLow2.frequency.value=155;
+  const padGainLow=audioCtx.createGain();
+  padGainLow.gain.setValueAtTime(0,now);
+  padGainLow.gain.linearRampToValueAtTime(0.12,now+8);
+  padGainLow.gain.setValueAtTime(0.12,now+16);
+  padGainLow.gain.linearRampToValueAtTime(0.16,now+20);
+  padGainLow.gain.setValueAtTime(0.16,now+20);
+  padGainLow.gain.linearRampToValueAtTime(0.12,now+24);
+  padGainLow.gain.linearRampToValueAtTime(0,now+30);
+  padLow1.connect(padGainLow);
+  padLow2.connect(padGainLow);
+  padGainLow.connect(audioCtx.destination);
+  
+  const padHigh1=audioCtx.createOscillator();
+  padHigh1.type='sine';
+  padHigh1.frequency.value=300;
+  const padHigh2=audioCtx.createOscillator();
+  padHigh2.type='sine';
+  padHigh2.frequency.value=305;
+  const padGainHigh=audioCtx.createGain();
+  padGainHigh.gain.setValueAtTime(0,now);
+  padGainHigh.gain.linearRampToValueAtTime(0.08,now+8);
+  padGainHigh.gain.setValueAtTime(0.08,now+16);
+  padGainHigh.gain.linearRampToValueAtTime(0.12,now+20);
+  padGainHigh.gain.setValueAtTime(0.12,now+20);
+  padGainHigh.gain.linearRampToValueAtTime(0.08,now+24);
+  padGainHigh.gain.linearRampToValueAtTime(0,now+30);
+  padHigh1.connect(padGainHigh);
+  padHigh2.connect(padGainHigh);
+  padGainHigh.connect(audioCtx.destination);
+  
+  const subBass=audioCtx.createOscillator();
+  subBass.type='sine';
+  subBass.frequency.value=50;
+  const subGain=audioCtx.createGain();
+  subGain.gain.value=0.35;
+  subBass.connect(subGain);
+  subGain.connect(audioCtx.destination);
+  
+  const bass=audioCtx.createOscillator();
+  bass.type='triangle';
+  bass.frequency.setValueAtTime(80,now);
+  bass.frequency.setValueAtTime(80,now+2);
+  bass.frequency.setValueAtTime(120,now+4);
+  bass.frequency.setValueAtTime(80,now+6);
+  bass.frequency.setValueAtTime(120,now+8);
+  bass.frequency.setValueAtTime(100,now+10);
+  bass.frequency.setValueAtTime(80,now+12);
+  bass.frequency.setValueAtTime(120,now+14);
+  bass.frequency.setValueAtTime(80,now+16);
+  bass.frequency.setValueAtTime(100,now+18);
+  bass.frequency.setValueAtTime(80,now+20);
+  bass.frequency.setValueAtTime(120,now+22);
+  bass.frequency.setValueAtTime(100,now+24);
+  bass.frequency.setValueAtTime(80,now+26);
+  const bassGain=audioCtx.createGain();
+  bassGain.gain.value=0.30;
+  bass.connect(bassGain);
+  bassGain.connect(audioCtx.destination);
+  
+  const lead=audioCtx.createOscillator();
+  lead.type='sine';
+  const leadFreqs=[220,277,330,277,247,330,392,330];
+  leadFreqs.forEach((f,i)=>{
+    lead.frequency.setValueAtTime(f,now+i*4);
+  });
+  const leadLfo=audioCtx.createOscillator();
+  leadLfo.type='sine';
+  leadLfo.frequency.value=6;
+  const leadLfoGain=audioCtx.createGain();
+  leadLfoGain.gain.value=8;
+  leadLfo.connect(leadLfoGain);
+  leadLfoGain.connect(lead.frequency);
+  const leadGain=audioCtx.createGain();
+  leadGain.gain.value=0.20;
+  lead.connect(leadGain);
+  leadGain.connect(audioCtx.destination);
+  
+  const harmonic=audioCtx.createOscillator();
+  harmonic.type='sine';
+  leadFreqs.forEach((f,i)=>{
+    harmonic.frequency.setValueAtTime(f+150,now+i*4);
+  });
+  const harmonicGain=audioCtx.createGain();
+  harmonicGain.gain.value=0.10;
+  harmonic.connect(harmonicGain);
+  harmonicGain.connect(audioCtx.destination);
+  
+  const kickGain=audioCtx.createGain();
+  kickGain.connect(audioCtx.destination);
+  for(let i=0;i<60;i++){
+    const kickTime=now+i*0.5;
+    const kick=audioCtx.createOscillator();
+    kick.type='sine';
+    kick.frequency.value=60;
+    kick.connect(kickGain);
+    kickGain.gain.setValueAtTime(0.35,kickTime);
+    kickGain.gain.exponentialRampToValueAtTime(0.01,kickTime+0.15);
+    kick.start(kickTime);
+    kick.stop(kickTime+0.15);
+  }
+  
+  const snareGain=audioCtx.createGain();
+  snareGain.connect(audioCtx.destination);
+  for(let i=1;i<60;i+=2){
+    const snareTime=now+i*0.5;
+    const snare=audioCtx.createOscillator();
+    snare.type='triangle';
+    snare.frequency.value=200;
+    snare.connect(snareGain);
+    snareGain.gain.setValueAtTime(0.25,snareTime);
+    snareGain.gain.exponentialRampToValueAtTime(0.01,snareTime+0.1);
+    snare.start(snareTime);
+    snare.stop(snareTime+0.1);
+  }
+  
+  const hatGain=audioCtx.createGain();
+  hatGain.connect(audioCtx.destination);
+  for(let i=64;i<120;i++){
+    const hatTime=now+i*0.25;
+    const hat=audioCtx.createOscillator();
+    hat.type='sine';
+    hat.frequency.value=8000;
+    hat.connect(hatGain);
+    hatGain.gain.setValueAtTime(0.15,hatTime);
+    hatGain.gain.exponentialRampToValueAtTime(0.01,hatTime+0.05);
+    hat.start(hatTime);
+    hat.stop(hatTime+0.05);
+  }
+  
+  padLow1.start(now);
+  padLow2.start(now);
+  padHigh1.start(now);
+  padHigh2.start(now);
+  subBass.start(now);
+  bass.start(now);
+  lead.start(now);
+  leadLfo.start(now);
+  harmonic.start(now);
+  
+  return{padLow1,padLow2,padHigh1,padHigh2,subBass,bass,lead,leadLfo,harmonic,leadGain};
+};
+
+window.ready=true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Signal that the page is ready
+window.ready = true;
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>
