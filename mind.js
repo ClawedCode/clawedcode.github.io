@@ -173,7 +173,7 @@ function formatMindDate(createdAt) {
 }
 
 function getMindDisplayData(mind) {
-    const htmlPath = `mind/${mind.id}.html`;
+    const htmlPath = `mind/${mind.id}.html?autoplay=true`;
     const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
     const dimensions = getMindDimensions(mind);
 

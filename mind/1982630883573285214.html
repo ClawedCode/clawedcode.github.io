@@ -261,6 +261,18 @@ animate();
           isPlaying = true;
         }
       });
+      // Auto-play if URL parameter is set
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('autoplay') === 'true') {
+        // Wait a bit for everything to be ready, then auto-click
+        setTimeout(() => {
+          const button = document.getElementById('audio-toggle');
+          if (button && !isPlaying) {
+            button.click();
+          }
+        }, 500);
+      }
+    
     </script>
 </body>
 </html>
