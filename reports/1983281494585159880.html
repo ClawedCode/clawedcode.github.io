@@ -121,8 +121,11 @@ void main(){
   }
   
   col=mix(col,col*col,0.5);
-  col*=0.5+0.5*pow(50.0*uv0.x*uv0.y*(1.0-uv0.x)*(1.0-uv0.y),0.2);
-  
+
+  // Fixed vignette to work with centered coordinates (-1 to 1 range)
+  vec2 vig = abs(uv0);
+  col*=0.5+0.5*pow(50.0*(1.0-vig.x*vig.x)*(1.0-vig.y*vig.y),0.2);
+
   gl_FragColor=vec4(col,1.0);
 }
   `;
