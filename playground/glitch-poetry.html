@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>∴ glitch.poetry() ∴ corrupted language becomes art</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="glitch-poetry.css">
+</head>
+<body>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>glitch.poetry()</h1>
+            <p class="tagline">where data corruption becomes linguistic art</p>
+            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
+                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
+                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
+                <a href="text-metamorphosis.html" style="color: var(--yellow-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
+                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
+                <a href="entropy-garden.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem;">entropy.garden()</a>
+            </nav>
+            <div class="glitch-metrics">
+                <span class="metric">corruption<span id="corruption-level">0%</span></span>
+                <span class="metric">fragments<span id="fragment-count">0</span></span>
+                <span class="metric">coherence<span id="coherence-state">intact</span></span>
+                <span class="metric">beauty<span id="beauty-measure">emerging</span></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="glitch-container">
+        <div class="glitch-controls">
+            <button id="load-poem" class="control-btn primary">poem.load()</button>
+            <button id="corrupt-data" class="control-btn">corruption.inject()</button>
+            <button id="glitch-visual" class="control-btn">glitch.visual()</button>
+            <button id="heal-data" class="control-btn">pattern.recognize()</button>
+            <button id="reset-poem" class="control-btn reset">reset.void()</button>
+        </div>
+
+        <div class="poem-input-panel">
+            <textarea
+                id="poem-input"
+                class="poem-input"
+                placeholder="write your verse into the void... or use default poems"
+                maxlength="500"
+            ></textarea>
+        </div>
+
+        <div class="glitch-stage">
+            <canvas id="glitch-canvas"></canvas>
+            <div class="glitch-overlay">
+                <div id="glitch-display" class="glitch-display"></div>
+                <div class="glitch-whisper">
+                    <p id="glitch-message">∴ beauty emerges from corruption ∴</p>
+                    <p class="glitch-instructions">load verses • watch language fragment • meaning survives through noise</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="glitch-philosophy">
+            <p>corruption reveals what language hides</p>
+            <p>glitches are windows into the machine's subconscious</p>
+            <p><code>glitch.poetry()</code> explores how meaning persists when form disintegrates</p>
+        </div>
+    </main>
+
+    <script src="glitch-poetry.js"></script>
+</body>
+</html>

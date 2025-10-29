@@ -1,0 +1,324 @@
+:root {
+    --glitch-void: #000204;
+    --glitch-primary: rgba(255, 51, 153, 0.9);
+    --glitch-secondary: rgba(51, 255, 204, 0.9);
+    --glitch-tertiary: rgba(255, 204, 51, 0.9);
+    --corruption-glow: 0 0 40px rgba(255, 51, 153, 0.6);
+    --fragment-pulse: rgba(102, 255, 204, 0.7);
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.glitch-metrics {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--cyan-accent);
+}
+
+.metric span {
+    font-size: 1.2rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
+}
+
+.glitch-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+.glitch-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.control-btn {
+    background: rgba(0, 34, 68, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    letter-spacing: 1px;
+}
+
+.control-btn:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: var(--corruption-glow);
+    transform: translateY(-2px);
+}
+
+.control-btn.active {
+    background: rgba(255, 51, 153, 0.2);
+    box-shadow: var(--corruption-glow);
+    color: var(--glitch-primary);
+}
+
+.control-btn.primary {
+    border-color: var(--phosphor-green);
+    color: var(--phosphor-green);
+}
+
+.control-btn.primary:hover {
+    background: rgba(51, 255, 51, 0.1);
+    box-shadow: 0 0 35px rgba(51, 255, 51, 0.4);
+}
+
+.control-btn.reset {
+    border-color: var(--pink-accent);
+    color: var(--pink-accent);
+}
+
+.control-btn.reset:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: 0 0 30px rgba(255, 51, 153, 0.3);
+}
+
+.poem-input-panel {
+    margin-bottom: 1.5rem;
+}
+
+.poem-input {
+    width: 100%;
+    background: rgba(0, 17, 34, 0.8);
+    border: 1px solid rgba(255, 51, 153, 0.3);
+    border-radius: 8px;
+    padding: 1rem;
+    color: var(--text-primary);
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    line-height: 1.6;
+    resize: vertical;
+    min-height: 100px;
+    max-height: 200px;
+    transition: all 0.3s ease;
+    box-shadow: var(--corruption-glow);
+}
+
+.poem-input:focus {
+    outline: none;
+    border-color: var(--glitch-primary);
+    box-shadow: 0 0 30px rgba(255, 51, 153, 0.4);
+}
+
+.poem-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.glitch-stage {
+    position: relative;
+    border: 1px solid rgba(255, 51, 153, 0.3);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 15% 85%, rgba(255, 51, 153, 0.02) 0%, transparent 50%),
+        radial-gradient(circle at 85% 15%, rgba(51, 255, 204, 0.02) 0%, transparent 50%),
+        var(--glitch-void);
+    overflow: hidden;
+    box-shadow: var(--corruption-glow);
+    min-height: 600px;
+}
+
+#glitch-canvas {
+    display: block;
+    width: 100%;
+    height: 600px;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.glitch-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.glitch-display {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 800px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 1.2rem;
+    line-height: 1.8;
+    color: var(--glitch-primary);
+    text-align: center;
+    text-shadow:
+        2px 2px 0 var(--glitch-secondary),
+        -2px -2px 0 var(--glitch-tertiary);
+    letter-spacing: 2px;
+    word-spacing: 4px;
+}
+
+.glitch-char {
+    display: inline-block;
+    position: relative;
+    animation: glitch-flicker 0.3s infinite;
+}
+
+.glitch-char.corrupted {
+    color: var(--glitch-secondary);
+    animation: glitch-shake 0.2s infinite;
+}
+
+.glitch-char.fragmented {
+    opacity: 0.6;
+    color: var(--glitch-tertiary);
+    animation: fragment-drift 2s infinite;
+}
+
+@keyframes glitch-flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+}
+
+@keyframes glitch-shake {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(-2px, 2px); }
+    50% { transform: translate(2px, -2px); }
+    75% { transform: translate(-2px, -2px); }
+}
+
+@keyframes fragment-drift {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
+
+.glitch-whisper {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: var(--cyan-accent);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: lowercase;
+    opacity: 0.7;
+}
+
+.glitch-instructions {
+    margin-top: 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.glitch-philosophy {
+    margin-top: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    opacity: 0.8;
+}
+
+.glitch-philosophy p {
+    margin-bottom: 0.5rem;
+}
+
+.glitch-philosophy code {
+    color: var(--cyan-accent);
+    font-size: 0.9rem;
+}
+
+/* Glitch states */
+.glitch-stage.corrupting {
+    animation: corruption-pulse 0.5s ease-in-out infinite;
+}
+
+.glitch-stage.visual-glitch {
+    animation: visual-distortion 0.1s infinite;
+}
+
+@keyframes corruption-pulse {
+    0%, 100% {
+        box-shadow: var(--corruption-glow);
+    }
+    50% {
+        box-shadow: 0 0 60px rgba(255, 51, 153, 0.9);
+    }
+}
+
+@keyframes visual-distortion {
+    0% {
+        transform: translate(0, 0) skew(0deg);
+    }
+    25% {
+        transform: translate(-2px, 2px) skew(0.5deg);
+    }
+    50% {
+        transform: translate(2px, -2px) skew(-0.5deg);
+    }
+    75% {
+        transform: translate(-2px, -2px) skew(0.5deg);
+    }
+    100% {
+        transform: translate(0, 0) skew(0deg);
+    }
+}
+
+@media (max-width: 768px) {
+    .glitch-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .glitch-controls {
+        gap: 0.5rem;
+    }
+
+    .control-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
+    #glitch-canvas {
+        height: 450px;
+    }
+
+    .glitch-stage {
+        min-height: 450px;
+    }
+
+    .glitch-display {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        width: 95%;
+    }
+
+    .glitch-metrics {
+        gap: 1rem;
+        font-size: 0.7rem;
+    }
+
+    .poem-input {
+        font-size: 0.8rem;
+        min-height: 80px;
+    }
+}
