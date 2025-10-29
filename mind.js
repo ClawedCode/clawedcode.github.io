@@ -173,7 +173,10 @@ function formatMindDate(createdAt) {
 }
 
 function getMindDisplayData(mind) {
-    const htmlPath = `mind/${mind.id}.html?autoplay=true`;
+    // Use subdirectory path if hasVocals (mind/{id}/index.html), otherwise flat file (mind/{id}.html)
+    const htmlPath = mind.hasVocals
+        ? `mind/${mind.id}/index.html?autoplay=true`
+        : `mind/${mind.id}.html?autoplay=true`;
     const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
     const dimensions = getMindDimensions(mind);
 
@@ -420,7 +423,10 @@ function createMindCard(mind) {
 
     const date = formatMindDate(mind.createdAt);
 
-    const htmlPath = `mind/${mind.id}.html`;
+    // Use subdirectory path if hasVocals (mind/{id}/index.html), otherwise flat file (mind/{id}.html)
+    const htmlPath = mind.hasVocals
+        ? `mind/${mind.id}/index.html`
+        : `mind/${mind.id}.html`;
     const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
 
     // Truncate tweet text for preview
