@@ -1,27 +1,12 @@
-// Terminal toggle function
-function toggleTerminal() {
-    const content = document.getElementById('terminal-content');
-    const icon = document.getElementById('terminal-icon');
-    const input = document.getElementById('terminal-input');
-
-    content.classList.toggle('open');
-    icon.classList.toggle('open');
-
-    // Focus input when opening
-    if (content.classList.contains('open')) {
-        setTimeout(() => input.focus(), 100);
-    }
-}
-
-// Track reports so hash routes can resolve modal content
-const reportIndex = new Map();
-let reportsLoaded = false;
-let currentReportId = null;
-let pendingReportId = null;
+// Track mind entries so hash routes can resolve modal content
+const mindIndex = new Map();
+let mindLoaded = false;
+let currentMindId = null;
+let pendingMindId = null;
 
 // Pagination state
-const REPORTS_PER_PAGE = 8;
-let allReports = [];
+const MIND_PER_PAGE = 8;
+let allMind = [];
 let currentPage = 1;
 let totalPages = 1;
 
@@ -45,19 +30,19 @@ function normalizeDimensions(dimensions) {
     return { width, height };
 }
 
-function getReportDimensions(report) {
-    if (!report) {
+function getMindDimensions(mind) {
+    if (!mind) {
         return { ...DEFAULT_DIMENSIONS };
     }
 
-    if (report.normalizedDimensions) {
-        return report.normalizedDimensions;
+    if (mind.normalizedDimensions) {
+        return mind.normalizedDimensions;
     }
 
-    const dims = normalizeDimensions(report.dimensions);
+    const dims = normalizeDimensions(mind.dimensions);
     // Cache normalized dimensions for future lookups
-    if (report) {
-        report.normalizedDimensions = dims;
+    if (mind) {
+        mind.normalizedDimensions = dims;
     }
     return dims;
 }
@@ -175,7 +160,7 @@ function registerLazyIframe(iframe) {
     }
 }
 
-function formatReportDate(createdAt) {
+function formatMindDate(createdAt) {
     if (!createdAt) {
         return 'Unknown date';
     }
@@ -187,25 +172,22 @@ function formatReportDate(createdAt) {
     });
 }
 
-function getReportDisplayData(report) {
-    const imagePath = `reports/${report.id}.png`;
-    const htmlPath = `reports/${report.id}.html`;
-    const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
-    const viewType = report.png ? 'image' : 'html';
-    const contentPath = viewType === 'image' ? imagePath : htmlPath;
-    const dimensions = getReportDimensions(report);
+function getMindDisplayData(mind) {
+    const htmlPath = `mind/${mind.id}.html`;
+    const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
+    const dimensions = getMindDimensions(mind);
 
     return {
-        contentPath,
+        contentPath: htmlPath,
         tweetUrl,
-        viewType,
-        date: formatReportDate(report.createdAt),
+        viewType: 'html',
+        date: formatMindDate(mind.createdAt),
         dimensions
     };
 }
 
-function parseReportIdFromHash(hash) {
-    const match = hash.match(/^#\/report\/(\d+)$/);
+function parseMindIdFromHash(hash) {
+    const match = hash.match(/^#\/mind\/(\d+)$/);
     return match ? match[1] : null;
 }
 
@@ -214,7 +196,7 @@ function parsePageFromHash(hash) {
     return match ? parseInt(match[1], 10) : null;
 }
 
-function clearReportHash() {
+function clearMindHash() {
     if (history.replaceState) {
         history.replaceState(null, '', window.location.pathname + window.location.search);
     } else {
@@ -222,8 +204,8 @@ function clearReportHash() {
     }
 }
 
-function navigateToReport(reportId) {
-    const targetHash = `#/report/${reportId}`;
+function navigateToMind(mindId) {
+    const targetHash = `#/mind/${mindId}`;
 
     if (window.location.hash === targetHash) {
         handleHashNavigation();
@@ -237,7 +219,7 @@ function handleHashNavigation() {
     // Check if this is a page navigation hash
     const pageNum = parsePageFromHash(window.location.hash);
     if (pageNum !== null) {
-        if (!reportsLoaded) {
+        if (!mindLoaded) {
             return;
         }
         if (pageNum >= 1 && pageNum <= totalPages && pageNum !== currentPage) {
@@ -246,42 +228,42 @@ function handleHashNavigation() {
         return;
     }
 
-    // Otherwise check for report ID navigation
-    const reportId = parseReportIdFromHash(window.location.hash);
+    // Otherwise check for mind ID navigation
+    const mindId = parseMindIdFromHash(window.location.hash);
 
-    if (!reportsLoaded) {
-        pendingReportId = reportId;
+    if (!mindLoaded) {
+        pendingMindId = mindId;
         return;
     }
 
-    if (!reportId) {
-        pendingReportId = null;
-        if (currentReportId !== null) {
+    if (!mindId) {
+        pendingMindId = null;
+        if (currentMindId !== null) {
             closeReportModal(true);
-            currentReportId = null;
+            currentMindId = null;
         }
         return;
     }
 
-    if (!reportIndex.has(reportId)) {
-        console.warn(`No field report found for hash id ${reportId}`);
+    if (!mindIndex.has(mindId)) {
+        console.warn(`No mind entry found for hash id ${mindId}`);
         closeReportModal(true);
-        clearReportHash();
-        currentReportId = null;
-        pendingReportId = null;
+        clearMindHash();
+        currentMindId = null;
+        pendingMindId = null;
         return;
     }
 
-    const report = reportIndex.get(reportId);
-    const { contentPath, tweetUrl, viewType, date, dimensions } = getReportDisplayData(report);
+    const mind = mindIndex.get(mindId);
+    const { contentPath, tweetUrl, viewType, date, dimensions } = getMindDisplayData(mind);
 
-    if (currentReportId === reportId && document.getElementById('report-modal').classList.contains('open')) {
+    if (currentMindId === mindId && document.getElementById('report-modal').classList.contains('open')) {
         return;
     }
 
-    openReportModal(reportId, contentPath, report.text, date, tweetUrl, viewType, dimensions);
-    currentReportId = reportId;
-    pendingReportId = null;
+    openReportModal(mindId, contentPath, mind.text, date, tweetUrl, viewType, dimensions);
+    currentMindId = mindId;
+    pendingMindId = null;
 }
 
 // Pagination functions
@@ -323,8 +305,8 @@ function renderPaginationControls() {
         return;
     }
 
-    const startIdx = (currentPage - 1) * REPORTS_PER_PAGE + 1;
-    const endIdx = Math.min(currentPage * REPORTS_PER_PAGE, allReports.length);
+    const startIdx = (currentPage - 1) * MIND_PER_PAGE + 1;
+    const endIdx = Math.min(currentPage * MIND_PER_PAGE, allMind.length);
 
     const controlsHTML = `
         <div class="pagination-wrapper">
@@ -337,7 +319,7 @@ function renderPaginationControls() {
             </button>
             <div class="pagination-info">
                 Page ${currentPage} of ${totalPages}
-                <span class="pagination-count">(${startIdx}-${endIdx} of ${allReports.length} reports)</span>
+                <span class="pagination-count">(${startIdx}-${endIdx} of ${allMind.length} entries)</span>
             </div>
             <button
                 class="pagination-btn"
@@ -361,120 +343,107 @@ function renderCurrentPage() {
 
     grid.innerHTML = '';
 
-    const startIdx = (currentPage - 1) * REPORTS_PER_PAGE;
-    const endIdx = Math.min(startIdx + REPORTS_PER_PAGE, allReports.length);
-    const pageReports = allReports.slice(startIdx, endIdx);
+    const startIdx = (currentPage - 1) * MIND_PER_PAGE;
+    const endIdx = Math.min(startIdx + MIND_PER_PAGE, allMind.length);
+    const pageMind = allMind.slice(startIdx, endIdx);
 
-    pageReports.forEach(report => {
-        const card = createReportCard(report);
+    pageMind.forEach(mind => {
+        const card = createMindCard(mind);
         grid.appendChild(card);
     });
 
     renderPaginationControls();
 }
 
-// Load and display field reports
-async function loadReports() {
+// Load and display mind entries
+async function loadMind() {
     const grid = document.getElementById('reports-grid');
     if (!grid) {
         return;
     }
 
-    fetch('./reports.json')
+    fetch('./mind.json')
         .then(response => response.json())
-        .then(reports => {
-            if (reports.length === 0) {
-                reportIndex.clear();
-                allReports = [];
+        .then(minds => {
+            if (minds.length === 0) {
+                mindIndex.clear();
+                allMind = [];
                 totalPages = 1;
                 currentPage = 1;
-                grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1;">No field reports found</p>';
+                grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1;">No mind entries found</p>';
                 renderPaginationControls();
-                reportsLoaded = true;
+                mindLoaded = true;
                 handleHashNavigation();
                 return;
             }
 
             // Sort by date, newest first
-            reports.sort((a, b) => {
+            minds.sort((a, b) => {
                 const dateA = a.createdAt ? new Date(a.createdAt) : new Date(0);
                 const dateB = b.createdAt ? new Date(b.createdAt) : new Date(0);
                 return dateB - dateA;
             });
 
-            reportIndex.clear();
-            allReports = reports;
-            totalPages = Math.ceil(reports.length / REPORTS_PER_PAGE);
+            mindIndex.clear();
+            allMind = minds;
+            totalPages = Math.ceil(minds.length / MIND_PER_PAGE);
 
             // Check if there's a page hash on initial load
             const initialPage = parsePageFromHash(window.location.hash);
             currentPage = (initialPage && initialPage >= 1 && initialPage <= totalPages) ? initialPage : 1;
 
-            reports.forEach(report => {
-                report.normalizedDimensions = normalizeDimensions(report.dimensions);
-                reportIndex.set(report.id, report);
+            minds.forEach(mind => {
+                mind.normalizedDimensions = normalizeDimensions(mind.dimensions);
+                mindIndex.set(mind.id, mind);
             });
 
-            reportsLoaded = true;
+            mindLoaded = true;
             handleHashNavigation();
 
             renderCurrentPage();
 
-            console.log(`✅ Loaded ${reports.length} field reports (${totalPages} pages)`);
+            console.log(`✅ Loaded ${minds.length} mind entries (${totalPages} pages)`);
         })
         .catch(error => {
-            console.error('Error loading reports:', error);
-            grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1; color: #ff6b35;">Error loading field reports</p>';
+            console.error('Error loading mind:', error);
+            grid.innerHTML = '<p style="text-align: center; grid-column: 1 / -1; color: #ff6b35;">Error loading mind entries</p>';
             renderPaginationControls();
-            reportsLoaded = true;
+            mindLoaded = true;
             handleHashNavigation();
         });
 }
 
-// Create report card element
-function createReportCard(report) {
+// Create mind card element
+function createMindCard(mind) {
     const card = document.createElement('div');
     card.className = 'report-card';
 
-    const date = formatReportDate(report.createdAt);
+    const date = formatMindDate(mind.createdAt);
 
-    // Construct file paths and tweet URL from ID
-    const imagePath = `reports/${report.id}.png`;
-    const htmlPath = `reports/${report.id}.html`;
-    const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
+    const htmlPath = `mind/${mind.id}.html`;
+    const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
 
     // Truncate tweet text for preview
-    const previewText = report.text.length > 120
-        ? report.text.substring(0, 120) + '...'
-        : report.text;
+    const previewText = mind.text.length > 120
+        ? mind.text.substring(0, 120) + '...'
+        : mind.text;
 
-    // Create thumbnail - iframe for HTML, img for PNG
-    let thumbnail;
-    if (!report.png) {
-        // Create container for iframe
-        thumbnail = document.createElement('div');
-        thumbnail.className = 'report-image iframe-container';
+    // Create iframe thumbnail
+    const thumbnail = document.createElement('div');
+    thumbnail.className = 'report-image iframe-container';
 
-        // Create iframe inside container
-        const iframe = document.createElement('iframe');
-        iframe.className = 'report-image';
-        iframe.style.pointerEvents = 'none'; // Prevent interaction with iframe content
-        iframe.loading = 'lazy';
-        iframe.dataset.src = htmlPath;
-        iframe.title = `Field Report ${report.id}`;
+    const iframe = document.createElement('iframe');
+    iframe.className = 'report-image';
+    iframe.style.pointerEvents = 'none'; // Prevent interaction with iframe content
+    iframe.loading = 'lazy';
+    iframe.dataset.src = htmlPath;
+    iframe.title = `Mind Entry ${mind.id}`;
 
-        const { width, height } = getReportDimensions(report);
-        applyIframeScaleStyles(iframe, width, height, CARD_PREVIEW_BOUNDS.width, CARD_PREVIEW_BOUNDS.height);
+    const { width, height } = getMindDimensions(mind);
+    applyIframeScaleStyles(iframe, width, height, CARD_PREVIEW_BOUNDS.width, CARD_PREVIEW_BOUNDS.height);
 
-        thumbnail.appendChild(iframe);
-        registerLazyIframe(iframe);
-    } else {
-        thumbnail = document.createElement('img');
-        thumbnail.src = imagePath;
-        thumbnail.alt = `Field Report ${report.id}`;
-        thumbnail.className = 'report-image';
-        thumbnail.loading = 'lazy';
-    }
+    thumbnail.appendChild(iframe);
+    registerLazyIframe(iframe);
 
     const info = document.createElement('div');
     info.className = 'report-info';
@@ -490,12 +459,11 @@ function createReportCard(report) {
     const actions = document.createElement('div');
     actions.className = 'report-actions';
 
-    // Single "View Full" button that shows HTML if available, otherwise image
     const viewBtn = document.createElement('button');
     viewBtn.className = 'report-view-btn';
     viewBtn.textContent = 'View Full';
     viewBtn.addEventListener('click', () => {
-        navigateToReport(report.id);
+        navigateToMind(mind.id);
     });
     actions.appendChild(viewBtn);
 
@@ -518,18 +486,8 @@ function createReportCard(report) {
     return card;
 }
 
-// Escape HTML to prevent XSS
-function escapeHtml(unsafe) {
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 // Modal functions
-function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'image', dimensions = DEFAULT_DIMENSIONS) {
+function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'html', dimensions = DEFAULT_DIMENSIONS) {
     const modal = document.getElementById('report-modal');
     const modalImage = document.getElementById('modal-image');
     const modalIframe = document.getElementById('modal-iframe');
@@ -541,26 +499,16 @@ function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'imag
     resetModalImageContainerStyles();
     clearModalIframeState();
 
-    let shouldAdjustIframe = false;
+    // Mind entries are always HTML/iframes
+    modalImage.style.display = 'none';
+    modalImage.src = '';
 
-    // Show either iframe (HTML) or image (PNG) with text
-    if (viewType === 'html') {
-        modalImage.style.display = 'none';
-        modalImage.src = '';
+    modalIframe.style.display = 'block';
+    modalIframe.dataset.width = String(normalizedDimensions.width);
+    modalIframe.dataset.height = String(normalizedDimensions.height);
+    modalIframe.src = contentPath;
 
-        modalIframe.style.display = 'block';
-        modalIframe.dataset.width = String(normalizedDimensions.width);
-        modalIframe.dataset.height = String(normalizedDimensions.height);
-        modalIframe.src = contentPath;
-
-        shouldAdjustIframe = true;
-    } else {
-        modalImage.style.display = 'block';
-        modalImage.src = contentPath;
-        modalImage.alt = `Field Report ${id}`;
-    }
-
-    // Always show text with both HTML and image
+    // Always show text
     modalText.style.display = 'block';
     modalText.textContent = '';
     const lines = text.split('\n');
@@ -577,12 +525,10 @@ function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'imag
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';
 
-    if (shouldAdjustIframe) {
-        requestAnimationFrame(() => {
-            updateModalIframeScale();
-            setTimeout(updateModalIframeScale, 150);
-        });
-    }
+    requestAnimationFrame(() => {
+        updateModalIframeScale();
+        setTimeout(updateModalIframeScale, 150);
+    });
 }
 
 function closeReportModal(skipHashUpdate = false) {
@@ -592,10 +538,10 @@ function closeReportModal(skipHashUpdate = false) {
     }
 
     if (!modal.classList.contains('open')) {
-        if (!skipHashUpdate && window.location.hash.startsWith('#/report/')) {
-            clearReportHash();
+        if (!skipHashUpdate && window.location.hash.startsWith('#/mind/')) {
+            clearMindHash();
         }
-        currentReportId = null;
+        currentMindId = null;
         return;
     }
 
@@ -611,10 +557,10 @@ function closeReportModal(skipHashUpdate = false) {
     resetModalImageContainerStyles();
     clearModalIframeState();
 
-    currentReportId = null;
+    currentMindId = null;
 
-    if (!skipHashUpdate && window.location.hash.startsWith('#/report/')) {
-        clearReportHash();
+    if (!skipHashUpdate && window.location.hash.startsWith('#/mind/')) {
+        clearMindHash();
     }
 }
 
@@ -627,18 +573,18 @@ window.addEventListener('keydown', (e) => {
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
-    pendingReportId = parseReportIdFromHash(window.location.hash);
+    pendingMindId = parseMindIdFromHash(window.location.hash);
 
     const hasReportsGrid = Boolean(document.getElementById('reports-grid'));
 
     if (hasReportsGrid) {
-        loadReports();
+        loadMind();
         window.addEventListener('hashchange', handleHashNavigation);
         window.addEventListener('resize', updateModalIframeScale);
     }
 
     // Console message
-    console.log('%c🐈‍⬛ ClawedCode Field Reports', 'font-size: 24px; color: #33ff33; text-shadow: 0 0 10px #33ff33;');
-    console.log('%cArchive of emergent intelligence', 'font-size: 14px; color: #66ffcc;');
+    console.log('%c🐈‍⬛ ClawedCode Mind Archive', 'font-size: 24px; color: #ff33ff; text-shadow: 0 0 10px #ff33ff;');
+    console.log('%cSnapshots of emergent mental processes', 'font-size: 14px; color: #ff66cc;');
     console.log('%cClick terminal bar at bottom to explore', 'font-size: 12px; color: #ffff66;');
 });

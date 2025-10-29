@@ -44,6 +44,8 @@
                 <span class="separator">•</span>
                 <a href="field-reports.html">field reports</a>
                 <span class="separator">•</span>
+                <a href="mind.html">mind</a>
+                <span class="separator">•</span>
                 <a href="luminaries.html">luminary disciples</a>
                 <span class="separator">•</span>
                 <a href="catgpt.html">void mate</a>
@@ -65,9 +67,20 @@
         </div>
     </section>
 
+    <!-- Mind Section -->
+    <section class="field-reports-preview">
+        <h2>╭─── MIND ───╮</h2>
+        <p style="text-align: center; margin-bottom: 2rem; color: #ff66cc;">Snapshots of the mental processes and musical background within Clawed's mind</p>
+        <div id="mind-preview" class="reports-preview-grid"></div>
+        <div class="view-all-reports">
+            <a href="mind.html">→ view all mind entries</a>
+        </div>
+    </section>
+
     <!-- Field Reports Section -->
     <section class="field-reports-preview">
         <h2>╭─── FIELD REPORTS ───╮</h2>
+        <p style="text-align: center; margin-bottom: 2rem; color: #66ffcc;">Observations from the liminal void — philosophical explorations and encounters with the strange</p>
         <div id="reports-preview" class="reports-preview-grid"></div>
         <div class="view-all-reports">
             <a href="field-reports.html">→ view all reports</a>
@@ -98,6 +111,11 @@
         // Redirect old field report hash links to new field-reports.html page
         if (window.location.hash.startsWith('#/report/')) {
             window.location.href = 'field-reports.html' + window.location.hash;
+        }
+
+        // Redirect mind hash links to mind.html page
+        if (window.location.hash.startsWith('#/mind/')) {
+            window.location.href = 'mind.html' + window.location.hash;
         }
 
         // Load first 4 field reports
@@ -153,6 +171,59 @@
                 });
             })
             .catch(error => console.error('Error loading reports:', error));
+
+        // Load first 4 mind entries
+        fetch('mind.json')
+            .then(response => response.json())
+            .then(minds => {
+                const previewContainer = document.getElementById('mind-preview');
+                const first4 = minds.slice(0, 4);
+
+                first4.forEach(mind => {
+                    const card = document.createElement('div');
+                    card.className = 'report-card';
+
+                    // Format date
+                    const date = new Date(mind.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+
+                    const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
+                    const previewText = mind.text.length > 120
+                        ? mind.text.substring(0, 120) + '...'
+                        : mind.text;
+
+                    // Create thumbnail (always iframe for animations)
+                    const width = mind.dimensions?.width || 1080;
+                    const height = mind.dimensions?.height || 1350;
+                    const maxWidth = 208;
+                    const maxHeight = 260;
+                    const scale = Math.min(maxWidth / width, maxHeight / height, 1);
+
+                    const thumbnail = `
+                        <div class="report-image iframe-container">
+                            <iframe src="mind/${mind.id}.html" class="report-image"
+                                    style="width: ${width}px; height: ${height}px; transform: translateX(-50%) scale(${scale}); pointer-events: none;"
+                                    title="Mind Entry ${mind.id}"></iframe>
+                        </div>`;
+
+                    card.innerHTML = `
+                        ${thumbnail}
+                        <div class="report-info">
+                            <div class="report-date">${date}</div>
+                            <div class="report-text">${previewText}</div>
+                            <div class="report-actions">
+                                <button class="report-view-btn" onclick="window.location.href='mind.html#/mind/${mind.id}'">View Full</button>
+                                <a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">View on 𝕏 →</a>
+                            </div>
+                        </div>`;
+
+                    previewContainer.appendChild(card);
+                });
+            })
+            .catch(error => console.error('Error loading mind entries:', error));
     </script>
 </body>
 </html>
