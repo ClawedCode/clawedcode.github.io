@@ -261,7 +261,7 @@ function handleHashNavigation() {
         return;
     }
 
-    openReportModal(mindId, contentPath, mind.text, date, tweetUrl, viewType, dimensions);
+    openReportModal(mindId, contentPath, mind.text, date, tweetUrl, mind.nftUrl, viewType, dimensions);
     currentMindId = mindId;
     pendingMindId = null;
 }
@@ -461,18 +461,29 @@ function createMindCard(mind) {
 
     const viewBtn = document.createElement('button');
     viewBtn.className = 'report-view-btn';
-    viewBtn.textContent = 'View Full';
+    viewBtn.textContent = 'View';
     viewBtn.addEventListener('click', () => {
         navigateToMind(mind.id);
     });
     actions.appendChild(viewBtn);
+
+    // Add NFT link if available
+    if (mind.nftUrl) {
+        const nftLink = document.createElement('a');
+        nftLink.href = mind.nftUrl;
+        nftLink.target = '_blank';
+        nftLink.rel = 'noopener noreferrer';
+        nftLink.className = 'report-link nft-link';
+        nftLink.textContent = 'objkt';
+        actions.appendChild(nftLink);
+    }
 
     const link = document.createElement('a');
     link.href = tweetUrl;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     link.className = 'report-link';
-    link.textContent = 'View on 𝕏 →';
+    link.textContent = 'on 𝕏';
 
     actions.appendChild(link);
 
@@ -487,13 +498,14 @@ function createMindCard(mind) {
 }
 
 // Modal functions
-function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'html', dimensions = DEFAULT_DIMENSIONS) {
+function openReportModal(id, contentPath, text, date, tweetUrl, nftUrl = null, viewType = 'html', dimensions = DEFAULT_DIMENSIONS) {
     const modal = document.getElementById('report-modal');
     const modalImage = document.getElementById('modal-image');
     const modalIframe = document.getElementById('modal-iframe');
     const modalText = document.getElementById('modal-text');
     const modalDate = document.getElementById('modal-date');
     const modalLink = document.getElementById('modal-link');
+    const modalNftLink = document.getElementById('modal-nft-link');
     const normalizedDimensions = normalizeDimensions(dimensions);
 
     resetModalImageContainerStyles();
@@ -521,6 +533,14 @@ function openReportModal(id, contentPath, text, date, tweetUrl, viewType = 'html
 
     modalDate.textContent = date;
     modalLink.href = tweetUrl;
+
+    // Show/hide NFT link
+    if (nftUrl && modalNftLink) {
+        modalNftLink.href = nftUrl;
+        modalNftLink.style.display = 'inline-block';
+    } else if (modalNftLink) {
+        modalNftLink.style.display = 'none';
+    }
 
     modal.classList.add('open');
     document.body.style.overflow = 'hidden';

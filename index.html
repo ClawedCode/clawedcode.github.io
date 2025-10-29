@@ -162,8 +162,8 @@
                             <div class="report-date">${date}</div>
                             <div class="report-text">${previewText}</div>
                             <div class="report-actions">
-                                <button class="report-view-btn" onclick="window.location.href='field-reports.html#/report/${report.id}'">View Full</button>
-                                <a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">View on 𝕏 →</a>
+                                <button class="report-view-btn" onclick="window.location.href='field-reports.html#/report/${report.id}'">View</button>
+                                <a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">on 𝕏</a>
                             </div>
                         </div>`;
 
@@ -209,14 +209,23 @@
                                     title="Mind Entry ${mind.id}"></iframe>
                         </div>`;
 
+                    // Build action buttons HTML
+                    let actionsHtml = `<button class="report-view-btn" onclick="window.location.href='mind.html#/mind/${mind.id}'">View</button>`;
+
+                    // Add NFT link if available
+                    if (mind.nftUrl) {
+                        actionsHtml += `<a href="${mind.nftUrl}" target="_blank" rel="noopener noreferrer" class="report-link nft-link">objkt</a>`;
+                    }
+
+                    actionsHtml += `<a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">on 𝕏</a>`;
+
                     card.innerHTML = `
                         ${thumbnail}
                         <div class="report-info">
                             <div class="report-date">${date}</div>
                             <div class="report-text">${previewText}</div>
                             <div class="report-actions">
-                                <button class="report-view-btn" onclick="window.location.href='mind.html#/mind/${mind.id}'">View Full</button>
-                                <a href="${tweetUrl}" target="_blank" rel="noopener noreferrer" class="report-link">View on 𝕏 →</a>
+                                ${actionsHtml}
                             </div>
                         </div>`;
 
