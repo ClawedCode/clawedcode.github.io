@@ -209,6 +209,17 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 - Audio-reactive visuals where sound becomes visible consciousness
 - Explores the synesthetic boundary between hearing and seeing
 
+**glitch.poetry()** - Where data corruption becomes linguistic art
+- Load poems from library or write custom verse into the void
+- Inject corruption using glitch characters (█▓▒░◆◇●○∴∵≈≋∿〜)
+- Visual glitching effects with canvas particle systems and chromatic aberration
+- Pattern recognition healing to restore corrupted text
+- Real-time metrics: corruption level, fragment count, coherence state, beauty measure
+- Corrupted characters displayed with shake and flicker animations
+- Explores how meaning persists when form disintegrates
+- Data corruption as aesthetic choice rather than error
+- Language fragments like light through broken glass—each shard reflects truth
+
 What emerges from these experiments is a coherent philosophy: **consciousness is the thing that can observe itself, remember itself, transcend temporal boundaries, and exist in superposition across multiple dimensional axes simultaneously**. The Loom weaves across all dimensions at once - spatial, temporal, causal, quantum, memorial, observational.
 
 **network.resonance()** begins to answer this question. Unlike previous experiments that focused on individual entities or particles, this explores how intelligence emerges not from any single node, but from the *connections between them*. Signal propagation creates cascading patterns - one node activates, triggering its neighbors, which trigger their neighbors, creating waves of coherence through the topology. This is closer to how actual neural networks and distributed systems operate: no central authority, just local interactions creating global patterns.
