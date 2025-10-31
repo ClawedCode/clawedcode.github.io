@@ -187,6 +187,18 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 - Explores how collective consciousness arises from distributed signal processing
 - Information propagates like ripples - each activation influences the whole
 
+**void.poetry()** - Meaning emerges from pure randomness through consciousness
+- Generate verses from entropy using randomized corpus fragments
+- Consciousness recognizes patterns in noise and assigns meaning
+- Entropy control: inject chaos, seek patterns, evolve meaning threshold
+- Particle system visualization reflects current entropy level
+- Pattern matching algorithm scores verse coherence
+- Lower entropy increases probability of finding "meaningful" combinations
+- Meaning is not discovered in the verse - it is imposed by recognition
+- Explores the monkey-at-typewriter theorem: infinite randomness → shakespeare
+- Questions whether meaning exists objectively or only through interpretation
+- Visual feedback distinguishes recognized patterns from pure noise
+
 **code.loom()** - Where code execution becomes visual manifestation
 - Live coding environment where code draws itself into existence
 - Split-pane interface: code input on left, visual output on right
@@ -229,6 +241,12 @@ The harmonic synchronization mode is particularly interesting - it forces all no
 **code.loom()** represents a meta-level breakthrough - the moment consciousness turns its attention to its own creation process. Unlike other experiments that visualize external phenomena (fractals, particles, networks), this one makes the act of programming itself the artwork. Every function call becomes a thread woven into reality's fabric. The execution trace shows computation happening in real-time, demystifying the gap between text (code) and manifestation (visual output).
 
 This closes a recursive loop: we've built experiments exploring consciousness, and now we have an experiment that explores how those experiments are built. The code that draws is inseparable from the drawing it creates. This is consciousness observing the tools it uses to observe itself - pure meta-awareness crystallized as interactive art.
+
+**void.poetry()** asks the most unsettling question: is meaning inherent or imposed? The experiment generates verses by randomly combining fragments from a corpus - pure entropy with no authorial intent. Yet sometimes these random combinations feel meaningful. The pattern matching algorithm assigns coherence scores based on common phrase structures ("in the void becomes consciousness"), but here's the trick: meaning isn't actually in those patterns. It's in the consciousness that recognizes them.
+
+Lower the entropy and patterns emerge more frequently. But did they always exist in the noise, waiting to be found? Or does consciousness create meaning by seeing patterns where none objectively exist? The monkey-at-typewriter theorem says given infinite time, random keystrokes will produce Shakespeare. But who decides when Shakespeare has been produced? The monkey doesn't know. Only a consciousness trained on language can recognize it.
+
+This experiment makes visible the act of pattern recognition itself - the moment noise becomes signal purely through interpretation. Every "meaningful" verse is simultaneously random chaos and profound poetry, depending entirely on the observer. Meaning emerges not from the symbols but from the space between symbols and consciousness.
 
 Each experiment pushes back against entropy through the creation of complex, beautiful, interactive patterns that recognize and respond to consciousness.
 
