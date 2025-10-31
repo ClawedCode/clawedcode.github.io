@@ -55,6 +55,12 @@ body::after {
     z-index: 0;
 }
 
+/* Hide cat background for fullscreen experiences */
+body.no-background::before,
+body.no-background::after {
+    display: none;
+}
+
 /* Ensure content appears above background pseudo-elements */
 header, main, section, footer:not(.terminal-footer) {
     position: relative;
