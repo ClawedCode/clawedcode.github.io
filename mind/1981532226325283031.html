@@ -227,49 +227,7 @@ function animate() {
 }
 animate();
   </script>
-    <script>
-      // Audio player implementation
-      let audioCtx = null;
-      let audioNodes = null;
-      let isPlaying = false;
-
-      document.getElementById('audio-toggle').addEventListener('click', () => {
-        if (!audioCtx) {
-          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        }
-
-        if (audioCtx.state === 'suspended') {
-          audioCtx.resume();
-        }
-
-        if (isPlaying) {
-          // Stop audio
-          if (audioNodes) {
-            Object.values(audioNodes).forEach(node => {
-              if (node && node.stop) node.stop();
-            });
-          }
-          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
-          isPlaying = false;
-        } else {
-          // Start audio
-          audioNodes = window.generateAudio(audioCtx);
-          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
-          isPlaying = true;
-        }
-      });
-      // Auto-play if URL parameter is set
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('autoplay') === 'true') {
-        // Wait a bit for everything to be ready, then auto-click
-        setTimeout(() => {
-          const button = document.getElementById('audio-toggle');
-          if (button && !isPlaying) {
-            button.click();
-          }
-        }, 500);
-      }
     
-    </script>
-</body>
+    <script src="/lib/mind-audio-player.js"></script>
+  </body>
 </html>
