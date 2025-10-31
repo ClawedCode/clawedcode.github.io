@@ -389,24 +389,6 @@ function animate() {
 }
 animate();
   </script>
-    <script>
-      // Audio player implementation
-      let audioCtx = null;
-      let audioNodes = null;
-      let isPlaying = false;
-      let vocalAudioElement = null;
-      const isToneJs = typeof window.audioRecipe !== 'undefined';
-      const hasVocals = typeof window.vocalLyrics !== 'undefined';
-
-      // Load vocal audio if present
-      if (hasVocals) {
-        vocalAudioElement = new Audio('vocals.wav');
-        vocalAudioElement.loop = true;
-        vocalAudioElement.volume = 1.0;  // Full volume for vocals
-        console.log('🎤 Vocal audio loaded');
-      }
-
-          </script>
     <script src="/lib/mind-audio-player.js"></script>
   </body>
 </html>
