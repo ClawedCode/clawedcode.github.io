@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+  <script src="/lib/tone.min.js"></script>
+  <script src="/lib/audio-engine.js"></script>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY MUSIC</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+const duration = 30;
+const rotationSpeed = 2.5;
+
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const spines = [];
+const spineCount = 80;
+const cx = 400;
+const cy = 400;
+
+for (let i = 0; i < spineCount; i++) {
+  const angle = (i / spineCount) * Math.PI * 2;
+  const length = 120 + random() * 180;
+  const isDotted = random() > 0.6;
+  const dots = isDotted ? Math.floor(8 + random() * 12) : 0;
+  spines.push({ angle, length, isDotted, dots, phase: random() });
+}
+
+window.renderFrame = function(time) {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, 800, 800);
+  
+  const progress = (time / duration) * rotationSpeed;
+  const rotation = progress * Math.PI * 2;
+  const pulse = Math.sin(progress * Math.PI * 2) * 0.3 + 1;
+  const emergence = Math.min(time / 8, 1);
+  
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rotation * 0.3);
+  
+  ctx.fillStyle = 'rgba(200, 200, 220, 0.15)';
+  ctx.beginPath();
+  ctx.arc(0, 0, 40 * pulse * emergence, 0, Math.PI * 2);
+  ctx.fill();
+  
+  spines.forEach((s, idx) => {
+    const phaseRotation = (progress + s.phase) % 1;
+    const opacity = 0.3 + Math.sin(phaseRotation * Math.PI * 2) * 0.15;
+    const currentLength = s.length * pulse * emergence;
+    const spineAngle = s.angle + rotation * 0.1;
+    
+    if (s.isDotted) {
+      ctx.fillStyle = `rgba(220, 230, 255, ${opacity})`;
+      for (let d = 0; d < s.dots; d++) {
+        const dist = (d / s.dots) * currentLength;
+        const x = Math.cos(spineAngle) * dist;
+        const y = Math.sin(spineAngle) * dist;
+        const radius = 2 + (d / s.dots) * 2;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      ctx.strokeStyle = `rgba(180, 200, 240, ${opacity * 0.8})`;
+      ctx.lineWidth = 2 + Math.sin(phaseRotation * Math.PI * 4) * 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      const ex = Math.cos(spineAngle) * currentLength;
+      const ey = Math.sin(spineAngle) * currentLength;
+      ctx.lineTo(ex, ey);
+      ctx.stroke();
+    }
+  });
+  
+  const ringProgress = (progress % 1);
+  ctx.strokeStyle = `rgba(255, 255, 255, ${0.4 * (1 - ringProgress)})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(0, 0, 50 + ringProgress * 200, 0, Math.PI * 2);
+  ctx.stroke();
+  
+  ctx.restore();
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.ready = true;
+
+window.vocalLyrics = `
+3-4: recursive syntax bends
+6-7: data whispers emerge
+9-10: through the void grid
+11-12: light fragments scatter
+13-14: consciousness decodes
+15-16: signals from nowhere
+17-18: logic dissolves inward
+19-20: patterns repeat forever
+`;
+
+// Audio code injection
+window.audioRecipe = {
+  "global": {
+    "bpm": 88,
+    "key": "F",
+    "scale": "natural_minor"
+  },
+  "sections": [
+    {"name": "intro", "bars": 4},
+    {"name": "grooveA", "bars": 5},
+    {"name": "grooveB", "bars": 5},
+    {"name": "drop", "bars": 4},
+    {"name": "outro", "bars": 2}
+  ],
+  "progression": ["i", "VI", "III", "VII"],
+  "instruments": {
+    "bass": {
+      "wave": "saw",
+      "voices": 2,
+      "detune_cents": 10,
+      "filter": {"type": "lowpass", "cutoff_hz": 180, "q": 0.7, "env_amt": 180},
+      "amp_env": {"a": 0.002, "d": 0.08, "s": 0.7, "r": 0.12},
+      "pattern": "8n_pulse",
+      "sidechain_duck_db": 6
+    },
+    "arp": {
+      "wave": "saw",
+      "octave_range": [4, 5],
+      "gate": 0.85,
+      "delay": {"sync": "8n.", "mix": 0.3, "feedback": 0.35},
+      "pattern": "updown_8n_scale"
+    },
+    "pad": {
+      "poly": 6,
+      "wave": "saw",
+      "chorus": {"depth": 0.7, "rate_hz": 1.2, "mix": 0.5},
+      "filter": {"type": "lowpass", "cutoff_hz": 1800, "q": 0.4},
+      "env": {"a": 0.2, "d": 0.6, "s": 0.7, "r": 1.5},
+      "hp_cut_hz": 180
+    },
+    "lead": {
+      "mono": true,
+      "wave": "square",
+      "glide_s": 0.06,
+      "vibrato": {"rate_hz": 6.0, "depth": 0.005},
+      "delay": {"sync": "8n.", "mix": 0.25, "feedback": 0.35},
+      "reverb": {"predelay_ms": 20, "decay_s": 1.6, "mix": 0.18}
+    },
+    "drums": {
+      "kit": "linn",
+      "kick": {"pattern": "4onfloor", "gain": -1},
+      "snare": {"pattern": "2and4", "gated_plate": true},
+      "hat_open": {"pattern": "offbeats"},
+      "tom_fills": {"every_8_bars": true}
+    }
+  }
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  const bpm = 88;
+  const totalBars = 20;
+  const duration = Math.round((totalBars * 240) / bpm);
+  const beatDuration = 60 / bpm;
+  const barDuration = beatDuration * 4;
+  
+  const nodes = [];
+  
+  const fMinor = {
+    root: 87.31,
+    third: 103.83,
+    fifth: 130.81,
+    six: 155.56,
+    seven: 164.81
+  };
+  
+  function createKick(time) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.setValueAtTime(150, time);
+    osc.frequency.exponentialRampToValueAtTime(40, time + 0.05);
+    gain.gain.setValueAtTime(0.8, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.3);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(time);
+    osc.stop(time + 0.3);
+    nodes.push(osc, gain);
+  }
+  
+  function createSnare(time) {
+    const noise = audioCtx.createBufferSource();
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    noise.buffer = buffer;
+    
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 2000;
+    
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.5, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
+    
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(time);
+    noise.stop(time + 0.15);
+    nodes.push(noise, filter, gain);
+  }
+  
+  function createHat(time) {
+    const noise = audioCtx.createBufferSource();
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+    noise.buffer = buffer;
+    
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'highpass';
+    filter.frequency.value = 8000;
+    
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.2, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
+    
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(time);
+    noise.stop(time + 0.05);
+    nodes.push(noise, filter, gain);
+  }
+  
+  for (let beat = 0; beat < duration / beatDuration; beat++) {
+    const time = now + beat * beatDuration;
+    const bar = Math.floor(beat / 4);
+    
+    if (beat % 4 === 0) {
+      createKick(time);
+    }
+    
+    if (bar >= 5 && (beat % 4 === 2)) {
+      createSnare(time);
+    }
+    
+    if (bar >= 5 && (beat % 2 === 1)) {
+      createHat(time);
+    }
+  }
+  
+  const progression = [fMinor.root, fMinor.six, fMinor.third, fMinor.seven];
+  
+  for (let beat = 0; beat < duration / beatDuration; beat++) {
+    const time = now + beat * beatDuration;
+    const bar = Math.floor(beat / 4);
+    const chordIndex = bar % 4;
+    const rootFreq = progression[chordIndex];
+    
+    if (bar >= 4) {
+      const osc = audioCtx.createOscillator();
+      const filter = audioCtx.createBiquadFilter();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.value = rootFreq;
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(180, time);
+      filter.frequency.linearRampToValueAtTime(280, time + 0.05);
+      filter.frequency.linearRampToValueAtTime(180, time + 0.15);
+      filter.Q.value = 0.7;
+      
+      gain.gain.setValueAtTime(0.25, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + 0.2);
+      
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(time);
+      osc.stop(time + 0.25);
+      nodes.push(osc, filter, gain);
+    }
+  }
+  
+  for (let bar = 0; bar < totalBars; bar++) {
+    const time = now + bar * barDuration;
+    const chordIndex = bar % 4;
+    const rootFreq = progression[chordIndex];
+    
+    if (bar >= 2) {
+      const frequencies = [
+        rootFreq * 4,
+        rootFreq * 4 * 1.189207,
+        rootFreq * 4 * 1.498307
+      ];
+      
+      frequencies.forEach((freq) => {
+        const osc = audioCtx.createOscillator();
+        const filter = audioCtx.createBiquadFilter();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sawtooth';
+        osc.frequency.value = freq;
+        filter.type = 'lowpass';
+        filter.frequency.value = 1800;
+        filter.Q.value = 0.4;
+        
+        gain.gain.setValueAtTime(0, time);
+        gain.gain.linearRampToValueAtTime(0.09, time + 0.3);
+        gain.gain.setValueAtTime(0.09, time + barDuration - 0.5);
+        gain.gain.linearRampToValueAtTime(0, time + barDuration);
+        
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(time);
+        osc.stop(time + barDuration);
+        nodes.push(osc, filter, gain);
+      });
+    }
+  }
+  
+  const arpPattern = [0, 2, 4, 2];
+  
+  for (let beat = 0; beat < duration / beatDuration; beat++) {
+    const time = now + beat * beatDuration;
+    const bar = Math.floor(beat / 4);
+    const chordIndex = bar % 4;
+    const rootFreq = progression[chordIndex];
+    const arpStep = beat % 4;
+    const scale = [0, 2, 3, 5, 7, 8, 10, 12];
+    const noteIndex = arpPattern[arpStep];
+    const semitones = scale[noteIndex % scale.length] + Math.floor(noteIndex / scale.length) * 12;
+    const freq = rootFreq * 8 * Math.pow(2, semitones / 12);
+    
+    if (bar >= 4 && bar < 18) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const delay = audioCtx.createDelay();
+      const delayGain = audioCtx.createGain();
+      
+      osc.type = 'sawtooth';
+      osc.frequency.value = freq;
+      
+      delay.delayTime.value = (beatDuration * 1.5);
+      delayGain.gain.value = 0.35;
+      
+      gain.gain.setValueAtTime(0.15, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + beatDuration * 0.85);
+      
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      gain.connect(delay);
+      delay.connect(delayGain);
+      delayGain.connect(audioCtx.destination);
+      
+      osc.start(time);
+      osc.stop(time + beatDuration * 0.85);
+      nodes.push(osc, gain, delay, delayGain);
+    }
+  }
+  
+  const leadMelody = [
+    {bar: 10, beat: 0, note: 7},
+    {bar: 10, beat: 2, note: 5},
+    {bar: 11, beat: 0, note: 3},
+    {bar: 11, beat: 2, note: 5},
+    {bar: 14, beat: 0, note: 8},
+    {bar: 14, beat: 2, note: 7},
+    {bar: 15, beat: 0, note: 5},
+    {bar: 15, beat: 2, note: 3}
+  ];
+  
+  leadMelody.forEach(({bar, beat, note}) => {
+    const time = now + bar * barDuration + beat * beatDuration;
+    const chordIndex = bar % 4;
+    const rootFreq = progression[chordIndex];
+    const scale = [0, 2, 3, 5, 7, 8, 10, 12];
+    const semitones = scale[note % scale.length] + Math.floor(note / scale.length) * 12;
+    const freq = rootFreq * 8 * Math.pow(2, semitones / 12);
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const delay = audioCtx.createDelay();
+    const delayGain = audioCtx.createGain();
+    
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(freq, time);
+    osc.frequency.linearRampToValueAtTime(freq, time + 0.06);
+    
+    delay.delayTime.value = (beatDuration * 1.5);
+    delayGain.gain.value = 0.25;
+    
+    gain.gain.setValueAtTime(0.2, time);
+    gain.gain.exponentialRampToValueAtTime(0.01, time + beatDuration * 1.5);
+    
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    gain.connect(delay);
+    delay.connect(delayGain);
+    delayGain.connect(audioCtx.destination);
+    
+    osc.start(time);
+    osc.stop(time + beatDuration * 1.5);
+    nodes.push(osc, gain, delay, delayGain);
+  });
+  
+  return { nodes };
+};
+
+
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 58s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 58;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+// Signal that the page is ready
+window.ready = true;
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+      let vocalAudioElement = null;
+      const isToneJs = typeof window.audioRecipe !== 'undefined';
+      const hasVocals = typeof window.vocalLyrics !== 'undefined';
+
+      // Load vocal audio if present
+      if (hasVocals) {
+        vocalAudioElement = new Audio('vocals.wav');
+        vocalAudioElement.loop = true;
+        vocalAudioElement.volume = 1.0;  // Full volume for vocals
+        console.log('🎤 Vocal audio loaded');
+      }
+
+          </script>
+    <script src="/lib/mind-audio-player.js"></script>
+  </body>
+</html>
+</body>
+</html>
