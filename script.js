@@ -438,12 +438,12 @@ function createReportCard(report) {
 
     const date = formatReportDate(report.createdAt);
 
-    // Construct file paths and tweet URL from ID
+    // Construct file paths and post URL from ID
     const imagePath = `reports/${report.id}.png`;
     const htmlPath = `reports/${report.id}.html`;
     const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
 
-    // Truncate tweet text for preview
+    // Truncate post text for preview
     const previewText = report.text.length > 120
         ? report.text.substring(0, 120) + '...'
         : report.text;

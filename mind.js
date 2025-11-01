@@ -425,7 +425,7 @@ function createMindCard(mind) {
     const htmlPath = `mind/${mind.id}/index.html`;
     const tweetUrl = `https://x.com/ClawedCode/status/${mind.id}`;
 
-    // Truncate tweet text for preview
+    // Truncate post text for preview
     const previewText = mind.text.length > 120
         ? mind.text.substring(0, 120) + '...'
         : mind.text;
