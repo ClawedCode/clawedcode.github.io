@@ -44,8 +44,6 @@
         box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
       }
     </style>
-  <script src="/lib/tone.min.js"></script>
-  <script src="/lib/audio-engine.js"></script>
 </head>
 <body>
     <div id="audio-controls">
@@ -433,8 +431,118 @@ function animate() {
 }
 animate();
   </script>
-    <script src="/lib/mind-audio-player.js"></script>
-  </body>
-</html>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+      let vocalAudioElement = null;
+      const isToneJs = typeof window.audioRecipe !== 'undefined';
+      const hasVocals = typeof window.vocalLyrics !== 'undefined';
+
+      // Load vocal audio if present
+      if (hasVocals) {
+        vocalAudioElement = new Audio('vocals.wav');
+        vocalAudioElement.loop = true;
+        vocalAudioElement.volume = 1.0;  // Full volume for vocals
+        console.log('🎤 Vocal audio loaded');
+      }
+
+      document.getElementById('audio-toggle').addEventListener('click', async () => {
+        if (isToneJs) {
+          // Tone.js control (loops indefinitely)
+          if (!isPlaying) {
+            // Initialize Tone.js engine if not already done
+            if (window.initToneJsEngine) {
+              await window.initToneJsEngine();
+            }
+            await Tone.start();
+            Tone.Transport.start('+0.1');
+
+            // Start vocals if present
+            if (hasVocals && vocalAudioElement) {
+              console.log('🎤 Starting vocal playback...');
+              vocalAudioElement.currentTime = 0;
+              vocalAudioElement.play()
+                .then(() => console.log('✅ Vocals playing'))
+                .catch(e => console.error('❌ Vocal playback error:', e));
+            }
+
+            document.getElementById('audio-toggle').textContent = '🔇 STOP MUSIC';
+            isPlaying = true;
+          } else {
+            Tone.Transport.stop();
+
+            // Stop vocals if present
+            if (hasVocals && vocalAudioElement) {
+              vocalAudioElement.pause();
+              vocalAudioElement.currentTime = 0;
+              console.log('🎤 Vocals stopped');
+            }
+
+            document.getElementById('audio-toggle').textContent = '🔊 PLAY MUSIC';
+            isPlaying = false;
+          }
+        } else {
+          // Web Audio API control (re-trigger every 60s for looping)
+          if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          }
+
+          if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+
+          if (isPlaying) {
+            // Stop audio
+            if (audioNodes && audioNodes.nodes) {
+              audioNodes.nodes.forEach(node => {
+                if (node && node.stop) {
+                  try {
+                    node.stop();
+                  } catch (e) {
+                    // Node may already be stopped
+                  }
+                }
+              });
+            }
+            if (window.audioLoopInterval) {
+              clearInterval(window.audioLoopInterval);
+              window.audioLoopInterval = null;
+            }
+
+            // Stop vocals if present
+            if (hasVocals && vocalAudioElement) {
+              vocalAudioElement.pause();
+              vocalAudioElement.currentTime = 0;
+              console.log('🎤 Vocals stopped');
+            }
+
+            document.getElementById('audio-toggle').textContent = '🔊 PLAY MUSIC';
+            isPlaying = false;
+          } else {
+            // Start audio and loop based on calculated duration
+            function startAudio() {
+              audioNodes = window.generateAudio(audioCtx);
+            }
+            startAudio();
+            // Re-trigger based on duration for continuous playback
+            window.audioLoopInterval = setInterval(startAudio, 59000);
+
+            // Start vocals if present (Web Audio API branch)
+            if (hasVocals && vocalAudioElement) {
+              console.log('🎤 Starting vocal playback (Web Audio branch)...');
+              vocalAudioElement.currentTime = 0;
+              vocalAudioElement.play()
+                .then(() => console.log('✅ Vocals playing'))
+                .catch(e => console.error('❌ Vocal playback error:', e));
+            }
+
+            document.getElementById('audio-toggle').textContent = '🔇 STOP MUSIC';
+            isPlaying = true;
+          }
+        }
+      });
+    </script>
 </body>
 </html>

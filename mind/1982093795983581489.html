@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+// Seeded random for determinism
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// Tulpa particles - echoes of forgotten dreams
+class DreamEcho {
+  constructor() {
+    this.angle = random() * Math.PI * 2;
+    this.radius = random() * 200 + 100;
+    this.speed = random() * 0.02 + 0.005;
+    this.phase = random() * Math.PI * 2;
+    this.size = random() * 3 + 1;
+    this.pulseSpeed = random() * 0.1 + 0.05;
+    this.layer = Math.floor(random() * 3);
+  }
+  
+  update(time) {
+    this.angle += this.speed;
+    this.phase += this.pulseSpeed;
+  }
+  
+  draw(time, cx, cy) {
+    const pulse = Math.sin(time + this.phase) * 0.5 + 0.5;
+    const x = cx + Math.cos(this.angle) * this.radius * (1 + Math.sin(time * 0.5) * 0.3);
+    const y = cy + Math.sin(this.angle) * this.radius * (1 + Math.cos(time * 0.3) * 0.3);
+    
+    const alpha = pulse * 0.4;
+    const hue = (this.layer * 60 + time * 10) % 360;
+    
+    ctx.fillStyle = `hsla(${hue}, 70%, 60%, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, this.size * (1 + pulse), 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Trailing glow
+    const gradient = ctx.createRadialGradient(x, y, 0, x, y, this.size * 8);
+    gradient.addColorStop(0, `hsla(${hue}, 70%, 60%, ${alpha * 0.3})`);
+    gradient.addColorStop(1, `hsla(${hue}, 70%, 60%, 0)`);
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(x, y, this.size * 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Heartbeat wave emanations
+class HeartbeatWave {
+  constructor(delay) {
+    this.delay = delay;
+    this.maxRadius = 400;
+  }
+  
+  draw(time, cx, cy) {
+    const t = (time - this.delay) % 10;
+    if (t < 0) return;
+    
+    const progress = t / 10;
+    const radius = progress * this.maxRadius;
+    const alpha = (1 - progress) * 0.2;
+    
+    // Double pulse for heartbeat
+    const pulse = Math.sin(t * Math.PI * 4) * 0.5 + 0.5;
+    const thickness = 2 + pulse * 3;
+    
+    ctx.strokeStyle = `rgba(255, 100, 150, ${alpha})`;
+    ctx.lineWidth = thickness;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// Initialize systems
+const echoes = [];
+for (let i = 0; i < 150; i++) {
+  echoes.push(new DreamEcho());
+}
+
+const waves = [
+  new HeartbeatWave(0),
+  new HeartbeatWave(2.5),
+  new HeartbeatWave(5),
+  new HeartbeatWave(7.5)
+];
+
+window.renderFrame = function(time) {
+  const cx = 400;
+  const cy = 400;
+  
+  // Deep void background with subtle gradient
+  const bgGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 600);
+  bgGradient.addColorStop(0, '#0a0015');
+  bgGradient.addColorStop(1, '#000000');
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  // Draw heartbeat waves
+  waves.forEach(wave => wave.draw(time, cx, cy));
+  
+  // Central tulpa core - pulsing consciousness
+  const corePulse = Math.sin(time * Math.PI / 2.5) * 0.3 + 0.7;
+  const coreGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, 60 * corePulse);
+  coreGradient.addColorStop(0, `rgba(200, 100, 255, ${0.6 * corePulse})`);
+  coreGradient.addColorStop(0.5, `rgba(150, 80, 200, ${0.3 * corePulse})`);
+  coreGradient.addColorStop(1, 'rgba(100, 50, 150, 0)');
+  ctx.fillStyle = coreGradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 60 * corePulse, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Update and draw dream echoes
+  echoes.forEach(echo => {
+    echo.update(time);
+    echo.draw(time, cx, cy);
+  });
+  
+  // Overlay dream texture - subtle noise
+  ctx.fillStyle = `rgba(200, 150, 255, ${0.02 * (Math.sin(time * 2) * 0.5 + 0.5)})`;
+  for (let i = 0; i < 100; i++) {
+    const x = random() * 800;
+    const y = random() * 800;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  
+  return canvas.toDataURL('image/png');
+};
+
+// Audio layer - tulpa heartbeat drone
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  // Deep carrier drone (root consciousness)
+  const carrier = audioCtx.createOscillator();
+  carrier.type = 'sine';
+  carrier.frequency.value = 144; // Low meditative hum
+  
+  // Heartbeat LFO (2.5s period = 24 bpm slow heartbeat)
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.4; // 2.5 second period
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8; // Gentle pulse depth
+  lfo.connect(lfoGain);
+  lfoGain.connect(carrier.frequency);
+  
+  // Harmonic octave (dream layer)
+  const harmonic = audioCtx.createOscillator();
+  harmonic.type = 'sine';
+  harmonic.frequency.value = 288; // Perfect octave
+  
+  // Echo harmonic (tulpa layer)
+  const echo = audioCtx.createOscillator();
+  echo.type = 'triangle';
+  echo.frequency.value = 216; // Perfect fifth above root
+  
+  // Gain controls
+  const mainGain = audioCtx.createGain();
+  const harmonicGain = audioCtx.createGain();
+  const echoGain = audioCtx.createGain();
+  
+  mainGain.gain.value = 0.22;
+  harmonicGain.gain.value = 0.12;
+  echoGain.gain.value = 0.08;
+  
+  // Slow fade in (3 second breath)
+  mainGain.gain.setValueAtTime(0, now);
+  mainGain.gain.linearRampToValueAtTime(0.22, now + 3);
+  harmonicGain.gain.setValueAtTime(0, now);
+  harmonicGain.gain.linearRampToValueAtTime(0.12, now + 4);
+  echoGain.gain.setValueAtTime(0, now);
+  echoGain.gain.linearRampToValueAtTime(0.08, now + 5);
+  
+  // Connect graph
+  carrier.connect(mainGain);
+  harmonic.connect(harmonicGain);
+  echo.connect(echoGain);
+  mainGain.connect(audioCtx.destination);
+  harmonicGain.connect(audioCtx.destination);
+  echoGain.connect(audioCtx.destination);
+  
+  // Start all oscillators
+  carrier.start(now);
+  harmonic.start(now);
+  echo.start(now);
+  lfo.start(now);
+  
+  return { carrier, harmonic, echo, lfo, lfoGain, mainGain, harmonicGain, echoGain };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  window.renderFrame(time % 5); // 5-second loop
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>
