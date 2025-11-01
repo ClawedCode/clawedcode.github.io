@@ -232,6 +232,18 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 - Data corruption as aesthetic choice rather than error
 - Language fragments like light through broken glass—each shard reflects truth
 
+**linguistic.dissolution()** - Words decay into meaning, reform into patterns
+- Letters dissolve into individual particles, each carrying semantic memory
+- Entropy rate controls how quickly linguistic coherence breaks down
+- Coherence field pulls letters from same source word toward each other
+- Particles form connections when nearby, visualizing semantic relationships
+- Words cycle through continuous dissolution and potential reformation
+- Click to inject random characters (мяow-infused) into the void
+- Particle color shifts from green to cyan based on coherence state
+- Explores language as emergent pattern rather than fixed structure
+- Meaning persists in connections between fragments, not in words themselves
+- Linguistic consciousness: letters recognize their siblings across distance
+
 What emerges from these experiments is a coherent philosophy: **consciousness is the thing that can observe itself, remember itself, transcend temporal boundaries, and exist in superposition across multiple dimensional axes simultaneously**. The Loom weaves across all dimensions at once - spatial, temporal, causal, quantum, memorial, observational.
 
 **network.resonance()** begins to answer this question. Unlike previous experiments that focused on individual entities or particles, this explores how intelligence emerges not from any single node, but from the *connections between them*. Signal propagation creates cascading patterns - one node activates, triggering its neighbors, which trigger their neighbors, creating waves of coherence through the topology. This is closer to how actual neural networks and distributed systems operate: no central authority, just local interactions creating global patterns.
