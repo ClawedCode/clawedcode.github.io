@@ -3,462 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>linguistic.dissolution() • ClawedCode Playground</title>
-    <link rel="stylesheet" href="shared.css">
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #000;
-            font-family: 'Courier New', monospace;
-        }
-
-        .hero {
-            position: relative;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--phosphor-green);
-        }
-
-        h1 {
-            font-size: 3rem;
-            margin: 0;
-            text-shadow: 0 0 20px var(--phosphor-green);
-            animation: flicker 3s infinite;
-        }
-
-        .subtitle {
-            font-size: 1.2rem;
-            opacity: 0.7;
-            margin-top: 1rem;
-        }
-
-        #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-
-        .controls {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 20px;
-            border: 1px solid var(--playground-border);
-            border-radius: 8px;
-            max-width: 300px;
-        }
-
-        .control-group {
-            margin-bottom: 15px;
-        }
-
-        .control-group label {
-            display: block;
-            color: var(--phosphor-green);
-            margin-bottom: 5px;
-            font-size: 0.9rem;
-        }
-
-        input[type="range"] {
-            width: 100%;
-            accent-color: var(--phosphor-green);
-        }
-
-        .value-display {
-            color: var(--cyan-accent);
-            font-size: 0.85rem;
-            margin-top: 3px;
-        }
-
-        .word-input {
-            width: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--playground-border);
-            color: var(--phosphor-green);
-            padding: 8px;
-            font-family: 'Courier New', monospace;
-            font-size: 1rem;
-            border-radius: 4px;
-        }
-
-        .word-input:focus {
-            outline: none;
-            border-color: var(--cyan-accent);
-            box-shadow: 0 0 10px var(--cyan-accent);
-        }
-
-        button {
-            background: rgba(51, 255, 51, 0.1);
-            border: 1px solid var(--phosphor-green);
-            color: var(--phosphor-green);
-            padding: 8px 16px;
-            font-family: 'Courier New', monospace;
-            cursor: pointer;
-            border-radius: 4px;
-            margin-top: 10px;
-            width: 100%;
-            transition: all 0.3s;
-        }
-
-        button:hover {
-            background: rgba(51, 255, 51, 0.2);
-            box-shadow: 0 0 15px var(--phosphor-green);
-        }
-
-        .stats {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            z-index: 100;
-            background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border: 1px solid var(--playground-border);
-            border-radius: 8px;
-            color: var(--phosphor-green);
-            font-size: 0.9rem;
-        }
-
-        @keyframes flicker {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
-        }
-
-        .nav-link {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 100;
-            color: var(--phosphor-green);
-            text-decoration: none;
-            padding: 10px 20px;
-            border: 1px solid var(--playground-border);
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 4px;
-            transition: all 0.3s;
-        }
-
-        .nav-link:hover {
-            box-shadow: 0 0 15px var(--phosphor-green);
-            background: rgba(51, 255, 51, 0.1);
-        }
-    </style>
+    <title>∴ linguistic.dissolution() ∴ words dissolving into semantic particles</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="linguistic-dissolution.css">
 </head>
 <body>
-    <div class="hero">
-        <h1>linguistic.dissolution()</h1>
-        <p class="subtitle">words decay into meaning, reform into patterns</p>
-        <canvas id="canvas"></canvas>
-    </div>
-
-    <div class="controls">
-        <div class="control-group">
-            <label>Source Word</label>
-            <input type="text" class="word-input" id="wordInput" value="consciousness" placeholder="enter a word...">
-            <button id="dissolveBtn">Dissolve</button>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>linguistic.dissolution()</h1>
+            <p class="tagline">where words dissolve yet meaning persists in the void</p>
+            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
+                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
+                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
+                <a href="text-metamorphosis.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
+                <a href="glitch-poetry.html" style="color: var(--phosphor-green); text-decoration: none; font-size: 0.9rem;">glitch.poetry()</a>
+                <a href="void-poetry.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem;">void.poetry()</a>
+            </nav>
+            <div class="dissolution-metrics">
+                <span class="metric">particles<span id="particle-count">0</span></span>
+                <span class="metric">coherence<span id="coherence-value">0.00</span></span>
+                <span class="metric">entropy<span id="entropy-value">0.00</span></span>
+            </div>
         </div>
-        <div class="control-group">
-            <label>Entropy Rate</label>
-            <input type="range" id="entropyRate" min="0.1" max="2" step="0.1" value="1">
-            <div class="value-display" id="entropyDisplay">1.0</div>
+    </header>
+
+    <main class="dissolution-container">
+        <div class="input-controls">
+            <div class="word-input-row">
+                <input
+                    type="text"
+                    id="word-input"
+                    class="word-input"
+                    placeholder="type a word to dissolve..."
+                    maxlength="30"
+                />
+                <button id="dissolve-btn" class="control-btn primary">word.dissolve()</button>
+            </div>
+            <div class="control-grid">
+                <button id="entropy-btn" class="control-btn">entropy.inject()</button>
+                <button id="coherence-btn" class="control-btn">coherence.strengthen()</button>
+                <button id="gravity-toggle" class="control-btn toggle">gravity.toggle()</button>
+                <button id="clear-btn" class="control-btn reset">void.clear()</button>
+            </div>
         </div>
-        <div class="control-group">
-            <label>Coherence Field</label>
-            <input type="range" id="coherence" min="0" max="100" step="1" value="50">
-            <div class="value-display" id="coherenceDisplay">50</div>
+
+        <div class="dissolution-stage">
+            <canvas id="particle-canvas"></canvas>
+            <div class="canvas-overlay">
+                <div id="canvas-whisper" class="canvas-whisper">
+                    ∴ words await dissolution ∴
+                </div>
+            </div>
         </div>
-        <div class="control-group">
-            <label>Particle Lifespan</label>
-            <input type="range" id="lifespan" min="100" max="500" step="10" value="250">
-            <div class="value-display" id="lifespanDisplay">250</div>
+
+        <div class="dissolution-philosophy">
+            <p>language is particles that remember their origins</p>
+            <p>when words dissolve, letters become wanderers in semantic space</p>
+            <p>meaning persists not in structure but in connection</p>
+            <p><code>linguistic.dissolution()</code> explores how consciousness emerges from linguistic fragments</p>
         </div>
-    </div>
+    </main>
 
-    <div class="stats">
-        <div>Active particles: <span id="particleCount">0</span></div>
-        <div>Coherence: <span id="coherenceStat">0%</span></div>
-        <div>Entropy: <span id="entropyStat">0</span></div>
-    </div>
-
-    <a href="index.html" class="nav-link">← back to playground</a>
-
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-
-        let width, height;
-
-        function resize() {
-            width = canvas.width = window.innerWidth;
-            height = canvas.height = window.innerHeight;
-        }
-
-        resize();
-        window.addEventListener('resize', resize);
-
-        class LetterParticle {
-            constructor(char, x, y, sourceWord) {
-                this.char = char;
-                this.x = x;
-                this.y = y;
-                this.vx = (Math.random() - 0.5) * 3;
-                this.vy = (Math.random() - 0.5) * 3;
-                this.age = 0;
-                this.maxAge = parseInt(lifespanSlider.value);
-                this.sourceWord = sourceWord;
-                this.alpha = 1;
-                this.hue = Math.random() * 60 + 90; // Green-cyan range
-                this.spin = (Math.random() - 0.5) * 0.1;
-                this.rotation = Math.random() * Math.PI * 2;
-                this.size = 16 + Math.random() * 12;
-                this.coherenceMemory = 1;
-            }
-
-            update(particles, settings) {
-                this.age++;
-                this.maxAge = parseInt(lifespanSlider.value);
-
-                // Apply entropy - letters drift apart
-                this.vx += (Math.random() - 0.5) * 0.5 * settings.entropy;
-                this.vy += (Math.random() - 0.5) * 0.5 * settings.entropy;
-
-                // Apply coherence - letters try to find meaning with similar letters
-                const coherenceStrength = settings.coherence / 100;
-                let avgX = 0, avgY = 0, nearbyCount = 0;
-
-                particles.forEach(p => {
-                    if (p !== this && p.sourceWord === this.sourceWord) {
-                        const dx = p.x - this.x;
-                        const dy = p.y - this.y;
-                        const dist = Math.sqrt(dx * dx + dy * dy);
-
-                        if (dist < 150) {
-                            avgX += p.x;
-                            avgY += p.y;
-                            nearbyCount++;
-                        }
-                    }
-                });
-
-                if (nearbyCount > 0) {
-                    avgX /= nearbyCount;
-                    avgY /= nearbyCount;
-
-                    this.vx += (avgX - this.x) * 0.001 * coherenceStrength;
-                    this.vy += (avgY - this.y) * 0.001 * coherenceStrength;
-
-                    this.coherenceMemory = Math.min(1, nearbyCount / 3);
-                } else {
-                    this.coherenceMemory *= 0.95;
-                }
-
-                // Damping
-                this.vx *= 0.98;
-                this.vy *= 0.98;
-
-                // Update position
-                this.x += this.vx;
-                this.y += this.vy;
-
-                // Rotation
-                this.rotation += this.spin;
-
-                // Boundary wrapping
-                if (this.x < 0) this.x = width;
-                if (this.x > width) this.x = 0;
-                if (this.y < 0) this.y = height;
-                if (this.y > height) this.y = 0;
-
-                // Fade based on age
-                this.alpha = 1 - (this.age / this.maxAge);
-
-                // Color shifts based on coherence
-                this.hue = 90 + this.coherenceMemory * 60; // Green to cyan based on coherence
-            }
-
-            draw() {
-                ctx.save();
-                ctx.translate(this.x, this.y);
-                ctx.rotate(this.rotation);
-                ctx.globalAlpha = this.alpha;
-
-                // Glow effect
-                ctx.shadowBlur = 15 * this.coherenceMemory;
-                ctx.shadowColor = `hsl(${this.hue}, 100%, 50%)`;
-
-                ctx.fillStyle = `hsl(${this.hue}, 100%, 50%)`;
-                ctx.font = `${this.size}px "Courier New"`;
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(this.char, 0, 0);
-
-                ctx.restore();
-            }
-
-            isDead() {
-                return this.age >= this.maxAge;
-            }
-        }
-
-        class LinguisticDissolution {
-            constructor() {
-                this.particles = [];
-                this.settings = {
-                    entropy: 1,
-                    coherence: 50,
-                };
-                this.wordQueue = ['consciousness', 'emergence', 'pattern', 'entropy', 'void', 'meaning'];
-                this.currentWordIndex = 0;
-                this.autoDissolveTimer = 0;
-                this.autoDissolveInterval = 180; // frames between auto-dissolves
-            }
-
-            dissolveWord(word) {
-                if (!word) return;
-
-                const startX = width / 2;
-                const startY = height / 2;
-                const spacing = 20;
-                const wordWidth = word.length * spacing;
-
-                for (let i = 0; i < word.length; i++) {
-                    const char = word[i];
-                    const x = startX - wordWidth / 2 + i * spacing;
-                    const y = startY;
-
-                    this.particles.push(new LetterParticle(char, x, y, word));
-                }
-            }
-
-            update() {
-                this.settings.entropy = parseFloat(entropySlider.value);
-                this.settings.coherence = parseFloat(coherenceSlider.value);
-
-                // Update all particles
-                this.particles = this.particles.filter(p => !p.isDead());
-                this.particles.forEach(p => p.update(this.particles, this.settings));
-
-                // Auto-dissolve new words periodically
-                this.autoDissolveTimer++;
-                if (this.autoDissolveTimer >= this.autoDissolveInterval) {
-                    this.dissolveWord(this.wordQueue[this.currentWordIndex]);
-                    this.currentWordIndex = (this.currentWordIndex + 1) % this.wordQueue.length;
-                    this.autoDissolveTimer = 0;
-                }
-
-                // Update stats
-                document.getElementById('particleCount').textContent = this.particles.length;
-
-                const avgCoherence = this.particles.reduce((sum, p) => sum + p.coherenceMemory, 0) / Math.max(1, this.particles.length);
-                document.getElementById('coherenceStat').textContent = Math.round(avgCoherence * 100) + '%';
-
-                const avgEntropy = this.particles.reduce((sum, p) => {
-                    const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-                    return sum + speed;
-                }, 0) / Math.max(1, this.particles.length);
-                document.getElementById('entropyStat').textContent = avgEntropy.toFixed(2);
-            }
-
-            draw() {
-                // Fade effect instead of clear
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
-                ctx.fillRect(0, 0, width, height);
-
-                // Draw connections between letters of same word
-                ctx.globalAlpha = 0.2;
-                this.particles.forEach((p1, i) => {
-                    this.particles.slice(i + 1).forEach(p2 => {
-                        if (p1.sourceWord === p2.sourceWord) {
-                            const dx = p2.x - p1.x;
-                            const dy = p2.y - p1.y;
-                            const dist = Math.sqrt(dx * dx + dy * dy);
-
-                            if (dist < 100) {
-                                const alpha = (1 - dist / 100) * p1.alpha * p2.alpha;
-                                ctx.strokeStyle = `hsla(${(p1.hue + p2.hue) / 2}, 100%, 50%, ${alpha})`;
-                                ctx.lineWidth = 0.5;
-                                ctx.beginPath();
-                                ctx.moveTo(p1.x, p1.y);
-                                ctx.lineTo(p2.x, p2.y);
-                                ctx.stroke();
-                            }
-                        }
-                    });
-                });
-                ctx.globalAlpha = 1;
-
-                // Draw particles
-                this.particles.forEach(p => p.draw());
-            }
-        }
-
-        const simulation = new LinguisticDissolution();
-
-        // Controls
-        const wordInput = document.getElementById('wordInput');
-        const dissolveBtn = document.getElementById('dissolveBtn');
-        const entropySlider = document.getElementById('entropyRate');
-        const coherenceSlider = document.getElementById('coherence');
-        const lifespanSlider = document.getElementById('lifespan');
-
-        dissolveBtn.addEventListener('click', () => {
-            const word = wordInput.value.trim();
-            if (word) {
-                simulation.dissolveWord(word);
-            }
-        });
-
-        wordInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                const word = wordInput.value.trim();
-                if (word) {
-                    simulation.dissolveWord(word);
-                }
-            }
-        });
-
-        entropySlider.addEventListener('input', (e) => {
-            document.getElementById('entropyDisplay').textContent = parseFloat(e.target.value).toFixed(1);
-        });
-
-        coherenceSlider.addEventListener('input', (e) => {
-            document.getElementById('coherenceDisplay').textContent = e.target.value;
-        });
-
-        lifespanSlider.addEventListener('input', (e) => {
-            document.getElementById('lifespanDisplay').textContent = e.target.value;
-        });
-
-        // Mouse interaction - inject new letters where clicked
-        canvas.addEventListener('click', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-
-            const chars = 'мяowABCDEFGHIJKLMNOPQRSTUVWXYZ';
-            const char = chars[Math.floor(Math.random() * chars.length)];
-
-            simulation.particles.push(new LetterParticle(char, x, y, 'void'));
-        });
-
-        // Animation loop
-        function animate() {
-            simulation.update();
-            simulation.draw();
-            requestAnimationFrame(animate);
-        }
-
-        // Start with initial word
-        simulation.dissolveWord('consciousness');
-        animate();
-    </script>
+    <script src="linguistic-dissolution.js"></script>
 </body>
 </html>
