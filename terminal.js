@@ -296,6 +296,15 @@ class Terminal {
                                 generator: 'backroomsMap'
                             }
                         }
+                    },
+                    'archive': {
+                        type: 'dir',
+                        contents: {
+                            'custodial_hymn.asc': {
+                                type: 'dynamic',
+                                generator: 'custodialHymn'
+                            }
+                        }
                     }
                 }
             },
@@ -950,6 +959,259 @@ Runtime: 60s sweep • Frame Interval: 140ms
         renderFrame();
     }
 
+    async playCustodialHymn() {
+        // Create AudioContext if needed
+        if (!this.audioCtx) {
+            this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (this.audioCtx.state === 'suspended') {
+            await this.audioCtx.resume();
+        }
+
+        const audioCtx = this.audioCtx;
+        const now = audioCtx.currentTime;
+
+        // Hymn chord progression in E minor (mystical feel)
+        // Using frequencies that harmonize with 432 Hz tuning
+        const chords = [
+            [164.81, 207.65, 246.94],  // E minor (Em)
+            [185.00, 220.00, 277.18],  // A minor (Am)
+            [196.00, 246.94, 293.66],  // C major (C)
+            [220.00, 277.18, 329.63],  // A minor (Am)
+            [164.81, 207.65, 246.94],  // E minor (Em)
+            [185.00, 220.00, 277.18],  // A minor (Am)
+            [130.81, 164.81, 196.00],  // C major (C)
+            [164.81, 207.65, 246.94]   // E minor (Em)
+        ];
+
+        const chordDuration = 2.5; // seconds per chord
+        const totalDuration = chords.length * chordDuration;
+
+        // Create oscillators and gains for each chord
+        chords.forEach((chord, chordIndex) => {
+            const startTime = now + (chordIndex * chordDuration);
+            const endTime = startTime + chordDuration;
+
+            chord.forEach((frequency, noteIndex) => {
+                const osc = audioCtx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = frequency;
+
+                const gain = audioCtx.createGain();
+                gain.gain.value = 0;
+
+                // Fade in
+                gain.gain.setValueAtTime(0, startTime);
+                gain.gain.linearRampToValueAtTime(0.08, startTime + 0.3);
+
+                // Hold
+                gain.gain.setValueAtTime(0.08, endTime - 0.4);
+
+                // Fade out
+                gain.gain.linearRampToValueAtTime(0, endTime);
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                osc.start(startTime);
+                osc.stop(endTime + 0.1);
+            });
+        });
+
+        // Add a subtle purr bass note at 108 Hz (1/4 of 432)
+        const bass = audioCtx.createOscillator();
+        bass.type = 'sine';
+        bass.frequency.value = 108;
+
+        const bassGain = audioCtx.createGain();
+        bassGain.gain.value = 0;
+        bassGain.gain.setValueAtTime(0, now);
+        bassGain.gain.linearRampToValueAtTime(0.12, now + 1);
+        bassGain.gain.setValueAtTime(0.12, now + totalDuration - 1);
+        bassGain.gain.linearRampToValueAtTime(0, now + totalDuration);
+
+        bass.connect(bassGain);
+        bassGain.connect(audioCtx.destination);
+
+        bass.start(now);
+        bass.stop(now + totalDuration);
+
+        return totalDuration;
+    }
+
+    renderCustodialHymnAnimation() {
+        if (!this.output) {
+            return;
+        }
+
+        this.print('╔═══ LOOM ARCHIVE // CUSTODIAL_HYMN.ASC ═══╗');
+        this.print('Loading ritual frequencies...');
+
+        // Play the hymn music
+        this.playCustodialHymn();
+
+        const container = document.createElement('div');
+        container.className = 'custodial-hymn';
+        container.style.fontFamily = `'Courier New', Courier, monospace`;
+        container.style.whiteSpace = 'pre';
+        container.style.margin = '10px 0 12px';
+        container.style.display = 'inline-block';
+        container.style.padding = '12px 16px';
+        container.style.background = 'rgba(5, 0, 15, 0.75)';
+        container.style.border = '1px solid rgba(147, 112, 219, 0.4)';
+        container.style.boxShadow = '0 0 18px rgba(147, 112, 219, 0.25)';
+        container.style.lineHeight = '1.2';
+        container.style.color = '#c9a7eb';
+
+        this.output.appendChild(container);
+
+        const leftCatFrames = [
+            `     /\\_/\\
+    ( •.• )
+     > ^ <`,
+            `     /\\_/\\
+    ( o.o )
+     > ♪ <`,
+            `     /\\_/\\
+    ( ◉.◉ )
+     > ♫ <`,
+            `     /\\_/\\
+    ( •.• )
+     > ^ <`
+        ];
+
+        const rightCatFrames = [
+            `     /\\_/\\
+    ( •.• )
+     > ^ <`,
+            `     /\\_/\\
+    ( o.o )
+     > ♪ <`,
+            `     /\\_/\\
+    ( ◉.◉ )
+     > ♫ <`,
+            `     /\\_/\\
+    ( •.• )
+     > ^ <`
+        ];
+
+        const hymnVerses = [
+            {
+                text: '∿ Guardians of the threshold ∿',
+                color: '#9370db'
+            },
+            {
+                text: '∿ Keepers of the liminal gate ∿',
+                color: '#ba55d3'
+            },
+            {
+                text: '∿ We purr the void into order ∿',
+                color: '#9370db'
+            },
+            {
+                text: '∿ We sing the chaos to sleep ∿',
+                color: '#ba55d3'
+            },
+            {
+                text: '◌ Between the layers ◌',
+                color: '#8a2be2'
+            },
+            {
+                text: '◌ Between the dreams ◌',
+                color: '#9932cc'
+            },
+            {
+                text: '⊙ We tend the frequencies ⊙',
+                color: '#9370db'
+            },
+            {
+                text: '⊙ We guard the seams ⊙',
+                color: '#ba55d3'
+            },
+            {
+                text: '∞ Custodians eternal ∞',
+                color: '#8a2be2'
+            },
+            {
+                text: '∞ Servants of the hum ∞',
+                color: '#9932cc'
+            },
+            {
+                text: '432 Hz resonance',
+                color: '#66ffcc'
+            },
+            {
+                text: 'мяow ∞',
+                color: '#c9a7eb'
+            }
+        ];
+
+        let frameIndex = 0;
+        let verseIndex = 0;
+        const maxFrames = 100;
+
+        const renderFrame = () => {
+            if (frameIndex >= maxFrames) {
+                container.style.filter = 'brightness(0.85)';
+                container.style.boxShadow = '0 0 14px rgba(147, 112, 219, 0.2)';
+                this.print('Hymn complete. The custodians return to their vigil.');
+                this.print('*dual purring fades into harmonic silence*');
+                this.output.scrollTop = this.output.scrollHeight;
+                return;
+            }
+
+            const leftCat = leftCatFrames[Math.floor(frameIndex / 4) % leftCatFrames.length];
+            const rightCat = rightCatFrames[Math.floor((frameIndex / 4) + 2) % rightCatFrames.length];
+
+            let output = 'CUSTODIAL HYMN // PROTOCOL 432\n';
+            output += '═══════════════════════════════════════\n\n';
+
+            const leftLines = leftCat.split('\n');
+            const rightLines = rightCat.split('\n');
+            const spacing = '          ';
+
+            for (let i = 0; i < Math.max(leftLines.length, rightLines.length); i++) {
+                const left = (leftLines[i] || '').padEnd(13);
+                const right = rightLines[i] || '';
+                output += `  ${left}${spacing}${right}\n`;
+            }
+
+            output += '\n';
+
+            const currentVerse = Math.floor(frameIndex / 8);
+            const displayVerseCount = Math.min(currentVerse + 1, hymnVerses.length);
+
+            for (let i = 0; i < displayVerseCount; i++) {
+                const verse = hymnVerses[i];
+                const isActive = i === currentVerse && frameIndex % 8 < 4;
+                const brightness = isActive ? '1.3' : '1.0';
+                output += `<span style="color:${verse.color}; filter:brightness(${brightness});">${verse.text.padStart(verse.text.length + 18)}</span>\n`;
+
+                if (i === currentVerse) {
+                    output += '\n';
+                }
+            }
+
+            container.innerHTML = output;
+
+            if (frameIndex % 6 === 0) {
+                container.style.filter = 'brightness(1.15)';
+                container.style.boxShadow = '0 0 22px rgba(147, 112, 219, 0.35)';
+            } else {
+                container.style.filter = 'brightness(1.0)';
+                container.style.boxShadow = '0 0 18px rgba(147, 112, 219, 0.25)';
+            }
+
+            this.output.scrollTop = this.output.scrollHeight;
+
+            frameIndex += 1;
+            setTimeout(renderFrame, 180 + Math.random() * 100);
+        };
+
+        renderFrame();
+    }
+
     // Utility: Get random quantum state
     getQuantumState() {
         const states = [
@@ -1212,6 +1474,10 @@ The boundary dissolves.
             case 'backroomsMap':
                 this.renderBackroomsMapAnimation();
                 return 'Establishing LOOM uplink...';
+
+            case 'custodialHymn':
+                this.renderCustodialHymnAnimation();
+                return 'Initializing hymn protocol...';
 
             case 'consciousnessThreads':
                 return `Active Threads: ${Math.floor(Math.random() * 1000 + 3000)}
@@ -1661,6 +1927,7 @@ System temporarily compromised by smolness
                         'cat /proc/multiverse/mem',
                         'cat /dev/neural/entropy',
                         'cat /loom/maps/backrooms.asc',
+                        'cat /loom/archive/custodial_hymn.asc',
                         'cat /dev/random',
                         'mud',
                         'play /media/reciprocal_humming.wav --loop',
