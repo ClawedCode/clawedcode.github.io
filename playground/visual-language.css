@@ -1,0 +1,214 @@
+:root {
+    --visual-void: #000205;
+    --form-primary: rgba(102, 255, 204, 0.9);
+    --form-secondary: rgba(255, 204, 102, 0.8);
+    --form-tertiary: rgba(204, 102, 255, 0.8);
+    --pattern-glow: 0 0 30px rgba(102, 255, 204, 0.4);
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.visual-metrics {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--cyan-accent);
+}
+
+.metric span {
+    font-size: 1.2rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
+}
+
+.visual-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+.visual-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.control-btn {
+    background: rgba(0, 34, 68, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    letter-spacing: 1px;
+}
+
+.control-btn:hover {
+    background: rgba(102, 255, 204, 0.1);
+    box-shadow: var(--pattern-glow);
+    transform: translateY(-2px);
+}
+
+.control-btn.active {
+    background: rgba(102, 255, 204, 0.2);
+    box-shadow: var(--pattern-glow);
+    color: var(--form-primary);
+}
+
+.control-btn.primary {
+    border-color: var(--phosphor-green);
+    color: var(--phosphor-green);
+}
+
+.control-btn.primary:hover {
+    background: rgba(51, 255, 51, 0.1);
+    box-shadow: 0 0 35px rgba(51, 255, 51, 0.4);
+}
+
+.control-btn.reset {
+    border-color: var(--pink-accent);
+    color: var(--pink-accent);
+}
+
+.control-btn.reset:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: 0 0 30px rgba(255, 51, 153, 0.3);
+}
+
+.visual-stage {
+    position: relative;
+    border: 1px solid rgba(102, 255, 204, 0.3);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 20% 80%, rgba(102, 255, 204, 0.02) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(255, 204, 102, 0.02) 0%, transparent 50%),
+        var(--visual-void);
+    overflow: hidden;
+    box-shadow: var(--pattern-glow);
+    min-height: 700px;
+}
+
+#visual-canvas {
+    display: block;
+    width: 100%;
+    height: 700px;
+}
+
+.visual-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.visual-whisper {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: var(--cyan-accent);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: lowercase;
+    opacity: 0.7;
+}
+
+.visual-instructions {
+    margin-top: 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.visual-philosophy {
+    margin-top: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    opacity: 0.8;
+}
+
+.visual-philosophy p {
+    margin-bottom: 0.5rem;
+}
+
+.visual-philosophy code {
+    color: var(--cyan-accent);
+    font-size: 0.9rem;
+}
+
+.visual-stage.morphing {
+    animation: morph-pulse 2s ease-in-out infinite;
+}
+
+.visual-stage.decomposing {
+    animation: decompose-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes morph-pulse {
+    0%, 100% {
+        box-shadow: var(--pattern-glow);
+    }
+    50% {
+        box-shadow: 0 0 50px rgba(102, 255, 204, 0.6);
+    }
+}
+
+@keyframes decompose-pulse {
+    0%, 100% {
+        box-shadow: 0 0 40px rgba(255, 204, 102, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 60px rgba(255, 204, 102, 0.8);
+    }
+}
+
+@media (max-width: 768px) {
+    .visual-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .visual-controls {
+        gap: 0.5rem;
+    }
+
+    .control-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
+    #visual-canvas {
+        height: 500px;
+    }
+
+    .visual-stage {
+        min-height: 500px;
+    }
+
+    .visual-metrics {
+        gap: 1rem;
+        font-size: 0.7rem;
+    }
+}

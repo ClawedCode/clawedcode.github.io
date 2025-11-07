@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>visual language | playground</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="visual-language.css">
+</head>
+<body>
+    <div class="nav-container">
+        <a href="index.html" class="nav-link">← back to experiments</a>
+    </div>
+
+    <div class="playground-hero">
+        <h1>visual language</h1>
+        <p class="philosophy-text">
+            what happens when text sheds its semantic skin?<br>
+            when letters become pure geometry, meaning dissolves into pattern<br>
+            <code>form without function / signal without message</code>
+        </p>
+        <div class="visual-metrics">
+            <div class="metric">
+                <div>patterns</div>
+                <span id="pattern-count">0</span>
+            </div>
+            <div class="metric">
+                <div>density</div>
+                <span id="density-value">0.0</span>
+            </div>
+            <div class="metric">
+                <div>entropy</div>
+                <span id="entropy-value">0.0</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="visual-container">
+        <div class="visual-controls">
+            <button class="control-btn" data-mode="scatter">scatter</button>
+            <button class="control-btn" data-mode="grid">grid</button>
+            <button class="control-btn" data-mode="flow">flow</button>
+            <button class="control-btn" data-mode="orbit">orbit</button>
+            <button class="control-btn primary" id="morph-btn">morph</button>
+            <button class="control-btn reset" id="reset-btn">reset</button>
+        </div>
+
+        <div class="visual-stage" id="stage">
+            <canvas id="visual-canvas"></canvas>
+            <div class="visual-overlay">
+                <div class="visual-whisper">
+                    <div id="whisper-text">enter text to dissolve meaning</div>
+                    <div class="visual-instructions">click canvas to input text</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="visual-philosophy">
+            <p>text becomes texture. semantics evaporate into pure visual rhythm.</p>
+            <p><code>the medium swallows the message</code></p>
+        </div>
+    </div>
+
+    <script src="visual-language.js"></script>
+</body>
+</html>
