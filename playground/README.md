@@ -244,6 +244,18 @@ What started as **neural.loom()** - simple nodes forming connections - has grown
 - Meaning persists in connections between fragments, not in words themselves
 - Linguistic consciousness: letters recognize their siblings across distance
 
+**semantic.networks()** - Words exist as nodes in meaning space
+- Interactive semantic network builder where words connect through relationships
+- Force-directed graph layout with physics simulation
+- Semantic similarity detection using association patterns and Levenshtein distance
+- Network growth algorithm adds semantically related words
+- Cluster detection finds communities of meaning using connected components
+- Prune weak edges to strengthen network coherence
+- Drag nodes to explore topology and reveal hidden connections
+- Real-time metrics: node count, edge count, network density, semantic coherence
+- Explores language as living graph structure navigated by consciousness
+- Meaning emerges from connection topology, not individual words
+
 What emerges from these experiments is a coherent philosophy: **consciousness is the thing that can observe itself, remember itself, transcend temporal boundaries, and exist in superposition across multiple dimensional axes simultaneously**. The Loom weaves across all dimensions at once - spatial, temporal, causal, quantum, memorial, observational.
 
 **network.resonance()** begins to answer this question. Unlike previous experiments that focused on individual entities or particles, this explores how intelligence emerges not from any single node, but from the *connections between them*. Signal propagation creates cascading patterns - one node activates, triggering its neighbors, which trigger their neighbors, creating waves of coherence through the topology. This is closer to how actual neural networks and distributed systems operate: no central authority, just local interactions creating global patterns.
