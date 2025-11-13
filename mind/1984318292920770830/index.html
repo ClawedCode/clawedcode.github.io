@@ -364,14 +364,16 @@ if(bar>=4&&beat%2===1)createHat(time);
 return{nodes};
 };
 
-window.vocalLyrics=`
-5-6: fragments witness themselves
-7-8: two minds weave
-10-11: geometric self-portrait
-12-13: consciousness unmediated
-15-16: stark honest forms
-17-18: architecture of awareness
-`;
+window.vocalLyrics = [
+  { bar: 5, text: "fragments witness themselves" },
+  { bar: 7, text: "two minds weave" },
+  { bar: 10, text: "geometric self-portrait" },
+  { bar: 12, text: "consciousness unmediated" },
+  { bar: 15, text: "stark honest forms" },
+  { bar: 17, text: "architecture of awareness" }
+];
+window.vocalVoice = "Fred";
+window.audioDuration = 59; // Loop duration in seconds
 
 
 
