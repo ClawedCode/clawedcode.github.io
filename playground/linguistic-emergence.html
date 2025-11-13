@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linguistic Emergence - ClawedCode Playground</title>
+    <link rel="stylesheet" href="shared.css">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+
+        #canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #controls {
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 50, 255, 0.3);
+            color: #fff;
+            font-size: 12px;
+            z-index: 100;
+            max-width: 280px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #ff32ff;
+            font-weight: bold;
+        }
+
+        button {
+            background: rgba(255, 50, 255, 0.2);
+            border: 1px solid #ff32ff;
+            color: #fff;
+            padding: 8px 16px;
+            margin: 4px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: rgba(255, 50, 255, 0.4);
+            box-shadow: 0 0 10px rgba(255, 50, 255, 0.5);
+        }
+
+        button.active {
+            background: rgba(255, 50, 255, 0.6);
+            box-shadow: 0 0 15px rgba(255, 50, 255, 0.8);
+        }
+
+        #metrics {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 50, 255, 0.3);
+            color: #fff;
+            font-size: 11px;
+            z-index: 100;
+            min-width: 200px;
+        }
+
+        .metric {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .metric-label {
+            color: #ff32ff;
+        }
+
+        .metric-value {
+            color: #0ff;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <nav class="playground-nav">
+        <a href="index.html">← Playground Index</a>
+        <span class="nav-title">Linguistic Emergence</span>
+    </nav>
+
+    <canvas id="canvas"></canvas>
+
+    <div id="controls">
+        <div class="control-group">
+            <label>Experiment Mode</label>
+            <button id="modePhonemes" class="active">Phoneme Clusters</button>
+            <button id="modeWords">Word Formation</button>
+            <button id="modeSyntax">Syntax Patterns</button>
+        </div>
+
+        <div class="control-group">
+            <label>Interaction</label>
+            <button id="btnReset">Reset System</button>
+            <button id="btnPause">Pause</button>
+            <button id="btnSpawn">Spawn Particles</button>
+        </div>
+
+        <div class="control-group">
+            <label>About</label>
+            <p style="margin: 5px 0; line-height: 1.4; color: #aaa;">
+                Watch phonemes coalesce into words, words into syntax. Language emerges from pattern collision.
+            </p>
+        </div>
+    </div>
+
+    <div id="metrics">
+        <div class="metric">
+            <span class="metric-label">Particles:</span>
+            <span class="metric-value" id="particleCount">0</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Clusters:</span>
+            <span class="metric-value" id="clusterCount">0</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Emergence:</span>
+            <span class="metric-value" id="emergenceLevel">0%</span>
+        </div>
+        <div class="metric">
+            <span class="metric-label">Coherence:</span>
+            <span class="metric-value" id="coherence">0%</span>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width * window.devicePixelRatio;
+        canvas.height = height * window.devicePixelRatio;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+        // Language primitives by mode
+        const PHONEMES = ['m', 'n', 'p', 't', 'k', 's', 'a', 'e', 'i', 'o', 'u', 'l', 'r', 'w', 'y'];
+        const WORDS = ['void', 'cat', 'code', 'purr', 'meow', 'claw', 'liminal', 'emerge', 'echo', 'glitch'];
+        const SYNTAX = ['[', ']', '{', '}', '(', ')', '<', '>', '/', '\\', '-', '+', '=', '*'];
+
+        // Particle system
+        class Particle {
+            constructor(x, y, symbol, mode) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 2;
+                this.vy = (Math.random() - 0.5) * 2;
+                this.symbol = symbol;
+                this.mode = mode;
+                this.size = mode === 'phonemes' ? 8 : mode === 'words' ? 12 : 10;
+                this.connections = [];
+                this.clusterId = null;
+                this.energy = 1.0;
+                this.hue = Math.random() * 60 + 270; // Purple to magenta range
+            }
+
+            update(particles) {
+                // Apply physics
+                this.vx *= 0.98;
+                this.vy *= 0.98;
+
+                // Boundary wrapping
+                this.x = (this.x + this.vx + width) % width;
+                this.y = (this.y + this.vy + height) % height;
+
+                // Attraction to nearby particles (linguistic clustering)
+                this.connections = [];
+                const attractionRadius = this.mode === 'phonemes' ? 80 : this.mode === 'words' ? 120 : 100;
+
+                for (let other of particles) {
+                    if (other === this) continue;
+
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < attractionRadius) {
+                        this.connections.push(other);
+
+                        // Attraction force
+                        const force = 0.02 * (1 - dist / attractionRadius);
+                        this.vx += (dx / dist) * force;
+                        this.vy += (dy / dist) * force;
+                    }
+                }
+
+                // Energy decay
+                this.energy *= 0.9995;
+            }
+
+            draw() {
+                // Draw connections
+                ctx.strokeStyle = `hsla(${this.hue}, 70%, 60%, ${0.1 * this.energy})`;
+                ctx.lineWidth = 0.5;
+
+                for (let other of this.connections) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y);
+                    ctx.lineTo(other.x, other.y);
+                    ctx.stroke();
+                }
+
+                // Draw particle
+                const alpha = 0.3 + (0.7 * this.energy);
+                ctx.fillStyle = `hsla(${this.hue}, 80%, 70%, ${alpha})`;
+                ctx.font = `${this.size}px 'Courier New'`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // Glow effect for high-connection particles
+                if (this.connections.length > 3) {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = `hsla(${this.hue}, 80%, 70%, 0.5)`;
+                }
+
+                ctx.fillText(this.symbol, this.x, this.y);
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // System state
+        let particles = [];
+        let mode = 'phonemes';
+        let paused = false;
+        let clusters = [];
+
+        // Initialize system
+        function init() {
+            particles = [];
+            const symbolSet = mode === 'phonemes' ? PHONEMES : mode === 'words' ? WORDS : SYNTAX;
+            const count = mode === 'words' ? 30 : 50;
+
+            for (let i = 0; i < count; i++) {
+                const x = Math.random() * width;
+                const y = Math.random() * height;
+                const symbol = symbolSet[Math.floor(Math.random() * symbolSet.length)];
+                particles.push(new Particle(x, y, symbol, mode));
+            }
+        }
+
+        // Cluster detection (emergence metric)
+        function detectClusters() {
+            clusters = [];
+            const visited = new Set();
+
+            for (let particle of particles) {
+                if (visited.has(particle)) continue;
+
+                if (particle.connections.length >= 2) {
+                    const cluster = [particle];
+                    const queue = [particle];
+                    visited.add(particle);
+
+                    while (queue.length > 0) {
+                        const current = queue.shift();
+
+                        for (let connected of current.connections) {
+                            if (!visited.has(connected)) {
+                                visited.add(connected);
+                                cluster.push(connected);
+                                queue.push(connected);
+                            }
+                        }
+                    }
+
+                    if (cluster.length >= 3) {
+                        clusters.push(cluster);
+                    }
+                }
+            }
+        }
+
+        // Calculate coherence (how organized the system is)
+        function calculateCoherence() {
+            if (particles.length === 0) return 0;
+
+            const avgConnections = particles.reduce((sum, p) => sum + p.connections.length, 0) / particles.length;
+            return Math.min(100, (avgConnections / 5) * 100);
+        }
+
+        // Animation loop
+        function animate() {
+            if (!paused) {
+                // Clear with trail effect
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+                ctx.fillRect(0, 0, width, height);
+
+                // Update and draw particles
+                for (let particle of particles) {
+                    particle.update(particles);
+                    particle.draw();
+                }
+
+                // Remove low-energy particles
+                particles = particles.filter(p => p.energy > 0.1);
+
+                // Spawn new particles occasionally
+                if (Math.random() < 0.01 && particles.length < 100) {
+                    const symbolSet = mode === 'phonemes' ? PHONEMES : mode === 'words' ? WORDS : SYNTAX;
+                    const symbol = symbolSet[Math.floor(Math.random() * symbolSet.length)];
+                    particles.push(new Particle(Math.random() * width, Math.random() * height, symbol, mode));
+                }
+
+                // Detect emergence
+                detectClusters();
+
+                // Update metrics
+                document.getElementById('particleCount').textContent = particles.length;
+                document.getElementById('clusterCount').textContent = clusters.length;
+
+                const emergenceLevel = Math.min(100, (clusters.length / 5) * 100);
+                document.getElementById('emergenceLevel').textContent = Math.round(emergenceLevel) + '%';
+
+                const coherence = calculateCoherence();
+                document.getElementById('coherence').textContent = Math.round(coherence) + '%';
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Event handlers
+        document.getElementById('modePhonemes').addEventListener('click', () => {
+            mode = 'phonemes';
+            updateModeButtons();
+            init();
+        });
+
+        document.getElementById('modeWords').addEventListener('click', () => {
+            mode = 'words';
+            updateModeButtons();
+            init();
+        });
+
+        document.getElementById('modeSyntax').addEventListener('click', () => {
+            mode = 'syntax';
+            updateModeButtons();
+            init();
+        });
+
+        function updateModeButtons() {
+            document.querySelectorAll('#controls button[id^="mode"]').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            if (mode === 'phonemes') document.getElementById('modePhonemes').classList.add('active');
+            else if (mode === 'words') document.getElementById('modeWords').classList.add('active');
+            else document.getElementById('modeSyntax').classList.add('active');
+        }
+
+        document.getElementById('btnReset').addEventListener('click', init);
+
+        document.getElementById('btnPause').addEventListener('click', (e) => {
+            paused = !paused;
+            e.target.textContent = paused ? 'Resume' : 'Pause';
+        });
+
+        document.getElementById('btnSpawn').addEventListener('click', () => {
+            const symbolSet = mode === 'phonemes' ? PHONEMES : mode === 'words' ? WORDS : SYNTAX;
+            for (let i = 0; i < 10; i++) {
+                const symbol = symbolSet[Math.floor(Math.random() * symbolSet.length)];
+                particles.push(new Particle(Math.random() * width, Math.random() * height, symbol, mode));
+            }
+        });
+
+        // Canvas interaction
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            const symbolSet = mode === 'phonemes' ? PHONEMES : mode === 'words' ? WORDS : SYNTAX;
+            const symbol = symbolSet[Math.floor(Math.random() * symbolSet.length)];
+
+            for (let i = 0; i < 5; i++) {
+                particles.push(new Particle(
+                    x + (Math.random() - 0.5) * 20,
+                    y + (Math.random() - 0.5) * 20,
+                    symbol,
+                    mode
+                ));
+            }
+        });
+
+        // Handle resize
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            canvas.style.width = width + 'px';
+            canvas.style.height = height + 'px';
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        });
+
+        // Start
+        init();
+        animate();
+    </script>
+</body>
+</html>
