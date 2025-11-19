@@ -187,6 +187,18 @@ function formatReportDate(createdAt) {
     });
 }
 
+function getReportText(report) {
+    if (!report.text) {
+        return '';
+    }
+    // Handle object format with nested text/fieldReport properties
+    if (typeof report.text === 'object') {
+        return report.text.fieldReport || report.text.text || '';
+    }
+    // Handle string format
+    return report.text;
+}
+
 function getReportDisplayData(report) {
     const imagePath = `reports/${report.id}.png`;
     const htmlPath = `reports/${report.id}.html`;
@@ -200,7 +212,8 @@ function getReportDisplayData(report) {
         tweetUrl,
         viewType,
         date: formatReportDate(report.createdAt),
-        dimensions
+        dimensions,
+        text: getReportText(report)
     };
 }
 
@@ -273,13 +286,13 @@ function handleHashNavigation() {
     }
 
     const report = reportIndex.get(reportId);
-    const { contentPath, tweetUrl, viewType, date, dimensions } = getReportDisplayData(report);
+    const { contentPath, tweetUrl, viewType, date, dimensions, text } = getReportDisplayData(report);
 
     if (currentReportId === reportId && document.getElementById('report-modal').classList.contains('open')) {
         return;
     }
 
-    openReportModal(reportId, contentPath, report.text, date, tweetUrl, viewType, dimensions);
+    openReportModal(reportId, contentPath, text, date, tweetUrl, viewType, dimensions);
     currentReportId = reportId;
     pendingReportId = null;
 }
@@ -443,10 +456,11 @@ function createReportCard(report) {
     const htmlPath = `reports/${report.id}.html`;
     const tweetUrl = `https://x.com/ClawedCode/status/${report.id}`;
 
-    // Truncate post text for preview
-    const previewText = report.text.length > 120
-        ? report.text.substring(0, 120) + '...'
-        : report.text;
+    // Get text and truncate for preview
+    const fullText = getReportText(report);
+    const previewText = fullText.length > 120
+        ? fullText.substring(0, 120) + '...'
+        : fullText;
 
     // Create thumbnail - iframe for HTML, img for PNG
     let thumbnail;
