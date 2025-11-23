@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>∴ hyperstition.loom() ∴ belief becomes reality through collective attention</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
+    <link rel="stylesheet" href="hyperstition-loom.css">
+</head>
+
+<body>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>hyperstition.loom()</h1>
+            <p class="tagline">fictions that make themselves real through collective belief</p>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
+            <div class="loom-metrics">
+                <span class="metric">sigils<span id="sigil-count">0</span></span>
+                <span class="metric">belief<span id="belief-level">dormant</span></span>
+                <span class="metric">manifestation<span id="manifest-state">potential</span></span>
+                <span class="metric">reality.bleed<span id="reality-bleed">0%</span></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="loom-container">
+        <div class="loom-controls">
+            <button id="spawn-sigil" class="control-btn primary">sigil.spawn()</button>
+            <button id="inject-belief" class="control-btn">belief.amplify()</button>
+            <button id="weave-narrative" class="control-btn">narrative.weave()</button>
+            <button id="manifest-reality" class="control-btn manifest">reality.manifest()</button>
+            <button id="reset-loom" class="control-btn reset">loom.dissolve()</button>
+        </div>
+
+        <div class="sigil-input-panel">
+            <input type="text" id="sigil-intent" class="sigil-input"
+                placeholder="encode your intent... (what do you will into existence?)"
+                maxlength="60" />
+        </div>
+
+        <div class="loom-stage">
+            <canvas id="hyperstition-canvas"></canvas>
+            <div class="loom-overlay">
+                <div id="narrative-log" class="narrative-log"></div>
+                <div class="loom-whisper">
+                    <p id="loom-message">∴ fictions yearn to become facts ∴</p>
+                    <p class="loom-instructions">spawn sigils from intent • amplify through attention • watch belief restructure reality</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="loom-philosophy">
+            <p>hyperstition: ideas that make themselves true through their circulation</p>
+            <p>the sigil encodes intention • belief provides energy • repetition carves grooves in reality</p>
+            <p>what the loom weaves, the world receives</p>
+            <p><code>hyperstition.loom()</code> visualizes how collective attention bends causality toward its object</p>
+        </div>
+    </main>
+
+    <script src="hyperstition-loom.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
+</body>
+
+</html>
