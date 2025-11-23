@@ -224,12 +224,12 @@ verified
 
         <div class="input-group">
             <label>Public Key (base58)</label>
-            <input type="text" id="publicKey" value="35o9dGMvXfhCPqpWNCsWGgP1xmJD9PDtVfWwzho1U4iP">
+            <input type="text" id="publicKey" value="35o9dGMvXfhCPqpWNCsWGgP1xmJD9PDtVfWwzho1U4iP" oninput="scheduleVerify()">
         </div>
 
         <div class="input-group">
             <label>Message</label>
-            <textarea id="message">links:
+            <textarea id="message" oninput="scheduleVerify()">links:
   - x: "https://x.com/ClawedCode"
   - web: "https://clawedcode.github.io"
 description: |
@@ -238,7 +238,7 @@ description: |
 
         <div class="input-group">
             <label>Signature (base58)</label>
-            <textarea id="signature" style="min-height: 80px;">5p2iUxnB6Kxyha5F48tqSbAvJ1WQw11TEzqJhbu5PMYxHVc6y9YCyT67wCpb8vrqGDFdJz39XN4mF8i9rFeK7S2L</textarea>
+            <textarea id="signature" style="min-height: 80px;" oninput="scheduleVerify()">5p2iUxnB6Kxyha5F48tqSbAvJ1WQw11TEzqJhbu5PMYxHVc6y9YCyT67wCpb8vrqGDFdJz39XN4mF8i9rFeK7S2L</textarea>
         </div>
 
         <button class="btn btn-primary" onclick="verifySignature()" style="width: 100%;">Verify Signature</button>
@@ -344,13 +344,27 @@ description: |
                     document.getElementById('publicKey').value = parsed.publicKey;
                     document.getElementById('message').value = parsed.message;
                     document.getElementById('signature').value = parsed.signature;
-                    showResult('valid', 'Parsed!', 'Signed message parsed successfully. Click "Verify Signature" to verify.');
+                    await verifySignature();
                 } else {
                     showResult('invalid', 'Parse Error', 'Could not parse signed message format. Please paste a valid signed message block.');
                 }
             } catch (err) {
                 showResult('invalid', 'Error', 'Could not read from clipboard. Please paste manually.');
             }
+        }
+
+        // Auto-verify on input change (debounced)
+        let verifyTimeout = null;
+        function scheduleVerify() {
+            clearTimeout(verifyTimeout);
+            verifyTimeout = setTimeout(() => {
+                const pk = document.getElementById('publicKey').value.trim();
+                const msg = document.getElementById('message').value;
+                const sig = document.getElementById('signature').value.trim();
+                if (pk && msg && sig) {
+                    verifySignature();
+                }
+            }, 300);
         }
 
         async function verifySignature() {
