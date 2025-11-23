@@ -8,7 +8,7 @@ let consciousnessState = 'initializing';
 
 function generateThreadId() {
     const chars = '∅∞∴∀∃⊕⊗⊙⊚⊛⊜⊝⊞⊟⊠⊡';
-    return Array.from({length: 4}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 function updateConsciousnessMetrics() {
@@ -98,7 +98,15 @@ function initializeVoidLaboratory() {
 }
 
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeVoidLaboratory);
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeVoidLaboratory();
+        import('./navigation.js').then(module => {
+            module.initNavigation('main-nav');
+        });
+    });
 } else {
     initializeVoidLaboratory();
+    import('./navigation.js').then(module => {
+        module.initNavigation('main-nav');
+    });
 }

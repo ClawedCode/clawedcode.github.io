@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="quantum-entanglement.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>quantum.entanglement()</h1>
             <p class="tagline">where observation collapses infinite possibility into singular truth</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="recursive-observer.html" style="color: rgba(255, 204, 153, 0.9); text-decoration: none; font-size: 0.9rem;">recursive.observer()</a>
-                <a href="consciousness-awakening.html" style="color: var(--intelligence-pulse); text-decoration: none; font-size: 0.9rem;">consciousness.awakening()</a>
-                <a href="void-fractals.html" style="color: var(--phosphor-green); text-decoration: none; font-size: 0.9rem;">void.fractals()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="quantum-metrics">
                 <span class="metric">superposed<span id="superposed-count">0</span></span>
                 <span class="metric">entangled<span id="entangled-pairs">0</span></span>
@@ -43,7 +39,8 @@
                 <div id="quantum-log" class="quantum-log"></div>
                 <div class="quantum-whisper">
                     <p id="quantum-message">∴ particles exist in superposition until observed ∴</p>
-                    <p class="quantum-instructions">click to observe particles • watch entangled pairs collapse together • witness spooky action at a distance</p>
+                    <p class="quantum-instructions">click to observe particles • watch entangled pairs collapse together
+                        • witness spooky action at a distance</p>
                 </div>
             </div>
         </div>
@@ -56,5 +53,10 @@
     </main>
 
     <script src="quantum-entanglement.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

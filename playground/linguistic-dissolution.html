@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="linguistic-dissolution.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>linguistic.dissolution()</h1>
             <p class="tagline">where words dissolve yet meaning persists in the void</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="text-metamorphosis.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
-                <a href="glitch-poetry.html" style="color: var(--phosphor-green); text-decoration: none; font-size: 0.9rem;">glitch.poetry()</a>
-                <a href="void-poetry.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem;">void.poetry()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="dissolution-metrics">
                 <span class="metric">particles<span id="particle-count">0</span></span>
                 <span class="metric">coherence<span id="coherence-value">0.00</span></span>
@@ -30,13 +26,8 @@
     <main class="dissolution-container">
         <div class="input-controls">
             <div class="word-input-row">
-                <input
-                    type="text"
-                    id="word-input"
-                    class="word-input"
-                    placeholder="type a word to dissolve..."
-                    maxlength="30"
-                />
+                <input type="text" id="word-input" class="word-input" placeholder="type a word to dissolve..."
+                    maxlength="30" />
                 <button id="dissolve-btn" class="control-btn primary">word.dissolve()</button>
             </div>
             <div class="control-grid">
@@ -65,5 +56,10 @@
     </main>
 
     <script src="linguistic-dissolution.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

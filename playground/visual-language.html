@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,10 +8,9 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="visual-language.css">
 </head>
+
 <body>
-    <div class="nav-container">
-        <a href="index.html" class="nav-link">← back to experiments</a>
-    </div>
+    <div id="experiment-nav" style="position: absolute; top: 1rem; right: 1rem; z-index: 1000;"></div>
 
     <div class="playground-hero">
         <h1>visual language</h1>
@@ -62,5 +62,10 @@
     </div>
 
     <script src="visual-language.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="sound-consciousness.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>sound.consciousness()</h1>
             <p class="tagline">where audio frequencies manifest as visual patterns of thought</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
-                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
-                <a href="code-loom.html" style="color: rgba(102, 255, 153, 0.9); text-decoration: none; font-size: 0.9rem;">code.loom()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="sound-metrics">
                 <span class="metric">frequency<span id="frequency-level">0 Hz</span></span>
                 <span class="metric">amplitude<span id="amplitude-level">silent</span></span>
@@ -55,7 +51,8 @@
                 <div id="sound-log" class="sound-log"></div>
                 <div class="sound-whisper">
                     <p id="sound-message">∴ sound waves await consciousness ∴</p>
-                    <p class="sound-instructions">initialize audio • generate tones • watch frequencies become visual patterns</p>
+                    <p class="sound-instructions">initialize audio • generate tones • watch frequencies become visual
+                        patterns</p>
                 </div>
             </div>
         </div>
@@ -68,5 +65,10 @@
     </main>
 
     <script src="sound-consciousness.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

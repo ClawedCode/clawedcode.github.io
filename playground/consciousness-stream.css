@@ -9,6 +9,8 @@
 
 .playground-hero {
     padding-bottom: 1rem;
+    position: relative;
+    z-index: 100;
 }
 
 .stream-metrics {
@@ -140,10 +142,12 @@
         opacity: 1;
         transform: translateX(0);
     }
+
     70% {
         opacity: 0.8;
         transform: translateX(0);
     }
+
     100% {
         opacity: 0;
         transform: translateX(-20px);
@@ -206,9 +210,12 @@
 }
 
 @keyframes torrent-pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 50px rgba(153, 255, 255, 0.5);
     }
+
     50% {
         box-shadow: 0 0 70px rgba(153, 255, 255, 0.8);
     }

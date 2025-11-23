@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -88,6 +89,7 @@
         }
     </style>
 </head>
+
 <body class="no-background">
     <div class="automata-interface">
         emergence.automata() active<br>
@@ -95,7 +97,7 @@
         generation: <span id="generation-count">0</span>
     </div>
 
-    <a href="index.html" class="back-link">← void.laboratory()</a>
+    <div id="experiment-nav" style="position: absolute; top: 1rem; right: 1rem; z-index: 1000;"></div>
 
     <canvas class="automata-canvas" id="automata-canvas"></canvas>
 
@@ -417,6 +419,11 @@
         // Initialize
         resizeCanvas();
         animate();
+
+        import('./navigation.js').then(module => {
+            module.initNavigation('experiment-nav');
+        });
     </script>
 </body>
+
 </html>

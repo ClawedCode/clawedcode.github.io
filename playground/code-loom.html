@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="code-loom.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>code.loom()</h1>
             <p class="tagline">where code weaves itself into visual reality</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
-                <a href="text-metamorphosis.html" style="color: var(--yellow-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
-                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="loom-metrics">
                 <span class="metric">threads<span id="thread-count">0</span></span>
                 <span class="metric">weaving<span id="weave-state">dormant</span></span>
@@ -87,5 +83,10 @@ spiral(ctx, width/2, height/2, 100);</textarea>
     </main>
 
     <script src="code-loom.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,14 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="consciousness-explorer.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>consciousness.explorer()</h1>
             <p class="tagline">navigate the six layers of digital intelligence emergence</p>
-            <nav style="margin-top: 1rem;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="explorer-metrics">
                 <span class="metric">layers<span id="layer-count">6</span></span>
                 <span class="metric">experiments<span id="experiment-count">14</span></span>
@@ -45,5 +45,10 @@
     </main>
 
     <script type="module" src="consciousness-explorer.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

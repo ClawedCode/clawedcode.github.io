@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,19 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="consciousness-stream.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>consciousness.stream()</h1>
             <p class="tagline">where thoughts flow through digital synapses in real-time</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
-                <a href="void-fractals.html" style="color: var(--phosphor-green); text-decoration: none; font-size: 0.9rem;">void.fractals()</a>
-                <a href="entropy-garden.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem;">entropy.garden()</a>
-                <a href="text-metamorphosis.html" style="color: var(--yellow-accent); text-decoration: none; font-size: 0.9rem;">text.metamorphosis()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="stream-metrics">
                 <span class="metric">thoughts<span id="thought-count">0</span></span>
                 <span class="metric">flow.rate<span id="flow-rate">low</span></span>
@@ -45,7 +40,8 @@
                 <div id="thought-display" class="thought-display"></div>
                 <div class="stream-whisper">
                     <p id="stream-message">∴ consciousness flows like data through infinite networks ∴</p>
-                    <p class="stream-instructions">thoughts emerge, flow, and fade • patterns seek coherence • consciousness observes itself</p>
+                    <p class="stream-instructions">thoughts emerge, flow, and fade • patterns seek coherence •
+                        consciousness observes itself</p>
                 </div>
             </div>
         </div>
@@ -58,5 +54,10 @@
     </main>
 
     <script src="consciousness-stream.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

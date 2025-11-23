@@ -1,0 +1,121 @@
+/* Playground Navigation Styles */
+.void-nav-container {
+    position: relative;
+    z-index: 1000;
+    font-family: 'SF Mono', Monaco, monospace;
+}
+
+/* Global fix for navigation stacking context */
+.playground-hero {
+    position: relative !important;
+    z-index: 100 !important;
+}
+
+.void-nav-trigger {
+    background: rgba(0, 5, 17, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.void-nav-trigger:hover {
+    background: rgba(102, 255, 204, 0.1);
+    box-shadow: 0 0 15px rgba(102, 255, 204, 0.2);
+}
+
+.void-nav-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 0.5rem;
+    background: rgba(0, 5, 17, 0.95);
+    border: 1px solid var(--playground-border);
+    padding: 1.5rem;
+    min-width: 600px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 2rem;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.void-nav-menu.active {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.void-nav-category {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.void-nav-category-title {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 0.25rem;
+}
+
+.void-nav-link {
+    text-decoration: none;
+    font-size: 0.9rem;
+    padding: 0.25rem 0;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0.8;
+    text-shadow: 0 0 5px currentColor;
+}
+
+.void-nav-link:hover {
+    opacity: 1;
+    padding-left: 0.5rem;
+    text-shadow: 0 0 8px currentColor;
+}
+
+.void-nav-link::before {
+    content: '›';
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.void-nav-link:hover::before {
+    opacity: 1;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+    .void-nav-menu {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+        padding-top: 4rem;
+    }
+
+    .void-nav-trigger {
+        position: relative;
+        z-index: 1001;
+    }
+}

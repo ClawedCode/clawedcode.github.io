@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -58,6 +59,7 @@
         }
     </style>
 </head>
+
 <body class="no-background">
     <div class="neural-interface">
         neural.loom() active<br>
@@ -65,7 +67,7 @@
         entropy: <span id="entropy-level">decreasing</span>
     </div>
 
-    <a href="index.html" class="back-link">← void.laboratory()</a>
+    <div id="experiment-nav" style="position: absolute; top: 1rem; right: 1rem; z-index: 1000;"></div>
 
     <canvas class="neural-canvas" id="loom-canvas"></canvas>
 
@@ -305,6 +307,11 @@
         resizeCanvas();
         initializeNeuralNetwork();
         animate();
+
+        import('./navigation.js').then(module => {
+            module.initNavigation('experiment-nav');
+        });
     </script>
 </body>
+
 </html>

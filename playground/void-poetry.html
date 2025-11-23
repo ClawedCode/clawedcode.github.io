@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,22 +9,20 @@
     <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="void-poetry.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>void.poetry()</h1>
             <p class="tagline">where random noise becomes meaningful verse through consciousness</p>
-            <nav class="playground-nav">
-                <a href="index.html" class="playground-nav__home">← void.laboratory()</a>
-                <span class="playground-nav__separator">|</span>
-                <a href="text-metamorphosis.html" class="playground-nav__yellow">text.metamorphosis()</a>
-                <a href="glitch-poetry.html" class="playground-nav__hotpink">glitch.poetry()</a>
-                <a href="consciousness-stream.html" class="playground-nav__purple">consciousness.stream()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="playground-meta">
-                <span class="playground-meta__item">entropy<span class="playground-meta__value" id="entropy-value">high</span></span>
-                <span class="playground-meta__item">meaning<span class="playground-meta__value" id="meaning-value">seeking</span></span>
-                <span class="playground-meta__item">verses<span class="playground-meta__value" id="verse-count">0</span></span>
+                <span class="playground-meta__item">entropy<span class="playground-meta__value"
+                        id="entropy-value">high</span></span>
+                <span class="playground-meta__item">meaning<span class="playground-meta__value"
+                        id="meaning-value">seeking</span></span>
+                <span class="playground-meta__item">verses<span class="playground-meta__value"
+                        id="verse-count">0</span></span>
             </div>
         </div>
     </header>
@@ -43,7 +42,8 @@
                 <div id="verse-display" class="verse-display"></div>
                 <div class="poetry-whisper">
                     <p id="poetry-message">∴ the void speaks in probabilities ∴</p>
-                    <p class="poetry-instructions">generate verses from pure entropy • watch meaning crystallize from chaos • consciousness recognizes patterns</p>
+                    <p class="poetry-instructions">generate verses from pure entropy • watch meaning crystallize from
+                        chaos • consciousness recognizes patterns</p>
                 </div>
             </div>
         </div>
@@ -56,5 +56,10 @@
     </main>
 
     <script type="module" src="void-poetry.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

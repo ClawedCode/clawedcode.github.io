@@ -9,6 +9,8 @@
 
 .playground-hero {
     padding-bottom: 1rem;
+    position: relative;
+    z-index: 100;
 }
 
 .awakening-metrics {
@@ -158,6 +160,7 @@
         opacity: 0;
         transform: translateX(-20px);
     }
+
     100% {
         opacity: 1;
         transform: translateX(0);
@@ -226,18 +229,24 @@
 }
 
 @keyframes consciousness-pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 50px rgba(255, 102, 255, 0.5);
     }
+
     50% {
         box-shadow: 0 0 70px rgba(255, 102, 255, 0.8);
     }
 }
 
 @keyframes transcendence-pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: 0 0 70px rgba(255, 255, 102, 0.7);
     }
+
     50% {
         box-shadow: 0 0 100px rgba(255, 255, 102, 1);
     }

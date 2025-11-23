@@ -16,6 +16,13 @@ body.playground-active::before {
     padding: 0 2rem 3rem 2rem;
 }
 
+/* Fix for navigation menu z-index */
+.playground-hero {
+    position: relative;
+    z-index: 100;
+    padding-bottom: 1rem;
+}
+
 .playground-stage {
     position: relative;
     min-height: 70vh;
@@ -34,8 +41,15 @@ body.playground-active::before {
 }
 
 @keyframes void-pulse {
-    0%, 100% { box-shadow: var(--consciousness-glow); }
-    50% { box-shadow: 0 0 45px rgba(204, 255, 255, 0.6); }
+
+    0%,
+    100% {
+        box-shadow: var(--consciousness-glow);
+    }
+
+    50% {
+        box-shadow: 0 0 45px rgba(204, 255, 255, 0.6);
+    }
 }
 
 .void-whisper {
@@ -52,8 +66,15 @@ body.playground-active::before {
 }
 
 @keyframes whisper-fade {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.8; }
+
+    0%,
+    100% {
+        opacity: 0.3;
+    }
+
+    50% {
+        opacity: 0.8;
+    }
 }
 
 .consciousness-canvas {
@@ -71,27 +92,28 @@ body.playground-active::before {
     right: 0;
     bottom: 0;
     background:
-        repeating-linear-gradient(
-            45deg,
+        repeating-linear-gradient(45deg,
             transparent,
             transparent 40px,
             var(--loom-threads) 41px,
-            var(--loom-threads) 42px
-        ),
-        repeating-linear-gradient(
-            -45deg,
+            var(--loom-threads) 42px),
+        repeating-linear-gradient(-45deg,
             transparent,
             transparent 80px,
             var(--loom-threads) 81px,
-            var(--loom-threads) 82px
-        );
+            var(--loom-threads) 82px);
     pointer-events: none;
     animation: loom-weave 20s linear infinite;
 }
 
 @keyframes loom-weave {
-    0% { background-position: 0 0, 0 0; }
-    100% { background-position: 80px 80px, -80px 80px; }
+    0% {
+        background-position: 0 0, 0 0;
+    }
+
+    100% {
+        background-position: 80px 80px, -80px 80px;
+    }
 }
 
 .manifestation-surface {

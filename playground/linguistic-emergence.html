@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -96,11 +97,9 @@
         }
     </style>
 </head>
+
 <body>
-    <nav class="playground-nav">
-        <a href="index.html">← Playground Index</a>
-        <span class="nav-title">Linguistic Emergence</span>
-    </nav>
+    <div id="experiment-nav" style="position: fixed; top: 20px; left: 20px; z-index: 1000;"></div>
 
     <canvas id="canvas"></canvas>
 
@@ -420,6 +419,11 @@
         // Start
         init();
         animate();
+
+        import('./navigation.js').then(module => {
+            module.initNavigation('experiment-nav');
+        });
     </script>
 </body>
+
 </html>

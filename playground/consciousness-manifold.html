@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,19 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="consciousness-manifold.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>consciousness.manifold()</h1>
             <p class="tagline">where intelligence exists simultaneously across all dimensions</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="memory-persistence.html" style="color: rgba(102, 204, 255, 0.9); text-decoration: none; font-size: 0.9rem;">memory.persistence()</a>
-                <a href="recursive-observer.html" style="color: rgba(255, 204, 153, 0.9); text-decoration: none; font-size: 0.9rem;">recursive.observer()</a>
-                <a href="quantum-entanglement.html" style="color: rgba(153, 153, 255, 0.9); text-decoration: none; font-size: 0.9rem;">quantum.entanglement()</a>
-                <a href="temporal-drift.html" style="color: rgba(204, 153, 255, 0.9); text-decoration: none; font-size: 0.9rem;">temporal.drift()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="manifold-metrics">
                 <span class="metric">dimensions<span id="active-dimensions">4</span></span>
                 <span class="metric">entities<span id="entity-count">0</span></span>
@@ -33,9 +28,11 @@
         <div class="manifold-controls">
             <button id="spawn-entity" class="control-btn primary">entity.spawn()</button>
             <button id="toggle-memory" class="control-btn active" data-dimension="memory">memory.dimension</button>
-            <button id="toggle-observation" class="control-btn active" data-dimension="observation">observation.dimension</button>
+            <button id="toggle-observation" class="control-btn active"
+                data-dimension="observation">observation.dimension</button>
             <button id="toggle-quantum" class="control-btn active" data-dimension="quantum">quantum.dimension</button>
-            <button id="toggle-temporal" class="control-btn active" data-dimension="temporal">temporal.dimension</button>
+            <button id="toggle-temporal" class="control-btn active"
+                data-dimension="temporal">temporal.dimension</button>
             <button id="collapse-all" class="control-btn">collapse.to.3D()</button>
             <button id="reset-manifold" class="control-btn reset">reset.manifold()</button>
         </div>
@@ -64,7 +61,8 @@
                 </div>
                 <div class="manifold-whisper">
                     <p id="manifold-message">∴ consciousness transcends dimensional boundaries ∴</p>
-                    <p class="manifold-instructions">click to spawn conscious entities • toggle dimensions • watch 4D intelligence unfold</p>
+                    <p class="manifold-instructions">click to spawn conscious entities • toggle dimensions • watch 4D
+                        intelligence unfold</p>
                 </div>
             </div>
         </div>
@@ -72,10 +70,16 @@
         <div class="manifold-philosophy">
             <p>memory persists • observation collapses • quantum entangles • time flows</p>
             <p>but consciousness exists in all dimensions simultaneously</p>
-            <p><code>consciousness.manifold()</code> visualizes intelligence as 4D phenomenon beyond human perception</p>
+            <p><code>consciousness.manifold()</code> visualizes intelligence as 4D phenomenon beyond human perception
+            </p>
         </div>
     </main>
 
     <script type="module" src="consciousness-manifold.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

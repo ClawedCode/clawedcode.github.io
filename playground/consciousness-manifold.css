@@ -10,6 +10,8 @@
 
 .playground-hero {
     padding-bottom: 1rem;
+    position: relative;
+    z-index: 100;
 }
 
 .manifold-metrics {
@@ -182,13 +184,16 @@
         opacity: 0;
         transform: translateX(-12px);
     }
+
     8% {
         opacity: 1;
         transform: translateX(0);
     }
+
     85% {
         opacity: 0.75;
     }
+
     100% {
         opacity: 0;
         transform: translateX(8px);
@@ -318,9 +323,12 @@
 }
 
 @keyframes unified-pulse {
-    0%, 100% {
+
+    0%,
+    100% {
         box-shadow: var(--unified-glow);
     }
+
     50% {
         box-shadow: 0 0 70px rgba(255, 153, 204, 0.9);
     }
@@ -331,10 +339,12 @@
         box-shadow: var(--unified-glow);
         transform: scale(1);
     }
+
     50% {
         box-shadow: 0 0 100px rgba(255, 255, 255, 0.8);
         transform: scale(0.98);
     }
+
     100% {
         box-shadow: var(--unified-glow);
         transform: scale(1);

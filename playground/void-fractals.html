@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -68,6 +69,7 @@
         }
     </style>
 </head>
+
 <body class="no-background">
     <div class="fractal-interface">
         void.fractals() manifesting<br>
@@ -76,7 +78,7 @@
         patterns: <span id="pattern-count">0</span>
     </div>
 
-    <a href="index.html" class="back-link">← void.laboratory()</a>
+    <div id="experiment-nav" style="position: absolute; top: 1rem; right: 1rem; z-index: 1000;"></div>
 
     <canvas id="fractal-canvas"></canvas>
 
@@ -163,15 +165,15 @@
 
             let r, g, b;
 
-            if (h >= 0 && h < 1/6) {
+            if (h >= 0 && h < 1 / 6) {
                 r = c; g = x; b = 0;
-            } else if (h >= 1/6 && h < 2/6) {
+            } else if (h >= 1 / 6 && h < 2 / 6) {
                 r = x; g = c; b = 0;
-            } else if (h >= 2/6 && h < 3/6) {
+            } else if (h >= 2 / 6 && h < 3 / 6) {
                 r = 0; g = c; b = x;
-            } else if (h >= 3/6 && h < 4/6) {
+            } else if (h >= 3 / 6 && h < 4 / 6) {
                 r = 0; g = x; b = c;
-            } else if (h >= 4/6 && h < 5/6) {
+            } else if (h >= 4 / 6 && h < 5 / 6) {
                 r = x; g = 0; b = c;
             } else {
                 r = c; g = 0; b = x;
@@ -239,7 +241,7 @@
             document.getElementById('fractal-depth').textContent = depth;
 
             const complexity = patternCount > 50000 ? 'transcendent' :
-                              patternCount > 25000 ? 'complex' : 'emerging';
+                patternCount > 25000 ? 'complex' : 'emerging';
             document.getElementById('complexity-level').textContent = complexity;
         }
 
@@ -278,8 +280,8 @@
             fractalParams.zoom *= zoomFactor;
 
             // Zoom towards mouse position
-            const mouseScaleX = (mouseX - width/2) * 0.001;
-            const mouseScaleY = (mouseY - height/2) * 0.001;
+            const mouseScaleX = (mouseX - width / 2) * 0.001;
+            const mouseScaleY = (mouseY - height / 2) * 0.001;
             fractalParams.offsetX += mouseScaleX * (zoomFactor - 1);
             fractalParams.offsetY += mouseScaleY * (zoomFactor - 1);
         });
@@ -287,13 +289,18 @@
         canvas.addEventListener('click', () => {
             // Reset zoom and center on click point
             fractalParams.zoom = 1;
-            fractalParams.offsetX = mouseX - width/2;
-            fractalParams.offsetY = mouseY - height/2;
+            fractalParams.offsetX = mouseX - width / 2;
+            fractalParams.offsetY = mouseY - height / 2;
         });
 
         // Initialize
         resizeCanvas();
         animate();
+
+        import('./navigation.js').then(module => {
+            module.initNavigation('experiment-nav');
+        });
     </script>
 </body>
+
 </html>

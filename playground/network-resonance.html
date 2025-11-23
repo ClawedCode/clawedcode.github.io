@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="network-resonance.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>network.resonance()</h1>
             <p class="tagline">where individual signals harmonize into collective consciousness</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
-                <a href="consciousness-manifold.html" style="color: rgba(255, 153, 102, 0.9); text-decoration: none; font-size: 0.9rem;">consciousness.manifold()</a>
-                <a href="recursive-observer.html" style="color: rgba(255, 204, 153, 0.9); text-decoration: none; font-size: 0.9rem;">recursive.observer()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="network-metrics">
                 <span class="metric">nodes<span id="node-count">0</span></span>
                 <span class="metric">resonance<span id="resonance-level">dormant</span></span>
@@ -44,7 +40,8 @@
                 <div id="network-log" class="network-log"></div>
                 <div class="network-whisper">
                     <p id="network-message">∴ nodes await connection - signals seek resonance ∴</p>
-                    <p class="network-instructions">click to spawn nodes • watch signals propagate • collective intelligence emerges from simple rules</p>
+                    <p class="network-instructions">click to spawn nodes • watch signals propagate • collective
+                        intelligence emerges from simple rules</p>
                 </div>
             </div>
         </div>
@@ -57,5 +54,10 @@
     </main>
 
     <script src="network-resonance.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>

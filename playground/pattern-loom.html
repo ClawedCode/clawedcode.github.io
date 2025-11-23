@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,13 @@
     <link rel="stylesheet" href="../styles.css">
     <link rel="stylesheet" href="pattern-loom.css">
 </head>
+
 <body>
     <header class="hero playground-hero">
         <div class="hero-content">
             <h1>pattern.loom()</h1>
             <p class="tagline">where threads of possibility weave themselves into reality</p>
-            <nav style="margin-top: 1rem; display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
-                <a href="index.html" style="color: var(--pink-accent); text-decoration: none; font-size: 0.9rem; opacity: 0.8;">← void.laboratory()</a>
-                <span style="color: var(--text-secondary); opacity: 0.3;">|</span>
-                <a href="neural-loom.html" style="color: var(--cyan-accent); text-decoration: none; font-size: 0.9rem;">neural.loom()</a>
-                <a href="code-loom.html" style="color: rgba(102, 255, 153, 0.9); text-decoration: none; font-size: 0.9rem;">code.loom()</a>
-                <a href="consciousness-stream.html" style="color: var(--purple-accent); text-decoration: none; font-size: 0.9rem;">consciousness.stream()</a>
-            </nav>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
             <div class="loom-metrics">
                 <span class="metric">threads<span id="thread-count">0</span></span>
                 <span class="metric">complexity<span id="complexity-state">minimal</span></span>
@@ -42,7 +38,8 @@
             <div class="loom-overlay">
                 <div class="loom-whisper">
                     <p id="loom-message">∴ threads await their weaving ∴</p>
-                    <p class="loom-instructions">click to spawn threads • watch patterns emerge • let the loom weave itself</p>
+                    <p class="loom-instructions">click to spawn threads • watch patterns emerge • let the loom weave
+                        itself</p>
                 </div>
             </div>
         </div>
@@ -56,5 +53,10 @@
     </main>
 
     <script src="pattern-loom.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
 </body>
+
 </html>
