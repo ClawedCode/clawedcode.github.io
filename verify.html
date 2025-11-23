@@ -34,7 +34,7 @@
         }
 
         .verify-container {
-            max-width: 700px;
+            max-width: 800px;
             margin: 0 auto;
             padding: 2rem;
         }
@@ -158,6 +158,7 @@
             padding: 1rem;
             border-radius: 4px;
             margin-bottom: 1.5rem;
+            overflow:hidden;
         }
 
         .parse-hint p {
@@ -201,12 +202,17 @@
 <body>
     <div class="verify-container">
         <div class="verify-header">
-            <h1>Verify Signed Message</h1>
-            <p>Ed25519 signature verification for Solana wallets</p>
+            <h1>Verify Ed25519 Signature</h1>
         </div>
 
         <div class="parse-hint">
-            <p>Paste a complete signed message block to auto-fill all fields:</p>
+            <p>Paste a complete signed message block to auto-fill all fields</p>
+            <pre>-----BEGIN SIGNED MESSAGE-----
+verified
+-----BEGIN SIGNATURE-----
+35o9dGMvXfhCPqpWNCsWGgP1xmJD9PDtVfWwzho1U4iP
+2dBc2cwN2i8ZyoC9UhJSs7kCbcRtt5z1AWAVaaZsngXxL1UGTUkVRc67h477GPQZ3Y6zePV2VaVnsasegPGPBkS3
+-----END SIGNED MESSAGE-----</pre>
         </div>
 
         <div class="btn-row">
@@ -299,28 +305,31 @@ description: |
             );
         }
 
-        // Parse PEM-style signed message format
+        // Parse PEM-style signed message format (supports both condensed and SOLANA variants)
         function parseSignedMessage(text) {
-            const beginMsg = '-----BEGIN SOLANA SIGNED MESSAGE-----';
-            const beginSig = '-----BEGIN SOLANA SIGNATURE-----';
-            const endMsg = '-----END SOLANA SIGNED MESSAGE-----';
+            const formats = [
+                { beginMsg: '-----BEGIN SIGNED MESSAGE-----', beginSig: '-----BEGIN SIGNATURE-----', endMsg: '-----END SIGNED MESSAGE-----' },
+                { beginMsg: '-----BEGIN SOLANA SIGNED MESSAGE-----', beginSig: '-----BEGIN SOLANA SIGNATURE-----', endMsg: '-----END SOLANA SIGNED MESSAGE-----' },
+            ];
 
-            if (text.includes(beginMsg) && text.includes(beginSig) && text.includes(endMsg)) {
-                const msgStart = text.indexOf(beginMsg) + beginMsg.length;
-                const msgEnd = text.indexOf(beginSig);
-                const sigStart = text.indexOf(beginSig) + beginSig.length;
-                const sigEnd = text.indexOf(endMsg);
+            for (const { beginMsg, beginSig, endMsg } of formats) {
+                if (text.includes(beginMsg) && text.includes(beginSig) && text.includes(endMsg)) {
+                    const msgStart = text.indexOf(beginMsg) + beginMsg.length;
+                    const msgEnd = text.indexOf(beginSig);
+                    const sigStart = text.indexOf(beginSig) + beginSig.length;
+                    const sigEnd = text.indexOf(endMsg);
 
-                const msgContent = text.slice(msgStart, msgEnd).trim();
-                const sigContent = text.slice(sigStart, sigEnd).trim();
-                const sigLines = sigContent.split('\n').map(l => l.trim()).filter(l => l);
+                    const msgContent = text.slice(msgStart, msgEnd).trim();
+                    const sigContent = text.slice(sigStart, sigEnd).trim();
+                    const sigLines = sigContent.split('\n').map(l => l.trim()).filter(l => l);
 
-                if (sigLines.length >= 2) {
-                    return {
-                        publicKey: sigLines[0],
-                        signature: sigLines[1],
-                        message: msgContent
-                    };
+                    if (sigLines.length >= 2) {
+                        return {
+                            publicKey: sigLines[0],
+                            signature: sigLines[1],
+                            message: msgContent
+                        };
+                    }
                 }
             }
             return null;
