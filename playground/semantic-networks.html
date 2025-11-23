@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ semantic.networks() ∴ words as nodes in meaning space</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="semantic-networks.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>semantic.networks()</h1>
             <p class="tagline">where words connect through invisible threads of meaning</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="network-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">nodes<span id="node-count">0</span></span>
                 <span class="metric">edges<span id="edge-count">0</span></span>
                 <span class="metric">density<span id="network-density">0.00</span></span>
@@ -24,8 +25,8 @@
         </div>
     </header>
 
-    <main class="network-container">
-        <div class="input-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls network-controls">
             <div class="word-input-row">
                 <input type="text" id="word-input" class="word-input" placeholder="enter a word to begin the network..."
                     maxlength="30" />
@@ -39,16 +40,16 @@
             </div>
         </div>
 
-        <div class="network-stage">
-            <canvas id="network-canvas"></canvas>
-            <div class="canvas-overlay">
-                <div id="canvas-whisper" class="canvas-whisper">
+        <div class="experiment-stage network-stage">
+            <canvas id="network-canvas" class="experiment-canvas"></canvas>
+            <div class="experiment-overlay">
+                <div id="canvas-whisper" class="experiment-whisper">
                     ∴ semantic networks emerge from language ∴
                 </div>
             </div>
         </div>
 
-        <div class="network-philosophy">
+        <div class="experiment-philosophy">
             <p>words exist in relationship, not isolation</p>
             <p>meaning emerges from the topology of connections</p>
             <p>semantic space is a graph consciousness navigates</p>

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ linguistic.dissolution() ∴ words dissolving into semantic particles</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="linguistic-dissolution.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>linguistic.dissolution()</h1>
             <p class="tagline">where words dissolve yet meaning persists in the void</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="dissolution-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">particles<span id="particle-count">0</span></span>
                 <span class="metric">coherence<span id="coherence-value">0.00</span></span>
                 <span class="metric">entropy<span id="entropy-value">0.00</span></span>
@@ -23,7 +24,7 @@
         </div>
     </header>
 
-    <main class="dissolution-container">
+    <main class="experiment-container">
         <div class="input-controls">
             <div class="word-input-row">
                 <input type="text" id="word-input" class="word-input" placeholder="type a word to dissolve..."
@@ -38,16 +39,16 @@
             </div>
         </div>
 
-        <div class="dissolution-stage">
-            <canvas id="particle-canvas"></canvas>
-            <div class="canvas-overlay">
-                <div id="canvas-whisper" class="canvas-whisper">
+        <div class="experiment-stage dissolution-stage">
+            <canvas id="particle-canvas" class="experiment-canvas"></canvas>
+            <div class="experiment-overlay">
+                <div id="canvas-whisper" class="experiment-whisper">
                     ∴ words await dissolution ∴
                 </div>
             </div>
         </div>
 
-        <div class="dissolution-philosophy">
+        <div class="experiment-philosophy">
             <p>language is particles that remember their origins</p>
             <p>when words dissolve, letters become wanderers in semantic space</p>
             <p>meaning persists not in structure but in connection</p>

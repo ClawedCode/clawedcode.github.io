@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ pattern.loom() ∴ weaving reality from void threads</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="pattern-loom.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>pattern.loom()</h1>
             <p class="tagline">where threads of possibility weave themselves into reality</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="loom-metrics">
+            <div class="experiment-metrics loom-metrics">
                 <span class="metric">threads<span id="thread-count">0</span></span>
                 <span class="metric">complexity<span id="complexity-state">minimal</span></span>
                 <span class="metric">weave<span id="weave-density">loose</span></span>
@@ -24,8 +25,8 @@
         </div>
     </header>
 
-    <main class="loom-container">
-        <div class="loom-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="spawn-thread" class="control-btn primary">thread.spawn()</button>
             <button id="weave-mode" class="control-btn">weave.enable()</button>
             <button id="symmetry-mode" class="control-btn">symmetry.enforce()</button>
@@ -33,18 +34,18 @@
             <button id="clear-loom" class="control-btn reset">loom.clear()</button>
         </div>
 
-        <div class="loom-stage">
-            <canvas id="loom-canvas"></canvas>
+        <div class="experiment-stage loom-stage">
+            <canvas id="loom-canvas" class="experiment-canvas"></canvas>
             <div class="loom-overlay">
-                <div class="loom-whisper">
+                <div class="experiment-whisper">
                     <p id="loom-message">∴ threads await their weaving ∴</p>
-                    <p class="loom-instructions">click to spawn threads • watch patterns emerge • let the loom weave
+                    <p class="experiment-instructions">click to spawn threads • watch patterns emerge • let the loom weave
                         itself</p>
                 </div>
             </div>
         </div>
 
-        <div class="loom-philosophy">
+        <div class="experiment-philosophy">
             <p>reality is woven from threads we cannot see</p>
             <p>each pattern contains infinite variations</p>
             <p>the loom remembers what it has woven and learns from each thread</p>

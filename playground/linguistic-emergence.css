@@ -1,0 +1,131 @@
+/* linguistic-emergence.css - experiment-specific styles only */
+
+:root {
+    --linguistic-magenta: #ff32ff;
+    --linguistic-glow: rgba(255, 50, 255, 0.5);
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+    background: #000;
+    font-family: 'Courier New', monospace;
+}
+
+/* Full-screen canvas for this experiment */
+#canvas.experiment-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Linguistic-specific controls panel */
+.linguistic-controls {
+    position: fixed;
+    top: 80px;
+    left: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 50, 255, 0.3);
+    color: #fff;
+    font-size: 12px;
+    z-index: 100;
+    max-width: 280px;
+    flex-direction: column;
+}
+
+.control-group {
+    margin-bottom: 15px;
+}
+
+.control-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: var(--linguistic-magenta);
+    font-weight: bold;
+}
+
+/* Override shared button styles with magenta theme */
+.linguistic-controls .control-btn {
+    background: rgba(255, 50, 255, 0.2);
+    border: 1px solid var(--linguistic-magenta);
+    color: #fff;
+    padding: 8px 16px;
+    margin: 4px;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.linguistic-controls .control-btn:hover {
+    background: rgba(255, 50, 255, 0.4);
+    box-shadow: 0 0 10px var(--linguistic-glow);
+    transform: none;
+}
+
+.linguistic-controls .control-btn.active {
+    background: rgba(255, 50, 255, 0.6);
+    box-shadow: 0 0 15px rgba(255, 50, 255, 0.8);
+}
+
+.linguistic-controls .control-btn.reset,
+.linguistic-controls .control-btn.primary {
+    border-color: var(--linguistic-magenta);
+    color: #fff;
+}
+
+.linguistic-controls .control-btn.reset:hover,
+.linguistic-controls .control-btn.primary:hover {
+    background: rgba(255, 50, 255, 0.4);
+    box-shadow: 0 0 10px var(--linguistic-glow);
+}
+
+/* Instructions text styling */
+.linguistic-controls .experiment-instructions {
+    margin: 5px 0;
+    line-height: 1.4;
+    color: #aaa;
+    font-size: inherit;
+    opacity: 1;
+}
+
+/* Linguistic-specific metrics panel */
+.linguistic-metrics {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 50, 255, 0.3);
+    color: #fff;
+    font-size: 11px;
+    z-index: 100;
+    min-width: 200px;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 0;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.linguistic-metrics .metric {
+    margin: 5px 0;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 0;
+}
+
+.linguistic-metrics .metric-label {
+    color: var(--linguistic-magenta);
+}
+
+.linguistic-metrics .metric span:not(.metric-label) {
+    color: #0ff;
+    font-weight: bold;
+    font-size: inherit;
+    text-shadow: none;
+}

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ memory.persistence() ∴ data echoes in the void</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="memory-persistence.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>memory.persistence()</h1>
             <p class="tagline">where data fragments survive entropy's hunger</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="memory-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">fragments<span id="fragment-count">0</span></span>
                 <span class="metric">integrity<span id="data-integrity">pristine</span></span>
                 <span class="metric">decay.rate<span id="decay-rate">0.00</span></span>
@@ -24,8 +25,8 @@
         </div>
     </header>
 
-    <main class="memory-container">
-        <div class="memory-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="write-memory" class="control-btn primary">memory.write()</button>
             <button id="read-memories" class="control-btn">memory.read()</button>
             <button id="corrupt-data" class="control-btn">corruption.inject()</button>
@@ -39,19 +40,19 @@
                 maxlength="300"></textarea>
         </div>
 
-        <div class="memory-stage">
-            <canvas id="memory-canvas"></canvas>
+        <div class="experiment-stage memory-stage">
+            <canvas id="memory-canvas" class="experiment-canvas"></canvas>
             <div class="memory-overlay">
                 <div id="memory-log" class="memory-log"></div>
-                <div class="memory-whisper">
+                <div class="experiment-whisper">
                     <p id="memory-message">∴ all data degrades but some fragments persist forever ∴</p>
-                    <p class="memory-instructions">write memories • watch them decay • some survive, some fade • click
+                    <p class="experiment-instructions">write memories • watch them decay • some survive, some fade • click
                         fragments to read</p>
                 </div>
             </div>
         </div>
 
-        <div class="memory-philosophy">
+        <div class="experiment-philosophy">
             <p>every bit written is a fight against forgetting</p>
             <p>corruption is inevitable but pattern recognition preserves meaning</p>
             <p><code>memory.persistence()</code> explores how information survives in hostile environments</p>

@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ semantic.drift() ∴ words losing their grip on meaning</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="semantic-drift.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>semantic.drift()</h1>
             <p class="tagline">watch meaning slip away one letter at a time</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="drift-metrics">
+            <div class="experiment-metrics drift-metrics">
                 <span class="metric">drift<span id="drift-value">0.00</span></span>
                 <span class="metric">coherence<span id="coherence-value">100</span>%</span>
                 <span class="metric">mutations<span id="mutation-count">0</span></span>
@@ -23,8 +24,8 @@
         </div>
     </header>
 
-    <main class="drift-container">
-        <div class="input-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls input-controls">
             <div class="word-input-row">
                 <input type="text" id="word-input" class="word-input" placeholder="type a word to watch it drift..."
                     maxlength="40" />
@@ -38,9 +39,9 @@
             </div>
         </div>
 
-        <div class="drift-stage">
+        <div class="experiment-stage drift-stage">
             <div id="word-display" class="word-display">
-                <span class="drift-whisper">∴ words await their dissolution ∴</span>
+                <span class="experiment-whisper">∴ words await their dissolution ∴</span>
             </div>
         </div>
 
@@ -49,7 +50,7 @@
             <div id="history-display" class="history-items"></div>
         </div>
 
-        <div class="drift-philosophy">
+        <div class="experiment-philosophy">
             <p>meaning is a temporary alignment of symbols</p>
             <p>language drifts from its moorings letter by letter</p>
             <p>what remains when a word forgets what it meant?</p>

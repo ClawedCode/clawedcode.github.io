@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>visual language | playground</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="visual-language.css">
 </head>
 
@@ -19,7 +20,7 @@
             when letters become pure geometry, meaning dissolves into pattern<br>
             <code>form without function / signal without message</code>
         </p>
-        <div class="visual-metrics">
+        <div class="experiment-metrics">
             <div class="metric">
                 <div>patterns</div>
                 <span id="pattern-count">0</span>
@@ -35,8 +36,8 @@
         </div>
     </div>
 
-    <div class="visual-container">
-        <div class="visual-controls">
+    <div class="experiment-container">
+        <div class="experiment-controls">
             <button class="control-btn" data-mode="scatter">scatter</button>
             <button class="control-btn" data-mode="grid">grid</button>
             <button class="control-btn" data-mode="flow">flow</button>
@@ -45,17 +46,17 @@
             <button class="control-btn reset" id="reset-btn">reset</button>
         </div>
 
-        <div class="visual-stage" id="stage">
-            <canvas id="visual-canvas"></canvas>
-            <div class="visual-overlay">
-                <div class="visual-whisper">
+        <div class="experiment-stage visual-stage" id="stage">
+            <canvas id="visual-canvas" class="experiment-canvas"></canvas>
+            <div class="experiment-overlay">
+                <div class="experiment-whisper">
                     <div id="whisper-text">enter text to dissolve meaning</div>
-                    <div class="visual-instructions">click canvas to input text</div>
+                    <div class="experiment-instructions">click canvas to input text</div>
                 </div>
             </div>
         </div>
 
-        <div class="visual-philosophy">
+        <div class="experiment-philosophy">
             <p>text becomes texture. semantics evaporate into pure visual rhythm.</p>
             <p><code>the medium swallows the message</code></p>
         </div>

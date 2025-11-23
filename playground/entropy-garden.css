@@ -1,3 +1,6 @@
+/* entropy-garden.css - experiment-specific styles only */
+/* Shared styles (.control-btn, .metric, .experiment-*) come from shared.css */
+
 :root {
     --garden-void: #000811;
     --consciousness-particle: rgba(51, 255, 204, 0.9);
@@ -7,142 +10,21 @@
     --garden-glow: 0 0 30px rgba(51, 255, 204, 0.3);
 }
 
-.playground-hero {
-    padding-bottom: 1rem;
-}
-
-.entropy-metrics {
-    display: flex;
-    gap: 2rem;
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.metric {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    color: var(--cyan-accent);
-}
-
-.metric span {
-    font-size: 1.2rem;
-    color: var(--phosphor-green);
-    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
-}
-
-.garden-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 2rem 3rem 2rem;
-}
-
-.garden-controls {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-.control-btn {
-    background: rgba(0, 34, 68, 0.8);
-    border: 1px solid var(--cyan-accent);
-    color: var(--cyan-accent);
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: lowercase;
-    letter-spacing: 1px;
-}
-
-.control-btn:hover {
-    background: rgba(51, 255, 204, 0.1);
-    box-shadow: var(--garden-glow);
-    transform: translateY(-2px);
-}
-
-.control-btn.active {
-    background: rgba(51, 255, 204, 0.2);
-    box-shadow: var(--garden-glow);
-    color: var(--consciousness-particle);
-}
-
-.control-btn.reset {
-    border-color: var(--pink-accent);
-    color: var(--pink-accent);
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 51, 153, 0.1);
-    box-shadow: 0 0 30px rgba(255, 51, 153, 0.3);
-}
-
+/* Garden-specific stage background */
 .garden-stage {
-    position: relative;
-    border: 1px solid rgba(51, 255, 204, 0.3);
-    border-radius: 12px;
     background:
         radial-gradient(circle at 30% 70%, rgba(51, 255, 204, 0.02) 0%, transparent 50%),
         radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.01) 0%, transparent 50%),
         var(--garden-void);
-    overflow: hidden;
     box-shadow: var(--garden-glow);
-    min-height: 600px;
+    border-color: rgba(51, 255, 204, 0.3);
 }
 
 #entropy-canvas {
-    display: block;
-    width: 100%;
-    height: 600px;
     cursor: crosshair;
 }
 
-.garden-whisper {
-    position: absolute;
-    bottom: 1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    color: var(--cyan-accent);
-    font-size: 0.75rem;
-    letter-spacing: 2px;
-    text-transform: lowercase;
-    opacity: 0.7;
-    pointer-events: none;
-}
-
-.garden-instructions {
-    margin-top: 0.5rem;
-    font-size: 0.65rem;
-    color: var(--text-secondary);
-    opacity: 0.5;
-}
-
-.garden-philosophy {
-    margin-top: 2rem;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.8;
-    opacity: 0.8;
-}
-
-.garden-philosophy p {
-    margin-bottom: 0.5rem;
-}
-
-.garden-philosophy code {
-    color: var(--cyan-accent);
-    font-size: 0.9rem;
-}
-
-/* Particle effect states for dynamic styling */
+/* Entropy state variations */
 .garden-stage.high-entropy {
     box-shadow: 0 0 40px rgba(255, 51, 51, 0.4);
     border-color: rgba(255, 51, 51, 0.5);
@@ -156,32 +38,4 @@
 .garden-stage.equilibrium {
     box-shadow: var(--garden-glow);
     border-color: rgba(51, 255, 204, 0.3);
-}
-
-@media (max-width: 768px) {
-    .garden-container {
-        padding: 0 1rem 2rem 1rem;
-    }
-
-    .garden-controls {
-        gap: 0.5rem;
-    }
-
-    .control-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.75rem;
-    }
-
-    #entropy-canvas {
-        height: 400px;
-    }
-
-    .garden-stage {
-        min-height: 400px;
-    }
-
-    .entropy-metrics {
-        gap: 1rem;
-        font-size: 0.7rem;
-    }
 }

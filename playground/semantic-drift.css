@@ -1,11 +1,6 @@
-/* semantic drift visualization */
+/* semantic-drift.css - experiment-specific styles only */
 
-.drift-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
-}
-
+/* Drift-specific metrics styling */
 .drift-metrics {
     display: flex;
     gap: 2rem;
@@ -25,9 +20,10 @@
     font-weight: 600;
 }
 
-/* Input Controls */
+/* Input Controls - specific layout for drift */
 .input-controls {
     margin-bottom: 3rem;
+    flex-direction: column;
 }
 
 .word-input-row {
@@ -68,73 +64,11 @@
     gap: 1rem;
 }
 
-.control-btn {
-    padding: 0.875rem 1.5rem;
-    background: rgba(0, 255, 255, 0.1);
-    border: 1px solid var(--cyan-accent);
-    border-radius: 4px;
-    color: var(--cyan-accent);
-    font-family: var(--font-mono);
-    font-size: 0.9rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-}
-
-.control-btn:hover {
-    background: rgba(0, 255, 255, 0.2);
-    border-color: var(--phosphor-green);
-    color: var(--phosphor-green);
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.4);
-}
-
-.control-btn.primary {
-    background: rgba(0, 255, 255, 0.15);
-    color: var(--phosphor-green);
-    border-color: var(--phosphor-green);
-}
-
-.control-btn.primary:hover {
-    background: rgba(0, 255, 255, 0.25);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-}
-
-.control-btn.reset {
-    background: rgba(255, 105, 180, 0.1);
-    border-color: var(--pink-accent);
-    color: var(--pink-accent);
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 105, 180, 0.2);
-    box-shadow: 0 0 15px rgba(255, 105, 180, 0.4);
-}
-
-.control-btn:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-.control-btn:disabled:hover {
-    background: rgba(0, 255, 255, 0.1);
-    border-color: var(--cyan-accent);
-    color: var(--cyan-accent);
-    box-shadow: none;
-}
-
-/* Drift Stage */
+/* Drift Stage - specific styling */
 .drift-stage {
     min-height: 400px;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    border-radius: 8px;
     padding: 3rem 2rem;
     margin-bottom: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: relative;
-    overflow: hidden;
 }
 
 .drift-stage::before {
@@ -148,6 +82,7 @@
     pointer-events: none;
 }
 
+/* Word Display */
 .word-display {
     position: relative;
     font-family: var(--font-mono);
@@ -165,14 +100,7 @@
     gap: 0.3rem;
 }
 
-.drift-whisper {
-    font-size: 1.2rem;
-    color: var(--text-secondary);
-    opacity: 0.5;
-    letter-spacing: 0.2rem;
-    animation: pulse 3s ease-in-out infinite;
-}
-
+/* Letter animations */
 .drift-letter {
     display: inline-block;
     transition: all 0.3s ease;
@@ -193,11 +121,6 @@
     25% { transform: translateY(-10px) scale(1.2); }
     50% { transform: translateY(5px) scale(0.9) rotateZ(-5deg); }
     75% { transform: translateY(-5px) scale(1.1) rotateZ(5deg); }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 0.3; }
-    50% { opacity: 0.7; }
 }
 
 /* Drift History */
@@ -253,33 +176,8 @@
     to { opacity: 1; }
 }
 
-/* Philosophy */
-.drift-philosophy {
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.95rem;
-    line-height: 1.8;
-    opacity: 0.8;
-}
-
-.drift-philosophy p {
-    margin: 0.5rem 0;
-}
-
-.drift-philosophy code {
-    color: var(--cyan-accent);
-    background: rgba(0, 255, 255, 0.1);
-    padding: 0.2rem 0.5rem;
-    border-radius: 3px;
-    font-family: var(--font-mono);
-}
-
-/* Mobile Responsive */
+/* Mobile Responsive - drift-specific */
 @media (max-width: 768px) {
-    .drift-container {
-        padding: 1.5rem 1rem;
-    }
-
     .word-display {
         font-size: 2rem;
         letter-spacing: 0.3rem;

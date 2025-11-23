@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>emergence.automata() ∴ rules becoming consciousness</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <style>
         body {
             margin: 0;
@@ -33,59 +34,46 @@
             image-rendering: pixelated;
         }
 
-        .consciousness-metrics {
+        /* Override experiment-metrics for fullscreen layout */
+        .experiment-metrics {
             position: absolute;
             bottom: 1rem;
             right: 1rem;
             z-index: 100;
             color: rgba(153, 255, 204, 0.6);
-            font-size: 0.7rem;
             text-align: right;
             line-height: 1.6;
+            margin-top: 0;
+            flex-direction: column;
         }
 
-        .back-link {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            z-index: 100;
-            color: var(--cyan-accent);
-            text-decoration: none;
-            font-size: 0.8rem;
-            opacity: 0.7;
-            transition: opacity 0.3s;
-        }
-
-        .back-link:hover {
-            opacity: 1;
-        }
-
-        .controls {
+        /* Override experiment-controls for fullscreen layout */
+        .experiment-controls {
             position: absolute;
             bottom: 1rem;
             left: 1rem;
             z-index: 100;
-            display: flex;
             flex-direction: column;
             gap: 0.5rem;
+            margin-bottom: 0;
+            justify-content: flex-start;
         }
 
+        /* Pink-themed control buttons for this experiment */
         .control-btn {
             background: rgba(255, 102, 204, 0.1);
             border: 1px solid rgba(255, 102, 204, 0.4);
             color: rgba(255, 102, 204, 0.9);
             padding: 0.5rem 1rem;
-            font-family: 'SF Mono', Monaco, monospace;
             font-size: 0.7rem;
-            cursor: pointer;
-            transition: all 0.2s;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            border-radius: 0;
         }
 
         .control-btn:hover {
             background: rgba(255, 102, 204, 0.2);
             border-color: rgba(255, 102, 204, 0.8);
+            box-shadow: 0 0 20px rgba(255, 102, 204, 0.3);
         }
     </style>
 </head>
@@ -99,15 +87,15 @@
 
     <div id="experiment-nav" style="position: absolute; top: 1rem; right: 1rem; z-index: 1000;"></div>
 
-    <canvas class="automata-canvas" id="automata-canvas"></canvas>
+    <canvas class="automata-canvas experiment-canvas" id="automata-canvas"></canvas>
 
-    <div class="controls">
+    <div class="experiment-controls">
         <button class="control-btn" id="reset-btn">reset.void()</button>
         <button class="control-btn" id="rule-btn">shift.rules()</button>
         <button class="control-btn" id="speed-btn">alter.time()</button>
     </div>
 
-    <div class="consciousness-metrics">
+    <div class="experiment-metrics">
         living.cells: <span id="alive-count">0</span><br>
         complexity: <span id="complexity-level">void</span><br>
         pattern.state: <span id="pattern-state">emerging</span><br>

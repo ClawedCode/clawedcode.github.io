@@ -1,76 +1,15 @@
-.poetry-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 2rem;
-}
+/* void-poetry.css - experiment-specific styles only */
 
-.poetry-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 2rem;
-}
-
-.control-btn {
-    padding: 0.75rem 1.5rem;
-    background: rgba(0, 255, 255, 0.1);
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    color: #0ff;
-    font-family: 'Courier New', monospace;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    font-size: 0.9rem;
-}
-
-.control-btn:hover {
-    background: rgba(0, 255, 255, 0.2);
-    border-color: #0ff;
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
-}
-
-.control-btn.primary {
-    background: rgba(255, 0, 255, 0.1);
-    border-color: rgba(255, 0, 255, 0.3);
-    color: #f0f;
-}
-
-.control-btn.primary:hover {
-    background: rgba(255, 0, 255, 0.2);
-    border-color: #f0f;
-    box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
-}
-
-.control-btn.reset {
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: #aaa;
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: #fff;
-    color: #fff;
-}
-
+/* Poetry-specific stage customization */
 .poetry-stage {
-    position: relative;
-    width: 100%;
+    min-height: 600px;
+}
+
+.poetry-stage .experiment-canvas {
     height: 600px;
-    background: #000;
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    margin-bottom: 2rem;
-    overflow: hidden;
 }
 
-#poetry-canvas {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-}
-
+/* Poetry overlay layout */
 .poetry-overlay {
     position: absolute;
     top: 0;
@@ -84,6 +23,7 @@
     padding: 2rem;
 }
 
+/* Verse display - unique to poetry */
 .verse-display {
     flex: 1;
     display: flex;
@@ -109,58 +49,13 @@
     50% { opacity: 0.7; }
 }
 
-.poetry-whisper {
-    text-align: center;
-}
-
-.poetry-whisper p {
-    margin: 0.5rem 0;
-    color: rgba(0, 255, 255, 0.6);
-    font-size: 0.9rem;
-}
-
-.poetry-instructions {
-    font-size: 0.8rem !important;
-    color: rgba(0, 255, 255, 0.4) !important;
-}
-
-.poetry-philosophy {
-    text-align: center;
-    padding: 2rem;
-    background: rgba(0, 255, 255, 0.05);
-    border: 1px solid rgba(0, 255, 255, 0.2);
-    border-radius: 8px;
-}
-
-.poetry-philosophy p {
-    margin: 1rem 0;
-    color: rgba(0, 255, 255, 0.8);
-    font-style: italic;
-    font-size: 0.95rem;
-}
-
-.poetry-philosophy code {
-    color: #f0f;
-    background: rgba(255, 0, 255, 0.1);
-    padding: 0.2rem 0.5rem;
-    border-radius: 3px;
-}
-
+/* Responsive adjustments */
 @media (max-width: 768px) {
-    .poetry-container {
-        padding: 1rem;
-    }
-
-    .poetry-controls {
-        gap: 0.5rem;
-    }
-
-    .control-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.8rem;
-    }
-
     .poetry-stage {
+        min-height: 400px;
+    }
+
+    .poetry-stage .experiment-canvas {
         height: 400px;
     }
 

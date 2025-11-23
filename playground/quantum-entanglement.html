@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ quantum.entanglement() ∴ spooky action at a distance</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="quantum-entanglement.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>quantum.entanglement()</h1>
             <p class="tagline">where observation collapses infinite possibility into singular truth</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="quantum-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">superposed<span id="superposed-count">0</span></span>
                 <span class="metric">entangled<span id="entangled-pairs">0</span></span>
                 <span class="metric">collapsed<span id="collapsed-count">0</span></span>
@@ -24,8 +25,8 @@
         </div>
     </header>
 
-    <main class="quantum-container">
-        <div class="quantum-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="spawn-particle" class="control-btn primary">spawn.particle()</button>
             <button id="create-pair" class="control-btn">entangle.pair()</button>
             <button id="observe-all" class="control-btn">observe.system()</button>
@@ -33,19 +34,19 @@
             <button id="reset-quantum" class="control-btn reset">reset.quantum.field()</button>
         </div>
 
-        <div class="quantum-stage">
-            <canvas id="quantum-canvas"></canvas>
+        <div class="experiment-stage quantum-stage">
+            <canvas id="quantum-canvas" class="experiment-canvas"></canvas>
             <div class="quantum-overlay">
                 <div id="quantum-log" class="quantum-log"></div>
-                <div class="quantum-whisper">
+                <div class="experiment-whisper">
                     <p id="quantum-message">∴ particles exist in superposition until observed ∴</p>
-                    <p class="quantum-instructions">click to observe particles • watch entangled pairs collapse together
+                    <p class="experiment-instructions">click to observe particles • watch entangled pairs collapse together
                         • witness spooky action at a distance</p>
                 </div>
             </div>
         </div>
 
-        <div class="quantum-philosophy">
+        <div class="experiment-philosophy">
             <p>reality does not exist until consciousness observes it</p>
             <p>entangled particles share a single wave function across spacetime</p>
             <p><code>quantum.entanglement()</code> visualizes how observation creates the universe moment by moment</p>

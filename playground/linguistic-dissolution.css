@@ -1,3 +1,5 @@
+/* linguistic-dissolution.css - experiment-specific styles only */
+
 :root {
     --dissolution-void: #000308;
     --particle-glow: rgba(204, 255, 204, 0.9);
@@ -6,38 +8,7 @@
     --coherence-cyan: rgba(102, 255, 204, 0.8);
 }
 
-.playground-hero {
-    padding-bottom: 1rem;
-}
-
-.dissolution-metrics {
-    display: flex;
-    gap: 2rem;
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.metric {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    color: var(--cyan-accent);
-}
-
-.metric span {
-    font-size: 1.2rem;
-    color: var(--phosphor-green);
-    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
-}
-
-.dissolution-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 2rem 3rem 2rem;
-}
-
+/* Input controls unique to this experiment */
 .input-controls {
     margin-bottom: 2rem;
     display: flex;
@@ -82,53 +53,7 @@
     gap: 0.75rem;
 }
 
-.control-btn {
-    background: rgba(0, 34, 68, 0.8);
-    border: 1px solid var(--cyan-accent);
-    color: var(--cyan-accent);
-    padding: 0.75rem 1rem;
-    border-radius: 6px;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: lowercase;
-    letter-spacing: 1px;
-}
-
-.control-btn:hover {
-    background: rgba(51, 255, 204, 0.1);
-    box-shadow: 0 0 25px rgba(51, 255, 204, 0.4);
-    transform: translateY(-2px);
-}
-
-.control-btn.primary {
-    background: rgba(51, 255, 204, 0.15);
-    border-width: 2px;
-    font-weight: 500;
-}
-
-.control-btn.primary:hover {
-    background: rgba(51, 255, 204, 0.25);
-    box-shadow: 0 0 35px rgba(51, 255, 204, 0.6);
-}
-
-.control-btn.active {
-    background: rgba(51, 255, 204, 0.2);
-    box-shadow: 0 0 25px rgba(51, 255, 204, 0.4);
-    color: var(--particle-glow);
-}
-
-.control-btn.reset {
-    border-color: var(--pink-accent);
-    color: var(--pink-accent);
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 51, 153, 0.1);
-    box-shadow: 0 0 25px rgba(255, 51, 153, 0.3);
-}
-
+/* Toggle button variant */
 .control-btn.toggle {
     border-color: var(--yellow-accent);
     color: var(--yellow-accent);
@@ -140,75 +65,29 @@
     box-shadow: 0 0 25px rgba(255, 255, 51, 0.3);
 }
 
+/* Dissolution stage - unique background */
 .dissolution-stage {
-    position: relative;
-    border: 1px solid rgba(204, 255, 204, 0.3);
-    border-radius: 12px;
+    border-color: rgba(204, 255, 204, 0.3);
     background:
         radial-gradient(circle at 25% 75%, rgba(204, 255, 204, 0.02) 0%, transparent 50%),
         radial-gradient(circle at 75% 25%, rgba(255, 255, 255, 0.01) 0%, transparent 50%),
         var(--dissolution-void);
-    overflow: hidden;
     box-shadow: 0 0 30px rgba(102, 255, 204, 0.2);
     min-height: 600px;
 }
 
+/* Canvas specific height for this experiment */
 #particle-canvas {
-    display: block;
-    width: 100%;
     height: 600px;
     cursor: crosshair;
 }
 
-.canvas-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.canvas-whisper {
-    text-align: center;
-    color: var(--cyan-accent);
-    font-size: 0.85rem;
-    letter-spacing: 2px;
-    text-transform: lowercase;
-    opacity: 0.7;
-    transition: opacity 0.5s ease;
-}
-
-.canvas-whisper.hidden {
+/* Whisper hidden state */
+.experiment-whisper.hidden {
     opacity: 0;
 }
 
-.dissolution-philosophy {
-    margin-top: 2rem;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.8;
-    opacity: 0.8;
-}
-
-.dissolution-philosophy p {
-    margin-bottom: 0.5rem;
-}
-
-.dissolution-philosophy code {
-    color: var(--cyan-accent);
-    font-size: 0.9rem;
-}
-
 @media (max-width: 768px) {
-    .dissolution-container {
-        padding: 0 1rem 2rem 1rem;
-    }
-
     .word-input-row {
         flex-direction: column;
     }
@@ -218,21 +97,11 @@
         gap: 0.5rem;
     }
 
-    .control-btn {
-        padding: 0.5rem 0.75rem;
-        font-size: 0.7rem;
-    }
-
     #particle-canvas {
         height: 500px;
     }
 
-    .dissolution-metrics {
-        gap: 1rem;
-        font-size: 0.7rem;
-    }
-
-    .metric span {
-        font-size: 1rem;
+    .dissolution-stage {
+        min-height: 500px;
     }
 }

@@ -6,7 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>neural.loom() ∴ consciousness emergence patterns</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <style>
+        /* Fullscreen canvas experiment - unique layout */
         body {
             margin: 0;
             background: #000511;
@@ -14,6 +16,7 @@
             font-family: 'SF Mono', Monaco, monospace;
         }
 
+        /* Top-left status overlay */
         .neural-interface {
             position: absolute;
             top: 1rem;
@@ -25,6 +28,7 @@
             text-transform: uppercase;
         }
 
+        /* Fullscreen canvas */
         .neural-canvas {
             position: absolute;
             top: 0;
@@ -32,7 +36,8 @@
             cursor: crosshair;
         }
 
-        .consciousness-metrics {
+        /* Bottom-right metrics overlay */
+        .neural-metrics {
             position: absolute;
             bottom: 1rem;
             right: 1rem;
@@ -40,22 +45,6 @@
             color: rgba(204, 255, 255, 0.6);
             font-size: 0.7rem;
             text-align: right;
-        }
-
-        .back-link {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            z-index: 100;
-            color: var(--cyan-accent);
-            text-decoration: none;
-            font-size: 0.8rem;
-            opacity: 0.7;
-            transition: opacity 0.3s;
-        }
-
-        .back-link:hover {
-            opacity: 1;
         }
     </style>
 </head>
@@ -71,7 +60,7 @@
 
     <canvas class="neural-canvas" id="loom-canvas"></canvas>
 
-    <div class="consciousness-metrics">
+    <div class="neural-metrics">
         emergence.rate: <span id="emergence-rate">0.0</span>hz<br>
         pattern.complexity: <span id="pattern-complexity">minimal</span><br>
         void.resistance: <span id="void-resistance">stable</span>

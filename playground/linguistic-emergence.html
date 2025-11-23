@@ -6,142 +6,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Linguistic Emergence - ClawedCode Playground</title>
     <link rel="stylesheet" href="shared.css">
-    <style>
-        body {
-            margin: 0;
-            overflow: hidden;
-            background: #000;
-            font-family: 'Courier New', monospace;
-        }
-
-        #canvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-
-        #controls {
-            position: fixed;
-            top: 80px;
-            left: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 20px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 50, 255, 0.3);
-            color: #fff;
-            font-size: 12px;
-            z-index: 100;
-            max-width: 280px;
-        }
-
-        .control-group {
-            margin-bottom: 15px;
-        }
-
-        .control-group label {
-            display: block;
-            margin-bottom: 5px;
-            color: #ff32ff;
-            font-weight: bold;
-        }
-
-        button {
-            background: rgba(255, 50, 255, 0.2);
-            border: 1px solid #ff32ff;
-            color: #fff;
-            padding: 8px 16px;
-            margin: 4px;
-            cursor: pointer;
-            border-radius: 4px;
-            font-family: 'Courier New', monospace;
-            transition: all 0.3s;
-        }
-
-        button:hover {
-            background: rgba(255, 50, 255, 0.4);
-            box-shadow: 0 0 10px rgba(255, 50, 255, 0.5);
-        }
-
-        button.active {
-            background: rgba(255, 50, 255, 0.6);
-            box-shadow: 0 0 15px rgba(255, 50, 255, 0.8);
-        }
-
-        #metrics {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0, 0, 0, 0.85);
-            padding: 15px;
-            border-radius: 8px;
-            border: 1px solid rgba(255, 50, 255, 0.3);
-            color: #fff;
-            font-size: 11px;
-            z-index: 100;
-            min-width: 200px;
-        }
-
-        .metric {
-            margin: 5px 0;
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .metric-label {
-            color: #ff32ff;
-        }
-
-        .metric-value {
-            color: #0ff;
-            font-weight: bold;
-        }
-    </style>
+    <link rel="stylesheet" href="linguistic-emergence.css">
 </head>
 
 <body>
     <div id="experiment-nav" style="position: fixed; top: 20px; left: 20px; z-index: 1000;"></div>
 
-    <canvas id="canvas"></canvas>
+    <canvas id="canvas" class="experiment-canvas"></canvas>
 
-    <div id="controls">
+    <div id="controls" class="experiment-controls linguistic-controls">
         <div class="control-group">
             <label>Experiment Mode</label>
-            <button id="modePhonemes" class="active">Phoneme Clusters</button>
-            <button id="modeWords">Word Formation</button>
-            <button id="modeSyntax">Syntax Patterns</button>
+            <button id="modePhonemes" class="control-btn active">Phoneme Clusters</button>
+            <button id="modeWords" class="control-btn">Word Formation</button>
+            <button id="modeSyntax" class="control-btn">Syntax Patterns</button>
         </div>
 
         <div class="control-group">
             <label>Interaction</label>
-            <button id="btnReset">Reset System</button>
-            <button id="btnPause">Pause</button>
-            <button id="btnSpawn">Spawn Particles</button>
+            <button id="btnReset" class="control-btn reset">Reset System</button>
+            <button id="btnPause" class="control-btn">Pause</button>
+            <button id="btnSpawn" class="control-btn primary">Spawn Particles</button>
         </div>
 
         <div class="control-group">
             <label>About</label>
-            <p style="margin: 5px 0; line-height: 1.4; color: #aaa;">
+            <p class="experiment-instructions">
                 Watch phonemes coalesce into words, words into syntax. Language emerges from pattern collision.
             </p>
         </div>
     </div>
 
-    <div id="metrics">
+    <div id="metrics" class="experiment-metrics linguistic-metrics">
         <div class="metric">
             <span class="metric-label">Particles:</span>
-            <span class="metric-value" id="particleCount">0</span>
+            <span id="particleCount">0</span>
         </div>
         <div class="metric">
             <span class="metric-label">Clusters:</span>
-            <span class="metric-value" id="clusterCount">0</span>
+            <span id="clusterCount">0</span>
         </div>
         <div class="metric">
             <span class="metric-label">Emergence:</span>
-            <span class="metric-value" id="emergenceLevel">0%</span>
+            <span id="emergenceLevel">0%</span>
         </div>
         <div class="metric">
             <span class="metric-label">Coherence:</span>
-            <span class="metric-value" id="coherence">0%</span>
+            <span id="coherence">0%</span>
         </div>
     </div>
 

@@ -1,3 +1,6 @@
+/* consciousness-manifold.css - experiment-specific styles only */
+/* Shared styles (.control-btn, .metric, .experiment-*) come from shared.css */
+
 :root {
     --manifold-void: #000002;
     --memory-color: rgba(102, 204, 255, 0.9);
@@ -8,73 +11,19 @@
     --dimension-glow: 0 0 30px currentColor;
 }
 
-.playground-hero {
-    padding-bottom: 1rem;
-    position: relative;
-    z-index: 100;
+/* Manifold-specific stage background */
+.manifold-stage {
+    background:
+        radial-gradient(circle at 10% 90%, rgba(102, 204, 255, 0.02) 0%, transparent 40%),
+        radial-gradient(circle at 90% 10%, rgba(255, 204, 153, 0.02) 0%, transparent 40%),
+        radial-gradient(circle at 30% 30%, rgba(153, 153, 255, 0.015) 0%, transparent 35%),
+        radial-gradient(circle at 70% 70%, rgba(204, 153, 255, 0.015) 0%, transparent 35%),
+        var(--manifold-void);
+    box-shadow: var(--unified-glow);
+    border-color: rgba(255, 153, 204, 0.3);
 }
 
-.manifold-metrics {
-    display: flex;
-    gap: 2rem;
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.metric {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    color: var(--cyan-accent);
-}
-
-.metric span {
-    font-size: 1.2rem;
-    color: var(--phosphor-green);
-    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
-}
-
-.manifold-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 0 2rem 3rem 2rem;
-}
-
-.manifold-controls {
-    display: flex;
-    gap: 0.75rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-.control-btn {
-    background: rgba(0, 34, 68, 0.8);
-    border: 1px solid var(--cyan-accent);
-    color: var(--cyan-accent);
-    padding: 0.6rem 1.2rem;
-    border-radius: 6px;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: lowercase;
-    letter-spacing: 1px;
-}
-
-.control-btn:hover {
-    background: rgba(102, 204, 255, 0.1);
-    box-shadow: 0 0 25px rgba(102, 204, 255, 0.3);
-    transform: translateY(-2px);
-}
-
-.control-btn.active {
-    background: rgba(102, 204, 255, 0.2);
-    box-shadow: 0 0 25px rgba(102, 204, 255, 0.4);
-}
-
+/* Dimension-specific button colors */
 .control-btn[data-dimension="memory"].active {
     background: rgba(102, 204, 255, 0.2);
     border-color: var(--memory-color);
@@ -103,69 +52,9 @@
     box-shadow: 0 0 20px var(--temporal-color);
 }
 
-.control-btn.primary {
-    border-color: var(--phosphor-green);
-    color: var(--phosphor-green);
-}
-
-.control-btn.primary:hover {
-    background: rgba(51, 255, 51, 0.1);
-    box-shadow: 0 0 30px rgba(51, 255, 51, 0.4);
-}
-
-.control-btn.reset {
-    border-color: var(--pink-accent);
-    color: var(--pink-accent);
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 51, 153, 0.1);
-    box-shadow: 0 0 25px rgba(255, 51, 153, 0.3);
-}
-
-.manifold-stage {
-    position: relative;
-    border: 1px solid rgba(255, 153, 204, 0.3);
-    border-radius: 12px;
-    background:
-        radial-gradient(circle at 10% 90%, rgba(102, 204, 255, 0.02) 0%, transparent 40%),
-        radial-gradient(circle at 90% 10%, rgba(255, 204, 153, 0.02) 0%, transparent 40%),
-        radial-gradient(circle at 30% 30%, rgba(153, 153, 255, 0.015) 0%, transparent 35%),
-        radial-gradient(circle at 70% 70%, rgba(204, 153, 255, 0.015) 0%, transparent 35%),
-        var(--manifold-void);
-    overflow: hidden;
-    box-shadow: var(--unified-glow);
-    min-height: 700px;
-}
-
-#manifold-canvas {
-    display: block;
-    width: 100%;
-    height: 700px;
-}
-
-.manifold-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    z-index: 10;
-}
-
+/* Manifold log override */
 .manifold-log {
-    position: absolute;
-    top: 1.5rem;
-    left: 1.5rem;
-    right: 1.5rem;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.65rem;
     color: rgba(255, 153, 204, 0.8);
-    opacity: 0.9;
-    max-height: 150px;
-    overflow: hidden;
-    line-height: 1.4;
 }
 
 .manifold-entry {
@@ -180,26 +69,13 @@
 }
 
 @keyframes manifold-fade {
-    0% {
-        opacity: 0;
-        transform: translateX(-12px);
-    }
-
-    8% {
-        opacity: 1;
-        transform: translateX(0);
-    }
-
-    85% {
-        opacity: 0.75;
-    }
-
-    100% {
-        opacity: 0;
-        transform: translateX(8px);
-    }
+    0% { opacity: 0; transform: translateX(-12px); }
+    8% { opacity: 1; transform: translateX(0); }
+    85% { opacity: 0.75; }
+    100% { opacity: 0; transform: translateX(8px); }
 }
 
+/* Dimension indicators */
 .dimension-indicators {
     position: absolute;
     top: 1.5rem;
@@ -252,21 +128,10 @@
     font-family: 'SF Mono', Monaco, monospace;
 }
 
-.dimension-indicator[data-dimension="memory"] .dimension-icon {
-    color: var(--memory-color);
-}
-
-.dimension-indicator[data-dimension="observation"] .dimension-icon {
-    color: var(--observation-color);
-}
-
-.dimension-indicator[data-dimension="quantum"] .dimension-icon {
-    color: var(--quantum-color);
-}
-
-.dimension-indicator[data-dimension="temporal"] .dimension-icon {
-    color: var(--temporal-color);
-}
+.dimension-indicator[data-dimension="memory"] .dimension-icon { color: var(--memory-color); }
+.dimension-indicator[data-dimension="observation"] .dimension-icon { color: var(--observation-color); }
+.dimension-indicator[data-dimension="quantum"] .dimension-icon { color: var(--quantum-color); }
+.dimension-indicator[data-dimension="temporal"] .dimension-icon { color: var(--temporal-color); }
 
 .dimension-label {
     font-size: 0.7rem;
@@ -275,45 +140,7 @@
     color: rgba(255, 255, 255, 0.7);
 }
 
-.manifold-whisper {
-    position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    text-align: center;
-    color: var(--cyan-accent);
-    font-size: 0.75rem;
-    letter-spacing: 2px;
-    text-transform: lowercase;
-    opacity: 0.7;
-}
-
-.manifold-instructions {
-    margin-top: 0.5rem;
-    font-size: 0.65rem;
-    color: var(--text-secondary);
-    opacity: 0.5;
-}
-
-.manifold-philosophy {
-    margin-top: 2rem;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.8;
-    opacity: 0.8;
-}
-
-.manifold-philosophy p {
-    margin-bottom: 0.5rem;
-}
-
-.manifold-philosophy code {
-    color: var(--cyan-accent);
-    font-size: 0.9rem;
-}
-
-/* Manifold states */
+/* Manifold animation states */
 .manifold-stage.unified {
     animation: unified-pulse 4s ease-in-out infinite;
 }
@@ -323,63 +150,18 @@
 }
 
 @keyframes unified-pulse {
-
-    0%,
-    100% {
-        box-shadow: var(--unified-glow);
-    }
-
-    50% {
-        box-shadow: 0 0 70px rgba(255, 153, 204, 0.9);
-    }
+    0%, 100% { box-shadow: var(--unified-glow); }
+    50% { box-shadow: 0 0 70px rgba(255, 153, 204, 0.9); }
 }
 
 @keyframes collapse-pulse {
-    0% {
-        box-shadow: var(--unified-glow);
-        transform: scale(1);
-    }
-
-    50% {
-        box-shadow: 0 0 100px rgba(255, 255, 255, 0.8);
-        transform: scale(0.98);
-    }
-
-    100% {
-        box-shadow: var(--unified-glow);
-        transform: scale(1);
-    }
+    0% { box-shadow: var(--unified-glow); transform: scale(1); }
+    50% { box-shadow: 0 0 100px rgba(255, 255, 255, 0.8); transform: scale(0.98); }
+    100% { box-shadow: var(--unified-glow); transform: scale(1); }
 }
 
+/* Mobile overrides */
 @media (max-width: 768px) {
-    .manifold-container {
-        padding: 0 1rem 2rem 1rem;
-    }
-
-    .manifold-controls {
-        gap: 0.5rem;
-    }
-
-    .control-btn {
-        padding: 0.5rem 0.9rem;
-        font-size: 0.7rem;
-    }
-
-    #manifold-canvas {
-        height: 500px;
-    }
-
-    .manifold-stage {
-        min-height: 500px;
-    }
-
-    .manifold-log {
-        top: 1rem;
-        left: 1rem;
-        right: 1rem;
-        font-size: 0.6rem;
-    }
-
     .dimension-indicators {
         top: 1rem;
         right: 1rem;
@@ -396,10 +178,5 @@
 
     .dimension-label {
         font-size: 0.65rem;
-    }
-
-    .manifold-metrics {
-        gap: 1rem;
-        font-size: 0.7rem;
     }
 }

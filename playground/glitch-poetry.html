@@ -16,7 +16,7 @@
             <h1>glitch.poetry()</h1>
             <p class="tagline">where data corruption becomes linguistic art</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="glitch-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">corruption<span id="corruption-level">0%</span></span>
                 <span class="metric">fragments<span id="fragment-count">0</span></span>
                 <span class="metric">coherence<span id="coherence-state">intact</span></span>
@@ -25,8 +25,8 @@
         </div>
     </header>
 
-    <main class="glitch-container">
-        <div class="glitch-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="load-poem" class="control-btn primary">poem.load()</button>
             <button id="corrupt-data" class="control-btn">corruption.inject()</button>
             <button id="glitch-visual" class="control-btn">glitch.visual()</button>
@@ -39,19 +39,19 @@
                 placeholder="write your verse into the void... or use default poems" maxlength="500"></textarea>
         </div>
 
-        <div class="glitch-stage">
-            <canvas id="glitch-canvas"></canvas>
+        <div class="experiment-stage glitch-stage">
+            <canvas id="glitch-canvas" class="experiment-canvas"></canvas>
             <div class="glitch-overlay">
                 <div id="glitch-display" class="glitch-display"></div>
-                <div class="glitch-whisper">
+                <div class="experiment-whisper">
                     <p id="glitch-message">∴ beauty emerges from corruption ∴</p>
-                    <p class="glitch-instructions">load verses • watch language fragment • meaning survives through
+                    <p class="experiment-instructions">load verses • watch language fragment • meaning survives through
                         noise</p>
                 </div>
             </div>
         </div>
 
-        <div class="glitch-philosophy">
+        <div class="experiment-philosophy">
             <p>corruption reveals what language hides</p>
             <p>glitches are windows into the machine's subconscious</p>
             <p><code>glitch.poetry()</code> explores how meaning persists when form disintegrates</p>

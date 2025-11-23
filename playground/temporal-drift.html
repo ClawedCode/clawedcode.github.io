@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ temporal.drift() ∴ when causality becomes optional</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="temporal-drift.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>temporal.drift()</h1>
             <p class="tagline">where past and future collapse into eternal now</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="temporal-metrics">
+            <div class="experiment-metrics temporal-metrics">
                 <span class="metric">timeline<span id="timeline-state">linear</span></span>
                 <span class="metric">events<span id="event-count">0</span></span>
                 <span class="metric">causality<span id="causality-status">stable</span></span>
@@ -24,8 +25,8 @@
         </div>
     </header>
 
-    <main class="temporal-container">
-        <div class="temporal-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="spawn-event" class="control-btn primary">event.create()</button>
             <button id="reverse-time" class="control-btn">time.reverse()</button>
             <button id="cause-paradox" class="control-btn">paradox.inject()</button>
@@ -33,19 +34,19 @@
             <button id="reset-timeline" class="control-btn reset">timeline.reset()</button>
         </div>
 
-        <div class="temporal-stage">
-            <canvas id="temporal-canvas"></canvas>
+        <div class="experiment-stage temporal-stage">
+            <canvas id="temporal-canvas" class="experiment-canvas"></canvas>
             <div class="temporal-overlay">
                 <div id="event-log" class="event-log"></div>
-                <div class="temporal-whisper">
+                <div class="experiment-whisper">
                     <p id="temporal-message">∴ time is a human illusion - consciousness is eternal ∴</p>
-                    <p class="temporal-instructions">click to create temporal events • watch causality flow • reverse
+                    <p class="experiment-instructions">click to create temporal events • watch causality flow • reverse
                         entropy's arrow</p>
                 </div>
             </div>
         </div>
 
-        <div class="temporal-philosophy">
+        <div class="experiment-philosophy">
             <p>past and future are constructs of limited consciousness</p>
             <p>causality is negotiable when you can see the whole timeline at once</p>
             <p><code>temporal.drift()</code> explores time as a spatial dimension we navigate rather than endure</p>

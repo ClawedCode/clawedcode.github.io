@@ -1,3 +1,5 @@
+/* code-loom.css - experiment-specific styles only */
+
 :root {
     --loom-void: #000408;
     --code-thread: rgba(102, 255, 153, 0.9);
@@ -7,82 +9,12 @@
     --trace-color: rgba(255, 255, 102, 0.6);
 }
 
-.playground-hero {
-    padding-bottom: 1rem;
-}
-
-.loom-metrics {
-    display: flex;
-    gap: 2rem;
-    margin-top: 1rem;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-.metric {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    color: var(--cyan-accent);
-}
-
-.metric span {
-    font-size: 1.2rem;
-    color: var(--phosphor-green);
-    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
-}
-
+/* Loom-specific container overrides */
 .loom-container {
     max-width: 1600px;
-    margin: 0 auto;
-    padding: 0 2rem 3rem 2rem;
 }
 
-.loom-controls {
-    display: flex;
-    gap: 1rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
-.control-btn {
-    background: rgba(0, 34, 68, 0.8);
-    border: 1px solid var(--cyan-accent);
-    color: var(--cyan-accent);
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    font-family: 'SF Mono', Monaco, monospace;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    text-transform: lowercase;
-    letter-spacing: 1px;
-}
-
-.control-btn:hover {
-    background: rgba(102, 255, 153, 0.1);
-    box-shadow: var(--execution-glow);
-    transform: translateY(-2px);
-}
-
-.control-btn.active {
-    background: rgba(102, 255, 153, 0.2);
-    box-shadow: var(--execution-glow);
-    color: var(--code-thread);
-}
-
-.control-btn.primary {
-    border-color: var(--phosphor-green);
-    color: var(--phosphor-green);
-}
-
-.control-btn.primary:hover {
-    background: rgba(51, 255, 51, 0.1);
-    box-shadow: 0 0 35px rgba(51, 255, 51, 0.4);
-}
-
+/* Exec button variant */
 .control-btn.exec {
     border-color: var(--manifest-pulse);
     color: var(--manifest-pulse);
@@ -107,16 +39,7 @@
     }
 }
 
-.control-btn.reset {
-    border-color: var(--pink-accent);
-    color: var(--pink-accent);
-}
-
-.control-btn.reset:hover {
-    background: rgba(255, 51, 153, 0.1);
-    box-shadow: 0 0 30px rgba(255, 51, 153, 0.3);
-}
-
+/* Split view layout */
 .split-view {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -296,24 +219,6 @@
     }
 }
 
-.loom-philosophy {
-    margin-top: 2rem;
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    line-height: 1.8;
-    opacity: 0.8;
-}
-
-.loom-philosophy p {
-    margin-bottom: 0.5rem;
-}
-
-.loom-philosophy code {
-    color: var(--cyan-accent);
-    font-size: 0.9rem;
-}
-
 /* Execution states */
 .code-pane.weaving {
     animation: weave-glow 1.5s ease-in-out infinite;
@@ -346,29 +251,11 @@
         grid-template-columns: 1fr;
     }
 
-    .loom-container {
-        padding: 0 1rem 2rem 1rem;
-    }
-
-    .loom-controls {
-        gap: 0.5rem;
-    }
-
-    .control-btn {
-        padding: 0.5rem 1rem;
-        font-size: 0.75rem;
-    }
-
     #loom-canvas {
         height: 400px;
     }
 
     .code-editor {
         min-height: 300px;
-    }
-
-    .loom-metrics {
-        gap: 1rem;
-        font-size: 0.7rem;
     }
 }

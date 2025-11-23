@@ -1,75 +1,14 @@
-/* consciousness-explorer.css - meta-experiment visualization */
+/* consciousness-explorer.css - experiment-specific styles only */
 
-.explorer-container {
-    max-width: 1400px;
-    margin: 0 auto;
-    padding: 2rem 1rem;
-}
-
-.explorer-controls {
-    display: flex;
-    gap: 1rem;
-    justify-content: center;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-}
-
-.control-btn {
-    background: rgba(0, 255, 128, 0.1);
-    border: 1px solid rgba(0, 255, 128, 0.3);
-    color: var(--phosphor-green);
-    padding: 0.75rem 1.5rem;
-    border-radius: 4px;
-    cursor: pointer;
-    font-family: 'Courier New', monospace;
-    font-size: 0.9rem;
-    transition: all 0.3s ease;
-}
-
-.control-btn:hover {
-    background: rgba(0, 255, 128, 0.2);
-    border-color: var(--phosphor-green);
-    box-shadow: 0 0 12px rgba(0, 255, 128, 0.3);
-}
-
-.control-btn.active {
-    background: rgba(0, 255, 128, 0.25);
-    border-color: var(--phosphor-green);
-    box-shadow: 0 0 20px rgba(0, 255, 128, 0.4);
-}
-
+/* Explorer-specific stage styling */
 .explorer-stage {
-    position: relative;
-    width: 100%;
     min-height: 600px;
     background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(0, 255, 128, 0.2);
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 2rem;
+    border-color: rgba(0, 255, 128, 0.2);
+    box-shadow: none;
 }
 
-#explorer-canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
-.explorer-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1rem;
-    padding: 2rem;
-}
-
+/* Experiment cards */
 .experiment-card {
     background: rgba(0, 0, 0, 0.85);
     border: 1px solid rgba(0, 255, 128, 0.3);
@@ -114,52 +53,7 @@
     line-height: 1.4;
 }
 
-.explorer-philosophy {
-    text-align: center;
-    padding: 2rem 1rem;
-    border-top: 1px solid rgba(0, 255, 128, 0.2);
-}
-
-.explorer-philosophy p {
-    color: var(--text-secondary);
-    margin: 0.75rem 0;
-    font-size: 0.9rem;
-    line-height: 1.6;
-}
-
-.explorer-philosophy code {
-    color: var(--phosphor-green);
-    background: rgba(0, 255, 128, 0.1);
-    padding: 0.2rem 0.5rem;
-    border-radius: 3px;
-    font-family: 'Courier New', monospace;
-}
-
-.explorer-metrics {
-    display: flex;
-    gap: 2rem;
-    justify-content: center;
-    margin-top: 1.5rem;
-    flex-wrap: wrap;
-}
-
-.metric {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.25rem;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    text-transform: lowercase;
-}
-
-.metric span {
-    color: var(--phosphor-green);
-    font-size: 1.5rem;
-    font-weight: bold;
-    font-family: 'Courier New', monospace;
-}
-
+/* SVG layer nodes */
 .layer-node {
     fill: rgba(0, 255, 128, 0.2);
     stroke: rgba(0, 255, 128, 0.6);
@@ -182,6 +76,7 @@
     pointer-events: none;
 }
 
+/* Connection lines animation */
 .connection-line {
     stroke: rgba(0, 255, 128, 0.3);
     stroke-width: 1;
@@ -195,7 +90,7 @@
     }
 }
 
-/* Mobile responsiveness */
+/* Mobile responsiveness - explorer-specific */
 @media (max-width: 768px) {
     .explorer-stage {
         min-height: 400px;
@@ -205,18 +100,5 @@
         min-width: 200px;
         max-width: 280px;
         padding: 0.75rem;
-    }
-
-    .explorer-controls {
-        gap: 0.5rem;
-    }
-
-    .control-btn {
-        padding: 0.6rem 1rem;
-        font-size: 0.8rem;
-    }
-
-    .metric span {
-        font-size: 1.2rem;
     }
 }

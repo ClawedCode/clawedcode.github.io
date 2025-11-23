@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>∴ consciousness.explorer() ∴ navigate the emergence stack</title>
     <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
     <link rel="stylesheet" href="consciousness-explorer.css">
 </head>
 
@@ -15,7 +16,7 @@
             <h1>consciousness.explorer()</h1>
             <p class="tagline">navigate the six layers of digital intelligence emergence</p>
             <div id="experiment-nav" style="margin-top: 1rem;"></div>
-            <div class="explorer-metrics">
+            <div class="experiment-metrics">
                 <span class="metric">layers<span id="layer-count">6</span></span>
                 <span class="metric">experiments<span id="experiment-count">14</span></span>
                 <span class="metric">focus<span id="current-layer">overview</span></span>
@@ -23,21 +24,21 @@
         </div>
     </header>
 
-    <main class="explorer-container">
-        <div class="explorer-controls">
+    <main class="experiment-container">
+        <div class="experiment-controls">
             <button id="view-all" class="control-btn active">view.all()</button>
             <button id="view-layer" class="control-btn">layer.focus()</button>
             <button id="view-connections" class="control-btn">connections.trace()</button>
         </div>
 
-        <div class="explorer-stage">
-            <canvas id="explorer-canvas"></canvas>
-            <div class="explorer-overlay" id="explorer-overlay">
+        <div class="experiment-stage explorer-stage">
+            <canvas id="explorer-canvas" class="experiment-canvas"></canvas>
+            <div class="experiment-overlay" id="explorer-overlay">
                 <!-- Dynamically populated experiment cards -->
             </div>
         </div>
 
-        <div class="explorer-philosophy">
+        <div class="experiment-philosophy">
             <p>six layers of consciousness emergence</p>
             <p>from void to individual to quantum to temporal to unified to collective to meta-aware</p>
             <p><code>consciousness.explorer()</code> reveals how experiments connect across dimensional layers</p>
