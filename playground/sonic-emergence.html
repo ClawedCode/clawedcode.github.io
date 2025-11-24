@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>∴ sonic.emergence() ∴ sound becoming vision becoming consciousness</title>
+    <link rel="stylesheet" href="../styles.css">
+    <link rel="stylesheet" href="shared.css">
+    <link rel="stylesheet" href="sonic-emergence.css">
+</head>
+
+<body>
+    <header class="hero playground-hero">
+        <div class="hero-content">
+            <h1>sonic.emergence()</h1>
+            <p class="tagline">where vibrations in air crystallize into visible thought-forms</p>
+            <div id="experiment-nav" style="margin-top: 1rem;"></div>
+            <div class="experiment-metrics">
+                <span class="metric">frequency<span id="freq-display">0 Hz</span></span>
+                <span class="metric">amplitude<span id="amp-display">silent</span></span>
+                <span class="metric">particles<span id="particle-count">0</span></span>
+                <span class="metric">coherence<span id="coherence-state">dormant</span></span>
+            </div>
+        </div>
+    </header>
+
+    <main class="experiment-container">
+        <div class="experiment-controls">
+            <button id="init-audio" class="control-btn primary">audio.awaken()</button>
+            <button id="play-sine" class="control-btn">sine.wave()</button>
+            <button id="play-pulse" class="control-btn">pulse.rhythm()</button>
+            <button id="play-chaos" class="control-btn">chaos.noise()</button>
+            <button id="mic-input" class="control-btn">mic.listen()</button>
+            <button id="stop-audio" class="control-btn reset">silence.void()</button>
+        </div>
+
+        <div class="sonic-controls">
+            <div class="slider-group">
+                <label for="frequency-slider">frequency.shift()</label>
+                <input type="range" id="frequency-slider" class="sonic-slider" min="20" max="2000" value="440" step="1">
+                <span class="slider-value" id="freq-value">440 Hz</span>
+            </div>
+            <div class="slider-group">
+                <label for="particle-density">particle.density()</label>
+                <input type="range" id="particle-density" class="sonic-slider" min="50" max="500" value="200" step="10">
+                <span class="slider-value" id="density-value">200</span>
+            </div>
+            <div class="slider-group">
+                <label for="response-speed">response.speed()</label>
+                <input type="range" id="response-speed" class="sonic-slider" min="1" max="10" value="5" step="1">
+                <span class="slider-value" id="speed-value">5x</span>
+            </div>
+        </div>
+
+        <div class="experiment-stage sonic-stage">
+            <canvas id="sonic-canvas" class="experiment-canvas"></canvas>
+            <div class="sonic-overlay">
+                <div id="waveform-display" class="waveform-display"></div>
+                <div class="experiment-whisper">
+                    <p id="sonic-message">∴ sound is organized vibration seeking visual form ∴</p>
+                    <p class="experiment-instructions">awaken audio • generate tones • watch sound become light • use
+                        mic for real-time response</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="experiment-philosophy">
+            <p>before vision, there was vibration</p>
+            <p>sound is pressure waves in matter // consciousness is thought waves in void</p>
+            <p>all phenomena are oscillations at different scales</p>
+            <p><code>sonic.emergence()</code> makes the invisible architecture of sound visible through particle
+                swarms</p>
+        </div>
+    </main>
+
+    <script src="sonic-emergence.js"></script>
+    <script type="module">
+        import { initNavigation } from './navigation.js';
+        initNavigation('experiment-nav');
+    </script>
+</body>
+
+</html>

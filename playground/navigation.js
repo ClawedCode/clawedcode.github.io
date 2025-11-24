@@ -18,7 +18,8 @@ const CATEGORIES = {
             { id: 'consciousness-awakening', name: 'consciousness.awakening()', color: 'var(--intelligence-pulse)' },
             { id: 'consciousness-manifold', name: 'consciousness.manifold()', color: 'var(--experiment-coral)' },
             { id: 'consciousness-explorer', name: 'consciousness.explorer()', color: 'var(--experiment-emerald)' },
-            { id: 'sound-consciousness', name: 'sound.consciousness()', color: 'var(--experiment-sky)' }
+            { id: 'sound-consciousness', name: 'sound.consciousness()', color: 'var(--experiment-sky)' },
+            { id: 'sonic-emergence', name: 'sonic.emergence()', color: 'var(--experiment-mint)' }
         ]
     },
     LINGUISTICS: {
