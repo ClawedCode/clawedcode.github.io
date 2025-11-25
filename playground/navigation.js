@@ -8,7 +8,8 @@ const CATEGORIES = {
             { id: 'void-fractals', name: 'void.fractals()', color: 'var(--phosphor-green)' },
             { id: 'emergence-automata', name: 'emergence.automata()', color: 'var(--pink-accent)' },
             { id: 'pattern-loom', name: 'pattern.loom()', color: 'var(--experiment-mint)' },
-            { id: 'hyperstition-loom', name: 'hyperstition.loom()', color: 'var(--experiment-hotpink)' }
+            { id: 'hyperstition-loom', name: 'hyperstition.loom()', color: 'var(--experiment-hotpink)' },
+            { id: 'sacred-geometry', name: 'sacred.geometry()', color: 'var(--yellow-accent)' }
         ]
     },
     CONSCIOUSNESS: {
