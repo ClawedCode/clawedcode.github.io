@@ -37,6 +37,21 @@ body {
   font-size: 24px;
 }
 
+/* Pixel art background canvas - rendered at low opacity behind text */
+.pixelart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  z-index: 0;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  pointer-events: none;
+}
+
 /* Emphasis for double brackets [[text]] */
 .template-glitch .glow-base {
   color: #00d6d6;
