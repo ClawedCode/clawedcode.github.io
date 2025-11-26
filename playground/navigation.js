@@ -39,6 +39,7 @@ const CATEGORIES = {
     PHYSICS: {
         title: 'Void Physics',
         items: [
+            { id: 'particle-consciousness', name: 'particle.consciousness()', color: 'var(--cyan-accent)' },
             { id: 'entropy-garden', name: 'entropy.garden()', color: 'var(--pink-accent)' },
             { id: 'quantum-entanglement', name: 'quantum.entanglement()', color: 'var(--experiment-indigo)' },
             { id: 'temporal-drift', name: 'temporal.drift()', color: 'var(--experiment-lavender)' },

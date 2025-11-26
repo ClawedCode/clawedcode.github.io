@@ -1,0 +1,107 @@
+/* particle-consciousness.css - experiment-specific styles only */
+
+:root {
+    --particle-void: #000108;
+    --quantum-particle: rgba(51, 204, 255, 0.95);
+    --emergence-glow: 0 0 40px rgba(51, 204, 255, 0.5);
+    --coherence-field: rgba(102, 255, 204, 0.3);
+    --attractor-force: rgba(255, 102, 204, 0.8);
+    --connection-line: rgba(51, 204, 255, 0.2);
+}
+
+/* Particle-specific stage styling */
+.particle-stage {
+    background:
+        radial-gradient(circle at 30% 70%, rgba(51, 204, 255, 0.03) 0%, transparent 50%),
+        radial-gradient(circle at 70% 30%, rgba(102, 255, 204, 0.02) 0%, transparent 50%),
+        var(--particle-void);
+    border-color: rgba(51, 204, 255, 0.3);
+    box-shadow: var(--emergence-glow);
+    cursor: crosshair;
+    min-height: 700px;
+}
+
+/* Particle overlay */
+.particle-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Stage state animations */
+.particle-stage.emerging {
+    box-shadow: 0 0 50px rgba(102, 255, 204, 0.6);
+    border-color: rgba(102, 255, 204, 0.5);
+    animation: emergence-pulse 3s ease-in-out infinite;
+}
+
+.particle-stage.coherent {
+    box-shadow: 0 0 70px rgba(51, 204, 255, 0.8);
+    border-color: rgba(51, 204, 255, 0.7);
+    animation: coherence-pulse 2s ease-in-out infinite;
+}
+
+.particle-stage.chaotic {
+    box-shadow: 0 0 60px rgba(255, 102, 204, 0.7);
+    border-color: rgba(255, 102, 204, 0.6);
+    animation: chaos-pulse 1s ease-in-out infinite;
+}
+
+@keyframes emergence-pulse {
+    0%, 100% {
+        box-shadow: 0 0 50px rgba(102, 255, 204, 0.6);
+    }
+    50% {
+        box-shadow: 0 0 70px rgba(102, 255, 204, 0.8);
+    }
+}
+
+@keyframes coherence-pulse {
+    0%, 100% {
+        box-shadow: 0 0 70px rgba(51, 204, 255, 0.8);
+    }
+    50% {
+        box-shadow: 0 0 100px rgba(51, 204, 255, 1);
+    }
+}
+
+@keyframes chaos-pulse {
+    0%, 100% {
+        box-shadow: 0 0 60px rgba(255, 102, 204, 0.7);
+    }
+    50% {
+        box-shadow: 0 0 90px rgba(255, 102, 204, 0.9);
+    }
+}
+
+/* Override whisper color for particle theme */
+.experiment-whisper {
+    color: var(--quantum-particle);
+}
+
+/* Cursor trail effect */
+.particle-stage::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--quantum-particle);
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0.3;
+    transition: opacity 0.3s ease;
+}
+
+.particle-stage:hover::after {
+    opacity: 0.6;
+}
+
+@media (max-width: 768px) {
+    .particle-stage {
+        min-height: 500px;
+    }
+}
