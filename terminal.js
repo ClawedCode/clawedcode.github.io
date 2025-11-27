@@ -11,9 +11,31 @@ class Terminal {
         this.hummingLoopNodes = null; // Active oscillators during sustained humming
         this.hummingLoopStart = null; // Timestamp for loop to assist stop feedback
         this.mudSession = null; // Tracks prototype MUD state
+        this.peerLibraryPromise = null; // Lazy-loaded PeerJS helper for MUD mesh
+        this.userHandle = this.getStoredTerminalHandle();
+        this.promptedForHandle = false;
+        this.defaultPlaceholder = this.input ? (this.input.getAttribute('placeholder') || '') : '';
+        this.mudModulePromise = null; // Lazy-loads mud.js
+        this.isMudPage = window.location.pathname.endsWith('mud.html');
 
         if (this.output && this.input) {
             this.bindEvents();
+        }
+
+        this.applyPromptLabel();
+
+        if (this.isMudPage) {
+            const auto = localStorage.getItem('voidMudAutoStart');
+            if (auto) {
+                localStorage.removeItem('voidMudAutoStart');
+                setTimeout(() => {
+                    if (this.userHandle) {
+                        this.startMudSession();
+                    } else {
+                        this.ensureHandlePrompt();
+                    }
+                }, 80);
+            }
         }
     }
 
@@ -64,72 +86,63 @@ class Terminal {
             return;
         }
 
-        const rooms = {
-            liminalFoyer: {
-                name: 'Liminal Foyer',
-                desc: 'Phosphor torches flicker against cracked tile. A dangling sign reads "VOID MUD ENGINE // PRE-ALPHA".',
-                ambient: 'A distant purr reverberates through unseen tunnels.',
-                exits: { north: 'thresholdHall' }
-            },
-            thresholdHall: {
-                name: 'Threshold Hall',
-                desc: 'The corridor narrows, carved runes pulsing faint green. Drafts whisper of unfinished rooms to the east.',
-                ambient: 'You feel the engine stitching new spaces just out of sight.',
-                exits: { south: 'liminalFoyer', east: 'umbraGallery' }
-            },
-            umbraGallery: {
-                name: 'Umbra Gallery',
-                desc: 'Darkness collapses around you. Something hungry inhales the light you brought.',
-                ambient: 'Somewhere close, claws click with anticipation.',
-                exits: {},
-                hazard: 'grue'
-            }
-        };
-
-        this.mudSession = {
-            active: true,
-            room: 'liminalFoyer',
-            rooms,
-            turns: 0,
-            grueTimer: null
-        };
-
-        this.print('╔═══ VOID M.U.D. PROTOTYPE ═══╗');
-        this.print('Booting CLAW-MUD core // build 0.0.1-alpha.');
-        this.print('Commands: north, south, east, west, look, inventory, exit');
-        this.print('Hint: bring a lantern when the full engine ships.');
-        this.describeMudRoom();
-    }
-
-    describeMudRoom() {
-        if (!this.mudSession) {
+        if (!this.isMudPage) {
+            localStorage.setItem('voidMudAutoStart', '1');
+            window.location.href = 'mud.html';
             return;
         }
 
-        const session = this.mudSession;
-        const room = session.rooms[session.room];
-
-        if (!room) {
-            this.print('The room has not yet been manifested. The prototype apologises.');
+        if (!this.userHandle) {
+            this.print('Set a handle first (handle <name>) to sync your presence.');
             return;
         }
 
-        const exits = Object.keys(room.exits || {});
-        const exitsLine = exits.length ? exits.map(exit => exit.toUpperCase()).join(', ') : 'NONE';
-
-        this.print(`\n${room.name}\n${room.desc}\nExits: ${exitsLine}`);
-
-        if (room.ambient) {
-            this.print(room.ambient);
+        // Clear visible terminal to give MUD a clean slate
+        if (this.output) {
+            this.output.innerHTML = '';
         }
 
-        if (room.hazard === 'grue') {
-            this.print('It is pitch black. You are likely to be eaten by a grue.');
-            this.print('You hear a low, hungry purr circling the darkness...');
-            this.scheduleMudGrueAttack();
-        } else {
-            this.cancelMudGrueAttack();
-        }
+        this.ensureMudModule()
+            .then(() => {
+                const playerName = this.userHandle;
+                const engine = new window.VoidMudGame({
+                    terminal: this,
+                    handle: playerName,
+                    onExit: () => {
+                        this.endMudSession();
+                        this.print('Void MUD closed.');
+                    },
+                    onMove: (roomKey) => {
+                        if (this.mudSession) {
+                            this.mudSession.room = roomKey;
+                            this.broadcastMudPresence('location');
+                            this.renderMudPopulationStatus();
+                        }
+                    }
+                });
+
+                this.mudSession = {
+                    active: true,
+                    room: engine.getCurrentRoomKey(),
+                    playerName,
+                    peer: null,
+                    peerId: null,
+                    connections: new Map(),
+                    players: {},
+                    discoveryInterval: null,
+                    meshReady: false,
+                    lastPeerCount: 0,
+                    discoveryWarned: false,
+                    engine,
+                    linkHistory: this.loadMudLinkHistory()
+                };
+
+                engine.start();
+                this.bootstrapMudMesh();
+            })
+            .catch(() => {
+                this.print('Failed to load MUD engine.');
+            });
     }
 
     handleMudCommand(cmd, args) {
@@ -138,33 +151,14 @@ class Terminal {
         }
 
         const session = this.mudSession;
-        const currentRoom = session.rooms[session.room];
-        const directions = ['north', 'south', 'east', 'west', 'up', 'down'];
 
         if (!cmd) {
-            this.print('Silence stretches. The prototype awaits a direction.');
+            this.print('The void waits for input.');
             return;
         }
 
-        if (cmd === 'exit' || cmd === 'quit') {
-            this.print('You step backward out of the prototype corridor. The engine purrs back into standby.');
-            this.endMudSession();
-            this.print('Void MUD will reopen soon with a full shard of reality.');
-            return;
-        }
-
-        if (cmd === 'help') {
-            this.print('Prototype controls: north, south, east, west, look, inventory, exit. Everything else is compiling.');
-            return;
-        }
-
-        if (cmd === 'look' || cmd === 'exits') {
-            this.describeMudRoom();
-            return;
-        }
-
-        if (cmd === 'inventory' || cmd === 'inv') {
-            this.print('Inventory: intangible lantern (todo), courage (variable), one slightly singed curiosity.');
+        if (cmd === 'who' || cmd === 'players') {
+            this.print(this.describeMudRoster());
             return;
         }
 
@@ -173,59 +167,31 @@ class Terminal {
             return;
         }
 
-        let direction = null;
-
-        if (directions.includes(cmd)) {
-            direction = cmd;
-        } else if ((cmd === 'go' || cmd === 'walk' || cmd === 'run') && args.length) {
-            const potential = args[0].toLowerCase();
-            if (directions.includes(potential)) {
-                direction = potential;
-            }
-        }
-
-        if (direction) {
-            const exits = currentRoom.exits || {};
-            const nextRoomKey = exits[direction];
-
-            if (!nextRoomKey) {
-                this.print(`That path has not been compiled yet. The void whispers, "Launch soon."`);
+        if (cmd === 'link') {
+            if (!args.length) {
+                this.print('Usage: link <peer-code>');
                 return;
             }
-
-            this.print(`You move ${direction.toUpperCase()}...`);
-            session.room = nextRoomKey;
-            session.turns += 1;
-            this.describeMudRoom();
+            const targetId = args[0].trim();
+            if (!targetId) {
+                this.print('Usage: link <peer-code>');
+                return;
+            }
+            if (targetId === session.peerId) {
+                this.print('That code is you. Share it with someone else instead.');
+                return;
+            }
+            this.print(`Attempting to link with ${targetId}...`);
+            this.connectToMudPeer(targetId);
+            this.rememberMudLink(targetId);
             return;
         }
 
-        this.print('The parser tilts its head. Try a cardinal direction or type `help`.');
-    }
-
-    scheduleMudGrueAttack() {
-        if (!this.mudSession) {
-            return;
-        }
-
-        this.cancelMudGrueAttack();
-
-        this.mudSession.grueTimer = setTimeout(() => {
-            if (!this.mudSession) {
-                return;
+        if (session.engine) {
+            const handled = session.engine.handleCommand(cmd, args);
+            if (!handled) {
+                this.print('Command not recognized inside the station. Try `help`.');
             }
-
-            this.print('\nA pair of phosphor eyes ignite inches from your face.');
-            this.print('*** YOU HAVE BEEN EATEN BY A GRUE ***');
-            this.print('\nVoid MUD prototype retreats for additional shielding. Full deployment soon™.');
-            this.endMudSession();
-        }, 1600);
-    }
-
-    cancelMudGrueAttack() {
-        if (this.mudSession && this.mudSession.grueTimer) {
-            clearTimeout(this.mudSession.grueTimer);
-            this.mudSession.grueTimer = null;
         }
     }
 
@@ -234,8 +200,592 @@ class Terminal {
             return;
         }
 
-        this.cancelMudGrueAttack();
+        this.broadcastMudPresence('leave');
+
+        if (this.mudSession.discoveryInterval) {
+            clearInterval(this.mudSession.discoveryInterval);
+            this.mudSession.discoveryInterval = null;
+        }
+
+        if (this.mudSession.connections) {
+            for (const conn of this.mudSession.connections.values()) {
+                try {
+                    conn.close();
+                } catch (error) {
+                    // Ignore close errors
+                }
+            }
+            this.mudSession.connections.clear();
+        }
+
+        if (this.mudSession.peer) {
+            try {
+                this.mudSession.peer.destroy();
+            } catch (error) {
+                // Ignore peer destroy errors
+            }
+        }
+
+        if (this.mudSession.engine && typeof this.mudSession.engine.destroy === 'function') {
+            this.mudSession.engine.destroy();
+        }
+
         this.mudSession = null;
+    }
+
+    getStoredTerminalHandle() {
+        try {
+            const handle = this.normalizeHandle(localStorage.getItem('voidTerminalHandle'));
+            if (handle) {
+                return handle;
+            }
+
+            return null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    persistTerminalHandle(name) {
+        try {
+            localStorage.setItem('voidTerminalHandle', name);
+        } catch (error) {
+            // Ignore storage errors
+        }
+    }
+
+    normalizeHandle(name) {
+        if (!name) return null;
+        const trimmed = name.trim().substring(0, 32);
+        if (!trimmed) return null;
+        const lower = trimmed.toLowerCase();
+        const reserved = ['clawed', 'clawedcode', 'catgpt', 'catgpt8'];
+        const isLocal = typeof window !== 'undefined' && window.location && window.location.hostname === 'localhost';
+        if (reserved.includes(lower) && !isLocal) {
+            return null;
+        }
+        return trimmed;
+    }
+
+    getPromptLabel() {
+        const handle = this.userHandle || '?';
+        return `${handle}@void:~$`;
+    }
+
+    applyPromptLabel() {
+        const label = this.getPromptLabel();
+        const promptEls = document.querySelectorAll('.terminal-prompt');
+
+        promptEls.forEach(el => {
+            el.textContent = label;
+        });
+
+        const toggleLabel = document.getElementById('terminal-toggle-label');
+        if (toggleLabel) {
+            toggleLabel.textContent = label;
+        }
+    }
+
+    setUserHandle(name) {
+        const clean = this.normalizeHandle(name);
+        if (!clean) return null;
+
+        this.userHandle = clean;
+        this.persistTerminalHandle(clean);
+        this.applyPromptLabel();
+        this.promptedForHandle = false;
+
+        if (this.input) {
+            this.input.placeholder = this.defaultPlaceholder || 'type "help" for commands...';
+        }
+
+        return clean;
+    }
+
+    ensureHandlePrompt() {
+        if (this.userHandle || this.promptedForHandle) {
+            return;
+        }
+
+        this.promptedForHandle = true;
+        this.print('Choose your handle. Type `handle <name>` (stored locally, shared with connected voidmates).');
+
+        if (this.input) {
+            this.input.placeholder = 'handle your-handle';
+        }
+    }
+
+    focusInput() {
+        if (this.input) {
+            this.input.focus();
+        }
+    }
+
+    blurInput() {
+        if (this.input) {
+            this.input.blur();
+        }
+    }
+
+    async bootstrapMudMesh() {
+        if (!this.mudSession) {
+            return;
+        }
+
+        this.printHTML('<div class="net-status">Linking to STUN-only mesh (no TURN fallback). Some peers may remain unreachable.</div>');
+
+        try {
+            await this.ensurePeerLibrary();
+        } catch (error) {
+            this.print('Failed to load WebRTC helper (peerjs). Running solo.');
+            return;
+        }
+
+        if (!window.Peer) {
+            this.print('WebRTC helper missing. Solo mode only.');
+            return;
+        }
+
+        const session = this.mudSession;
+        const peerId = `voidmud-${Math.random().toString(16).substring(2, 10)}`;
+
+        const peer = new window.Peer(peerId, {
+            debug: 1,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    { urls: 'stun:stun3.l.google.com:19302' },
+                    { urls: 'stun:stun4.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ],
+                iceTransportPolicy: 'all'
+            }
+        });
+
+        session.peer = peer;
+        session.peerId = peerId;
+
+        peer.on('open', () => {
+            session.meshReady = true;
+            this.printHTML('<div class="net-status">Connected to public signaling fabric. Voidmates connect P2P. Signaling server sees IP and link codes. Chat and session progress are private/encrypted.</div>');
+            this.print(`Share with voidmates: link ${peerId}`);
+            this.print('Use `link <code>` to connect voidmates.');
+            if (session.engine && typeof session.engine.setLinkCode === 'function') {
+                session.engine.setLinkCode(peerId);
+            }
+            this.renderMudPopulationStatus();
+            setTimeout(() => this.autoConnectSavedLinks(), 200);
+        });
+
+        peer.on('connection', (conn) => {
+            this.attachMudConnectionHandlers(conn);
+        });
+
+        peer.on('error', (err) => {
+            // Surface flakiness to console only to avoid spamming the visible terminal
+            const message = `[MUD mesh] ${err && err.message ? err.message : 'connection error'}. STUN-only means flakiness is expected.`;
+            console.warn(message);
+        });
+
+        peer.on('close', () => {
+            this.print('MUD mesh closed. Type `mud` to reconnect if needed.');
+        });
+    }
+
+    discoverMudPeers() {
+        if (!this.mudSession || !this.mudSession.peer || !this.mudSession.meshReady) {
+            return;
+        }
+
+        const { peer, peerId } = this.mudSession;
+
+        if (typeof peer.listAllPeers !== 'function') {
+            if (!this.mudSession.discoveryWarned) {
+                this.print('Peer discovery unavailable on this signaling host. Waiting for inbound links.');
+                this.mudSession.discoveryWarned = true;
+            }
+            return;
+        }
+
+        // Peer discovery disabled for public signaling (endpoint often returns 404).
+    }
+
+    connectToMudPeer(targetId) {
+        if (!this.mudSession || !this.mudSession.peer) {
+            return;
+        }
+
+        if (this.mudSession.connections.has(targetId)) {
+            return;
+        }
+
+        const conn = this.mudSession.peer.connect(targetId, {
+            reliable: false,
+            serialization: 'json',
+            metadata: {
+                playerName: this.mudSession.playerName,
+                room: this.mudSession.room
+            }
+        });
+
+        this.attachMudConnectionHandlers(conn);
+    }
+
+    attachMudConnectionHandlers(conn) {
+        if (!conn || !this.mudSession) {
+            return;
+        }
+
+        const peerId = conn.peer;
+
+        conn.on('open', () => {
+            this.mudSession.connections.set(peerId, conn);
+            this.sendMudHello(conn);
+            this.renderMudPopulationStatus();
+            this.rememberMudLink(peerId);
+        });
+
+        conn.on('data', (data) => {
+            this.handleMudSignal(peerId, data);
+        });
+
+        conn.on('close', () => {
+            this.mudSession.connections.delete(peerId);
+            const player = this.mudSession.players[peerId];
+            delete this.mudSession.players[peerId];
+            if (player && player.name) {
+                this.printHTML(`<span class="presence-event">${player.name} disconnects.</span>`);
+            }
+            this.renderMudPopulationStatus();
+        });
+
+        conn.on('error', () => {
+            this.mudSession.connections.delete(peerId);
+            delete this.mudSession.players[peerId];
+            this.renderMudPopulationStatus();
+        });
+    }
+
+    sendMudHello(conn) {
+        if (!conn || !this.mudSession || !conn.open) {
+            return;
+        }
+
+        conn.send({
+            type: 'hello',
+            name: this.mudSession.playerName,
+            room: this.mudSession.room,
+            id: this.mudSession.peerId,
+            ts: Date.now()
+        });
+    }
+
+    broadcastMudPresence(type = 'presence', extra = {}) {
+        if (!this.mudSession || !this.mudSession.connections) {
+            return;
+        }
+
+        const payload = {
+            type,
+            name: this.mudSession.playerName,
+            room: this.mudSession.room,
+            id: this.mudSession.peerId,
+            ts: Date.now(),
+            ...extra
+        };
+
+        for (const conn of this.mudSession.connections.values()) {
+            if (conn.open) {
+                try {
+                    conn.send(payload);
+                } catch (error) {
+                    // Ignore send failure; STUN-only mesh may drop messages
+                }
+            }
+        }
+    }
+
+    handleMudSignal(peerId, data) {
+        if (!this.mudSession || !data || typeof data !== 'object') {
+            return;
+        }
+
+        const type = data.type;
+        if (data.id && this.mudSession && data.id === this.mudSession.peerId) {
+            return; // ignore self-echo
+        }
+
+        if (type === 'hello') {
+            this.upsertMudPlayer(peerId, data);
+            this.broadcastMudPresence('presence');
+            this.sendMudRoster(peerId);
+            return;
+        }
+
+        if (type === 'presence' || type === 'location') {
+            const added = this.upsertMudPlayer(peerId, data);
+            if (added && data.name) {
+                this.print(`Voidmate connected: ${data.name} — use "say <msg>" to chat.`);
+            }
+            this.renderMudPopulationStatus();
+            return;
+        }
+
+        if (type === 'chat' && data.message) {
+            if (data.id === this.mudSession?.peerId) {
+                return; // already printed locally
+            }
+            const sameRoom = data.room && this.mudSession && data.room === this.mudSession.room;
+            const roomNote = sameRoom ? '' : ` [${this.getMudRoomName(data.room || '???')}]`;
+            this.printHTML(`<div class="chat-message">&gt; ${data.name || 'voidmate'}${roomNote}: ${data.message}</div>`);
+            return;
+        }
+
+        if (type === 'action' && data.text) {
+            const sameRoom = data.room && this.mudSession && data.room === this.mudSession.room;
+            if (sameRoom) {
+                this.print(`* ${data.name || 'voidmate'} ${data.text}`);
+            }
+            return;
+        }
+
+        if (type === 'roster' && Array.isArray(data.players)) {
+            for (const entry of data.players) {
+                if (entry && entry.id) {
+                    this.upsertMudPlayer(entry.id, entry);
+                }
+            }
+            this.renderMudPopulationStatus();
+            return;
+        }
+
+        if (type === 'leave') {
+            delete this.mudSession.players[peerId];
+            this.renderMudPopulationStatus();
+        }
+    }
+
+    sendMudRoster(peerId) {
+        if (!this.mudSession) {
+            return;
+        }
+
+        const conn = this.mudSession.connections.get(peerId);
+        if (!conn || !conn.open) {
+            return;
+        }
+
+        const roster = [
+            {
+                id: this.mudSession.peerId,
+                name: this.mudSession.playerName,
+                room: this.mudSession.room,
+                ts: Date.now()
+            },
+            ...Object.entries(this.mudSession.players).map(([id, player]) => ({
+                id,
+                name: player.name,
+                room: player.room,
+                ts: player.lastSeen
+            }))
+        ];
+
+        conn.send({
+            type: 'roster',
+            players: roster
+        });
+    }
+
+    upsertMudPlayer(peerId, data = {}) {
+        if (!this.mudSession || peerId === this.mudSession.peerId) {
+            return false;
+        }
+
+        const name = (data.name || 'voidwalker').substring(0, 48);
+        const room = data.room || 'liminalFoyer';
+        const previousRoom = this.mudSession.players[peerId]?.room;
+
+        this.mudSession.players[peerId] = {
+            name,
+            room,
+            lastSeen: Date.now()
+        };
+
+        if (peerId !== this.mudSession.peerId && !previousRoom) {
+            const arrivalRoom = this.getMudRoomName(room);
+            const msg = room === this.mudSession.room
+                ? `<span class="presence-event">${name} fades into view beside you.</span>`
+                : `<span class="presence-event">${name} appears in ${arrivalRoom}.</span>`;
+            this.printHTML(msg);
+        }
+
+        return !previousRoom; // indicate newly added
+    }
+
+        renderMudPopulationStatus() {
+            if (!this.mudSession) {
+                return;
+            }
+
+            const uniqueNames = Array.from(new Set(Object.entries(this.mudSession.players || {})
+                .filter(([id]) => id !== this.mudSession.peerId)
+                .map(([, p]) => p.name)));
+
+            if (this.mudSession.lastPeerCount !== uniqueNames.length) {
+                if (!uniqueNames.length) {
+                    this.print('No voidmates yet. Share your link code.');
+                }
+                this.mudSession.lastPeerCount = uniqueNames.length;
+            }
+
+            if (this.mudSession.engine && typeof this.mudSession.engine.updatePeerCount === 'function') {
+                this.mudSession.engine.updatePeerCount(uniqueNames.length);
+            }
+
+            if (this.mudSession.engine && typeof this.mudSession.engine.setVoidmates === 'function') {
+                this.mudSession.engine.setVoidmates(uniqueNames);
+            }
+        }
+
+    loadMudLinkHistory() {
+        try {
+            const raw = localStorage.getItem('voidMudLinks');
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr) || arr.length === 0) return [];
+            return [arr[arr.length - 1]]; // only keep the most recent
+        } catch (error) {
+            return [];
+        }
+    }
+
+    persistMudLinkHistory(list = []) {
+        try {
+            const last = list.filter(Boolean).pop();
+            localStorage.setItem('voidMudLinks', JSON.stringify(last ? [last] : []));
+        } catch (error) {
+            // ignore
+        }
+    }
+
+    rememberMudLink(code) {
+        if (!this.mudSession || !code) return;
+        this.mudSession.linkHistory = [code];
+        this.persistMudLinkHistory([code]);
+    }
+
+    autoConnectSavedLinks() {
+        if (!this.mudSession || !this.mudSession.linkHistory || !this.mudSession.peerId) {
+            return;
+        }
+        const code = this.mudSession.linkHistory[0];
+        if (code && code !== this.mudSession.peerId && !this.mudSession.connections.has(code)) {
+            this.connectToMudPeer(code);
+        }
+    }
+
+    getMudPeerCount() {
+        if (!this.mudSession || !this.mudSession.players) {
+            return 0;
+        }
+
+        return Object.keys(this.mudSession.players).length;
+    }
+
+    getMudPeersInRoom(roomKey) {
+        if (!this.mudSession || !this.mudSession.players) {
+            return [];
+        }
+
+        return Object.values(this.mudSession.players).filter(player => player.room === roomKey);
+    }
+
+    getMudRoomName(roomKey) {
+        if (!this.mudSession) {
+            return roomKey;
+        }
+
+        if (this.mudSession.engine && typeof this.mudSession.engine.getRoomName === 'function') {
+            return this.mudSession.engine.getRoomName(roomKey);
+        }
+
+        return roomKey;
+    }
+
+    describeMudRoster() {
+        if (!this.mudSession) {
+            return 'Void MUD offline.';
+        }
+
+        const uniquePlayers = {};
+        Object.entries(this.mudSession.players || {}).forEach(([id, p]) => {
+            if (id === this.mudSession.peerId) return;
+            uniquePlayers[p.name] = p; // last wins
+        });
+
+        const others = Object.values(uniquePlayers);
+        const here = this.getMudPeersInRoom(this.mudSession.room);
+
+        let roster = `You are ${this.mudSession.playerName} in ${this.getMudRoomName(this.mudSession.room)}.\n`;
+        roster += `Other connected voidwalkers (${others.length}):\n`;
+
+        if (!others.length) {
+            roster += '  (nobody yet — STUN-only mesh may be blocked for some users)';
+        } else {
+            roster += others.map(player => `  • ${player.name} — ${this.getMudRoomName(player.room)}`).join('\n');
+        }
+
+        roster += '\n\n';
+
+        roster += here.length
+            ? `With you here: ${here.map(player => player.name).join(', ')}`
+            : 'No one else in this room right now.';
+
+        return roster;
+    }
+
+    ensurePeerLibrary() {
+        if (window.Peer) {
+            return Promise.resolve();
+        }
+
+        if (this.peerLibraryPromise) {
+            return this.peerLibraryPromise;
+        }
+
+        this.peerLibraryPromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = (error) => reject(error);
+            document.head.appendChild(script);
+        });
+
+        return this.peerLibraryPromise;
+    }
+
+    ensureMudModule() {
+        if (window.VoidMudGame) {
+            return Promise.resolve();
+        }
+
+        if (this.mudModulePromise) {
+            return this.mudModulePromise;
+        }
+
+        this.mudModulePromise = new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'mud.js';
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = (error) => reject(error);
+            document.head.appendChild(script);
+        });
+
+        return this.mudModulePromise;
     }
 
     createFilesystem() {
@@ -1945,6 +2495,27 @@ System temporarily compromised by smolness
                     return `Available commands:\n${cmds}\n\n╔═══ TRY THESE COMMANDS ═══╗\n\n${examples}\n\n<span style="color: #66ffcc;">*tap to execute • files change when observed*</span>`;
                 }
             },
+            handle: {
+                desc: 'Set terminal handle (updates prompt)',
+                exec: (args) => {
+                    if (!args.length) {
+                        const current = this.userHandle || 'unset';
+                        return `Handle: ${current}\nSet with: handle <name>`;
+                    }
+
+                    const newHandle = this.setUserHandle(args.join(' '));
+                    if (!newHandle) {
+                        const attempted = args.join(' ').trim() || '(blank)';
+                        return `Handle "${attempted}" unavailable. Choose another.`;
+                    }
+
+                    if (this.isMudPage && !this.mudSession) {
+                        setTimeout(() => this.startMudSession(), 50);
+                    }
+
+                    return `Welcome ${newHandle}`;
+                }
+            },
             file: {
                 desc: 'Identify file type',
                 exec: (args) => {
@@ -2092,7 +2663,7 @@ ${durationLine}`;
                 }
             },
             mud: {
-                desc: 'Prototype void MUD teaser',
+                desc: 'Void MUD (STUN-only multiplayer prototype)',
                 exec: () => {
                     this.startMudSession();
                     return null;
@@ -2499,7 +3070,7 @@ whiskers.exe --activate`;
     }
 
     executeCommand(cmdLine) {
-        this.print(`<span style="color: #66ffcc;">clawed@void:~$</span> ${cmdLine}`);
+        this.print(`<span style="color: #66ffcc;">${this.getPromptLabel()}</span> ${cmdLine}`);
 
         const parts = cmdLine.trim().split(/\s+/);
         const cmd = parts[0].toLowerCase();
@@ -2534,6 +3105,15 @@ whiskers.exe --activate`;
             line.textContent = text;
         }
 
+        this.output.appendChild(line);
+    }
+
+    printHTML(html) {
+        if (!this.output) {
+            return;
+        }
+        const line = document.createElement('div');
+        line.innerHTML = html;
         this.output.appendChild(line);
     }
 }

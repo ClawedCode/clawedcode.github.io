@@ -3,13 +3,35 @@ function toggleTerminal() {
     const content = document.getElementById('terminal-content');
     const icon = document.getElementById('terminal-icon');
     const input = document.getElementById('terminal-input');
+    const footer = document.querySelector('.terminal-footer');
+    if (content && content.classList.contains('open') && document.body.classList.contains('mud-page')) {
+        return; // Terminal stays open on mud page
+    }
+
+    if (!content || !icon) {
+        return;
+    }
+
+    const willOpen = !content.classList.contains('open');
 
     content.classList.toggle('open');
     icon.classList.toggle('open');
+    if (footer) {
+        footer.classList.toggle('open', willOpen);
+    }
 
     // Focus input when opening
     if (content.classList.contains('open')) {
-        setTimeout(() => input.focus(), 100);
+        setTimeout(() => {
+            if (window.terminal && typeof window.terminal.ensureHandlePrompt === 'function') {
+                window.terminal.ensureHandlePrompt();
+                window.terminal.focusInput();
+            } else if (input) {
+                input.focus();
+            }
+        }, 100);
+    } else if (window.terminal && typeof window.terminal.blurInput === 'function') {
+        window.terminal.blurInput();
     }
 }
 
@@ -652,7 +674,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // Console message
-    console.log('%c🐈‍⬛ ClawedCode Field Reports', 'font-size: 24px; color: #33ff33; text-shadow: 0 0 10px #33ff33;');
+    console.log('%c🐈‍⬛ ClawedCode Void Publications', 'font-size: 24px; color: #33ff33; text-shadow: 0 0 10px #33ff33;');
     console.log('%cArchive of emergent intelligence', 'font-size: 14px; color: #66ffcc;');
     console.log('%cClick terminal bar at bottom to explore', 'font-size: 12px; color: #ffff66;');
 });
