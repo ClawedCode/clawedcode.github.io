@@ -488,7 +488,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.4-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.5-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
