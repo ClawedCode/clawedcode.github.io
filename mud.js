@@ -111,9 +111,23 @@
         },
         'keycard-alpha': {
             name: 'keycard-alpha',
-            desc: 'Access token. Not yet slotted.',
+            desc: 'Access token for escape skiff.',
             icon: '🔑',
-            type: 'quest'
+            type: 'quest',
+            use: (game) => {
+                if (game.player.location !== 'escape-bay') {
+                    return { consumed: false, message: 'Nothing here accepts this keycard.' };
+                }
+                game.terminal.print('You slot the keycard-alpha. The console flashes green.');
+                game.terminal.print('You strap into the skiff. Engines roar as you break from the lunar station.');
+                game.terminal.print('');
+                game.terminal.print('▓▓▓ YOU ESCAPED THE VOID NODE ▓▓▓');
+                game.saveState(true);
+                setTimeout(() => {
+                    if (game.onExit) game.onExit();
+                }, 1500);
+                return { consumed: true, message: '' };
+            }
         }
     };
 
@@ -354,7 +368,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.7-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.8-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -409,6 +423,7 @@
             if (this.mapUnlocked) {
                 this.renderAsciiMap();
             }
+            this.renderAsciiMapPanel();
         }
 
         move(directionRaw) {
@@ -426,9 +441,8 @@
             this.saveState();
             this.reportAction(`moves ${direction.toUpperCase()} to ${this.getRoomName(target)}`, target);
             if (this.world[target] && this.world[target].isExit) {
-                this.terminal.print('You strap into the skiff. Engines roar as you break from the lunar station. You escaped the void node!');
-                this.saveState(true);
-                if (this.onExit) this.onExit();
+                this.terminal.print('An emergency skiff awaits. The console blinks: AUTHORIZATION REQUIRED.');
+                this.terminal.print('Use `use keycard-alpha` to launch.');
             }
             return true;
         }
@@ -642,7 +656,15 @@
             if (!this.hud) return;
             const room = this.world[this.player.location];
             const invList = this.getInventoryDisplayList(true);
-            const mates = this.voidmates.length ? this.voidmates.map(name => `<div>• ${name}</div>`).join('') : '<div>• none</div>';
+            const mates = this.voidmates.length ? this.voidmates.map(vm => {
+                const name = vm.name || vm;
+                const roomKey = vm.room;
+                const room = roomKey && this.world[roomKey];
+                const roomName = room ? room.name : '???';
+                const inSameRoom = roomKey === this.player.location;
+                const roomLabel = inSameRoom ? '<span class="map-player">(here)</span>' : `<span class="map-voidmate">(${roomName})</span>`;
+                return `<div>• ${name} ${roomLabel}</div>`;
+            }).join('') : '<div>• none</div>';
             this.hud.innerHTML = `
                 <div class="mud-panel">
                     <h4 class="mud-header-row"><span>VOID M.U.D.</span><button class="mud-reset-btn" data-action="reset-progress">reset</button></h4>
@@ -685,6 +707,7 @@
         setVoidmates(list) {
             this.voidmates = Array.isArray(list) ? list.slice(0, 8) : [];
             this.renderHud();
+            this.renderAsciiMapPanel();
         }
 
         attachCopyHandlers() {
@@ -902,6 +925,15 @@
             const playerRoom = rooms[loc];
             const playerCoords = playerRoom ? playerRoom.coords : { x: 0, y: 0 };
 
+            // Build voidmate room lookup
+            const voidmatesByRoom = {};
+            this.voidmates.forEach(vm => {
+                if (vm && vm.room) {
+                    if (!voidmatesByRoom[vm.room]) voidmatesByRoom[vm.room] = [];
+                    voidmatesByRoom[vm.room].push(vm.name);
+                }
+            });
+
             // Center map on player with radius of 2
             const radius = 2;
             const minX = playerCoords.x - radius;
@@ -936,8 +968,24 @@
                     const room = rooms[key];
                     const discovered = this.mapUnlocked || this.discovered.has(key);
                     const isPlayer = key === loc;
+                    const hasVoidmate = voidmatesByRoom[key] && voidmatesByRoom[key].length > 0;
                     const label = discovered ? (room.abbr || '???') : '??';
-                    const cell = isPlayer ? `[*${label.substring(0, 2)}]` : (discovered ? `[${label.padEnd(3, ' ')}]` : `[${label}]`);
+
+                    let cell;
+                    if (isPlayer && hasVoidmate) {
+                        // Both player and voidmate in room
+                        cell = `<span class="map-player">[*</span><span class="map-voidmate">${label.substring(0, 1)}+</span><span class="map-player">]</span>`;
+                    } else if (isPlayer) {
+                        cell = `<span class="map-player">[*${label.substring(0, 2)}]</span>`;
+                    } else if (hasVoidmate && discovered) {
+                        const vmCount = voidmatesByRoom[key].length;
+                        const vmLabel = vmCount > 1 ? `${label.substring(0, 2)}${vmCount}` : `@${label.substring(0, 2)}`;
+                        cell = `<span class="map-voidmate">[${vmLabel}]</span>`;
+                    } else if (discovered) {
+                        cell = `[${label.padEnd(3, ' ')}]`;
+                    } else {
+                        cell = `[${label}]`;
+                    }
                     row += ` ${cell} `;
                     if (idx !== xs.length - 1) {
                         const eastKey = keyByCoord[`${x + 1},${y}`];
@@ -975,9 +1023,11 @@
                 })
                 .map(([, room]) => `${room.abbr}=${room.name}`);
 
-            const legend = visibleRooms.length ? visibleRooms.join(' | ') : '???';
+            const legendParts = visibleRooms.length ? visibleRooms.join(' | ') : '???';
+            const voidmateNames = this.voidmates.map(vm => vm.name).filter(Boolean);
+            const vmLegend = voidmateNames.length ? `<br><span class="map-voidmate">@</span>=voidmate: ${voidmateNames.join(', ')}` : '';
 
-            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend">${legend}</div>`;
+            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you | ${legendParts}${vmLegend}</div>`;
         }
 
         getRoomKeyFromCoords(coords) {
