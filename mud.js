@@ -354,7 +354,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.6-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.7-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -899,15 +899,27 @@
             }
             const loc = this.player.location;
             const rooms = this.world;
-            const coords = Object.values(rooms).map(r => r.coords).filter(Boolean);
-            const xs = Array.from(new Set(coords.map(c => c.x))).sort((a, b) => a - b);
-            const ys = Array.from(new Set(coords.map(c => c.y))).sort((a, b) => b - a);
+            const playerRoom = rooms[loc];
+            const playerCoords = playerRoom ? playerRoom.coords : { x: 0, y: 0 };
+
+            // Center map on player with radius of 2
+            const radius = 2;
+            const minX = playerCoords.x - radius;
+            const maxX = playerCoords.x + radius;
+            const minY = playerCoords.y - radius;
+            const maxY = playerCoords.y + radius;
+
             const keyByCoord = {};
             Object.entries(rooms).forEach(([key, room]) => {
                 if (room.coords) {
                     keyByCoord[`${room.coords.x},${room.coords.y}`] = key;
                 }
             });
+
+            const xs = [];
+            const ys = [];
+            for (let x = minX; x <= maxX; x++) xs.push(x);
+            for (let y = maxY; y >= minY; y--) ys.push(y);
 
             const lines = [];
             ys.forEach(y => {
@@ -917,20 +929,21 @@
                     if (!key) {
                         row += '       ';
                         if (idx !== xs.length - 1) {
-                            row += '   ';
+                            row += '  ';
                         }
                         return;
                     }
                     const room = rooms[key];
                     const discovered = this.mapUnlocked || this.discovered.has(key);
+                    const isPlayer = key === loc;
                     const label = discovered ? (room.abbr || '???') : '??';
-                    const cell = discovered ? `[${label.padEnd(3, ' ')}]` : `[${label}]`;
+                    const cell = isPlayer ? `[*${label.substring(0, 2)}]` : (discovered ? `[${label.padEnd(3, ' ')}]` : `[${label}]`);
                     row += ` ${cell} `;
                     if (idx !== xs.length - 1) {
                         const eastKey = keyByCoord[`${x + 1},${y}`];
                         const eastDiscovered = eastKey && (this.mapUnlocked || this.discovered.has(eastKey));
                         const hasCorridor = eastKey && room.exits && room.exits.east === eastKey && (discovered || eastDiscovered);
-                        row += hasCorridor ? '────' : '    ';
+                        row += hasCorridor ? '──' : '  ';
                     }
                 });
                 lines.push(row);
@@ -943,21 +956,28 @@
                         const room = rooms[key];
                         const southDiscovered = southKey && (this.mapUnlocked || this.discovered.has(southKey));
                         const hasSouth = key && southKey && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
-                        vertRow += key ? (hasSouth ? '    │    ' : '         ') : '         ';
+                        vertRow += key ? (hasSouth ? '   │   ' : '       ') : '       ';
                         if (idx !== xs.length - 1) {
-                            vertRow += '    ';
+                            vertRow += '  ';
                         }
                     });
                     lines.push(vertRow);
                 }
             });
 
-            const legend = Object.values(this.world)
-                .filter(room => this.mapUnlocked || this.discovered.has(this.getRoomKeyFromCoords(room.coords)))
-                .map(room => `${room.abbr || '??'} = ${room.name}`)
-                .join('\n');
+            // Build compact legend showing only visible rooms
+            const visibleRooms = Object.entries(this.world)
+                .filter(([key, room]) => {
+                    if (!room.coords) return false;
+                    const inView = room.coords.x >= minX && room.coords.x <= maxX && room.coords.y >= minY && room.coords.y <= maxY;
+                    const known = this.mapUnlocked || this.discovered.has(key);
+                    return inView && known;
+                })
+                .map(([, room]) => `${room.abbr}=${room.name}`);
 
-            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div style="margin-top:6px; font-size:0.75rem; white-space: pre-wrap;">Legend:\n${legend || '???'}</div>`;
+            const legend = visibleRooms.length ? visibleRooms.join(' | ') : '???';
+
+            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend">${legend}</div>`;
         }
 
         getRoomKeyFromCoords(coords) {
