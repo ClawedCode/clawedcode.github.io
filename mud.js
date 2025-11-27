@@ -8,6 +8,7 @@
         'med-patch': {
             name: 'med patch',
             desc: 'Restores +8 HP.',
+            icon: '🩹',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.hp;
@@ -18,6 +19,7 @@
         'patch-kit': {
             name: 'patch kit',
             desc: 'Restores +8 HP.',
+            icon: '🧰',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.hp;
@@ -28,6 +30,7 @@
         'repair-gel': {
             name: 'repair gel',
             desc: 'Restores +5 HP.',
+            icon: '🧪',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.hp;
@@ -38,6 +41,7 @@
         'ion-cell': {
             name: 'ion cell',
             desc: 'Restores +4 EN.',
+            icon: '🔋',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.energy;
@@ -48,6 +52,7 @@
         'shield-weave': {
             name: 'shield weave',
             desc: 'Adds +4 SHIELD.',
+            icon: '🛡️',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.shield;
@@ -58,6 +63,7 @@
         'field-map': {
             name: 'field map',
             desc: 'Highlights points of interest.',
+            icon: '🗺️',
             type: 'tool',
             use: () => ({
                 consumed: false,
@@ -67,6 +73,7 @@
         'plasma-torch': {
             name: 'plasma torch',
             desc: 'Weapon upgrade. Burns hot.',
+            icon: '🔦',
             type: 'equipment',
             use: (game) => {
                 game.player.weapon = 'plasma torch';
@@ -76,6 +83,7 @@
         'ration-bar': {
             name: 'ration bar',
             desc: 'Minor HP restore.',
+            icon: '🍫',
             type: 'consumable',
             use: (game) => {
                 const prev = game.player.hp;
@@ -86,22 +94,26 @@
         'flare': {
             name: 'flare',
             desc: 'Illuminates nothing important (for now).',
+            icon: '✨',
             type: 'consumable',
             use: () => ({ consumed: true, message: 'You spark a flare. Shadows recoil briefly.' })
         },
         'bio-sample': {
             name: 'bio-sample',
             desc: 'Valuable research sample.',
+            icon: '🧬',
             type: 'quest'
         },
         'ion-shard': {
             name: 'ion shard',
             desc: 'Charged fragment. Feels warm.',
+            icon: '⚡',
             type: 'quest'
         },
         'keycard-alpha': {
             name: 'keycard-alpha',
             desc: 'Access token. Not yet slotted.',
+            icon: '🔑',
             type: 'quest'
         }
     };
@@ -473,7 +485,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.3-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.4-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -504,7 +516,7 @@
             this.markDiscovered(this.player.location);
             const exits = Object.keys(room.exits || {}).map(e => e.toUpperCase()).join(', ') || 'NONE';
             const items = (room.items && room.items.length)
-                ? `Items: ${room.items.map(id => this.getItemName(id)).join(', ')}`
+                ? `Items: ${room.items.map(id => this.getItemLabel(id)).join(', ')}`
                 : 'Items: none visible.';
             const foe = room.enemy ? `Threat detected: ${room.enemy.name}` : 'Area appears quiet.';
             this.terminal.print(`\n${room.name}\n${room.desc}\nExits: ${exits}\n${items}\n${foe}`);
@@ -597,9 +609,11 @@
             foe.hp -= playerHit;
             this.terminal.print(`You strike the ${foe.name} for ${playerHit} damage.`);
             this.reportAction(`attacks ${foe.name}`, this.player.location);
+            this.printCombatAscii('hit');
 
             if (foe.hp <= 0) {
                 this.terminal.print(`The ${foe.name} collapses. Area secure.`);
+                this.printCombatAscii('kill');
                 if (foe.loot) {
                     const lootId = this.resolveItemId(foe.loot);
                     this.terminal.print(`Loot acquired: ${this.getItemName(lootId)}.`);
@@ -643,7 +657,7 @@
             const room = this.world[this.player.location];
             const hints = [];
             if (room.enemy) hints.push(`Threat: ${room.enemy.name}`);
-            if (room.items && room.items.length) hints.push(`Items nearby: ${room.items.map(id => this.getItemName(id)).join(', ')}`);
+            if (room.items && room.items.length) hints.push(`Items nearby: ${room.items.map(id => this.getItemLabel(id)).join(', ')}`);
             hints.push('Best route: east to labs, then reactor for power cells.');
             this.terminal.print(hints.join('\n'));
         }
@@ -684,7 +698,8 @@
         renderHud() {
             if (!this.hud) return;
             const room = this.world[this.player.location];
-            const items = this.getInventoryDisplayList().join(', ') || 'Empty';
+            const invList = this.getInventoryDisplayList();
+            const items = invList.join(', ') || 'Empty';
             const mates = this.voidmates.length ? this.voidmates.map(name => `<div>• ${name}</div>`).join('') : '<div>• none</div>';
             this.hud.innerHTML = `
                 <div class="mud-panel">
@@ -699,7 +714,7 @@
                 </div>
                 <div class="mud-panel">
                     <h4>Inventory</h4>
-                    <div>${items}</div>
+                    <div>${invList.length ? invList.map(it => `<span class="item-badge">${it}</span>`).join('') : 'Empty'}</div>
                 </div>
                 <div class="mud-panel">
                     <h4>Voidmates</h4>
@@ -852,6 +867,15 @@
             return meta ? meta.name : id;
         }
 
+        getItemIcon(id) {
+            const meta = ITEM_REGISTRY[id];
+            return meta && meta.icon ? meta.icon : '•';
+        }
+
+        getItemLabel(id) {
+            return `${this.getItemIcon(id)} ${this.getItemName(id)}`;
+        }
+
         renderAsciiMap() {
             if (!this.mapUnlocked) {
                 return;
@@ -859,9 +883,10 @@
             const loc = this.player.location;
             const marker = (key, label) => {
                 if (!this.discovered.has(key)) {
-                    return ' ??? ';
+                    return ' .. ';
                 }
-                return key === loc ? `[${label}]` : ` ${label} `;
+                const base = key === loc ? `[${label}]` : ` ${label} `;
+                return key === loc ? `[${label}]` : base;
             };
             const coords = Object.values(this.world).map(r => r.coords);
             const xs = Array.from(new Set(coords.map(c => c.x))).sort((a, b) => a - b);
@@ -887,6 +912,21 @@
                 ...rows
             ].join('\n');
             this.terminal.print(map);
+            const legend = Object.values(this.world)
+                .map(room => `${room.abbr || '???'} = ${room.name}`)
+                .join(', ');
+            this.terminal.print(`Legend: ${legend}`);
+        }
+
+        printCombatAscii(type) {
+            const asciiSets = {
+                hit: ['(╯°□°）╯︵ ✧', '(/｀ω´)/☆', '＞﹏＜', '(ง •̀_•́)ง'],
+                kill: ['(=｀ω´=)ノ” ☆', '✧･ﾟ: *✧･ﾟ:*', '⊂(◉‿◉)つ']
+            };
+            const list = asciiSets[type] || [];
+            if (!list.length) return;
+            const pick = list[Math.floor(Math.random() * list.length)];
+            this.terminal.printHTML(`<div class="combat-ascii">${pick}</div>`);
         }
 
         resolveItemId(name) {
@@ -927,7 +967,7 @@
 
         getInventoryDisplayList() {
             return this.player.inventory.map(entry => {
-                const name = this.getItemName(entry.id);
+                const name = this.getItemLabel(entry.id);
                 return entry.qty > 1 ? `${name} x${entry.qty}` : name;
             });
         }

@@ -181,6 +181,14 @@ class Terminal {
                 this.print('That code is you. Share it with someone else instead.');
                 return;
             }
+            if (!this.userHandle) {
+                const newHandle = this.normalizeHandle(prompt('Choose a handle before linking:', '') || '');
+                if (!newHandle) {
+                    this.print('Handle required before linking. Use `handle <name>`.');
+                    return;
+                }
+                this.setUserHandle(newHandle);
+            }
             this.print(`Attempting to link with ${targetId}...`);
             this.connectToMudPeer(targetId);
             this.rememberMudLink(targetId);
