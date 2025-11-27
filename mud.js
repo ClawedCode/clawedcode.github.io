@@ -281,6 +281,8 @@
             };
             this.discovered = new Set();
             this.mapUnlocked = false;
+            this.mapPanel = null;
+            this.mapVisible = false;
             this.loadState();
             this.markDiscovered(this.player.location);
         }
@@ -293,6 +295,7 @@
             if (this.mapUnlocked) {
                 this.renderAsciiMap();
             }
+            this.renderAsciiMapPanel();
         }
 
         destroy() {
@@ -516,10 +519,10 @@
             this.markDiscovered(this.player.location);
             const exits = Object.keys(room.exits || {}).map(e => e.toUpperCase()).join(', ') || 'NONE';
             const items = (room.items && room.items.length)
-                ? `Items: ${room.items.map(id => this.getItemLabel(id)).join(', ')}`
+                ? `Items: ${room.items.map(id => this.getItemLabel(id, true)).join(', ')}`
                 : 'Items: none visible.';
-            const foe = room.enemy ? `Threat detected: ${room.enemy.name}` : 'Area appears quiet.';
-            this.terminal.print(`\n${room.name}\n${room.desc}\nExits: ${exits}\n${items}\n${foe}`);
+            const foe = room.enemy ? `Threat detected: ${this.getThreatLabel(room.enemy)}` : 'Area appears quiet.';
+            this.terminal.printHTML(`\n${room.name}\n${room.desc}\nExits: ${exits}\n${items}\n${foe}`);
             this.renderHud();
             this.onMove && this.onMove(this.player.location);
             if (this.mapUnlocked) {
@@ -693,6 +696,42 @@
             });
             container.appendChild(toggle);
             this.hudToggle = toggle;
+
+            this.ensureMapPanel();
+        }
+
+        ensureMapPanel() {
+            const container = document.querySelector('.terminal-content');
+            if (!container) return;
+            if (this.mapPanel && this.mapPanel.parentNode !== container) {
+                this.mapPanel.parentNode.removeChild(this.mapPanel);
+                this.mapPanel = null;
+            }
+            if (!this.mapPanel) {
+                const panel = document.createElement('div');
+                panel.className = 'mud-map-panel';
+                const pre = document.createElement('pre');
+                panel.appendChild(pre);
+                container.appendChild(panel);
+                this.mapPanel = panel;
+            }
+            if (this.output) {
+                this.output.addEventListener('click', (e) => {
+                    const target = e.target;
+                    if (target.classList.contains('item-pill') && target.dataset.action === 'take') {
+                        const id = target.dataset.target;
+                        if (id) {
+                            this.terminal.executeCommand(`take ${id}`);
+                        }
+                    }
+                    if (target.classList.contains('threat-pill') && target.dataset.action === 'attack') {
+                        const name = target.dataset.target;
+                        if (name) {
+                            this.terminal.executeCommand(`attack ${name}`);
+                        }
+                    }
+                });
+            }
         }
 
         renderHud() {
@@ -703,7 +742,7 @@
             const mates = this.voidmates.length ? this.voidmates.map(name => `<div>• ${name}</div>`).join('') : '<div>• none</div>';
             this.hud.innerHTML = `
                 <div class="mud-panel">
-                    <h4 class="mud-header-row"><span>VOID M.U.D.</span><button class="mud-reset-btn" data-action="reset-progress">reset progress</button></h4>
+                    <h4 class="mud-header-row"><span>VOID M.U.D.</span><span><button class="mud-map-toggle" data-action="toggle-map">map</button><button class="mud-reset-btn" data-action="reset-progress">reset</button></span></h4>
                     <div class="mud-stat"><span>Handle</span><span>${this.player.name}</span></div>
                     <div class="mud-stat"><span>Location</span><span>${room ? room.name : '???'}</span></div>
                     <div class="mud-divider"></div>
@@ -785,6 +824,15 @@
                     if (window.terminal && typeof window.terminal.endMudSession === 'function') {
                         window.terminal.endMudSession();
                     }
+                });
+            }
+
+            const mapBtn = this.hud.querySelector('.mud-map-toggle[data-action="toggle-map"]');
+            if (mapBtn) {
+                mapBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    this.mapVisible = !this.mapVisible;
+                    this.renderAsciiMapPanel();
                 });
             }
         }
@@ -872,8 +920,13 @@
             return meta && meta.icon ? meta.icon : '•';
         }
 
-        getItemLabel(id) {
-            return `${this.getItemIcon(id)} ${this.getItemName(id)}`;
+        getItemLabel(id, clickable = false) {
+            const icon = this.getItemIcon(id);
+            const name = this.getItemName(id);
+            if (!clickable) {
+                return `${icon} ${name}`;
+            }
+            return `<span class="clickable item-pill" data-action="take" data-target="${id}">${icon} ${name}</span>`;
         }
 
         renderAsciiMap() {
@@ -882,11 +935,12 @@
             }
             const loc = this.player.location;
             const marker = (key, label) => {
-                if (!this.discovered.has(key)) {
-                    return ' .. ';
+                if (!this.discovered.has(key) && !this.mapUnlocked) {
+                    return '     ';
                 }
-                const base = key === loc ? `[${label}]` : ` ${label} `;
-                return key === loc ? `[${label}]` : base;
+                const display = this.discovered.has(key) || this.mapUnlocked ? label : '??';
+                const base = key === loc ? `[${display}]` : ` ${display} `;
+                return base;
             };
             const coords = Object.values(this.world).map(r => r.coords);
             const xs = Array.from(new Set(coords.map(c => c.x))).sort((a, b) => a - b);
@@ -912,10 +966,94 @@
                 ...rows
             ].join('\n');
             this.terminal.print(map);
+            const seenLegend = Object.values(this.world)
+                .filter(room => this.discovered.has(this.getRoomKeyFromCoords(room.coords)))
+                .map(room => `${room.abbr || '???'} = ${room.name}`);
+            this.terminal.print(`Legend: ${seenLegend.length ? seenLegend.join(', ') : '???'}`);
+            this.renderAsciiMapPanel();
+        }
+
+        renderAsciiMapPanel() {
+            if (!this.mapPanel) {
+                return;
+            }
+            this.mapPanel.style.display = this.mapVisible ? 'block' : 'none';
+            if (!this.mapVisible) {
+                this.mapPanel.innerHTML = '';
+                return;
+            }
+            const loc = this.player.location;
+            const rooms = this.world;
+            const coords = Object.values(rooms).map(r => r.coords).filter(Boolean);
+            const xs = Array.from(new Set(coords.map(c => c.x))).sort((a, b) => a - b);
+            const ys = Array.from(new Set(coords.map(c => c.y))).sort((a, b) => b - a);
+            const keyByCoord = {};
+            Object.entries(rooms).forEach(([key, room]) => {
+                if (room.coords) {
+                    keyByCoord[`${room.coords.x},${room.coords.y}`] = key;
+                }
+            });
+
+            const lines = [];
+            ys.forEach(y => {
+                let row = '';
+                xs.forEach((x, idx) => {
+                    const key = keyByCoord[`${x},${y}`];
+                    if (!key) {
+                        row += '       ';
+                        if (idx !== xs.length - 1) {
+                            row += '   ';
+                        }
+                        return;
+                    }
+                    const room = rooms[key];
+                    const discovered = this.mapUnlocked || this.discovered.has(key);
+                    const label = discovered ? (room.abbr || '???') : '??';
+                    const cell = discovered ? `[${label.padEnd(3, ' ')}]` : `[${label}]`;
+                    row += ` ${cell} `;
+                    if (idx !== xs.length - 1) {
+                        const eastKey = keyByCoord[`${x + 1},${y}`];
+                        const eastDiscovered = eastKey && (this.mapUnlocked || this.discovered.has(eastKey));
+                        const hasCorridor = eastKey && room.exits && room.exits.east === eastKey && (discovered || eastDiscovered);
+                        row += hasCorridor ? '────' : '    ';
+                    }
+                });
+                lines.push(row);
+                // vertical connectors
+                if (y !== ys[ys.length - 1]) {
+                    let vertRow = '';
+                    xs.forEach((x, idx) => {
+                        const key = keyByCoord[`${x},${y}`];
+                        const southKey = keyByCoord[`${x},${y - 1}`];
+                        const room = rooms[key];
+                        const southDiscovered = southKey && (this.mapUnlocked || this.discovered.has(southKey));
+                        const hasSouth = key && southKey && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
+                        vertRow += key ? (hasSouth ? '    │    ' : '         ') : '         ';
+                        if (idx !== xs.length - 1) {
+                            vertRow += '    ';
+                        }
+                    });
+                    lines.push(vertRow);
+                }
+            });
+
             const legend = Object.values(this.world)
-                .map(room => `${room.abbr || '???'} = ${room.name}`)
-                .join(', ');
-            this.terminal.print(`Legend: ${legend}`);
+                .filter(room => this.mapUnlocked || this.discovered.has(this.getRoomKeyFromCoords(room.coords)))
+                .map(room => `${room.abbr || '??'} = ${room.name}`)
+                .join('\n');
+
+            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div style="margin-top:6px; font-size:0.75rem; white-space: pre-wrap;">Legend:\n${legend || '???'}</div>`;
+        }
+
+        getRoomKeyFromCoords(coords) {
+            if (!coords) return null;
+            const entry = Object.entries(this.world).find(([, room]) => room.coords && room.coords.x === coords.x && room.coords.y === coords.y);
+            return entry ? entry[0] : null;
+        }
+
+        getThreatLabel(enemy) {
+            if (!enemy) return '';
+            return `<span class="clickable threat-pill" data-action="attack" data-target="${enemy.name}">${enemy.name}</span>`;
         }
 
         printCombatAscii(type) {
@@ -948,6 +1086,7 @@
             if (id === 'field-map') {
                 this.mapUnlocked = true;
             }
+            this.renderAsciiMapPanel();
         }
 
         removeItemFromInventory(id, qty = 1) {
@@ -1076,6 +1215,7 @@
                         this.mapUnlocked = true;
                     }
                 }
+                this.renderAsciiMapPanel();
             } catch (error) {
                 // ignore load errors
             }
