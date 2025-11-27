@@ -3,7 +3,6 @@
         return;
     }
 
-    const styleId = 'void-mud-styles';
     const ITEM_REGISTRY = {
         'med-patch': {
             name: 'med patch',
@@ -117,142 +116,6 @@
             type: 'quest'
         }
     };
-    if (!document.getElementById(styleId)) {
-        const style = document.createElement('style');
-        style.id = styleId;
-        style.textContent = `
-        .mud-hud {
-            position: absolute;
-            top: 8px;
-            right: 12px;
-            display: grid;
-            gap: 8px;
-            z-index: 2;
-            pointer-events: none;
-        }
-        .mud-hud.mobile-hidden {
-            display: none;
-        }
-        .mud-hud-toggle {
-            position: fixed;
-            top: 10px;
-            right: 12px;
-            z-index: 5;
-            padding: 6px 10px;
-            background: rgba(0, 17, 0, 0.9);
-            border: 1px solid rgba(102, 255, 204, 0.6);
-            color: #66ffcc;
-            font-size: 0.85rem;
-            cursor: pointer;
-            box-shadow: 0 0 12px rgba(102, 255, 204, 0.25);
-        }
-        @media (max-width: 768px) {
-            .mud-hud {
-                right: 8px;
-                gap: 6px;
-                width: calc(100vw - 24px);
-                max-width: none;
-            }
-            .mud-panel {
-                width: 100%;
-            }
-            .mud-hud-toggle {
-                top: 8px;
-                right: 8px;
-            }
-        }
-        .mud-panel {
-            background: rgba(0, 17, 0, 0.92);
-            border: 1px solid rgba(102, 255, 204, 0.4);
-            box-shadow: 0 0 12px rgba(102, 255, 204, 0.25);
-            padding: 10px 12px;
-            width: 240px;
-            font-size: 0.82rem;
-            line-height: 1.4;
-            color: #c0ffd1;
-        }
-        .mud-panel h4 {
-            margin: 0 0 4px 0;
-            font-size: 0.95rem;
-            color: #66ffcc;
-            letter-spacing: 0.04em;
-        }
-        .mud-header-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-        .mud-reset-btn {
-            pointer-events: auto;
-            background: rgba(0, 17, 0, 0.6);
-            color: #ffdd99;
-            border: 1px solid rgba(255, 221, 153, 0.6);
-            padding: 2px 6px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            margin-left: 8px;
-        }
-        .mud-stat-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 4px 8px;
-        }
-        .mud-stat {
-            display: flex;
-            justify-content: space-between;
-        }
-        .mud-badge {
-            display: inline-block;
-            padding: 2px 6px;
-            border: 1px solid rgba(255, 255, 102, 0.5);
-            border-radius: 4px;
-            color: #ffffcc;
-            font-size: 0.75rem;
-            margin: 2px 0;
-        }
-        .mud-copy-btn {
-            pointer-events: auto;
-            background: rgba(0, 20, 0, 0.8);
-            color: #66ffcc;
-            border: 1px solid rgba(102, 255, 204, 0.6);
-            padding: 2px 6px;
-            font-size: 0.75rem;
-            cursor: pointer;
-            line-height: 1;
-            margin-left: 6px;
-        }
-        .mud-copy-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .mud-copy-btn.copied {
-            color: #0f0;
-            border-color: rgba(0, 255, 128, 0.8);
-            box-shadow: 0 0 8px rgba(0, 255, 128, 0.5);
-        }
-        .mud-list {
-            margin: 4px 0 0 0;
-            padding-left: 14px;
-        }
-        .mud-list li {
-            margin: 2px 0;
-        }
-        .mud-banner {
-            border: 1px solid rgba(102, 255, 204, 0.35);
-            padding: 10px 12px;
-            margin-bottom: 8px;
-            background: rgba(0, 20, 0, 0.6);
-            box-shadow: 0 0 10px rgba(51, 255, 51, 0.25);
-        }
-        .mud-banner strong {
-            color: #66ffcc;
-        }
-        .mud-divider {
-            margin: 6px 0;
-            border-top: 1px solid rgba(102, 255, 204, 0.2);
-        }`;
-        document.head.appendChild(style);
-    }
 
     class VoidMudGame {
         constructor({ terminal, handle, onExit, onMove }) {
@@ -291,7 +154,6 @@
             this.injectHud();
             this.renderHud();
             this.printIntro();
-            this.describeCurrentRoom();
             if (this.mapUnlocked) {
                 this.renderAsciiMap();
             }
@@ -304,9 +166,13 @@
             }
             this.hud = null;
             if (this.hudToggle && this.hudToggle.parentNode) {
-                this.hudToggle.parentNode.removeChild(this.hudToggle);
+                const container = this.hudToggle.parentNode;
+                if (container && container.parentNode) {
+                    container.parentNode.removeChild(container);
+                }
             }
             this.hudToggle = null;
+            this.mapToggleBtn = null;
         }
 
         createWorld() {
@@ -488,7 +354,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.5-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.6-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -510,6 +376,12 @@
             this.terminal.print(lines.join('\n'));
         }
 
+        getExitLabel(direction, targetKey) {
+            const targetRoom = this.world[targetKey];
+            const tooltip = targetRoom ? targetRoom.name : 'Unknown';
+            return `<span class="clickable exit-pill" data-action="move" data-target="${direction}" title="${tooltip}">${direction.toUpperCase()}</span>`;
+        }
+
         describeCurrentRoom() {
             const room = this.world[this.player.location];
             if (!room) {
@@ -517,12 +389,21 @@
                 return;
             }
             this.markDiscovered(this.player.location);
-            const exits = Object.keys(room.exits || {}).map(e => e.toUpperCase()).join(', ') || 'NONE';
+            const exits = Object.entries(room.exits || {})
+                .map(([dir, target]) => this.getExitLabel(dir, target))
+                .join(', ') || 'NONE';
             const items = (room.items && room.items.length)
-                ? `Items: ${room.items.map(id => this.getItemLabel(id, true)).join(', ')}`
-                : 'Items: none visible.';
-            const foe = room.enemy ? `Threat detected: ${this.getThreatLabel(room.enemy)}` : 'Area appears quiet.';
-            this.terminal.printHTML(`\n${room.name}\n${room.desc}\nExits: ${exits}\n${items}\n${foe}`);
+                ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
+                : 'none visible';
+            const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
+
+            this.terminal.print('');
+            this.terminal.printHTML(`<strong>${room.name}</strong>`);
+            this.terminal.print(room.desc);
+            this.terminal.printHTML(`Exits: ${exits}`);
+            this.terminal.printHTML(`Items: ${items}`);
+            this.terminal.printHTML(foe ? `Threat: ${foe}` : 'Area quiet.');
+
             this.renderHud();
             this.onMove && this.onMove(this.player.location);
             if (this.mapUnlocked) {
@@ -687,14 +568,30 @@
             this.hud.setAttribute('aria-hidden', 'true');
             container.appendChild(this.hud);
 
+            const toggleContainer = document.createElement('div');
+            toggleContainer.className = 'mud-toggle-container';
+
             const toggle = document.createElement('button');
             toggle.className = 'mud-hud-toggle';
-            toggle.textContent = 'HUD';
+            toggle.textContent = 'HUD ▲';
             toggle.addEventListener('click', () => {
                 const isHidden = this.hud.classList.toggle('mobile-hidden');
                 toggle.textContent = isHidden ? 'HUD ▼' : 'HUD ▲';
             });
-            container.appendChild(toggle);
+
+            const mapToggle = document.createElement('button');
+            mapToggle.className = 'mud-hud-toggle mud-map-toggle-btn';
+            mapToggle.textContent = 'MAP ▼';
+            mapToggle.addEventListener('click', () => {
+                this.mapVisible = !this.mapVisible;
+                mapToggle.textContent = this.mapVisible ? 'MAP ▲' : 'MAP ▼';
+                this.renderAsciiMapPanel();
+            });
+            this.mapToggleBtn = mapToggle;
+
+            toggleContainer.appendChild(toggle);
+            toggleContainer.appendChild(mapToggle);
+            container.appendChild(toggleContainer);
             this.hudToggle = toggle;
 
             this.ensureMapPanel();
@@ -715,34 +612,40 @@
                 container.appendChild(panel);
                 this.mapPanel = panel;
             }
-            if (this.output) {
-                this.output.addEventListener('click', (e) => {
-                    const target = e.target;
-                    if (target.classList.contains('item-pill') && target.dataset.action === 'take') {
-                        const id = target.dataset.target;
-                        if (id) {
-                            this.terminal.executeCommand(`take ${id}`);
-                        }
-                    }
-                    if (target.classList.contains('threat-pill') && target.dataset.action === 'attack') {
-                        const name = target.dataset.target;
-                        if (name) {
-                            this.terminal.executeCommand(`attack ${name}`);
-                        }
-                    }
-                });
-            }
+            this.attachTerminalClickHandlers();
+        }
+
+        attachTerminalClickHandlers() {
+            const output = document.getElementById('terminal-output');
+            if (!output || output.dataset.mudClickBound) return;
+            output.dataset.mudClickBound = 'true';
+
+            output.addEventListener('click', (e) => {
+                const target = e.target;
+                if (!target.classList.contains('clickable')) return;
+
+                const action = target.dataset.action;
+                const value = target.dataset.target;
+                if (!action || !value) return;
+
+                if (action === 'take') {
+                    this.terminal.executeCommand(`take ${value}`);
+                } else if (action === 'attack') {
+                    this.terminal.executeCommand(`attack ${value}`);
+                } else if (action === 'move') {
+                    this.terminal.executeCommand(value);
+                }
+            });
         }
 
         renderHud() {
             if (!this.hud) return;
             const room = this.world[this.player.location];
-            const invList = this.getInventoryDisplayList();
-            const items = invList.join(', ') || 'Empty';
+            const invList = this.getInventoryDisplayList(true);
             const mates = this.voidmates.length ? this.voidmates.map(name => `<div>• ${name}</div>`).join('') : '<div>• none</div>';
             this.hud.innerHTML = `
                 <div class="mud-panel">
-                    <h4 class="mud-header-row"><span>VOID M.U.D.</span><span><button class="mud-map-toggle" data-action="toggle-map">map</button><button class="mud-reset-btn" data-action="reset-progress">reset</button></span></h4>
+                    <h4 class="mud-header-row"><span>VOID M.U.D.</span><button class="mud-reset-btn" data-action="reset-progress">reset</button></h4>
                     <div class="mud-stat"><span>Handle</span><span>${this.player.name}</span></div>
                     <div class="mud-stat"><span>Location</span><span>${room ? room.name : '???'}</span></div>
                     <div class="mud-divider"></div>
@@ -753,7 +656,7 @@
                 </div>
                 <div class="mud-panel">
                     <h4>Inventory</h4>
-                    <div>${invList.length ? invList.map(it => `<span class="item-badge">${it}</span>`).join('') : 'Empty'}</div>
+                    <div class="mud-inventory">${invList.length ? invList.map(it => `<span class="item-badge">${it}</span>`).join('') : 'Empty'}</div>
                 </div>
                 <div class="mud-panel">
                     <h4>Voidmates</h4>
@@ -827,12 +730,16 @@
                 });
             }
 
-            const mapBtn = this.hud.querySelector('.mud-map-toggle[data-action="toggle-map"]');
-            if (mapBtn) {
-                mapBtn.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    this.mapVisible = !this.mapVisible;
-                    this.renderAsciiMapPanel();
+            const invContainer = this.hud.querySelector('.mud-inventory');
+            if (invContainer) {
+                invContainer.addEventListener('click', (e) => {
+                    const target = e.target.closest('.inv-pill');
+                    if (target && target.dataset.action === 'use') {
+                        const id = target.dataset.target;
+                        if (id) {
+                            this.terminal.executeCommand(`use ${id}`);
+                        }
+                    }
                 });
             }
         }
@@ -920,13 +827,21 @@
             return meta && meta.icon ? meta.icon : '•';
         }
 
-        getItemLabel(id, clickable = false) {
+        getItemDesc(id) {
+            const meta = ITEM_REGISTRY[id];
+            return meta && meta.desc ? meta.desc : '';
+        }
+
+        getItemLabel(id, clickable = false, action = 'take') {
             const icon = this.getItemIcon(id);
             const name = this.getItemName(id);
+            const desc = this.getItemDesc(id);
             if (!clickable) {
                 return `${icon} ${name}`;
             }
-            return `<span class="clickable item-pill" data-action="take" data-target="${id}">${icon} ${name}</span>`;
+            const tooltip = desc ? ` title="${desc}"` : '';
+            const actionClass = action === 'use' ? 'inv-pill' : 'item-pill';
+            return `<span class="clickable ${actionClass}" data-action="${action}" data-target="${id}"${tooltip}>${icon} ${name}</span>`;
         }
 
         renderAsciiMap() {
@@ -1053,7 +968,8 @@
 
         getThreatLabel(enemy) {
             if (!enemy) return '';
-            return `<span class="clickable threat-pill" data-action="attack" data-target="${enemy.name}">${enemy.name}</span>`;
+            const tooltip = `HP: ${enemy.hp} | ATK: ${enemy.attack}`;
+            return `<span class="clickable threat-pill" data-action="attack" data-target="${enemy.name}" title="${tooltip}">${enemy.name}</span>`;
         }
 
         printCombatAscii(type) {
@@ -1104,9 +1020,9 @@
             return this.player.inventory.find(entry => entry.id === id) || null;
         }
 
-        getInventoryDisplayList() {
+        getInventoryDisplayList(clickable = false) {
             return this.player.inventory.map(entry => {
-                const name = this.getItemLabel(entry.id);
+                const name = this.getItemLabel(entry.id, clickable, 'use');
                 return entry.qty > 1 ? `${name} x${entry.qty}` : name;
             });
         }

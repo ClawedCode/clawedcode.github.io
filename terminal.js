@@ -373,10 +373,13 @@ class Terminal {
         peer.on('open', () => {
             session.meshReady = true;
             this.printHTML('<div class="net-status">Connected to public signaling fabric. Voidmates connect P2P. Signaling server sees IP and link codes. Chat and session progress are private/encrypted.</div>');
-            this.print(`Share with voidmates: link ${peerId}`);
-            this.print('Use `link <code>` to connect voidmates.');
+            this.printHTML(`<div class="net-status">Share with voidmates: link ${peerId}</div>`);
+            this.printHTML('<div class="net-status">Use `link <code>` to connect voidmates.</div>');
             if (session.engine && typeof session.engine.setLinkCode === 'function') {
                 session.engine.setLinkCode(peerId);
+            }
+            if (session.engine && typeof session.engine.describeCurrentRoom === 'function') {
+                session.engine.describeCurrentRoom();
             }
             this.renderMudPopulationStatus();
             setTimeout(() => this.autoConnectSavedLinks(), 200);
@@ -627,30 +630,35 @@ class Terminal {
         return !previousRoom; // indicate newly added
     }
 
-        renderMudPopulationStatus() {
-            if (!this.mudSession) {
-                return;
-            }
-
-            const uniqueNames = Array.from(new Set(Object.entries(this.mudSession.players || {})
-                .filter(([id]) => id !== this.mudSession.peerId)
-                .map(([, p]) => p.name)));
-
-            if (this.mudSession.lastPeerCount !== uniqueNames.length) {
-                if (!uniqueNames.length) {
-                    this.print('No voidmates yet. Share your link code.');
-                }
-                this.mudSession.lastPeerCount = uniqueNames.length;
-            }
-
-            if (this.mudSession.engine && typeof this.mudSession.engine.updatePeerCount === 'function') {
-                this.mudSession.engine.updatePeerCount(uniqueNames.length);
-            }
-
-            if (this.mudSession.engine && typeof this.mudSession.engine.setVoidmates === 'function') {
-                this.mudSession.engine.setVoidmates(uniqueNames);
-            }
+    renderMudPopulationStatus() {
+        if (!this.mudSession) {
+            return;
         }
+
+        const unique = new Map();
+        Object.entries(this.mudSession.players || {})
+            .filter(([id]) => id !== this.mudSession.peerId)
+            .forEach(([, p]) => {
+                unique.set(p.name, { name: p.name, room: p.room });
+            });
+
+        const uniqueNames = Array.from(unique.keys());
+
+        if (this.mudSession.lastPeerCount !== uniqueNames.length) {
+            if (!uniqueNames.length) {
+                this.print('No voidmates yet. Share your link code.');
+            }
+            this.mudSession.lastPeerCount = uniqueNames.length;
+        }
+
+        if (this.mudSession.engine && typeof this.mudSession.engine.updatePeerCount === 'function') {
+            this.mudSession.engine.updatePeerCount(uniqueNames.length);
+        }
+
+        if (this.mudSession.engine && typeof this.mudSession.engine.setVoidmates === 'function') {
+            this.mudSession.engine.setVoidmates(Array.from(unique.values()));
+        }
+    }
 
     loadMudLinkHistory() {
         try {
