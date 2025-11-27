@@ -165,6 +165,21 @@
             color: #66ffcc;
             letter-spacing: 0.04em;
         }
+        .mud-header-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .mud-reset-btn {
+            pointer-events: auto;
+            background: rgba(0, 17, 0, 0.6);
+            color: #ffdd99;
+            border: 1px solid rgba(255, 221, 153, 0.6);
+            padding: 2px 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            margin-left: 8px;
+        }
         .mud-stat-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -673,7 +688,7 @@
             const mates = this.voidmates.length ? this.voidmates.map(name => `<div>• ${name}</div>`).join('') : '<div>• none</div>';
             this.hud.innerHTML = `
                 <div class="mud-panel">
-                    <h4>VOID MUD // LUNAR NODE</h4>
+                    <h4 class="mud-header-row"><span>VOID M.U.D.</span><button class="mud-reset-btn" data-action="reset-progress">reset progress</button></h4>
                     <div class="mud-stat"><span>Handle</span><span>${this.player.name}</span></div>
                     <div class="mud-stat"><span>Location</span><span>${room ? room.name : '???'}</span></div>
                     <div class="mud-divider"></div>
@@ -738,6 +753,22 @@
                         localStorage.removeItem('voidMudLinks');
                         window.terminal.endMudSession();
                         window.terminal.print('Disconnected from voidmates. Use "mud" to restart.');
+                    }
+                });
+            }
+
+            const resetBtn = this.hud.querySelector('.mud-reset-btn[data-action="reset-progress"]');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    try {
+                        localStorage.removeItem('voidMudState');
+                    } catch (error) {
+                        // ignore
+                    }
+                    this.terminal.printHTML('<span class="presence-event">Progress cleared. Use "mud" to restart.</span>');
+                    if (window.terminal && typeof window.terminal.endMudSession === 'function') {
+                        window.terminal.endMudSession();
                     }
                 });
             }
