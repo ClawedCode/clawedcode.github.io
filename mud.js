@@ -437,7 +437,7 @@ I can wait a little longer.`
                     coords: { x: 1, y: 0, z: 0 },
                     desc: 'Columns of frosted glass hum with a frequency that feels wrong—not machine noise, but something organic filtered through circuitry. Status monitors loop "VOID RESEARCH STATION // SAFE" with a timestamp frozen on Day 47.',
                     exits: { west: 'airlock', east: 'lab', south: 'hangar', north: 'observatory', up: { room: 'lift', requires: 'keycard-gamma' } },
-                    items: ['field-map'],
+                    items: [],
                     enemy: null,
                     readable: 'roster'
                 },
@@ -592,7 +592,7 @@ I can wait a little longer.`
                     coords: { x: 3, y: 0, z: 1 },
                     desc: 'Server racks hum with the station\'s memory. Terminals flicker with corrupted logs—fragments of truth hiding in the static. The AI that ran this place is still here, somewhere, watching through dead cameras.',
                     exits: { west: 'lift' },
-                    items: ['data-chip', 'ion-shard'],
+                    items: ['data-chip', 'ion-shard', 'field-map'],
                     enemy: null,
                     readable: 'records'
                 },
