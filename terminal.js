@@ -557,6 +557,13 @@ class Terminal {
             return;
         }
 
+        if (type === 'enemy-sync' && data.room) {
+            if (this.mudSession.engine && typeof this.mudSession.engine.handleEnemySync === 'function') {
+                this.mudSession.engine.handleEnemySync(data.room, data.enemy);
+            }
+            return;
+        }
+
         if (type === 'roster' && Array.isArray(data.players)) {
             for (const entry of data.players) {
                 if (entry && entry.id) {

@@ -168,9 +168,6 @@
             this.injectHud();
             this.renderHud();
             this.printIntro();
-            if (this.mapUnlocked) {
-                this.renderAsciiMap();
-            }
             this.renderAsciiMapPanel();
         }
 
@@ -368,7 +365,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.8-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.9-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -420,9 +417,6 @@
 
             this.renderHud();
             this.onMove && this.onMove(this.player.location);
-            if (this.mapUnlocked) {
-                this.renderAsciiMap();
-            }
             this.renderAsciiMapPanel();
         }
 
@@ -484,7 +478,7 @@
             }
             if (entry.id === 'field-map') {
                 this.mapUnlocked = true;
-                this.renderAsciiMap();
+                this.terminal.print('Map data synced. Station layout now visible.');
             }
             if (result && result.consumed) {
                 this.removeItemFromInventory(entry.id, 1);
@@ -507,6 +501,7 @@
             foe.hp -= playerHit;
             this.terminal.print(`You strike the ${foe.name} for ${playerHit} damage.`);
             this.reportAction(`attacks ${foe.name}`, this.player.location);
+            this.broadcastEnemyState(this.player.location);
             this.printCombatAscii('hit');
 
             if (foe.hp <= 0) {
@@ -519,6 +514,7 @@
                     this.saveState();
                 }
                 room.enemy = null;
+                this.broadcastEnemyState(this.player.location);
                 this.renderHud();
                 return true;
             }
@@ -572,7 +568,15 @@
         injectHud() {
             const container = document.querySelector('.terminal-content');
             if (!container) return;
-            if (this.hud && this.hud.parentNode !== container) {
+
+            // Create sidebar container for HUD and map
+            if (!this.sidebar) {
+                this.sidebar = document.createElement('div');
+                this.sidebar.className = 'mud-sidebar';
+                container.appendChild(this.sidebar);
+            }
+
+            if (this.hud && this.hud.parentNode !== this.sidebar) {
                 this.hud.parentNode.removeChild(this.hud);
                 this.hud = null;
             }
@@ -580,7 +584,7 @@
             this.hud = document.createElement('div');
             this.hud.className = 'mud-hud';
             this.hud.setAttribute('aria-hidden', 'true');
-            container.appendChild(this.hud);
+            this.sidebar.appendChild(this.hud);
 
             const toggleContainer = document.createElement('div');
             toggleContainer.className = 'mud-toggle-container';
@@ -599,6 +603,9 @@
             mapToggle.addEventListener('click', () => {
                 this.mapVisible = !this.mapVisible;
                 mapToggle.textContent = this.mapVisible ? 'MAP ▲' : 'MAP ▼';
+                if (this.mapPanel) {
+                    this.mapPanel.classList.toggle('visible', this.mapVisible);
+                }
                 this.renderAsciiMapPanel();
             });
             this.mapToggleBtn = mapToggle;
@@ -612,9 +619,8 @@
         }
 
         ensureMapPanel() {
-            const container = document.querySelector('.terminal-content');
-            if (!container) return;
-            if (this.mapPanel && this.mapPanel.parentNode !== container) {
+            if (!this.sidebar) return;
+            if (this.mapPanel && this.mapPanel.parentNode !== this.sidebar) {
                 this.mapPanel.parentNode.removeChild(this.mapPanel);
                 this.mapPanel = null;
             }
@@ -623,7 +629,7 @@
                 panel.className = 'mud-map-panel';
                 const pre = document.createElement('pre');
                 panel.appendChild(pre);
-                container.appendChild(panel);
+                this.sidebar.appendChild(panel);
                 this.mapPanel = panel;
             }
             this.attachTerminalClickHandlers();
@@ -915,7 +921,7 @@
             if (!this.mapPanel) {
                 return;
             }
-            this.mapPanel.style.display = this.mapVisible ? 'block' : 'none';
+            this.mapPanel.classList.toggle('visible', this.mapVisible);
             if (!this.mapVisible) {
                 this.mapPanel.innerHTML = '';
                 return;
@@ -1023,11 +1029,11 @@
                 })
                 .map(([, room]) => `${room.abbr}=${room.name}`);
 
-            const legendParts = visibleRooms.length ? visibleRooms.join(' | ') : '???';
+            const legendParts = visibleRooms.length ? visibleRooms.join(', ') : '???';
             const voidmateNames = this.voidmates.map(vm => vm.name).filter(Boolean);
-            const vmLegend = voidmateNames.length ? `<br><span class="map-voidmate">@</span>=voidmate: ${voidmateNames.join(', ')}` : '';
+            const vmLegend = voidmateNames.length ? ` | <span class="map-voidmate">@</span>=${voidmateNames.join(', ')}` : '';
 
-            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you | ${legendParts}${vmLegend}</div>`;
+            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend}<br>${legendParts}</div>`;
         }
 
         getRoomKeyFromCoords(coords) {
@@ -1111,6 +1117,39 @@
                 text,
                 room: roomKey
             });
+        }
+
+        broadcastEnemyState(roomKey) {
+            if (!this.terminal || typeof this.terminal.broadcastMudPresence !== 'function') {
+                return;
+            }
+            const room = this.world[roomKey];
+            this.terminal.broadcastMudPresence('enemy-sync', {
+                room: roomKey,
+                enemy: room && room.enemy ? { name: room.enemy.name, hp: room.enemy.hp } : null
+            });
+        }
+
+        handleEnemySync(roomKey, enemyData) {
+            const room = this.world[roomKey];
+            if (!room) return;
+
+            if (!enemyData) {
+                // Enemy was killed by voidmate
+                if (room.enemy) {
+                    this.terminal.print(`The ${room.enemy.name} collapses from voidmate assault.`);
+                    room.enemy = null;
+                    this.renderHud();
+                }
+                return;
+            }
+
+            if (room.enemy && room.enemy.name === enemyData.name) {
+                // Sync HP to lowest value (enemy took damage)
+                if (enemyData.hp < room.enemy.hp) {
+                    room.enemy.hp = enemyData.hp;
+                }
+            }
         }
 
         saveState(reset = false) {
