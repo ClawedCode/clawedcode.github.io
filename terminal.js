@@ -3087,8 +3087,11 @@ whiskers.exe --activate`;
         });
     }
 
-    executeCommand(cmdLine) {
-        this.print(`<span style="color: #66ffcc;">${this.getPromptLabel()}</span> ${cmdLine}`);
+    executeCommand(cmdLine, silent = false) {
+        // In MUD mode with silent flag, suppress command echo for cleaner output
+        if (!(silent && this.mudSession)) {
+            this.print(`<span style="color: #66ffcc;">${this.getPromptLabel()}</span> ${cmdLine}`);
+        }
 
         const parts = cmdLine.trim().split(/\s+/);
         const cmd = parts[0].toLowerCase();

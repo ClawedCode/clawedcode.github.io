@@ -3,7 +3,7 @@
         return;
     }
 
-    const MUD_VERSION = '1.0.6-pre';
+    const MUD_VERSION = '1.0.7-pre';
 
     const ITEM_REGISTRY = {
         'med-patch': {
@@ -858,15 +858,15 @@ I can wait a little longer.`
                 : (room.items && room.items.length)
                     ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
                     : 'none visible';
-            const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
+            const enemyCard = room.enemy ? this.getEnemyCard(room.enemy) : '';
 
             const roomHtml = `
                 <div class="mud-room-block" data-room="${this.player.location}">
                     <strong>${room.name}</strong>
-                    <div>${roomDesc}</div>
+                    <div class="mud-room-desc">${roomDesc}</div>
                     <div class="mud-room-exits">Exits: ${exits}</div>
                     <div class="mud-room-items">Items: ${items}</div>
-                    <div class="mud-room-threat">${foe ? `Threat: ${foe}` : 'Area quiet.'}</div>
+                    <div class="mud-room-threat">${enemyCard || '<span class="area-quiet">Area quiet.</span>'}</div>
                 </div>
             `.trim();
 
@@ -899,9 +899,9 @@ I can wait a little longer.`
                 : (room.items && room.items.length)
                     ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
                     : 'none visible';
-            const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
+            const enemyCard = room.enemy ? this.getEnemyCard(room.enemy) : '';
 
-            const descEl = block.querySelector('div:nth-child(2)');
+            const descEl = block.querySelector('.mud-room-desc');
             const exitsEl = block.querySelector('.mud-room-exits');
             const itemsEl = block.querySelector('.mud-room-items');
             const threatEl = block.querySelector('.mud-room-threat');
@@ -909,7 +909,7 @@ I can wait a little longer.`
             if (descEl) descEl.innerHTML = roomDesc;
             if (exitsEl) exitsEl.innerHTML = `Exits: ${exits}`;
             if (itemsEl) itemsEl.innerHTML = `Items: ${items}`;
-            if (threatEl) threatEl.innerHTML = foe ? `Threat: ${foe}` : 'Area quiet.';
+            if (threatEl) threatEl.innerHTML = enemyCard || '<span class="area-quiet">Area quiet.</span>';
         }
 
         move(directionRaw) {
@@ -1223,19 +1223,37 @@ I can wait a little longer.`
             output.dataset.mudClickBound = 'true';
 
             output.addEventListener('click', (e) => {
-                const target = e.target;
-                if (!target.classList.contains('clickable')) return;
+                // Handle clickable elements (items, exits, old threat pills)
+                const clickable = e.target.closest('.clickable');
+                if (clickable) {
+                    const action = clickable.dataset.action;
+                    const value = clickable.dataset.target;
+                    if (!action || !value) return;
 
-                const action = target.dataset.action;
-                const value = target.dataset.target;
-                if (!action || !value) return;
+                    if (action === 'take') {
+                        this.terminal.executeCommand(`take ${value}`, true);
+                    } else if (action === 'attack') {
+                        this.terminal.executeCommand(`attack ${value}`, true);
+                    } else if (action === 'move') {
+                        this.terminal.executeCommand(value, true);
+                    }
+                    return;
+                }
 
-                if (action === 'take') {
-                    this.terminal.executeCommand(`take ${value}`);
-                } else if (action === 'attack') {
-                    this.terminal.executeCommand(`attack ${value}`);
-                } else if (action === 'move') {
-                    this.terminal.executeCommand(value);
+                // Handle enemy card action buttons
+                const actionBtn = e.target.closest('.enemy-action-btn');
+                if (actionBtn && !actionBtn.disabled) {
+                    const action = actionBtn.dataset.action;
+                    const value = actionBtn.dataset.target;
+                    if (action === 'attack') {
+                        this.terminal.executeCommand(`attack ${value}`, true);
+                    } else if (action === 'ability') {
+                        if (value === 'scan') {
+                            this.terminal.executeCommand('scan', true);
+                        } else {
+                            this.terminal.executeCommand(`ability ${value}`, true);
+                        }
+                    }
                 }
             });
         }
@@ -1253,6 +1271,10 @@ I can wait a little longer.`
                 const roomLabel = inSameRoom ? '<span class="map-player">(here)</span>' : `<span class="map-voidmate">(${roomName})</span>`;
                 return `<div>• ${name} ${roomLabel}</div>`;
             }).join('') : '<div>• none</div>';
+            const en = this.player.energy;
+            const canSurge = en >= 3;
+            const canEvade = en >= 4;
+            const canScan = en >= 2;
             this.hud.innerHTML = `
                 <div class="mud-panel">
                     <h4 class="mud-header-row"><span>VOID M.U.D.</span><button class="mud-reset-btn" data-action="reset-progress">reset</button></h4>
@@ -1263,6 +1285,12 @@ I can wait a little longer.`
                     <div class="mud-stat"><span>EN</span><span>${this.player.energy}</span></div>
                     <div class="mud-stat"><span>Shield</span><span>${this.player.shield}</span></div>
                     <div class="mud-stat"><span>Weapon</span><span>${this.player.weapon}</span></div>
+                    <div class="mud-divider"></div>
+                    <div class="mud-abilities">
+                        <button class="mud-ability-btn${canSurge ? '' : ' disabled'}" data-action="ability" data-target="surge" ${canSurge ? '' : 'disabled'}>surge <span class="en-cost">3</span></button>
+                        <button class="mud-ability-btn${canEvade ? '' : ' disabled'}" data-action="ability" data-target="evade" ${canEvade ? '' : 'disabled'}>evade <span class="en-cost">4</span></button>
+                        <button class="mud-ability-btn${canScan ? '' : ' disabled'}" data-action="ability" data-target="scan" ${canScan ? '' : 'disabled'}>scan <span class="en-cost">2</span></button>
+                    </div>
                 </div>
                 <div class="mud-panel">
                     <h4>Inventory</h4>
@@ -1345,7 +1373,22 @@ I can wait a little longer.`
                     if (target && target.dataset.action === 'use') {
                         const id = target.dataset.target;
                         if (id) {
-                            this.terminal.executeCommand(`use ${id}`);
+                            this.terminal.executeCommand(`use ${id}`, true);
+                        }
+                    }
+                });
+            }
+
+            const abilitiesContainer = this.hud.querySelector('.mud-abilities');
+            if (abilitiesContainer) {
+                abilitiesContainer.addEventListener('click', (e) => {
+                    const btn = e.target.closest('.mud-ability-btn');
+                    if (btn && !btn.disabled) {
+                        const ability = btn.dataset.target;
+                        if (ability === 'scan') {
+                            this.terminal.executeCommand('scan', true);
+                        } else if (ability) {
+                            this.terminal.executeCommand(`ability ${ability}`, true);
                         }
                     }
                 });
@@ -1620,6 +1663,41 @@ I can wait a little longer.`
             if (!enemy) return '';
             const tooltip = `HP: ${enemy.hp} | ATK: ${enemy.attack}`;
             return `<span class="clickable threat-pill" data-action="attack" data-target="${enemy.name}" title="${tooltip}">${enemy.name}</span>`;
+        }
+
+        getEnemyCard(enemy) {
+            if (!enemy) return '';
+            // Store maxHp on first encounter
+            if (!enemy.maxHp) enemy.maxHp = enemy.hp;
+            const maxHp = enemy.maxHp;
+            const hpPercent = Math.max(0, Math.min(100, (enemy.hp / maxHp) * 100));
+            const hpColor = hpPercent > 50 ? '#66ffcc' : hpPercent > 25 ? '#ffcc66' : '#ff6666';
+            const desc = enemy.desc || 'A hostile entity.';
+            const en = this.player.energy;
+            const canSurge = en >= 3;
+            const canEvade = en >= 4;
+            const canScan = en >= 2;
+            const isInvulnerable = enemy.fearLight;
+
+            return `
+                <div class="mud-enemy-card">
+                    <div class="enemy-header">
+                        <span class="enemy-name">${enemy.name}</span>
+                        <span class="enemy-atk">ATK ${enemy.attack}</span>
+                    </div>
+                    <div class="enemy-hp-bar">
+                        <div class="enemy-hp-fill" style="width: ${hpPercent}%; background: ${hpColor}"></div>
+                        <span class="enemy-hp-text">${enemy.hp} HP</span>
+                    </div>
+                    <div class="enemy-desc">${desc}</div>
+                    <div class="enemy-actions">
+                        <button class="enemy-action-btn attack-btn" data-action="attack" data-target="${enemy.name}" ${isInvulnerable ? 'disabled title="Immune to physical attacks"' : ''}>${isInvulnerable ? '???' : 'attack'}</button>
+                        <button class="enemy-action-btn${canSurge ? '' : ' disabled'}" data-action="ability" data-target="surge" ${canSurge ? '' : 'disabled'}>surge</button>
+                        <button class="enemy-action-btn${canEvade ? '' : ' disabled'}" data-action="ability" data-target="evade" ${canEvade ? '' : 'disabled'}>evade</button>
+                        <button class="enemy-action-btn${canScan ? '' : ' disabled'}" data-action="ability" data-target="scan" ${canScan ? '' : 'disabled'}>scan</button>
+                    </div>
+                </div>
+            `.trim();
         }
 
         printCombatAscii(type) {

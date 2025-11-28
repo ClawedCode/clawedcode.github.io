@@ -135,6 +135,146 @@
     margin: 2px 0;
 }
 
+/* Ability Buttons */
+.mud-abilities {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.mud-ability-btn {
+    pointer-events: auto;
+    background: rgba(0, 40, 20, 0.8);
+    border: 1px solid rgba(102, 255, 204, 0.5);
+    color: #66ffcc;
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+}
+
+.mud-ability-btn:hover:not(.disabled) {
+    background: rgba(102, 255, 204, 0.2);
+    box-shadow: 0 0 8px rgba(102, 255, 204, 0.4);
+}
+
+.mud-ability-btn.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    border-color: rgba(102, 255, 204, 0.2);
+}
+
+.mud-ability-btn .en-cost {
+    opacity: 0.7;
+    font-size: 0.65rem;
+}
+
+/* Enemy Card */
+.mud-enemy-card {
+    background: rgba(60, 20, 20, 0.6);
+    border: 1px solid rgba(255, 102, 102, 0.5);
+    border-radius: 4px;
+    padding: 10px;
+    margin: 8px 0;
+}
+
+.enemy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.enemy-name {
+    color: #ff9966;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
+.enemy-atk {
+    color: #ff6666;
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border: 1px solid rgba(255, 102, 102, 0.4);
+    border-radius: 3px;
+}
+
+.enemy-hp-bar {
+    position: relative;
+    height: 16px;
+    background: rgba(0, 0, 0, 0.4);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.enemy-hp-fill {
+    height: 100%;
+    transition: width 0.3s ease, background 0.3s ease;
+}
+
+.enemy-hp-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.7rem;
+    color: #fff;
+    text-shadow: 0 0 3px #000;
+}
+
+.enemy-desc {
+    color: #cc9999;
+    font-size: 0.8rem;
+    font-style: italic;
+    margin-bottom: 10px;
+    line-height: 1.3;
+}
+
+.enemy-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.enemy-action-btn {
+    background: rgba(40, 20, 20, 0.8);
+    border: 1px solid rgba(255, 102, 102, 0.5);
+    color: #ffaa88;
+    padding: 5px 10px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.15s ease;
+}
+
+.enemy-action-btn:hover:not(.disabled):not(:disabled) {
+    background: rgba(255, 102, 102, 0.2);
+    box-shadow: 0 0 8px rgba(255, 102, 102, 0.4);
+}
+
+.enemy-action-btn.disabled,
+.enemy-action-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.enemy-action-btn.attack-btn {
+    background: rgba(80, 30, 30, 0.8);
+    border-color: rgba(255, 80, 80, 0.6);
+    color: #ff8866;
+}
+
+.enemy-action-btn.attack-btn:hover:not(:disabled) {
+    background: rgba(255, 80, 80, 0.3);
+}
+
+.area-quiet {
+    color: #7a9988;
+    font-style: italic;
+}
+
 /* MUD Banner */
 .mud-banner {
     border: 1px solid rgba(102, 255, 204, 0.35);
