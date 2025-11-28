@@ -365,7 +365,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.9-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.10-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -1019,21 +1019,25 @@
                 }
             });
 
-            // Build compact legend showing only visible rooms
-            const visibleRooms = Object.entries(this.world)
-                .filter(([key, room]) => {
-                    if (!room.coords) return false;
-                    const inView = room.coords.x >= minX && room.coords.x <= maxX && room.coords.y >= minY && room.coords.y <= maxY;
-                    const known = this.mapUnlocked || this.discovered.has(key);
-                    return inView && known;
-                })
-                .map(([, room]) => `${room.abbr}=${room.name}`);
-
-            const legendParts = visibleRooms.length ? visibleRooms.join(', ') : '???';
+            // Build legend with player indicators only
             const voidmateNames = this.voidmates.map(vm => vm.name).filter(Boolean);
             const vmLegend = voidmateNames.length ? ` | <span class="map-voidmate">@</span>=${voidmateNames.join(', ')}` : '';
+            const isFullscreen = this.mapPanel.classList.contains('fullscreen');
+            const fullscreenIcon = isFullscreen ? '⊟' : '⊞';
 
-            this.mapPanel.innerHTML = `<pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend}<br>${legendParts}</div>`;
+            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button><pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend}</div>`;
+            this.attachMapFullscreenHandler();
+        }
+
+        attachMapFullscreenHandler() {
+            if (!this.mapPanel) return;
+            const btn = this.mapPanel.querySelector('.mud-map-fullscreen');
+            if (!btn) return;
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.mapPanel.classList.toggle('fullscreen');
+                this.renderAsciiMapPanel();
+            });
         }
 
         getRoomKeyFromCoords(coords) {

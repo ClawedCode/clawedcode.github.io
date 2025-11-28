@@ -10,6 +10,7 @@
     flex-direction: column;
     gap: 8px;
     pointer-events: none;
+    width: 240px;
 }
 
 /* HUD Container */
@@ -154,19 +155,50 @@
 
 /* Map Panel */
 .mud-map-panel {
+    position: relative;
     display: none;
     background: rgba(0, 8, 0, 0.95);
     border: 1px solid rgba(102, 255, 204, 0.4);
     box-shadow: 0 0 12px rgba(102, 255, 204, 0.25);
     padding: 8px 10px;
     color: #c0ffd1;
-    max-width: 320px;
+    width: 100%;
+    box-sizing: border-box;
     overflow-x: auto;
     pointer-events: auto;
 }
 
 .mud-map-panel.visible {
     display: block;
+}
+
+.mud-map-panel.fullscreen {
+    position: fixed;
+    top: 40px;
+    left: 12px;
+    right: 12px;
+    bottom: 52px;
+    width: auto;
+    max-width: none;
+    z-index: 10;
+}
+
+.mud-map-fullscreen {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: rgba(0, 17, 0, 0.8);
+    border: 1px solid rgba(102, 255, 204, 0.5);
+    color: #66ffcc;
+    font-size: 0.9rem;
+    padding: 2px 6px;
+    cursor: pointer;
+    pointer-events: auto;
+    line-height: 1;
+}
+
+.mud-map-fullscreen:hover {
+    background: rgba(102, 255, 204, 0.2);
 }
 
 .mud-map-panel pre {
