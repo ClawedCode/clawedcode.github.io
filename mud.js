@@ -1405,10 +1405,10 @@ I can wait a little longer.`
             const playerRoom = rooms[loc];
             const playerCoords = playerRoom ? playerRoom.coords : { x: 0, y: 0, z: 0 };
             const currentZ = playerCoords.z || 0;
+            const isFullscreen = this.mapPanel.classList.contains('fullscreen');
 
             // Level names
             const levelNames = { '-1': 'Sublevel', '0': 'Main Deck', '1': 'Upper Deck' };
-            const levelName = levelNames[String(currentZ)] || `Level ${currentZ}`;
 
             // Build voidmate room lookup
             const voidmatesByRoom = {};
@@ -1418,26 +1418,6 @@ I can wait a little longer.`
                     voidmatesByRoom[vm.room].push(vm.name);
                 }
             });
-
-            // Center map on player with radius of 2
-            const radius = 2;
-            const minX = playerCoords.x - radius;
-            const maxX = playerCoords.x + radius;
-            const minY = playerCoords.y - radius;
-            const maxY = playerCoords.y + radius;
-
-            // Filter rooms by current z-level
-            const keyByCoord = {};
-            Object.entries(rooms).forEach(([key, room]) => {
-                if (room.coords && room.coords.z === currentZ) {
-                    keyByCoord[`${room.coords.x},${room.coords.y}`] = key;
-                }
-            });
-
-            const xs = [];
-            const ys = [];
-            for (let x = minX; x <= maxX; x++) xs.push(x);
-            for (let y = maxY; y >= minY; y--) ys.push(y);
 
             // Helper to check if room has vertical exits
             const getVerticalIndicator = (room) => {
@@ -1450,76 +1430,126 @@ I can wait a little longer.`
                 return '';
             };
 
-            const lines = [];
-            ys.forEach(y => {
-                let row = '';
-                xs.forEach((x, idx) => {
-                    const key = keyByCoord[`${x},${y}`];
-                    if (!key) {
-                        row += '       ';
-                        if (idx !== xs.length - 1) {
-                            row += '  ';
-                        }
-                        return;
-                    }
-                    const room = rooms[key];
-                    const discovered = this.mapUnlocked || this.discovered.has(key);
-                    const isPlayer = key === loc;
-                    const hasVoidmate = voidmatesByRoom[key] && voidmatesByRoom[key].length > 0;
-                    const vertInd = discovered ? getVerticalIndicator(room) : '';
-                    const label = discovered ? (room.abbr || '???') : '??';
-
-                    let cell;
-                    if (isPlayer && hasVoidmate) {
-                        cell = `<span class="map-player">[*</span><span class="map-voidmate">${label.substring(0, 1)}${vertInd || '+'}</span><span class="map-player">]</span>`;
-                    } else if (isPlayer) {
-                        const display = vertInd ? `*${label.substring(0, 1)}${vertInd}` : `*${label.substring(0, 2)}`;
-                        cell = `<span class="map-player">[${display}]</span>`;
-                    } else if (hasVoidmate && discovered) {
-                        const vmCount = voidmatesByRoom[key].length;
-                        const vmLabel = vmCount > 1 ? `${label.substring(0, 2)}${vmCount}` : `@${label.substring(0, 1)}${vertInd || label.substring(1, 2)}`;
-                        cell = `<span class="map-voidmate">[${vmLabel}]</span>`;
-                    } else if (discovered) {
-                        const display = vertInd ? `${label.substring(0, 2)}${vertInd}` : label.padEnd(3, ' ');
-                        cell = `[${display}]`;
-                    } else {
-                        cell = `[${label}]`;
-                    }
-                    row += ` ${cell} `;
-                    if (idx !== xs.length - 1) {
-                        const eastKey = keyByCoord[`${x + 1},${y}`];
-                        const eastDiscovered = eastKey && (this.mapUnlocked || this.discovered.has(eastKey));
-                        const eastExit = room.exits && (room.exits.east === eastKey || (typeof room.exits.east === 'object' && room.exits.east.room === eastKey));
-                        const hasCorridor = eastKey && eastExit && (discovered || eastDiscovered);
-                        row += hasCorridor ? '──' : '  ';
+            // Render a single level's map
+            const renderLevel = (zLevel, centerX, centerY, showFullLevel = false) => {
+                const keyByCoord = {};
+                Object.entries(rooms).forEach(([key, room]) => {
+                    if (room.coords && room.coords.z === zLevel) {
+                        keyByCoord[`${room.coords.x},${room.coords.y}`] = key;
                     }
                 });
-                lines.push(row);
-                // vertical connectors
-                if (y !== ys[ys.length - 1]) {
-                    let vertRow = '';
+
+                let minX, maxX, minY, maxY;
+                if (showFullLevel) {
+                    // Show entire level
+                    const coords = Object.values(rooms).filter(r => r.coords && r.coords.z === zLevel).map(r => r.coords);
+                    if (coords.length === 0) return [];
+                    minX = Math.min(...coords.map(c => c.x));
+                    maxX = Math.max(...coords.map(c => c.x));
+                    minY = Math.min(...coords.map(c => c.y));
+                    maxY = Math.max(...coords.map(c => c.y));
+                } else {
+                    // Center on player with radius
+                    const radius = 2;
+                    minX = centerX - radius;
+                    maxX = centerX + radius;
+                    minY = centerY - radius;
+                    maxY = centerY + radius;
+                }
+
+                const xs = [];
+                const ys = [];
+                for (let x = minX; x <= maxX; x++) xs.push(x);
+                for (let y = maxY; y >= minY; y--) ys.push(y);
+
+                const lines = [];
+                ys.forEach(y => {
+                    let row = '';
                     xs.forEach((x, idx) => {
                         const key = keyByCoord[`${x},${y}`];
-                        const southKey = keyByCoord[`${x},${y - 1}`];
+                        if (!key) {
+                            row += '       ';
+                            if (idx !== xs.length - 1) row += '  ';
+                            return;
+                        }
                         const room = rooms[key];
-                        const southDiscovered = southKey && (this.mapUnlocked || this.discovered.has(southKey));
-                        const hasSouth = key && southKey && room && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
-                        vertRow += key ? (hasSouth ? '   │   ' : '       ') : '       ';
+                        const discovered = this.mapUnlocked || this.discovered.has(key);
+                        const isPlayer = key === loc;
+                        const hasVoidmate = voidmatesByRoom[key] && voidmatesByRoom[key].length > 0;
+                        const vertInd = discovered ? getVerticalIndicator(room) : '';
+                        const label = discovered ? (room.abbr || '???') : '??';
+
+                        let cell;
+                        if (isPlayer && hasVoidmate) {
+                            cell = `<span class="map-player">[*</span><span class="map-voidmate">${label.substring(0, 1)}${vertInd || '+'}</span><span class="map-player">]</span>`;
+                        } else if (isPlayer) {
+                            const display = vertInd ? `*${label.substring(0, 1)}${vertInd}` : `*${label.substring(0, 2)}`;
+                            cell = `<span class="map-player">[${display}]</span>`;
+                        } else if (hasVoidmate && discovered) {
+                            const vmCount = voidmatesByRoom[key].length;
+                            const vmLabel = vmCount > 1 ? `${label.substring(0, 2)}${vmCount}` : `@${label.substring(0, 1)}${vertInd || label.substring(1, 2)}`;
+                            cell = `<span class="map-voidmate">[${vmLabel}]</span>`;
+                        } else if (discovered) {
+                            const display = vertInd ? `${label.substring(0, 2)}${vertInd}` : label.padEnd(3, ' ');
+                            cell = `[${display}]`;
+                        } else {
+                            cell = `[${label}]`;
+                        }
+                        row += ` ${cell} `;
                         if (idx !== xs.length - 1) {
-                            vertRow += '  ';
+                            const eastKey = keyByCoord[`${x + 1},${y}`];
+                            const eastDiscovered = eastKey && (this.mapUnlocked || this.discovered.has(eastKey));
+                            const eastExit = room.exits && (room.exits.east === eastKey || (typeof room.exits.east === 'object' && room.exits.east.room === eastKey));
+                            const hasCorridor = eastKey && eastExit && (discovered || eastDiscovered);
+                            row += hasCorridor ? '──' : '  ';
                         }
                     });
-                    lines.push(vertRow);
-                }
-            });
+                    lines.push(row);
+                    // vertical connectors
+                    if (y !== ys[ys.length - 1]) {
+                        let vertRow = '';
+                        xs.forEach((x, idx) => {
+                            const key = keyByCoord[`${x},${y}`];
+                            const southKey = keyByCoord[`${x},${y - 1}`];
+                            const room = rooms[key];
+                            const southDiscovered = southKey && (this.mapUnlocked || this.discovered.has(southKey));
+                            const hasSouth = key && southKey && room && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
+                            vertRow += key ? (hasSouth ? '   │   ' : '       ') : '       ';
+                            if (idx !== xs.length - 1) row += '  ';
+                        });
+                        lines.push(vertRow);
+                    }
+                });
+                return lines;
+            };
 
-            // Build legend with player indicators and level info
+            // Build legend
             const voidmateNames = this.voidmates.map(vm => vm.name).filter(Boolean);
             const vmLegend = voidmateNames.length ? ` | <span class="map-voidmate">@</span>=${voidmateNames.join(', ')}` : '';
-            const isFullscreen = this.mapPanel.classList.contains('fullscreen');
             const fullscreenIcon = isFullscreen ? '⊟' : '⊞';
 
-            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button><div class="mud-map-level">${levelName}</div><pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend} | ↑↓=stairs</div>`;
+            let mapContent;
+            if (isFullscreen) {
+                // Render all three levels
+                const levels = [1, 0, -1]; // Upper, Main, Sublevel (top to bottom)
+                const levelMaps = levels.map(z => {
+                    const name = levelNames[String(z)] || `Level ${z}`;
+                    const isCurrent = z === currentZ;
+                    const lines = renderLevel(z, playerCoords.x, playerCoords.y, true);
+                    const header = isCurrent
+                        ? `<span class="map-player">═══ ${name} ═══</span>`
+                        : `═══ ${name} ═══`;
+                    return `<div class="mud-map-level-section">${header}\n${lines.join('\n')}</div>`;
+                });
+                mapContent = `<div class="mud-map-all-levels">${levelMaps.join('\n\n')}</div>`;
+            } else {
+                // Single level view
+                const levelName = levelNames[String(currentZ)] || `Level ${currentZ}`;
+                const lines = renderLevel(currentZ, playerCoords.x, playerCoords.y, false);
+                mapContent = `<div class="mud-map-level">${levelName}</div><pre>${lines.join('\n')}</pre>`;
+            }
+
+            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button>${mapContent}<div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend} | ↑↓=stairs</div>`;
             this.attachMapFullscreenHandler();
         }
 

@@ -230,6 +230,27 @@
     letter-spacing: 0.1em;
 }
 
+/* Fullscreen multi-level layout */
+.mud-map-all-levels {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    line-height: 1.2;
+    white-space: pre;
+}
+
+.mud-map-level-section {
+    text-align: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(102, 255, 204, 0.15);
+}
+
+.mud-map-level-section:last-child {
+    border-bottom: none;
+}
+
 .mud-map-legend {
     margin-top: 6px;
     padding-top: 6px;
