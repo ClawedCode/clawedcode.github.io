@@ -1283,14 +1283,11 @@ I can wait a little longer.`
             if (resetBtn) {
                 resetBtn.addEventListener('click', (e) => {
                     e.preventDefault();
-                    try {
-                        localStorage.removeItem('voidMudState');
-                    } catch (error) {
-                        // ignore
-                    }
-                    this.terminal.printHTML('<span class="presence-event">Progress cleared. Use "mud" to restart.</span>');
-                    if (window.terminal && typeof window.terminal.endMudSession === 'function') {
+                    localStorage.removeItem('voidMudState');
+                    this.terminal.printHTML('<span class="presence-event">Progress cleared. Restarting...</span>');
+                    if (window.terminal) {
                         window.terminal.endMudSession();
+                        setTimeout(() => window.terminal.startMudSession(), 100);
                     }
                 });
             }
