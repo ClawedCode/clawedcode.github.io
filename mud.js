@@ -447,7 +447,7 @@ I can wait a little longer.`
                     coords: { x: 2, y: 0, z: 0 },
                     desc: 'Biostasis pods hiss with labored breathing. Pod 7 is cracked, its occupant gone but leaving black spores that drift like thoughts given form. A whiteboard shows frantic equations—Dr. Chen was calculating the mass of consciousness.',
                     exits: { west: 'atrium', east: 'reactor', south: 'maintenance' },
-                    items: ['med-patch', 'keycard-alpha'],
+                    items: ['med-patch'],
                     enemy: { name: 'Spore Warden', hp: 11, attack: 4, loot: 'bio-sample', desc: 'Dr. Chen\'s research assistant, transformed while guarding specimens. The smile is wrong, but the eyes still recognize you.' },
                     readable: 'terminal'
                 },
@@ -602,8 +602,8 @@ I can wait a little longer.`
                     coords: { x: 2, y: 1, z: 1 },
                     desc: 'Panoramic viewports show Earth in shadow—smaller than you remember, older than it should be. Main controls are dark. The captain\'s chair faces the void, and something sits in it. Something that remembers being human.',
                     exits: { south: 'lift' },
-                    items: ['pulse-rifle'],
-                    enemy: { name: 'Bridge Guardian', hp: 20, attack: 6, loot: 'stim-pack', desc: 'The station\'s final officer, fused with the command systems. It will defend this bridge until the stars burn out. It has nothing else.' },
+                    items: ['pulse-rifle', 'stim-pack'],
+                    enemy: { name: 'Bridge Guardian', hp: 20, attack: 6, loot: 'keycard-alpha', desc: 'The station\'s final officer, fused with the command systems. It will defend this bridge until the stars burn out. It has nothing else.' },
                     readable: 'captain-log'
                 }
             };
