@@ -193,10 +193,11 @@
 }
 
 .mud-map-fullscreen {
-    position: absolute;
+    position: sticky;
     top: 4px;
-    right: 4px;
-    background: rgba(0, 17, 0, 0.8);
+    float: right;
+    margin: -4px -4px 4px 4px;
+    background: rgba(0, 17, 0, 0.9);
     border: 1px solid rgba(102, 255, 204, 0.5);
     color: #66ffcc;
     font-size: 0.9rem;
@@ -204,6 +205,7 @@
     cursor: pointer;
     pointer-events: auto;
     line-height: 1;
+    z-index: 1;
 }
 
 .mud-map-fullscreen:hover {

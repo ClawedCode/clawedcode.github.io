@@ -159,7 +159,7 @@
             this.discovered = new Set();
             this.mapUnlocked = false;
             this.mapPanel = null;
-            this.mapVisible = false;
+            this.mapVisible = true;
             this.loadState();
             this.markDiscovered(this.player.location);
         }
@@ -299,8 +299,12 @@
             }
 
             if (lower === 'exit' || lower === 'quit') {
-                this.terminal.print('You seal the airlock and step away from the console.');
-                if (this.onExit) this.onExit();
+                if (this.player.location !== 'escape-bay') {
+                    this.terminal.print('No exit here. Find the escape bay.');
+                    return true;
+                }
+                this.terminal.print('The console blinks: AUTHORIZATION REQUIRED.');
+                this.terminal.print('Use `use keycard-alpha` to launch.');
                 return true;
             }
 
@@ -365,7 +369,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.11-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.12-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -636,7 +640,7 @@
 
             const mapToggle = document.createElement('button');
             mapToggle.className = 'mud-hud-toggle mud-map-toggle-btn';
-            mapToggle.textContent = 'MAP ▼';
+            mapToggle.textContent = 'MAP ▲';
             mapToggle.addEventListener('click', () => {
                 this.mapVisible = !this.mapVisible;
                 mapToggle.textContent = this.mapVisible ? 'MAP ▲' : 'MAP ▼';
