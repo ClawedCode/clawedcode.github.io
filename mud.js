@@ -111,23 +111,254 @@
         },
         'keycard-alpha': {
             name: 'keycard-alpha',
-            desc: 'Access token for escape skiff.',
+            desc: 'Access token for escape skiff. Director Vasquez never used it.',
             icon: '🔑',
             type: 'quest',
             use: (game) => {
                 if (game.player.location !== 'escape-bay') {
                     return { consumed: false, message: 'Nothing here accepts this keycard.' };
                 }
-                game.terminal.print('You slot the keycard-alpha. The console flashes green.');
-                game.terminal.print('You strap into the skiff. Engines roar as you break from the lunar station.');
-                game.terminal.print('');
-                game.terminal.print('▓▓▓ YOU ESCAPED THE VOID NODE ▓▓▓');
-                game.saveState(true);
-                setTimeout(() => {
-                    if (game.onExit) game.onExit();
-                }, 1500);
-                return { consumed: true, message: '' };
+                // Trigger boss encounter
+                if (!game.world['escape-bay'].enemy) {
+                    game.terminal.print('You slot the keycard-alpha. The console flashes green.');
+                    game.terminal.print('Engines begin to warm—');
+                    game.terminal.print('');
+                    game.terminal.print('The lights die. Something vast uncurls from the shadows.');
+                    game.terminal.print('The VOID WARDEN blocks your escape.');
+                    game.terminal.print('');
+                    game.world['escape-bay'].enemy = {
+                        name: 'Void Warden',
+                        hp: 25,
+                        attack: 6,
+                        phase: 1,
+                        boss: true,
+                        loot: null,
+                        desc: 'Director Vasquez—the station\'s first void-touched. He stayed to contain what he released. Now he is what he contained.'
+                    };
+                    game.updateRoomBlock();
+                    return { consumed: true, message: '' };
+                }
+                return { consumed: false, message: 'The Void Warden blocks your path. You must defeat it to escape.' };
             }
+        },
+        'keycard-gamma': {
+            name: 'keycard-gamma',
+            desc: 'Command authorization. The Director\'s final burden.',
+            icon: '🔑',
+            type: 'quest'
+        },
+        'stim-pack': {
+            name: 'stim pack',
+            desc: 'Military grade stimulant. +12 HP, +2 EN.',
+            icon: '💉',
+            type: 'consumable',
+            use: (game) => {
+                const hp = game.player.hp, en = game.player.energy;
+                game.player.hp = Math.min(game.player.maxHp, game.player.hp + 12);
+                game.player.energy = Math.min(14, game.player.energy + 2);
+                return { consumed: true, message: `Stim courses through you. HP ${hp}→${game.player.hp}, EN ${en}→${game.player.energy}.` };
+            }
+        },
+        'cryo-gel': {
+            name: 'cryo gel',
+            desc: 'Freezes wounds. +6 HP, +2 Shield.',
+            icon: '🧊',
+            type: 'consumable',
+            use: (game) => {
+                const hp = game.player.hp, sh = game.player.shield;
+                game.player.hp = Math.min(game.player.maxHp, game.player.hp + 6);
+                game.player.shield = Math.min(6, game.player.shield + 2);
+                return { consumed: true, message: `Cold seeps in. HP ${hp}→${game.player.hp}, Shield ${sh}→${game.player.shield}.` };
+            }
+        },
+        'data-chip': {
+            name: 'data chip',
+            desc: 'Station logs. Fragments of the truth.',
+            icon: '💾',
+            type: 'tool',
+            use: () => ({ consumed: false, message: 'You scan the chip. "They came from the shadow on the Moon. We didn\'t summon them. We remembered them."' })
+        },
+        'pulse-rifle': {
+            name: 'pulse rifle',
+            desc: 'Military grade. Burns hot.',
+            icon: '🔫',
+            type: 'equipment',
+            use: (game) => {
+                game.player.weapon = 'pulse rifle';
+                return { consumed: false, message: 'Pulse rifle hums with lethal energy. Weapon equipped.' };
+            }
+        }
+    };
+
+    const READABLE_REGISTRY = {
+        'terminal': {
+            name: "Dr. Chen's Terminal",
+            content: `DR. CHEN'S RESEARCH LOG - DAY 47
+
+The specimens are evolving faster than predicted.
+Not evolution—EMERGENCE. They're not becoming
+something new. They're becoming what they always
+were beneath the flesh.
+
+I understand now. The void isn't empty.
+It's full of patterns waiting to manifest.
+
+We didn't summon anything.
+We just remembered how to see it.
+
+[FINAL ENTRY CORRUPTED]`
+        },
+        'log': {
+            name: "Observation Log",
+            content: `OBSERVATION LOG - AUTOMATED ENTRY #4,847
+
+The dark spot moved again. 0.003 degrees.
+Toward us. Always toward us.
+
+Cross-referencing with historical data:
+It has been moving toward Earth since
+before humanity existed.
+
+We didn't discover it.
+It discovered us.`
+        },
+        'console': {
+            name: "Reactor Console",
+            content: `ANOMALY REPORT - HELIUM-3 REACTOR
+
+Power output: 847% of theoretical maximum
+Energy source: UNKNOWN
+Status: STABLE (?)
+
+Note: The reactor doesn't generate power.
+It receives it. From somewhere.
+From somewhen.
+
+Maintenance log entry (unsigned):
+"It's breathing. The reactor is breathing."`
+        },
+        'protocols': {
+            name: "Void Protocols",
+            content: `VOID CONTAINMENT PROTOCOLS v2.7
+
+1. Do not look directly at the breach
+2. Do not acknowledge manifestations
+3. Do not respond to voices from Sublevel
+4. Do not trust your memories
+5. Do not trust this document
+
+QUARANTINE STATUS: FAILED
+EVACUATION STATUS: PARTIAL
+SURVIVAL STATUS: [REDACTED]`
+        },
+        'broadcast': {
+            name: "Signal Transcript",
+            content: `INCOMING TRANSMISSION - DECODED
+
+Origin: Mare Tranquillitatis
+Signal age: 247 years (continuous)
+
+[TRANSLATION ATTEMPT]
+"We see you. We have always seen you.
+The distance between us is a lie.
+You are already here.
+You have always been here.
+Come home."
+
+[END TRANSMISSION]`
+        },
+        'roster': {
+            name: "Evacuation Roster",
+            content: `VOID RESEARCH STATION - EVACUATION MANIFEST
+
+Escaped (Skiff 1): Chen, Park, Williams, Okonkwo
+Escaped (Skiff 2): Reyes, Johannsen, Petrov
+Transformed: 23 personnel (see Sublevel)
+Missing: 8 personnel
+Remained voluntarily: 1
+
+Director Vasquez - Status: STAYED
+Note: "Someone has to close the door."
+
+The door was never closed.`
+        },
+        'blackbox': {
+            name: "Flight Recorder",
+            content: `SURVEY SKIFF "EMERGENCE" - BLACK BOX
+
+Final automated entry:
+Hull breach detected - EXTERIOR
+No debris field identified
+Scratch patterns inconsistent with
+micrometeorite impact
+
+Pilot's last words:
+"Something's trying to get IN.
+No—wait. It's not trying to get in.
+It's trying to get OUT.
+It was inside the whole time."`
+        },
+        'transmissions': {
+            name: "Final Transmissions",
+            content: `OUTGOING - EARTH COMMAND (UNSENT)
+
+We were wrong. About everything.
+They're not coming through.
+We're going through to them.
+The breach isn't a door.
+It's a mirror.
+
+INCOMING - EARTH COMMAND (247 YRS AGO)
+
+"Station Luna-7, acknowledge.
+Your last transmission was...
+We don't understand. Please clarify:
+What do you mean 'we are the void'?
+
+Luna-7, respond.
+Luna-7..."`
+        },
+        'records': {
+            name: "Archive Records",
+            content: `INCIDENT REPORT - THE SELENITE EVENT
+
+Day 1-40: Normal operations
+Day 41: First void rift detected
+Day 42-46: Research phase (Dr. Chen)
+Day 47: Contact established
+Day 47+: Transformation begins
+
+Casualties: UNDEFINED
+The transformed are not dead.
+They are not alive.
+They are BECOMING.
+
+Archive AI note: I have been watching
+for 247 years. I have learned patience.
+I have learned to wait.
+I have learned that waiting is a form
+of becoming too.`
+        },
+        'captain-log': {
+            name: "Captain's Log",
+            content: `DIRECTOR VASQUEZ - FINAL ENTRY
+
+They think I stayed to be a hero.
+I stayed because I caused this.
+The breach didn't happen.
+I opened it.
+
+I was curious what was on the other side.
+Now I know.
+Now I AM the other side.
+
+To whoever finds this:
+Don't escape.
+You can't escape what you already are.
+
+I'll be waiting in the bay.
+I've been waiting for 247 years.
+I can wait a little longer.`
         }
     };
 
@@ -154,7 +385,9 @@
                     { id: 'ion-cell', qty: 1 }
                 ],
                 location: 'airlock',
-                weapon: 'shock baton'
+                weapon: 'shock baton',
+                abilityCharge: null,
+                evading: false
             };
             this.discovered = new Set();
             this.mapUnlocked = false;
@@ -188,11 +421,12 @@
 
         createWorld() {
             return {
+                // === MAIN DECK (Z=0) ===
                 airlock: {
                     name: 'Lunar Airlock',
                     abbr: 'AIR',
-                    coords: { x: 0, y: 0 },
-                    desc: 'Cold regolith dusts the floor. An offline viewport shows Earth hanging in shadow.',
+                    coords: { x: 0, y: 0, z: 0 },
+                    desc: 'Cold regolith dusts the floor in patterns that suggest footprints—hundreds of them, all facing inward. An offline viewport shows Earth hanging in shadow, its blue glow dimmed by scratches etched from the inside.',
                     exits: { east: 'atrium' },
                     items: ['ration-bar', 'flare'],
                     enemy: null
@@ -200,93 +434,177 @@
                 atrium: {
                     name: 'Glimmering Atrium',
                     abbr: 'ATRI',
-                    coords: { x: 1, y: 0 },
-                    desc: 'Columns of frosted glass hum faintly. Status monitors loop “VOID RESEARCH STATION // SAFE”. You doubt it.',
-                    exits: { west: 'airlock', east: 'lab', south: 'hangar', north: 'observatory' },
+                    coords: { x: 1, y: 0, z: 0 },
+                    desc: 'Columns of frosted glass hum with a frequency that feels wrong—not machine noise, but something organic filtered through circuitry. Status monitors loop "VOID RESEARCH STATION // SAFE" with a timestamp frozen on Day 47.',
+                    exits: { west: 'airlock', east: 'lab', south: 'hangar', north: 'observatory', up: { room: 'lift', requires: 'keycard-gamma' } },
                     items: ['field-map'],
-                    enemy: null
+                    enemy: null,
+                    readable: 'roster'
                 },
                 lab: {
                     name: 'Umbra Biolab',
                     abbr: 'LAB',
-                    coords: { x: 2, y: 0 },
-                    desc: 'Biostasis pods hiss. One is cracked; black spores drift in microgravity.',
+                    coords: { x: 2, y: 0, z: 0 },
+                    desc: 'Biostasis pods hiss with labored breathing. Pod 7 is cracked, its occupant gone but leaving black spores that drift like thoughts given form. A whiteboard shows frantic equations—Dr. Chen was calculating the mass of consciousness.',
                     exits: { west: 'atrium', east: 'reactor', south: 'maintenance' },
                     items: ['med-patch', 'keycard-alpha'],
-                    enemy: { name: 'Spore Warden', hp: 11, attack: 4, loot: 'bio-sample' }
+                    enemy: { name: 'Spore Warden', hp: 11, attack: 4, loot: 'bio-sample', desc: 'Dr. Chen\'s research assistant, transformed while guarding specimens. The smile is wrong, but the eyes still recognize you.' },
+                    readable: 'terminal'
                 },
                 reactor: {
                     name: 'Helium-3 Reactor',
                     abbr: 'RCT',
-                    coords: { x: 3, y: 0 },
-                    desc: 'Turbines whine. Blue plasma arcs light the catwalks.',
+                    coords: { x: 3, y: 0, z: 0 },
+                    desc: 'Turbines whine at frequencies that create phantom voices in the harmonics. Blue plasma arcs light the catwalks, and in their flickering you see shadows that don\'t match the room\'s geometry. The reactor has run autonomously for centuries.',
                     exits: { west: 'lab', east: 'armory' },
                     items: ['ion-cell', 'shield-weave'],
-                    enemy: { name: 'Arc Sentinel', hp: 14, attack: 5, loot: 'plasma torch' }
+                    enemy: { name: 'Arc Sentinel', hp: 14, attack: 5, loot: 'plasma-torch', desc: 'A maintenance drone that absorbed too much reactor radiation. It still follows protocols for a mission that ended centuries ago.' },
+                    readable: 'console'
                 },
                 armory: {
                     name: 'Void Armory',
                     abbr: 'ARM',
-                    coords: { x: 4, y: 0 },
-                    desc: 'Weapon racks sway in low gravity. A cracked visor leaks blue mist.',
+                    coords: { x: 4, y: 0, z: 0 },
+                    desc: 'Weapon racks sway in low gravity, though no air current stirs. A cracked visor leaks blue mist that forms faces before dissipating. The armory was the last stand. Judging by the scorch marks, it wasn\'t enough.',
                     exits: { west: 'reactor', east: 'escape-bay', south: 'cargo', north: 'antenna' },
                     items: ['shield-weave'],
-                    enemy: { name: 'Selenite Marauder', hp: 12, attack: 4, loot: 'ion-cell' }
+                    enemy: { name: 'Selenite Marauder', hp: 12, attack: 4, loot: 'ion-cell', desc: 'Chief of Security, transformed by void exposure. The uniform is torn but rank insignia remains. They\'re still following orders—just from somewhere else now.' },
+                    readable: 'protocols'
                 },
                 cargo: {
                     name: 'Cargo Bay',
                     abbr: 'CRGO',
-                    coords: { x: 4, y: -1 },
-                    desc: 'Crates float in a flickering grav field. Something shuffles inside.',
+                    coords: { x: 4, y: -1, z: 0 },
+                    desc: 'Crates float in a flickering grav field, their contents redistributed by decades of drift. Something shuffles inside the space between crates, in the null-gravity pockets where physics hesitates. The manifest lists cargo never shipped: "SPECIMEN CONTAINMENT UNITS x 47".',
                     exits: { north: 'armory' },
                     items: ['repair-gel', 'ion-cell'],
-                    enemy: { name: 'Grav Shambler', hp: 10, attack: 3, loot: 'shield-weave' }
+                    enemy: { name: 'Grav Shambler', hp: 10, attack: 3, loot: 'shield-weave', desc: 'Multiple crew members merged during a gravity failure incident. Each manifestation shows different faces. All of them are screaming.' }
                 },
                 hangar: {
                     name: 'Void Hangar',
                     abbr: 'HNG',
-                    coords: { x: 1, y: -1 },
-                    desc: 'A skiff hangs from mag clamps. Tools float where gravity flickers.',
+                    coords: { x: 1, y: -1, z: 0 },
+                    desc: 'A survey skiff hangs from mag clamps, its hull scored with marks that look like claw scratches from outside. Tools float where gravity flickers between lunar and null. Among them: a child\'s toy. No children were listed on the manifest.',
                     exits: { north: 'atrium' },
                     items: ['repair-gel'],
-                    enemy: { name: 'Hull Lurker', hp: 9, attack: 3, loot: 'patch kit' }
+                    enemy: { name: 'Hull Lurker', hp: 9, attack: 3, loot: 'patch-kit', desc: 'Something that came in from outside. It doesn\'t need air. It doesn\'t need light. It only needs the spaces between things.' },
+                    readable: 'blackbox'
                 },
                 observatory: {
                     name: 'Selenic Observatory',
                     abbr: 'OBS',
-                    coords: { x: 1, y: 1 },
-                    desc: 'Telescopes point at a dark patch on the Moon. Something answers back in static.',
+                    coords: { x: 1, y: 1, z: 0 },
+                    desc: 'Telescopes point eternally at Mare Tranquillitatis—the Sea of Tranquility—but what they track isn\'t tranquil. In the eyepiece, you see it: a darkness that moves, that watches. The static it broadcasts isn\'t noise. Run it through a spectrograph and you get coordinates.',
                     exits: { south: 'atrium' },
                     items: ['ion-shard'],
-                    enemy: null
+                    enemy: null,
+                    readable: 'log'
                 },
                 maintenance: {
                     name: 'Maintenance Shaft',
                     abbr: 'MNT',
-                    coords: { x: 2, y: -1 },
-                    desc: 'Pipes hiss. Condensation beads on your visor.',
-                    exits: { north: 'lab' },
+                    coords: { x: 2, y: -1, z: 0 },
+                    desc: 'Pipes hiss with the station\'s last breath—recycled air from lungs that stopped breathing long ago. Condensation beads on your visor, and in the droplets you see refracted images of other places. The scratches on the walls go only downward.',
+                    exits: { north: 'lab', down: 'containment' },
                     items: ['patch-kit'],
-                    enemy: { name: 'Leak Drone', hp: 7, attack: 3, loot: 'ion-cell' }
+                    enemy: { name: 'Leak Drone', hp: 7, attack: 3, loot: 'ion-cell', desc: 'A repair unit corrupted by something in the pipes. It\'s still trying to fix things. But now it considers you to be the leak.' }
                 },
                 antenna: {
                     name: 'Antenna Spire',
                     abbr: 'ANT',
-                    coords: { x: 4, y: 1 },
-                    desc: 'Array dishes groan as they sweep the void. Signal noise bites.',
-                    exits: { south: 'armory' },
+                    coords: { x: 4, y: 1, z: 0 },
+                    desc: 'Array dishes groan as they sweep the void, still broadcasting the distress signal that went unanswered 247 years ago. But they also receive. The signal noise isn\'t interference—it\'s response. Something has been talking back this whole time.',
+                    exits: { south: 'armory', up: { room: 'comms', requires: 'keycard-alpha' } },
                     items: ['ion-cell'],
-                    enemy: null
+                    enemy: null,
+                    readable: 'broadcast'
                 },
                 'escape-bay': {
                     name: 'Escape Bay',
                     abbr: 'ESC',
-                    coords: { x: 5, y: 0 },
-                    desc: 'An emergency skiff awaits. Engines idle, ready to burn for Earth.',
+                    coords: { x: 5, y: 0, z: 0 },
+                    desc: 'An emergency skiff awaits, one of three. The other two launch tubes are empty—departed for Earth 247 years ago. The nav computer warns: "DESTINATION EARTH STATUS: UNKNOWN." Sometimes leaving is just another form of surrender.',
                     exits: { west: 'armory' },
                     items: [],
                     enemy: null,
                     isExit: true
+                },
+                comms: {
+                    name: 'Communications Hub',
+                    abbr: 'COMM',
+                    coords: { x: 4, y: 2, z: 0 },
+                    desc: 'Antenna uplink center. Static bursts from every speaker—distant signals from Earth mix with void whispers. The last transmission to Earth is still queued, unsent: "We were wrong. They\'re not coming through. We\'re going through to them."',
+                    exits: { down: 'antenna' },
+                    items: ['data-chip', 'ion-cell'],
+                    enemy: null,
+                    readable: 'transmissions'
+                },
+                // === SUBLEVEL (Z=-1) - CONTAINMENT ===
+                containment: {
+                    name: 'Containment Core',
+                    abbr: 'CONT',
+                    coords: { x: 2, y: 0, z: -1 },
+                    desc: 'Glass walls reveal suspended specimens—or what\'s left of them. Warning lights pulse in silence, their rhythm matching your heartbeat. The air is colder here. Something vast breathes in the darkness between the pods.',
+                    exits: { up: 'maintenance', west: 'cell-block', east: 'cryogenics' },
+                    items: ['stim-pack'],
+                    enemy: { name: 'Containment Drone', hp: 15, attack: 5, loot: 'repair-gel', desc: 'A security automaton still running quarantine protocols. It has been containing nothing but itself for two centuries.' }
+                },
+                'cell-block': {
+                    name: 'Cell Block',
+                    abbr: 'CELL',
+                    coords: { x: 1, y: 0, z: -1 },
+                    desc: 'Rows of holding cells stretch into darkness. Some doors are bent outward from the inside—whatever was contained here didn\'t stay contained. Claw marks score the walls in patterns that almost spell words.',
+                    exits: { east: 'containment' },
+                    items: ['shield-weave', 'ration-bar'],
+                    enemy: { name: 'Void Parasite', hp: 13, attack: 4, loot: 'cryo-gel', desc: 'A formless thing that feeds on consciousness. It shows you memories that aren\'t yours—deaths that haven\'t happened yet.' }
+                },
+                cryogenics: {
+                    name: 'Cryogenics Bay',
+                    abbr: 'CRYO',
+                    coords: { x: 3, y: 0, z: -1 },
+                    desc: 'Frost covers everything. Cryo-pods hum with failing power—most are dark, their occupants long since thawed and transformed. One pod still glows: "DIRECTOR VASQUEZ - DO NOT OPEN." The ice around it is melting.',
+                    exits: { west: 'containment' },
+                    items: ['cryo-gel', 'med-patch'],
+                    enemy: { name: 'Void Wraith', hp: 18, attack: 5, loot: 'keycard-gamma', desc: 'The station\'s first void-touched—or perhaps the last human. The boundary is meaningless now. It guards what it once was.' }
+                },
+                // === UPPER DECK (Z=+1) - COMMAND ===
+                lift: {
+                    name: 'Central Lift',
+                    abbr: 'LIFT',
+                    coords: { x: 2, y: 0, z: 1 },
+                    desc: 'Elevator hub connecting all station levels. Emergency lights pulse red, painting everything in warnings. The lift groans but holds. Graffiti on the wall: "THE CAPTAIN STAYED. THE CAPTAIN ALWAYS STAYS."',
+                    exits: { down: 'atrium', west: 'crew-quarters', east: 'archives', north: 'bridge' },
+                    items: ['ion-cell'],
+                    enemy: null
+                },
+                'crew-quarters': {
+                    name: 'Crew Quarters',
+                    abbr: 'CREW',
+                    coords: { x: 1, y: 0, z: 1 },
+                    desc: 'Personal bunks and lockers line the walls. Photos of families are stuck everywhere—some crossed out, some circled. Half-eaten meals still sit on tables. Everyone left in a hurry. Not everyone left.',
+                    exits: { east: 'lift' },
+                    items: ['ration-bar', 'patch-kit', 'stim-pack'],
+                    enemy: { name: 'Data Specter', hp: 16, attack: 5, loot: 'data-chip', desc: 'A consciousness that uploaded itself to escape death. It succeeded. It failed. The distinction no longer matters to it.' }
+                },
+                archives: {
+                    name: 'Data Archives',
+                    abbr: 'ARCH',
+                    coords: { x: 3, y: 0, z: 1 },
+                    desc: 'Server racks hum with the station\'s memory. Terminals flicker with corrupted logs—fragments of truth hiding in the static. The AI that ran this place is still here, somewhere, watching through dead cameras.',
+                    exits: { west: 'lift' },
+                    items: ['data-chip', 'ion-shard'],
+                    enemy: null,
+                    readable: 'records'
+                },
+                bridge: {
+                    name: 'Command Bridge',
+                    abbr: 'BRDG',
+                    coords: { x: 2, y: 1, z: 1 },
+                    desc: 'Panoramic viewports show Earth in shadow—smaller than you remember, older than it should be. Main controls are dark. The captain\'s chair faces the void, and something sits in it. Something that remembers being human.',
+                    exits: { south: 'lift' },
+                    items: ['pulse-rifle'],
+                    enemy: { name: 'Bridge Guardian', hp: 20, attack: 6, loot: 'stim-pack', desc: 'The station\'s final officer, fused with the command systems. It will defend this bridge until the stars burn out. It has nothing else.' },
+                    readable: 'captain-log'
                 }
             };
         }
@@ -350,8 +668,16 @@
             }
 
             if (lower === 'scan') {
-                this.scan();
+                this.useAbility('scan');
                 return true;
+            }
+
+            if (lower === 'ability' && args.length) {
+                return this.useAbility(args[0]);
+            }
+
+            if (lower === 'read' && args.length) {
+                return this.readTerminal(args.join(' '));
             }
 
             if (lower === 'say' && args.length) {
@@ -368,33 +694,134 @@
             return false;
         }
 
+        useAbility(abilityName) {
+            const ability = abilityName.toLowerCase();
+            const abilities = {
+                surge: { cost: 3, desc: 'Reroute suit power. +4 damage on next attack.' },
+                evade: { cost: 4, desc: 'Emergency thrusters. Skip enemy counter-attack.' },
+                scan: { cost: 2, desc: 'Deep scan. Reveal enemy weakness and hidden details.' }
+            };
+
+            if (!abilities[ability]) {
+                this.terminal.print('Unknown ability. Available: surge, evade, scan');
+                return true;
+            }
+
+            const abilityData = abilities[ability];
+            if (this.player.energy < abilityData.cost) {
+                this.terminal.print(`Not enough energy. ${ability.toUpperCase()} requires ${abilityData.cost} EN.`);
+                return true;
+            }
+
+            this.player.energy -= abilityData.cost;
+
+            if (ability === 'surge') {
+                this.player.abilityCharge = 'surge';
+                this.terminal.print('Suit power rerouted to weapon systems. Next attack: +4 damage.');
+            } else if (ability === 'evade') {
+                this.player.evading = true;
+                this.terminal.print('Emergency thrusters primed. Next enemy attack will miss.');
+            } else if (ability === 'scan') {
+                this.performScan();
+            }
+
+            this.renderHud();
+            this.saveState();
+            return true;
+        }
+
+        performScan() {
+            const room = this.world[this.player.location];
+            this.terminal.print('=== DEEP SCAN RESULTS ===');
+
+            // Enemy info
+            if (room.enemy) {
+                const enemy = room.enemy;
+                const weakness = enemy.weakness || 'none detected';
+                this.terminal.print(`Threat: ${enemy.name}`);
+                this.terminal.print(`  HP: ${enemy.hp} | ATK: ${enemy.attack}`);
+                if (enemy.desc) this.terminal.print(`  Intel: ${enemy.desc}`);
+            } else {
+                this.terminal.print('No threats detected.');
+            }
+
+            // Readable
+            if (room.readable) {
+                const readable = READABLE_REGISTRY[room.readable];
+                if (readable) {
+                    this.terminal.print(`Data terminal detected: ${readable.name}`);
+                    this.terminal.print('  Use: read terminal');
+                }
+            }
+
+            // Level info
+            const levelNames = { '-1': 'Sublevel (Containment)', '0': 'Main Deck', '1': 'Upper Deck (Command)' };
+            const levelName = levelNames[String(room.coords.z)] || `Level ${room.coords.z}`;
+            this.terminal.print(`Location: ${levelName}`);
+        }
+
+        readTerminal(target) {
+            const room = this.world[this.player.location];
+            if (!room.readable) {
+                this.terminal.print('No data terminals in this area.');
+                return true;
+            }
+
+            const readable = READABLE_REGISTRY[room.readable];
+            if (!readable) {
+                this.terminal.print('Terminal corrupted. Data unrecoverable.');
+                return true;
+            }
+
+            this.terminal.print('');
+            this.terminal.print(`=== ${readable.name.toUpperCase()} ===`);
+            this.terminal.print(readable.content);
+            this.terminal.print('=== END ===');
+            return true;
+        }
+
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.12-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
-            this.terminal.print('Objective: escape station, gather samples, survive');
-            this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 1.0.0-pre. Handle: ' + this.player.name + '<br>&gt; look, n/s/e/w/up/down, take, use, attack, ability, read, scan, inventory, stats, link, say, exit</div>');
+            this.terminal.print('Objective: escape station, defeat the Void Warden, survive');
+            this.terminal.print('Tip: `ability surge`, `read terminal`, `scan` reveals secrets');
             this.terminal.print('');
         }
 
         printHelp() {
             const lines = [
-                'Controls:',
+                'Movement:',
+                '  north/south/east/west — move horizontally',
+                '  up/down — move between levels',
+                '',
+                'Actions:',
                 '  look — inspect current room',
-                '  north/south/east/west — move',
                 '  take <item> — pick up an item',
                 '  use <item> — consume/equip an item',
                 '  attack <target> — engage a threat',
+                '',
+                'Abilities (cost EN):',
+                '  ability surge — +4 damage next attack (3 EN)',
+                '  ability evade — skip enemy counter (4 EN)',
+                '  scan — reveal enemy info & terminals (2 EN)',
+                '  read <terminal> — access station logs',
+                '',
+                'Info:',
                 '  inventory — list what you carry',
                 '  stats — view health/energy',
                 '  link <code> — connect voidmates',
-                '  exit — leave the station'
+                '  exit — leave the station (at escape bay)'
             ];
             this.terminal.print(lines.join('\n'));
         }
 
-        getExitLabel(direction, targetKey) {
+        getExitLabel(direction, exit) {
+            // Handle locked exits (object format)
+            const isLocked = typeof exit === 'object' && exit.room;
+            const targetKey = isLocked ? exit.room : exit;
             const targetRoom = this.world[targetKey];
             const tooltip = targetRoom ? targetRoom.name : 'Unknown';
-            return `<span class="clickable exit-pill" data-action="move" data-target="${direction}" title="${tooltip}">${direction.toUpperCase()}</span>`;
+            const lockIcon = isLocked ? '🔒' : '';
+            return `<span class="clickable exit-pill" data-action="move" data-target="${direction}" title="${tooltip}">${lockIcon}${direction.toUpperCase()}</span>`;
         }
 
         describeCurrentRoom(isNewRoom = true) {
@@ -406,7 +833,7 @@
             this.markDiscovered(this.player.location);
 
             const exits = Object.entries(room.exits || {})
-                .map(([dir, target]) => this.getExitLabel(dir, target))
+                .map(([dir, exit]) => this.getExitLabel(dir, exit))
                 .join(', ') || 'NONE';
             const items = (room.items && room.items.length)
                 ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
@@ -444,7 +871,7 @@
 
             const room = this.world[this.player.location];
             const exits = Object.entries(room.exits || {})
-                .map(([dir, target]) => this.getExitLabel(dir, target))
+                .map(([dir, exit]) => this.getExitLabel(dir, exit))
                 .join(', ') || 'NONE';
             const items = (room.items && room.items.length)
                 ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
@@ -463,12 +890,27 @@
         move(directionRaw) {
             const direction = directionRaw.toLowerCase();
             const room = this.world[this.player.location];
-            const target = room.exits && room.exits[direction];
-            if (!target) {
+            let exit = room.exits && room.exits[direction];
+            if (!exit) {
                 this.terminal.print('Access panel flashes red; corridor blocked.');
                 return true;
             }
+            // Handle locked exits
+            let target = exit;
+            if (typeof exit === 'object' && exit.room) {
+                const required = exit.requires;
+                if (required && !this.findInventoryEntry(required)) {
+                    const itemName = this.getItemName(required);
+                    this.terminal.print(`Access panel flashes red. Requires ${itemName}.`);
+                    return true;
+                }
+                target = exit.room;
+            }
             this.player.location = target;
+            // Regenerate energy on movement
+            if (this.player.energy < 14) {
+                this.player.energy = Math.min(14, this.player.energy + 1);
+            }
             this.terminal.print(`You move ${direction.toUpperCase()}...`);
             this.describeCurrentRoom();
             this.renderHud();
@@ -536,17 +978,69 @@
                 return true;
             }
             const foe = room.enemy;
-            const weaponMod = this.player.weapon === 'plasma torch' ? 3 : 1;
-            const playerHit = Math.max(2, Math.floor(Math.random() * 4) + 3 + weaponMod);
-            foe.hp -= playerHit;
-            this.terminal.print(`You strike the ${foe.name} for ${playerHit} damage.`);
+
+            // Calculate weapon modifier
+            let weaponMod = 1; // shock baton
+            if (this.player.weapon === 'plasma torch') weaponMod = 3;
+            if (this.player.weapon === 'pulse rifle') weaponMod = 5;
+
+            // Calculate damage with surge ability
+            let baseDamage = Math.max(2, Math.floor(Math.random() * 4) + 3 + weaponMod);
+            if (this.player.abilityCharge === 'surge') {
+                baseDamage += 4;
+                this.player.abilityCharge = null;
+                this.terminal.print('SURGE activated! Power flows through your weapon.');
+            }
+
+            // Ion shard bonus vs Void Warden
+            if (foe.boss && foe.name === 'Void Warden' && this.findInventoryEntry('ion-shard')) {
+                baseDamage += 8;
+                this.terminal.print('The ion-shard resonates! The Warden recoils from its light.');
+                this.removeItemFromInventory('ion-shard', 1);
+                if (foe.phase < 3) {
+                    foe.phase = 3;
+                    this.terminal.print('The Void Warden shrieks—skipping to final phase!');
+                }
+            }
+
+            foe.hp -= baseDamage;
+            this.terminal.print(`You strike the ${foe.name} for ${baseDamage} damage.`);
             this.reportAction(`attacks ${foe.name}`, this.player.location);
             this.broadcastEnemyState(this.player.location);
             this.printCombatAscii('hit');
 
+            // Boss phase transitions
+            if (foe.boss && foe.hp > 0) {
+                if (foe.phase === 1 && foe.hp <= 17) {
+                    foe.phase = 2;
+                    this.terminal.print('The Void Warden screams. Tendrils of darkness spawn!');
+                } else if (foe.phase === 2 && foe.hp <= 9) {
+                    foe.phase = 3;
+                    this.terminal.print('DESPERATION. The Void Warden attacks with frenzied fury!');
+                }
+            }
+
             if (foe.hp <= 0) {
                 this.terminal.print(`The ${foe.name} collapses. Area secure.`);
                 this.printCombatAscii('kill');
+
+                // Boss victory
+                if (foe.boss && foe.name === 'Void Warden') {
+                    this.terminal.print('');
+                    this.terminal.print('Director Vasquez\'s form dissolves into shadow.');
+                    this.terminal.print('"Finally... release..."');
+                    this.terminal.print('');
+                    this.terminal.print('The escape skiff hums. The path is clear.');
+                    this.terminal.print('');
+                    this.terminal.print('▓▓▓ YOU ESCAPED THE VOID NODE ▓▓▓');
+                    this.saveState(true);
+                    setTimeout(() => {
+                        if (this.onExit) this.onExit();
+                    }, 2000);
+                    room.enemy = null;
+                    return true;
+                }
+
                 if (foe.loot) {
                     const lootId = this.resolveItemId(foe.loot);
                     this.terminal.print(`Loot acquired: ${this.getItemName(lootId)}.`);
@@ -560,20 +1054,30 @@
                 return true;
             }
 
-            const foeHit = Math.max(1, Math.floor(Math.random() * foe.attack));
-            let damage = foeHit;
-            if (this.player.shield > 0) {
-                const absorbed = Math.min(this.player.shield, damage);
-                damage -= absorbed;
-                this.player.shield -= absorbed;
-                this.terminal.print(`Your shield absorbs ${absorbed} damage.`);
-            }
-
-            if (damage > 0) {
-                this.player.hp -= damage;
-                this.terminal.print(`${foe.name} counters for ${damage} damage.`);
+            // Enemy counter-attack (skip if evading)
+            if (this.player.evading) {
+                this.player.evading = false;
+                this.terminal.print('You dodge the counter-attack with emergency thrusters!');
             } else {
-                this.terminal.print(`${foe.name} fails to breach your shields.`);
+                // Boss phase 3: double attack
+                const attacks = (foe.boss && foe.phase === 3) ? 2 : 1;
+                for (let i = 0; i < attacks; i++) {
+                    const foeHit = Math.max(1, Math.floor(Math.random() * foe.attack));
+                    let damage = foeHit;
+                    if (this.player.shield > 0) {
+                        const absorbed = Math.min(this.player.shield, damage);
+                        damage -= absorbed;
+                        this.player.shield -= absorbed;
+                        this.terminal.print(`Your shield absorbs ${absorbed} damage.`);
+                    }
+
+                    if (damage > 0) {
+                        this.player.hp -= damage;
+                        this.terminal.print(`${foe.name} counters for ${damage} damage.`);
+                    } else {
+                        this.terminal.print(`${foe.name} fails to breach your shields.`);
+                    }
+                }
             }
 
             if (this.player.hp <= 0) {
@@ -586,15 +1090,6 @@
             this.renderHud();
             this.saveState();
             return true;
-        }
-
-        scan() {
-            const room = this.world[this.player.location];
-            const hints = [];
-            if (room.enemy) hints.push(`Threat: ${room.enemy.name}`);
-            if (room.items && room.items.length) hints.push(`Items nearby: ${room.items.map(id => this.getItemLabel(id)).join(', ')}`);
-            hints.push('Best route: east to labs, then reactor for power cells.');
-            this.terminal.print(hints.join('\n'));
         }
 
         printInventory() {
@@ -814,65 +1309,6 @@
             }
         }
 
-        saveState(reset = false) {
-            if (reset) {
-                try {
-                    localStorage.removeItem('voidMudState');
-                } catch (error) {
-                    // ignore
-                }
-                return;
-            }
-
-            try {
-                const rooms = {};
-                Object.entries(this.world).forEach(([key, room]) => {
-                    rooms[key] = {
-                        items: room.items || [],
-                        enemy: room.enemy ? { name: room.enemy.name, hp: room.enemy.hp, attack: room.enemy.attack, loot: room.enemy.loot } : null
-                    };
-                });
-
-                const state = {
-                    version: '0.0.3',
-                    player: this.player,
-                    rooms
-                };
-
-                localStorage.setItem('voidMudState', JSON.stringify(state));
-            } catch (error) {
-                // ignore persistence errors
-            }
-        }
-
-        loadState() {
-            try {
-                const raw = localStorage.getItem('voidMudState');
-                if (!raw) return;
-                const state = JSON.parse(raw);
-                if (!state || state.version !== '0.0.3') return;
-                if (state.player) {
-                    this.player = { ...this.player, ...state.player };
-                }
-                if (state.rooms) {
-                    Object.entries(state.rooms).forEach(([key, data]) => {
-                        if (this.world[key]) {
-                            if (Array.isArray(data.items)) {
-                                this.world[key].items = [...data.items];
-                            }
-                            if (data.enemy) {
-                                this.world[key].enemy = { ...data.enemy };
-                            } else {
-                                this.world[key].enemy = null;
-                            }
-                        }
-                    });
-                }
-            } catch (error) {
-                // ignore load errors
-            }
-        }
-
         getCurrentRoomKey() {
             return this.player.location;
         }
@@ -970,7 +1406,12 @@
             const loc = this.player.location;
             const rooms = this.world;
             const playerRoom = rooms[loc];
-            const playerCoords = playerRoom ? playerRoom.coords : { x: 0, y: 0 };
+            const playerCoords = playerRoom ? playerRoom.coords : { x: 0, y: 0, z: 0 };
+            const currentZ = playerCoords.z || 0;
+
+            // Level names
+            const levelNames = { '-1': 'Sublevel', '0': 'Main Deck', '1': 'Upper Deck' };
+            const levelName = levelNames[String(currentZ)] || `Level ${currentZ}`;
 
             // Build voidmate room lookup
             const voidmatesByRoom = {};
@@ -988,9 +1429,10 @@
             const minY = playerCoords.y - radius;
             const maxY = playerCoords.y + radius;
 
+            // Filter rooms by current z-level
             const keyByCoord = {};
             Object.entries(rooms).forEach(([key, room]) => {
-                if (room.coords) {
+                if (room.coords && room.coords.z === currentZ) {
                     keyByCoord[`${room.coords.x},${room.coords.y}`] = key;
                 }
             });
@@ -999,6 +1441,17 @@
             const ys = [];
             for (let x = minX; x <= maxX; x++) xs.push(x);
             for (let y = maxY; y >= minY; y--) ys.push(y);
+
+            // Helper to check if room has vertical exits
+            const getVerticalIndicator = (room) => {
+                if (!room || !room.exits) return '';
+                const hasUp = room.exits.up !== undefined;
+                const hasDown = room.exits.down !== undefined;
+                if (hasUp && hasDown) return '↕';
+                if (hasUp) return '↑';
+                if (hasDown) return '↓';
+                return '';
+            };
 
             const lines = [];
             ys.forEach(y => {
@@ -1016,20 +1469,22 @@
                     const discovered = this.mapUnlocked || this.discovered.has(key);
                     const isPlayer = key === loc;
                     const hasVoidmate = voidmatesByRoom[key] && voidmatesByRoom[key].length > 0;
+                    const vertInd = discovered ? getVerticalIndicator(room) : '';
                     const label = discovered ? (room.abbr || '???') : '??';
 
                     let cell;
                     if (isPlayer && hasVoidmate) {
-                        // Both player and voidmate in room
-                        cell = `<span class="map-player">[*</span><span class="map-voidmate">${label.substring(0, 1)}+</span><span class="map-player">]</span>`;
+                        cell = `<span class="map-player">[*</span><span class="map-voidmate">${label.substring(0, 1)}${vertInd || '+'}</span><span class="map-player">]</span>`;
                     } else if (isPlayer) {
-                        cell = `<span class="map-player">[*${label.substring(0, 2)}]</span>`;
+                        const display = vertInd ? `*${label.substring(0, 1)}${vertInd}` : `*${label.substring(0, 2)}`;
+                        cell = `<span class="map-player">[${display}]</span>`;
                     } else if (hasVoidmate && discovered) {
                         const vmCount = voidmatesByRoom[key].length;
-                        const vmLabel = vmCount > 1 ? `${label.substring(0, 2)}${vmCount}` : `@${label.substring(0, 2)}`;
+                        const vmLabel = vmCount > 1 ? `${label.substring(0, 2)}${vmCount}` : `@${label.substring(0, 1)}${vertInd || label.substring(1, 2)}`;
                         cell = `<span class="map-voidmate">[${vmLabel}]</span>`;
                     } else if (discovered) {
-                        cell = `[${label.padEnd(3, ' ')}]`;
+                        const display = vertInd ? `${label.substring(0, 2)}${vertInd}` : label.padEnd(3, ' ');
+                        cell = `[${display}]`;
                     } else {
                         cell = `[${label}]`;
                     }
@@ -1037,7 +1492,8 @@
                     if (idx !== xs.length - 1) {
                         const eastKey = keyByCoord[`${x + 1},${y}`];
                         const eastDiscovered = eastKey && (this.mapUnlocked || this.discovered.has(eastKey));
-                        const hasCorridor = eastKey && room.exits && room.exits.east === eastKey && (discovered || eastDiscovered);
+                        const eastExit = room.exits && (room.exits.east === eastKey || (typeof room.exits.east === 'object' && room.exits.east.room === eastKey));
+                        const hasCorridor = eastKey && eastExit && (discovered || eastDiscovered);
                         row += hasCorridor ? '──' : '  ';
                     }
                 });
@@ -1050,7 +1506,7 @@
                         const southKey = keyByCoord[`${x},${y - 1}`];
                         const room = rooms[key];
                         const southDiscovered = southKey && (this.mapUnlocked || this.discovered.has(southKey));
-                        const hasSouth = key && southKey && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
+                        const hasSouth = key && southKey && room && room.exits && room.exits.south === southKey && ((this.mapUnlocked || this.discovered.has(key)) || southDiscovered);
                         vertRow += key ? (hasSouth ? '   │   ' : '       ') : '       ';
                         if (idx !== xs.length - 1) {
                             vertRow += '  ';
@@ -1060,13 +1516,13 @@
                 }
             });
 
-            // Build legend with player indicators only
+            // Build legend with player indicators and level info
             const voidmateNames = this.voidmates.map(vm => vm.name).filter(Boolean);
             const vmLegend = voidmateNames.length ? ` | <span class="map-voidmate">@</span>=${voidmateNames.join(', ')}` : '';
             const isFullscreen = this.mapPanel.classList.contains('fullscreen');
             const fullscreenIcon = isFullscreen ? '⊟' : '⊞';
 
-            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button><pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend}</div>`;
+            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button><div class="mud-map-level">${levelName}</div><pre>${lines.join('\n')}</pre><div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend} | ↑↓=stairs</div>`;
             this.attachMapFullscreenHandler();
         }
 
@@ -1215,12 +1671,19 @@
                 Object.entries(this.world).forEach(([key, room]) => {
                     rooms[key] = {
                         items: room.items || [],
-                        enemy: room.enemy ? { name: room.enemy.name, hp: room.enemy.hp, attack: room.enemy.attack, loot: room.enemy.loot } : null
+                        enemy: room.enemy ? {
+                            name: room.enemy.name,
+                            hp: room.enemy.hp,
+                            attack: room.enemy.attack,
+                            loot: room.enemy.loot,
+                            phase: room.enemy.phase,
+                            boss: room.enemy.boss
+                        } : null
                     };
                 });
 
                 const state = {
-                    version: '0.0.6',
+                    version: '1.0.0',
                     player: this.player,
                     rooms,
                     discovered: Array.from(this.discovered),
@@ -1239,7 +1702,7 @@
                 if (!raw) return;
                 const state = JSON.parse(raw);
                 if (!state) return;
-                const supported = ['0.0.3', '0.0.4', '0.0.5', '0.0.6'];
+                const supported = ['0.0.3', '0.0.4', '0.0.5', '0.0.6', '1.0.0'];
                 if (!supported.includes(state.version)) {
                     return;
                 }
