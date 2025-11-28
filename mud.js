@@ -3,7 +3,7 @@
         return;
     }
 
-    const MUD_VERSION = '1.0.8-pre';
+    const MUD_VERSION = '1.0.9-pre';
 
     const ITEM_REGISTRY = {
         'med-patch': {
@@ -746,33 +746,29 @@ I can wait a little longer.`
 
         performScan() {
             const room = this.world[this.player.location];
-            this.terminal.print('=== DEEP SCAN RESULTS ===');
+            const results = [];
 
-            // Enemy info
-            if (room.enemy) {
-                const enemy = room.enemy;
-                enemy.scanned = true; // Mark as scanned to reveal stats
-                this.terminal.print(`Threat: ${enemy.name}`);
-                this.terminal.print(`  HP: ${enemy.hp} | ATK: ${enemy.attack}`);
-                if (enemy.desc) this.terminal.print(`  Intel: ${enemy.desc}`);
-                this.updateRoomBlock(); // Update card to show revealed stats
-            } else {
-                this.terminal.print('No threats detected.');
+            // Enemy info - mark as scanned and update card
+            if (room.enemy && !room.enemy.defeated) {
+                room.enemy.scanned = true;
+                this.updateRoomBlock();
+                results.push(`Threat analyzed: ${room.enemy.name}`);
             }
 
             // Readable
             if (room.readable) {
                 const readable = READABLE_REGISTRY[room.readable];
                 if (readable) {
-                    this.terminal.print(`Data terminal detected: ${readable.name}`);
-                    this.terminal.print('  Use: read terminal');
+                    results.push(`Terminal detected: ${readable.name} (read terminal)`);
                 }
             }
 
             // Level info
             const levelNames = { '-1': 'Sublevel (Containment)', '0': 'Main Deck', '1': 'Upper Deck (Command)' };
             const levelName = levelNames[String(room.coords.z)] || `Level ${room.coords.z}`;
-            this.terminal.print(`Location: ${levelName}`);
+            results.push(`Location: ${levelName}`);
+
+            this.terminal.print(results.join(' | '));
         }
 
         readTerminal(target) {
@@ -1003,7 +999,7 @@ I can wait a little longer.`
 
         attack(targetRaw) {
             const room = this.world[this.player.location];
-            if (!room.enemy) {
+            if (!room.enemy || room.enemy.defeated) {
                 this.terminal.print('No hostiles here. Save your strength.');
                 return true;
             }
@@ -1068,7 +1064,8 @@ I can wait a little longer.`
             }
 
             if (foe.hp <= 0) {
-                this.terminal.print(`The ${foe.name} collapses. Area secure.`);
+                foe.hp = 0;
+                foe.defeated = true;
                 this.printCombatAscii('kill');
 
                 // Boss victory
@@ -1084,7 +1081,7 @@ I can wait a little longer.`
                     setTimeout(() => {
                         if (this.onExit) this.onExit();
                     }, 2000);
-                    room.enemy = null;
+                    this.updateRoomBlock();
                     return true;
                 }
 
@@ -1092,12 +1089,11 @@ I can wait a little longer.`
                     const lootId = this.resolveItemId(foe.loot);
                     this.terminal.print(`Loot acquired: ${this.getItemName(lootId)}.`);
                     this.addItemToInventory(lootId);
-                    this.saveState();
                 }
-                room.enemy = null;
                 this.broadcastEnemyState(this.player.location);
                 this.updateRoomBlock();
                 this.renderHud();
+                this.saveState();
                 return true;
             }
 
@@ -1669,6 +1665,24 @@ I can wait a little longer.`
 
         getEnemyCard(enemy) {
             if (!enemy) return '';
+
+            // Defeated state - show collapsed card
+            if (enemy.defeated) {
+                return `
+                    <div class="mud-enemy-card defeated">
+                        <div class="enemy-header">
+                            <span class="enemy-name">${enemy.name}</span>
+                            <span class="enemy-status">DEFEATED</span>
+                        </div>
+                        <div class="enemy-hp-bar">
+                            <div class="enemy-hp-fill" style="width: 0%; background: #333"></div>
+                            <span class="enemy-hp-text">0 HP</span>
+                        </div>
+                        <div class="enemy-desc">Area secure.</div>
+                    </div>
+                `.trim();
+            }
+
             // Store maxHp on first encounter
             if (!enemy.maxHp) enemy.maxHp = enemy.hp;
             const maxHp = enemy.maxHp;
@@ -1845,7 +1859,8 @@ I can wait a little longer.`
                             phase: room.enemy.phase,
                             boss: room.enemy.boss,
                             fearLight: room.enemy.fearLight,
-                            scanned: room.enemy.scanned
+                            scanned: room.enemy.scanned,
+                            defeated: room.enemy.defeated
                         } : null
                     };
                 });
