@@ -29,6 +29,7 @@ const CATEGORIES = {
             { id: 'text-metamorphosis', name: 'text.metamorphosis()', color: 'var(--yellow-accent)' },
             { id: 'glitch-poetry', name: 'glitch.poetry()', color: 'var(--experiment-hotpink)' },
             { id: 'void-poetry', name: 'void.poetry()', color: 'var(--cyan-accent)' },
+            { id: 'void-whispers', name: 'void.whispers()', color: 'var(--experiment-coral)' },
             { id: 'linguistic-dissolution', name: 'linguistic.dissolution()', color: 'var(--phosphor-green)' },
             { id: 'linguistic-emergence', name: 'linguistic.emergence()', color: 'var(--experiment-emerald)' },
             { id: 'semantic-drift', name: 'semantic.drift()', color: 'var(--experiment-orange)' },
