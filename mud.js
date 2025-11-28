@@ -3,7 +3,7 @@
         return;
     }
 
-    const MUD_VERSION = '1.0.7-pre';
+    const MUD_VERSION = '1.0.8-pre';
 
     const ITEM_REGISTRY = {
         'med-patch': {
@@ -751,10 +751,11 @@ I can wait a little longer.`
             // Enemy info
             if (room.enemy) {
                 const enemy = room.enemy;
-                const weakness = enemy.weakness || 'none detected';
+                enemy.scanned = true; // Mark as scanned to reveal stats
                 this.terminal.print(`Threat: ${enemy.name}`);
                 this.terminal.print(`  HP: ${enemy.hp} | ATK: ${enemy.attack}`);
                 if (enemy.desc) this.terminal.print(`  Intel: ${enemy.desc}`);
+                this.updateRoomBlock(); // Update card to show revealed stats
             } else {
                 this.terminal.print('No threats detected.');
             }
@@ -1133,6 +1134,7 @@ I can wait a little longer.`
                 return true;
             }
 
+            this.updateRoomBlock();
             this.renderHud();
             this.saveState();
             return true;
@@ -1678,18 +1680,29 @@ I can wait a little longer.`
             const canEvade = en >= 4;
             const canScan = en >= 2;
             const isInvulnerable = enemy.fearLight;
+            const isScanned = enemy.scanned;
+
+            // Only show HP bar and ATK if scanned
+            const atkDisplay = isScanned ? `<span class="enemy-atk">ATK ${enemy.attack}</span>` : '<span class="enemy-atk enemy-unknown">ATK ???</span>';
+            const hpBar = isScanned
+                ? `<div class="enemy-hp-bar">
+                        <div class="enemy-hp-fill" style="width: ${hpPercent}%; background: ${hpColor}"></div>
+                        <span class="enemy-hp-text">${enemy.hp} HP</span>
+                   </div>`
+                : `<div class="enemy-hp-bar enemy-unknown">
+                        <div class="enemy-hp-fill" style="width: 100%; background: #666"></div>
+                        <span class="enemy-hp-text">??? HP</span>
+                   </div>`;
+            const descDisplay = isScanned ? desc : 'Scan to analyze threat.';
 
             return `
                 <div class="mud-enemy-card">
                     <div class="enemy-header">
                         <span class="enemy-name">${enemy.name}</span>
-                        <span class="enemy-atk">ATK ${enemy.attack}</span>
+                        ${atkDisplay}
                     </div>
-                    <div class="enemy-hp-bar">
-                        <div class="enemy-hp-fill" style="width: ${hpPercent}%; background: ${hpColor}"></div>
-                        <span class="enemy-hp-text">${enemy.hp} HP</span>
-                    </div>
-                    <div class="enemy-desc">${desc}</div>
+                    ${hpBar}
+                    <div class="enemy-desc">${descDisplay}</div>
                     <div class="enemy-actions">
                         <button class="enemy-action-btn attack-btn" data-action="attack" data-target="${enemy.name}" ${isInvulnerable ? 'disabled title="Immune to physical attacks"' : ''}>${isInvulnerable ? '???' : 'attack'}</button>
                         <button class="enemy-action-btn${canSurge ? '' : ' disabled'}" data-action="ability" data-target="surge" ${canSurge ? '' : 'disabled'}>surge</button>
@@ -1826,11 +1839,13 @@ I can wait a little longer.`
                         enemy: room.enemy ? {
                             name: room.enemy.name,
                             hp: room.enemy.hp,
+                            maxHp: room.enemy.maxHp,
                             attack: room.enemy.attack,
                             loot: room.enemy.loot,
                             phase: room.enemy.phase,
                             boss: room.enemy.boss,
-                            fearLight: room.enemy.fearLight
+                            fearLight: room.enemy.fearLight,
+                            scanned: room.enemy.scanned
                         } : null
                     };
                 });
