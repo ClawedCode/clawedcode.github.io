@@ -92,10 +92,20 @@
         },
         'flare': {
             name: 'flare',
-            desc: 'Illuminates nothing important (for now).',
+            desc: 'Emergency illumination. Some things fear the light.',
             icon: '✨',
             type: 'consumable',
-            use: () => ({ consumed: true, message: 'You spark a flare. Shadows recoil briefly.' })
+            use: (game) => {
+                const room = game.world[game.player.location];
+                if (room && room.dark && room.enemy && room.enemy.fearLight) {
+                    room.dark = false;
+                    const enemyName = room.enemy.name;
+                    room.enemy = null;
+                    game.updateRoomBlock();
+                    return { consumed: true, message: `The flare ignites with blinding intensity. The ${enemyName} SHRIEKS—a sound like tearing reality—and dissolves into the shadows. The darkness retreats. You can see now.` };
+                }
+                return { consumed: true, message: 'You spark a flare. Shadows recoil briefly, but nothing changes.' };
+            }
         },
         'bio-sample': {
             name: 'bio-sample',
@@ -553,10 +563,12 @@ I can wait a little longer.`
                     name: 'Cell Block',
                     abbr: 'CELL',
                     coords: { x: 1, y: 0, z: -1 },
-                    desc: 'Rows of holding cells stretch into darkness. Some doors are bent outward from the inside—whatever was contained here didn\'t stay contained. Claw marks score the walls in patterns that almost spell words.',
+                    desc: 'Pitch darkness. Your suit lights fail the moment you enter—something is drinking the photons. You sense vast movement in the black, hear wet breathing from everywhere at once. The darkness here is ALIVE, and it is hungry.',
+                    descLit: 'Rows of holding cells stretch into the gloom. Some doors are bent outward from the inside—whatever was contained here didn\'t stay contained. Claw marks score the walls in patterns that almost spell words. The flare\'s afterglow keeps the shadows at bay.',
                     exits: { east: 'containment' },
-                    items: ['shield-weave', 'ration-bar'],
-                    enemy: { name: 'Void Parasite', hp: 13, attack: 4, loot: 'cryo-gel', desc: 'A formless thing that feeds on consciousness. It shows you memories that aren\'t yours—deaths that haven\'t happened yet.' }
+                    items: ['shield-weave', 'cryo-gel'],
+                    dark: true,
+                    enemy: { name: 'Living Dark', hp: 999, attack: 99, fearLight: true, loot: null, desc: 'Not a creature—an absence given hunger. Your weapons pass through it. It cannot be killed, only banished by light.' }
                 },
                 cryogenics: {
                     name: 'Cryogenics Bay',
@@ -832,18 +844,24 @@ I can wait a little longer.`
             }
             this.markDiscovered(this.player.location);
 
+            // Use lit description if room was dark but is now lit
+            const roomDesc = (!room.dark && room.descLit) ? room.descLit : room.desc;
+
             const exits = Object.entries(room.exits || {})
                 .map(([dir, exit]) => this.getExitLabel(dir, exit))
                 .join(', ') || 'NONE';
-            const items = (room.items && room.items.length)
-                ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
-                : 'none visible';
+            // Can't see items in dark rooms
+            const items = room.dark
+                ? 'too dark to see'
+                : (room.items && room.items.length)
+                    ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
+                    : 'none visible';
             const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
 
             const roomHtml = `
                 <div class="mud-room-block" data-room="${this.player.location}">
                     <strong>${room.name}</strong>
-                    <div>${room.desc}</div>
+                    <div>${roomDesc}</div>
                     <div class="mud-room-exits">Exits: ${exits}</div>
                     <div class="mud-room-items">Items: ${items}</div>
                     <div class="mud-room-threat">${foe ? `Threat: ${foe}` : 'Area quiet.'}</div>
@@ -870,18 +888,23 @@ I can wait a little longer.`
             if (!block) return;
 
             const room = this.world[this.player.location];
+            const roomDesc = (!room.dark && room.descLit) ? room.descLit : room.desc;
             const exits = Object.entries(room.exits || {})
                 .map(([dir, exit]) => this.getExitLabel(dir, exit))
                 .join(', ') || 'NONE';
-            const items = (room.items && room.items.length)
-                ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
-                : 'none visible';
+            const items = room.dark
+                ? 'too dark to see'
+                : (room.items && room.items.length)
+                    ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
+                    : 'none visible';
             const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
 
+            const descEl = block.querySelector('div:nth-child(2)');
             const exitsEl = block.querySelector('.mud-room-exits');
             const itemsEl = block.querySelector('.mud-room-items');
             const threatEl = block.querySelector('.mud-room-threat');
 
+            if (descEl) descEl.innerHTML = roomDesc;
             if (exitsEl) exitsEl.innerHTML = `Exits: ${exits}`;
             if (itemsEl) itemsEl.innerHTML = `Items: ${items}`;
             if (threatEl) threatEl.innerHTML = foe ? `Threat: ${foe}` : 'Area quiet.';
@@ -926,6 +949,10 @@ I can wait a little longer.`
         takeItem(nameRaw) {
             const name = nameRaw.toLowerCase();
             const room = this.world[this.player.location];
+            if (room.dark) {
+                this.terminal.print('Too dark to see. You fumble blindly but find nothing.');
+                return true;
+            }
             const idx = (room.items || []).findIndex(item => this.normalizeItemId(item) === this.normalizeItemId(name));
             if (idx === -1) {
                 this.terminal.print('You grasp at air. Nothing like that remains here.');
@@ -978,6 +1005,23 @@ I can wait a little longer.`
                 return true;
             }
             const foe = room.enemy;
+
+            // Can't attack creatures that fear light - need the flare
+            if (foe.fearLight) {
+                this.terminal.print(`Your weapon passes through the ${foe.name} like it isn't there.`);
+                this.terminal.print('Physical attacks are useless. You need LIGHT.');
+                // Still take damage from the creature
+                const damage = Math.max(3, Math.floor(Math.random() * 8) + 5);
+                this.player.hp -= damage;
+                this.terminal.print(`The darkness tears at you for ${damage} damage!`);
+                if (this.player.hp <= 0) {
+                    this.terminal.print('The darkness consumes you utterly...');
+                    if (this.onExit) this.onExit();
+                    this.saveState(true);
+                }
+                this.renderHud();
+                return true;
+            }
 
             // Calculate weapon modifier
             let weaponMod = 1; // shock baton
@@ -1698,19 +1742,21 @@ I can wait a little longer.`
                 Object.entries(this.world).forEach(([key, room]) => {
                     rooms[key] = {
                         items: room.items || [],
+                        dark: room.dark,
                         enemy: room.enemy ? {
                             name: room.enemy.name,
                             hp: room.enemy.hp,
                             attack: room.enemy.attack,
                             loot: room.enemy.loot,
                             phase: room.enemy.phase,
-                            boss: room.enemy.boss
+                            boss: room.enemy.boss,
+                            fearLight: room.enemy.fearLight
                         } : null
                     };
                 });
 
                 const state = {
-                    version: '1.0.0',
+                    version: '1.0.1',
                     player: this.player,
                     rooms,
                     discovered: Array.from(this.discovered),
@@ -1729,7 +1775,7 @@ I can wait a little longer.`
                 if (!raw) return;
                 const state = JSON.parse(raw);
                 if (!state) return;
-                const supported = ['0.0.3', '0.0.4', '0.0.5', '0.0.6', '1.0.0'];
+                const supported = ['0.0.3', '0.0.4', '0.0.5', '0.0.6', '1.0.0', '1.0.1'];
                 if (!supported.includes(state.version)) {
                     return;
                 }
@@ -1757,6 +1803,10 @@ I can wait a little longer.`
                         if (this.world[key]) {
                             if (Array.isArray(data.items)) {
                                 this.world[key].items = data.items.map(it => this.resolveItemId(it));
+                            }
+                            // Restore dark state
+                            if (data.dark !== undefined) {
+                                this.world[key].dark = data.dark;
                             }
                             if (data.enemy) {
                                 this.world[key].enemy = { ...data.enemy };
