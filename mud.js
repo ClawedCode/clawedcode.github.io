@@ -365,7 +365,7 @@
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.10-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 0.0.11-pre. Handle: ' + this.player.name + '<br>&gt; look, north/south/east/west, take, use, attack, inventory, stats, link, say, exit</div>');
             this.terminal.print('Objective: escape station, gather samples, survive');
             this.terminal.print('Tip: `attack <target>`, `use med patch`, `take item`');
             this.terminal.print('');
@@ -393,13 +393,14 @@
             return `<span class="clickable exit-pill" data-action="move" data-target="${direction}" title="${tooltip}">${direction.toUpperCase()}</span>`;
         }
 
-        describeCurrentRoom() {
+        describeCurrentRoom(isNewRoom = true) {
             const room = this.world[this.player.location];
             if (!room) {
                 this.terminal.print('This slice of the station has not fully rendered.');
                 return;
             }
             this.markDiscovered(this.player.location);
+
             const exits = Object.entries(room.exits || {})
                 .map(([dir, target]) => this.getExitLabel(dir, target))
                 .join(', ') || 'NONE';
@@ -408,16 +409,51 @@
                 : 'none visible';
             const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
 
-            this.terminal.print('');
-            this.terminal.printHTML(`<strong>${room.name}</strong>`);
-            this.terminal.print(room.desc);
-            this.terminal.printHTML(`Exits: ${exits}`);
-            this.terminal.printHTML(`Items: ${items}`);
-            this.terminal.printHTML(foe ? `Threat: ${foe}` : 'Area quiet.');
+            const roomHtml = `
+                <div class="mud-room-block" data-room="${this.player.location}">
+                    <strong>${room.name}</strong>
+                    <div>${room.desc}</div>
+                    <div class="mud-room-exits">Exits: ${exits}</div>
+                    <div class="mud-room-items">Items: ${items}</div>
+                    <div class="mud-room-threat">${foe ? `Threat: ${foe}` : 'Area quiet.'}</div>
+                </div>
+            `.trim();
+
+            if (isNewRoom) {
+                this.terminal.print('');
+                this.terminal.printHTML(roomHtml);
+            } else {
+                this.updateRoomBlock();
+            }
 
             this.renderHud();
             this.onMove && this.onMove(this.player.location);
             this.renderAsciiMapPanel();
+        }
+
+        updateRoomBlock() {
+            const output = document.getElementById('terminal-output');
+            if (!output) return;
+            const blocks = output.querySelectorAll(`.mud-room-block[data-room="${this.player.location}"]`);
+            const block = blocks.length ? blocks[blocks.length - 1] : null;
+            if (!block) return;
+
+            const room = this.world[this.player.location];
+            const exits = Object.entries(room.exits || {})
+                .map(([dir, target]) => this.getExitLabel(dir, target))
+                .join(', ') || 'NONE';
+            const items = (room.items && room.items.length)
+                ? room.items.map(id => this.getItemLabel(id, true)).join(', ')
+                : 'none visible';
+            const foe = room.enemy ? this.getThreatLabel(room.enemy) : null;
+
+            const exitsEl = block.querySelector('.mud-room-exits');
+            const itemsEl = block.querySelector('.mud-room-items');
+            const threatEl = block.querySelector('.mud-room-threat');
+
+            if (exitsEl) exitsEl.innerHTML = `Exits: ${exits}`;
+            if (itemsEl) itemsEl.innerHTML = `Items: ${items}`;
+            if (threatEl) threatEl.innerHTML = foe ? `Threat: ${foe}` : 'Area quiet.';
         }
 
         move(directionRaw) {
@@ -452,9 +488,9 @@
             const item = room.items.splice(idx, 1)[0];
             this.addItemToInventory(this.normalizeItemId(item));
             this.terminal.print(`Taken: ${this.getItemName(item)}.`);
+            this.updateRoomBlock();
             this.renderHud();
             this.saveState();
-            this.describeCurrentRoom();
             this.reportAction(`takes ${this.getItemName(item)}`, this.player.location);
             return true;
         }
@@ -515,6 +551,7 @@
                 }
                 room.enemy = null;
                 this.broadcastEnemyState(this.player.location);
+                this.updateRoomBlock();
                 this.renderHud();
                 return true;
             }
@@ -1143,6 +1180,9 @@
                 if (room.enemy) {
                     this.terminal.print(`The ${room.enemy.name} collapses from voidmate assault.`);
                     room.enemy = null;
+                    if (roomKey === this.player.location) {
+                        this.updateRoomBlock();
+                    }
                     this.renderHud();
                 }
                 return;
