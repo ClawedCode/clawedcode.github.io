@@ -3,6 +3,8 @@
         return;
     }
 
+    const MUD_VERSION = '1.0.6-pre';
+
     const ITEM_REGISTRY = {
         'med-patch': {
             name: 'med patch',
@@ -793,7 +795,7 @@ I can wait a little longer.`
         }
 
         printIntro() {
-            this.terminal.printHTML('<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build 1.0.0-pre. Handle: ' + this.player.name + '<br>&gt; look, n/s/e/w/up/down, take, use, attack, ability, read, scan, inventory, stats, link, say, exit</div>');
+            this.terminal.printHTML(`<div class="mud-banner"><strong>VOID M.U.D. RESEARCH STATION // LUNAR NODE</strong><br>Build ${MUD_VERSION}. Handle: ${this.player.name}<br>&gt; look, n/s/e/w/up/down, take, use, attack, ability, read, scan, inventory, stats, link, say, exit</div>`);
             this.terminal.print('Objective: escape station, defeat the Void Warden, survive');
             this.terminal.print('Tip: `ability surge`, `read terminal`, `scan` reveals secrets');
             this.terminal.print('');
