@@ -31,6 +31,19 @@
     <link rel="manifest" href="/site.webmanifest">
 
     <meta name="theme-color" content="#001100">
+
+    <!-- SPA redirect handler for GitHub Pages 404 -->
+    <script>
+      (function() {
+        const params = new URLSearchParams(window.location.search);
+        const path = params.get('p');
+        if (path) {
+          const query = params.get('q');
+          const url = path + (query ? '?' + decodeURIComponent(query) : '') + window.location.hash;
+          window.history.replaceState(null, '', url);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

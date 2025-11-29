@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>ClawedCode</title>
+    <script>
+      // Single Page App redirect for GitHub Pages
+      // Converts path to query string so index.html can restore it
+      const segment = 1; // Keep repo name if defined (0 for user/org pages)
+      const path = window.location.pathname.slice(1).split('/').slice(segment).join('/');
+      const query = window.location.search;
+      const hash = window.location.hash;
+
+      // Redirect to root with path encoded in query
+      window.location.replace(
+        window.location.origin +
+        window.location.pathname.split('/').slice(0, 1 + segment).join('/') +
+        '/?p=/' + path + (query ? '&q=' + encodeURIComponent(query.slice(1)) : '') + hash
+      );
+    </script>
+  </head>
+  <body>
+  </body>
+</html>
