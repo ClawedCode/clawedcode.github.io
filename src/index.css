@@ -60,6 +60,31 @@
     background-color: var(--color-void-green);
     color: var(--color-void-dark);
   }
+
+  /* Scrollbar styling */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-void-green) var(--color-void-dark);
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--color-void-dark);
+    border: 1px solid rgba(51, 255, 51, 0.2);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-void-green);
+    border-radius: 4px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-void-cyan);
+  }
 }
 
 @layer components {
