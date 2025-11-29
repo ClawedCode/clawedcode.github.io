@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { TerminalProvider } from './components/terminal/TerminalProvider'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
@@ -11,7 +11,7 @@ import Mud from './pages/Mud'
 import Verify from './pages/Verify'
 
 const App = () => (
-  <BrowserRouter>
+  <HashRouter>
     <TerminalProvider>
       <Routes>
         <Route element={<Layout />}>
@@ -38,7 +38,7 @@ const App = () => (
         <Route path="/verify.html" element={<Navigate to="/verify" replace />} />
       </Routes>
     </TerminalProvider>
-  </BrowserRouter>
+  </HashRouter>
 )
 
 export default App
