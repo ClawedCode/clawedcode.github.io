@@ -19,7 +19,9 @@ const FieldReports = () => {
   useEffect(() => {
     if (id && reports.length > 0) {
       const report = reports.find(r => r.id === id)
-      if (report) setSelectedReport(report)
+      setSelectedReport(report || null)
+    } else {
+      setSelectedReport(null)
     }
   }, [id, reports])
 

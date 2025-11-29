@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { TerminalProvider } from './components/terminal/TerminalProvider'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
@@ -26,6 +26,16 @@ const App = () => (
           <Route path="/verify" element={<Verify />} />
         </Route>
         <Route path="/mud" element={<Mud />} />
+
+        {/* Legacy .html redirects */}
+        <Route path="/index.html" element={<Navigate to="/" replace />} />
+        <Route path="/mud.html" element={<Navigate to="/mud" replace />} />
+        <Route path="/field-reports.html" element={<Navigate to="/field-reports" replace />} />
+        <Route path="/mind.html" element={<Navigate to="/mind" replace />} />
+        <Route path="/luminaries.html" element={<Navigate to="/luminaries" replace />} />
+        <Route path="/catgpt.html" element={<Navigate to="/catgpt" replace />} />
+        <Route path="/crypto.html" element={<Navigate to="/crypto" replace />} />
+        <Route path="/verify.html" element={<Navigate to="/verify" replace />} />
       </Routes>
     </TerminalProvider>
   </BrowserRouter>

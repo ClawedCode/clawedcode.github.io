@@ -93,6 +93,42 @@
     color: var(--color-void-dark);
   }
 
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn:disabled:hover {
+    background-color: transparent;
+    color: var(--color-void-green);
+  }
+
+  .btn-small {
+    padding: 0.25rem 0.5rem;
+    border: 1px solid var(--color-void-green);
+    color: var(--color-void-green);
+    font-family: var(--font-family-mono);
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-radius: 0.25rem;
+  }
+
+  .btn-small:hover {
+    background-color: var(--color-void-green);
+    color: var(--color-void-dark);
+  }
+
+  .btn-small:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .btn-small:disabled:hover {
+    background-color: transparent;
+    color: var(--color-void-green);
+  }
+
   .card {
     background-color: rgba(0, 17, 0, 0.8);
     border: 1px solid rgba(51, 255, 51, 0.3);

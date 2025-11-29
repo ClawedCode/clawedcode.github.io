@@ -3,8 +3,11 @@ import { useRef, useState, useEffect } from 'react'
 const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight }) => {
   const containerRef = useRef(null)
   const [isVisible, setIsVisible] = useState(false)
+  const [hasError, setHasError] = useState(false)
 
   const scale = Math.min(maxWidth / width, maxHeight / height, 1)
+  const scaledWidth = width * scale
+  const scaledHeight = height * scale
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -14,7 +17,7 @@ const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight }) => {
           observer.disconnect()
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.1, rootMargin: '50px' }
     )
 
     if (containerRef.current) {
@@ -27,20 +30,31 @@ const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight }) => {
   return (
     <div
       ref={containerRef}
-      className="relative overflow-hidden bg-void-dark"
-      style={{ height: maxHeight }}
+      className="relative overflow-hidden bg-void-dark border border-void-green/20"
+      style={{
+        width: maxWidth,
+        height: maxHeight,
+      }}
+      data-testid="iframe-thumbnail"
     >
-      {isVisible && (
+      {isVisible && !hasError && (
         <iframe
           src={src}
           title="Content preview"
-          className="absolute left-1/2 origin-top-left pointer-events-none"
+          className="absolute top-0 left-0 pointer-events-none border-0"
           style={{
             width,
             height,
-            transform: `translateX(-50%) scale(${scale})`,
+            transformOrigin: 'top left',
+            transform: `scale(${scale})`,
           }}
+          onError={() => setHasError(true)}
         />
+      )}
+      {hasError && (
+        <div className="flex items-center justify-center h-full text-void-green/50 text-xs">
+          Preview unavailable
+        </div>
       )}
     </div>
   )

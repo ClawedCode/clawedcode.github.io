@@ -19,7 +19,9 @@ const Mind = () => {
   useEffect(() => {
     if (id && minds.length > 0) {
       const mind = minds.find(m => m.id === id)
-      if (mind) setSelectedMind(mind)
+      setSelectedMind(mind || null)
+    } else {
+      setSelectedMind(null)
     }
   }, [id, minds])
 
