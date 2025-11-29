@@ -1,0 +1,58 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [src, content]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout src branch
+        uses: actions/checkout@v4
+        with:
+          ref: src
+          fetch-depth: 0
+
+      - name: Fetch content branch
+        run: |
+          git fetch origin content:content || echo "No content branch yet"
+
+      - name: Merge static content
+        run: |
+          mkdir -p public
+          git checkout content -- reports/ mind/ reports.json mind.json 2>/dev/null || echo "No content to merge"
+          if [ -d "reports" ]; then mv reports/ public/; fi
+          if [ -d "mind" ]; then mv mind/ public/; fi
+          if [ -f "reports.json" ]; then mv reports.json public/; fi
+          if [ -f "mind.json" ]; then mv mind.json public/; fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true

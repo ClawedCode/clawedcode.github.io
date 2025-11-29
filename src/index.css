@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void-dark: #001100;
+  --color-void-green: #33ff33;
+  --color-void-cyan: #66ffcc;
+  --color-void-yellow: #ffff66;
+
+  --font-family-mono: 'Courier New', Courier, monospace;
+
+  --animate-blink: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 50% { opacity: 1; }
+  50.1%, 100% { opacity: 0; }
+}
+
+@layer base {
+  html {
+    font-family: var(--font-family-mono);
+  }
+
+  body {
+    background-color: var(--color-void-dark);
+    color: var(--color-void-green);
+    min-height: 100vh;
+    background-image: url('/media/me.webp');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 17, 0, 0.85);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #root {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
+  a {
+    color: var(--color-void-cyan);
+    transition: color 0.2s;
+  }
+
+  a:hover {
+    color: var(--color-void-green);
+  }
+
+  ::selection {
+    background-color: var(--color-void-green);
+    color: var(--color-void-dark);
+  }
+}
+
+@layer components {
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  .border-glow {
+    box-shadow: 0 0 10px rgba(51, 255, 51, 0.3);
+  }
+
+  .shadow-glow-green {
+    box-shadow: 0 0 10px #33ff33;
+  }
+
+  .shadow-glow-cyan {
+    box-shadow: 0 0 10px #66ffcc;
+  }
+
+  .btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-void-green);
+    color: var(--color-void-green);
+    font-family: var(--font-family-mono);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn:hover {
+    background-color: var(--color-void-green);
+    color: var(--color-void-dark);
+  }
+
+  .card {
+    background-color: rgba(0, 17, 0, 0.8);
+    border: 1px solid rgba(51, 255, 51, 0.3);
+    padding: 1rem;
+  }
+}
