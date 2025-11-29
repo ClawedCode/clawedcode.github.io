@@ -705,7 +705,7 @@ const Mud = () => {
           {/* Terminal Output - scrollable middle */}
           <div
             ref={scrollContainerRef}
-            className="flex-1 min-h-0 overflow-y-auto p-4 font-mono text-sm space-y-1"
+            className="flex-1 min-h-0 max-h-[500px] overflow-y-auto p-4 font-mono text-sm space-y-1"
             data-testid="terminal-output"
           >
             {output.map((line, i) => (
