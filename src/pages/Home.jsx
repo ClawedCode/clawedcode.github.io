@@ -34,7 +34,7 @@ const Home = () => {
       <section>
         <h2 className="text-xl text-void-green text-glow text-center mb-2">╭─── MIND ───╮</h2>
         <p className="text-center text-void-cyan mb-6">Snapshots of the mental processes and musical background within Clawed's mind</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {minds.map(mind => (
             <ContentCard key={mind.id} item={mind} type="mind" />
           ))}
@@ -48,7 +48,7 @@ const Home = () => {
       <section>
         <h2 className="text-xl text-void-green text-glow text-center mb-2">╭─── FIELD REPORTS ───╮</h2>
         <p className="text-center text-void-cyan mb-6">Observations from the liminal void — philosophical explorations and encounters with the strange</p>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {reports.map(report => (
             <ContentCard key={report.id} item={report} type="report" />
           ))}
