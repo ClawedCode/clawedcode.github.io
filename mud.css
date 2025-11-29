@@ -560,8 +560,112 @@
     cursor: pointer;
 }
 
-/* Mobile Responsive */
-@media (max-width: 768px) {
+/* Desktop Layout - Three columns: Terminal | Map | HUD */
+/* Gap: 12px between each column */
+@media (min-width: 900px) {
+    .mud-sidebar {
+        width: 19vw;
+        min-width: 180px;
+        right: 12px;
+        top: 40px;
+    }
+
+    .mud-panel {
+        width: 100%;
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+
+    /* Map: 12px gap after HUD (which is 19vw + 12px from right edge) */
+    .mud-map-panel {
+        position: fixed;
+        right: calc(19vw + 24px);
+        top: 40px;
+        width: 33vw;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .mud-map-panel pre {
+        font-size: 0.75rem;
+        line-height: 1.15;
+    }
+
+    /* Terminal: 12px gap after Map */
+    .mud-page .terminal-output,
+    .mud-page .terminal-input-container {
+        margin-right: calc(19vw + 33vw + 36px);
+    }
+
+    /* Fullscreen map override */
+    .mud-map-panel.fullscreen {
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-width: none;
+        max-height: none;
+        bottom: 52px;
+    }
+}
+
+/* Large desktop */
+@media (min-width: 1400px) {
+    .mud-sidebar {
+        width: 17vw;
+        min-width: 200px;
+    }
+
+    .mud-panel {
+        padding: 8px 10px;
+        font-size: 0.78rem;
+    }
+
+    .mud-map-panel {
+        right: calc(17vw + 24px);
+        width: 35vw;
+    }
+
+    .mud-map-panel pre {
+        font-size: 0.8rem;
+        line-height: 1.2;
+    }
+
+    .mud-page .terminal-output,
+    .mud-page .terminal-input-container {
+        margin-right: calc(17vw + 35vw + 36px);
+    }
+}
+
+/* Extra large desktop */
+@media (min-width: 1600px) {
+    .mud-sidebar {
+        width: 15vw;
+        min-width: 220px;
+    }
+
+    .mud-panel {
+        padding: 10px 12px;
+        font-size: 0.8rem;
+    }
+
+    .mud-map-panel {
+        right: calc(15vw + 24px);
+        width: 38vw;
+    }
+
+    .mud-map-panel pre {
+        font-size: 0.85rem;
+        line-height: 1.25;
+    }
+
+    .mud-page .terminal-output,
+    .mud-page .terminal-input-container {
+        margin-right: calc(15vw + 38vw + 36px);
+    }
+}
+
+/* Mobile/Tablet - stacked layout */
+@media (max-width: 899px) {
     .mud-sidebar {
         right: 8px;
         left: 8px;
@@ -578,6 +682,9 @@
     }
 
     .mud-map-panel {
+        position: relative;
+        left: auto;
+        top: auto;
         max-width: none;
         width: 100%;
     }
@@ -590,5 +697,14 @@
     /* Add top padding to prevent content from being hidden behind toggle buttons */
     .mud-page .terminal-output {
         padding-top: 36px;
+        margin-left: 0;
+        margin-right: 0;
+        max-width: none;
+    }
+
+    .mud-page .terminal-input-container {
+        margin-left: 0;
+        margin-right: 0;
+        max-width: none;
     }
 }

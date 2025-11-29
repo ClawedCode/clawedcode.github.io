@@ -3,7 +3,7 @@
         return;
     }
 
-    const MUD_VERSION = '1.0.9-pre';
+    const MUD_VERSION = '1.1.0-pre';
 
     const ITEM_REGISTRY = {
         'med-patch': {
@@ -1615,8 +1615,12 @@ I can wait a little longer.`
             const vmLegend = voidmateNames.length ? ` | <span class="map-voidmate">@</span>=${voidmateNames.join(', ')}` : '';
             const fullscreenIcon = isFullscreen ? '⊟' : '⊞';
 
+            // Desktop shows all levels by default (3-column layout)
+            const isDesktop = window.innerWidth >= 1024;
+            const showAllLevels = isFullscreen || isDesktop;
+
             let mapContent;
-            if (isFullscreen) {
+            if (showAllLevels) {
                 // Render all three levels
                 const levels = [1, 0, -1]; // Upper, Main, Sublevel (top to bottom)
                 const levelMaps = levels.map(z => {
@@ -1630,13 +1634,15 @@ I can wait a little longer.`
                 });
                 mapContent = `<div class="mud-map-all-levels">${levelMaps.join('\n\n')}</div>`;
             } else {
-                // Single level view
+                // Single level view (mobile)
                 const levelName = levelNames[String(currentZ)] || `Level ${currentZ}`;
                 const lines = renderLevel(currentZ, playerCoords.x, playerCoords.y, false);
                 mapContent = `<div class="mud-map-level">${levelName}</div><pre>${lines.join('\n')}</pre>`;
             }
 
-            this.mapPanel.innerHTML = `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button>${mapContent}<div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend} | ↑↓=stairs</div>`;
+            // Hide fullscreen button on desktop (already showing all levels)
+            const fullscreenBtn = isDesktop ? '' : `<button class="mud-map-fullscreen" data-action="toggle-fullscreen">${fullscreenIcon}</button>`;
+            this.mapPanel.innerHTML = `${fullscreenBtn}${mapContent}<div class="mud-map-legend"><span class="map-player">*</span>=you${vmLegend} | ↑↓=stairs</div>`;
             this.attachMapFullscreenHandler();
         }
 
