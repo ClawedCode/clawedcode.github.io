@@ -7,5 +7,5 @@ export const navLinks = [
   { href: 'https://pump.fun/coin/ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump', label: '$CLAWED', external: true },
   { to: '/crypto', label: 'crypto' },
   { to: '/verify', label: 'verify' },
-  { href: '/playground/index.html', label: 'void.laboratory()' },
+  { to: '/playground', label: 'void.laboratory()' },
 ]

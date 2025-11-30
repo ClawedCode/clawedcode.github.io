@@ -4,7 +4,7 @@ import Pagination from './Pagination'
 
 const ITEMS_PER_PAGE = 8
 
-const ContentGrid = ({ items, type, onSelect }) => {
+const ContentGrid = ({ items, type, onSelect, suspended = false }) => {
   const [currentPage, setCurrentPage] = useState(1)
 
   const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE)
@@ -20,6 +20,7 @@ const ContentGrid = ({ items, type, onSelect }) => {
             item={item}
             type={type}
             onClick={onSelect}
+            suspended={suspended}
           />
         ))}
       </div>

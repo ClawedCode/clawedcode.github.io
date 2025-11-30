@@ -9,6 +9,9 @@ import CatGPT from './pages/CatGPT'
 import Crypto from './pages/Crypto'
 import Mud from './pages/Mud'
 import Verify from './pages/Verify'
+import PlaygroundIndex from './pages/playground/PlaygroundIndex'
+import PlaygroundCategory from './pages/playground/PlaygroundCategory'
+import PlaygroundExperiment from './pages/playground/PlaygroundExperiment'
 
 const App = () => (
   <HashRouter>
@@ -26,6 +29,11 @@ const App = () => (
           <Route path="/verify" element={<Verify />} />
         </Route>
         <Route path="/mud" element={<Mud />} />
+
+        {/* Playground - full screen like MUD */}
+        <Route path="/playground" element={<PlaygroundIndex />} />
+        <Route path="/playground/:category" element={<PlaygroundCategory />} />
+        <Route path="/playground/:category/:experiment" element={<PlaygroundExperiment />} />
 
         {/* Legacy .html redirects */}
         <Route path="/index.html" element={<Navigate to="/" replace />} />

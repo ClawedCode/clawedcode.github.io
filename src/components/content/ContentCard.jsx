@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import IframeThumbnail from './IframeThumbnail'
 
-const ContentCard = ({ item, type, onClick }) => {
+const ContentCard = ({ item, type, onClick, suspended = false }) => {
   const date = new Date(item.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -29,6 +29,7 @@ const ContentCard = ({ item, type, onClick }) => {
         height={item.dimensions?.height || 1350}
         maxWidth={208}
         maxHeight={260}
+        suspended={suspended}
       />
 
       <div className="mt-3 space-y-2">

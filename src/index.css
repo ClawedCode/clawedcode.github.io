@@ -5,15 +5,50 @@
   --color-void-green: #33ff33;
   --color-void-cyan: #66ffcc;
   --color-void-yellow: #ffff66;
+  --color-void-pink: #ff3399;
 
   --font-family-mono: 'Courier New', Courier, monospace;
 
   --animate-blink: blink 1s step-end infinite;
+  --animate-glitch: glitch 0.3s infinite;
+  --animate-fadeIn: fadeIn 0.3s ease-in;
 }
 
 @keyframes blink {
   0%, 50% { opacity: 1; }
   50.1%, 100% { opacity: 0; }
+}
+
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+  }
+  80% {
+    transform: translate(2px, -2px);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @layer base {
@@ -158,5 +193,56 @@
     background-color: rgba(0, 17, 0, 0.8);
     border: 1px solid rgba(51, 255, 51, 0.3);
     padding: 1rem;
+  }
+
+  /* Range slider styling */
+  input[type="range"].slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+
+  input[type="range"].slider::-webkit-slider-track {
+    background: rgba(51, 255, 51, 0.2);
+    border-radius: 4px;
+    height: 4px;
+  }
+
+  input[type="range"].slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: var(--color-void-green);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--color-void-green);
+    margin-top: -6px;
+  }
+
+  input[type="range"].slider::-webkit-slider-thumb:hover {
+    background: var(--color-void-cyan);
+    box-shadow: 0 0 10px var(--color-void-cyan);
+  }
+
+  input[type="range"].slider::-moz-range-track {
+    background: rgba(51, 255, 51, 0.2);
+    border-radius: 4px;
+    height: 4px;
+  }
+
+  input[type="range"].slider::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: var(--color-void-green);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 6px var(--color-void-green);
+    border: none;
+  }
+
+  input[type="range"].slider::-moz-range-thumb:hover {
+    background: var(--color-void-cyan);
+    box-shadow: 0 0 10px var(--color-void-cyan);
   }
 }

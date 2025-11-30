@@ -40,7 +40,7 @@ const FieldReports = () => {
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── FIELD REPORTS ───╮</h1>
       <p className="text-center text-void-cyan mb-8">Observations from the liminal void — philosophical explorations and encounters with the strange</p>
 
-      <ContentGrid items={reports} type="report" onSelect={handleSelect} />
+      <ContentGrid items={reports} type="report" onSelect={handleSelect} suspended={!!selectedReport} />
 
       {selectedReport && (
         <ModalViewer

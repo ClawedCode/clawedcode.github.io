@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 
-const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight }) => {
+const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight, suspended = false }) => {
   const containerRef = useRef(null)
   const [isVisible, setIsVisible] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -37,7 +37,7 @@ const IframeThumbnail = ({ src, width, height, maxWidth, maxHeight }) => {
       }}
       data-testid="iframe-thumbnail"
     >
-      {isVisible && !hasError && (
+      {isVisible && !hasError && !suspended && (
         <iframe
           src={src}
           title="Content preview"

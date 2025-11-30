@@ -170,7 +170,7 @@ document.getElementById('audio-toggle').addEventListener('click', async () => {
       }
 
       Tone.Transport.start('+0.1');
-      document.getElementById('audio-toggle').textContent = '🔇 STOP MUSIC';
+      document.getElementById('audio-toggle').textContent = '■ Stop';
       isPlaying = true;
       console.log('🎵 Tone.js instruments available:', Object.keys(window.toneJsInstruments || {}));
     } else {
@@ -237,7 +237,7 @@ document.getElementById('audio-toggle').addEventListener('click', async () => {
         }
       }
 
-      document.getElementById('audio-toggle').textContent = '🔊 PLAY MUSIC';
+      document.getElementById('audio-toggle').textContent = '▶ Play';
       isPlaying = false;
     }
   } else {
@@ -276,7 +276,7 @@ document.getElementById('audio-toggle').addEventListener('click', async () => {
           vocalAudioElement.currentTime = 0;
         }
       }
-      document.getElementById('audio-toggle').textContent = '🔊 PLAY MUSIC';
+      document.getElementById('audio-toggle').textContent = '▶ Play';
       isPlaying = false;
     } else {
       // Create new AudioContext if needed (after stopping)
@@ -311,7 +311,7 @@ document.getElementById('audio-toggle').addEventListener('click', async () => {
           console.log('⚠️ Autoplay blocked, waiting for user interaction');
         });
       }
-      document.getElementById('audio-toggle').textContent = '🔇 STOP MUSIC';
+      document.getElementById('audio-toggle').textContent = '■ Stop';
       isPlaying = true;
     }
   }
@@ -341,7 +341,7 @@ if (urlParams.get('autoplay') === 'true') {
             window.audioLoopInterval = null;
           }
           isPlaying = false;
-          document.getElementById('audio-toggle').textContent = '🔊 PLAY MUSIC';
+          document.getElementById('audio-toggle').textContent = '▶ Play';
           console.log('⚠️ Autoplay blocked - click button to play');
         }
       }, 100);

@@ -40,7 +40,7 @@ const Mind = () => {
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── MIND ───╮</h1>
       <p className="text-center text-void-cyan mb-8">Snapshots of the mental processes and musical background within Clawed's mind</p>
 
-      <ContentGrid items={minds} type="mind" onSelect={handleSelect} />
+      <ContentGrid items={minds} type="mind" onSelect={handleSelect} suspended={!!selectedMind} />
 
       {selectedMind && (
         <ModalViewer
