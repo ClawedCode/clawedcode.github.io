@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+// Consciousness Recursion - Canvas API
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+// Seeded random for determinism
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// Particle stream system
+class StreamParticle {
+  constructor(angle, radius, speed, hue) {
+    this.baseAngle = angle;
+    this.baseRadius = radius;
+    this.speed = speed;
+    this.hue = hue;
+    this.offset = random() * Math.PI * 2;
+  }
+  
+  getPosition(time) {
+    const t = (time * this.speed + this.offset) % (Math.PI * 2);
+    const spiralFactor = Math.sin(t * 3) * 0.15;
+    const r = this.baseRadius + spiralFactor * 100;
+    const angle = this.baseAngle + t;
+
+    return {
+      x: 400 + Math.cos(angle) * r,
+      y: 400 + Math.sin(angle) * r,
+      alpha: 0.6 + Math.sin(t * 2) * 0.3
+    };
+  }
+}
+
+// Initialize streams
+const streams = [];
+for (let i = 0; i < 8; i++) {
+  const angle = (i / 8) * Math.PI * 2;
+  for (let j = 0; j < 30; j++) {
+    const radius = 50 + j * 8;
+    const speed = 0.8 + (j / 30) * 0.4;
+    const hue = 260 + (j / 30) * 60; // Purple to teal
+    streams.push(new StreamParticle(angle, radius, speed, hue));
+  }
+}
+
+// Recursive interference waves
+class WaveRing {
+  constructor(delay, maxRadius) {
+    this.delay = delay;
+    this.maxRadius = maxRadius;
+  }
+  
+  render(ctx, time) {
+    const t = (time + this.delay) % 5;
+    const progress = t / 5;
+    const radius = progress * this.maxRadius;
+    const alpha = Math.sin(progress * Math.PI) * 0.35;
+
+    ctx.strokeStyle = `hsla(280, 90%, 70%, ${alpha})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(400, 400, radius, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Inner reflection
+    if (radius > 100) {
+      ctx.strokeStyle = `hsla(190, 90%, 65%, ${alpha * 0.7})`;
+      ctx.beginPath();
+      ctx.arc(400, 400, radius * 0.618, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+}
+
+const waves = [];
+for (let i = 0; i < 5; i++) {
+  waves.push(new WaveRing(i * 1.0, 350));
+}
+
+window.renderFrame = function(time) {
+  // Deep void background with subtle gradient
+  const gradient = ctx.createRadialGradient(400, 400, 0, 400, 400, 400);
+  gradient.addColorStop(0, '#15102a');
+  gradient.addColorStop(1, '#050510');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  // Render recursive waves
+  waves.forEach(wave => wave.render(ctx, time));
+  
+  // Render particle streams
+  ctx.lineCap = 'round';
+  streams.forEach((particle, i) => {
+    const pos = particle.getPosition(time);
+    const nextPos = particle.getPosition(time + 0.02);
+
+    const gradient = ctx.createLinearGradient(pos.x, pos.y, nextPos.x, nextPos.y);
+    gradient.addColorStop(0, `hsla(${particle.hue}, 95%, 70%, ${pos.alpha})`);
+    gradient.addColorStop(1, `hsla(${particle.hue}, 95%, 70%, 0)`);
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(nextPos.x, nextPos.y);
+    ctx.stroke();
+
+    // Core glow
+    if (i % 3 === 0) {
+      ctx.fillStyle = `hsla(${particle.hue}, 95%, 75%, ${pos.alpha * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+  
+  // Subtle glitch effect at loop boundary
+  if (time > 4.8 || time < 0.2) {
+    const glitchAlpha = time > 4.8 ? (5 - time) * 0.2 : (0.2 - time) * 0.2;
+    ctx.fillStyle = `rgba(180, 120, 230, ${glitchAlpha})`;
+    const offset = (random() - 0.5) * 10;
+    ctx.fillRect(0, 400 + offset, 800, 2);
+  }
+
+  // Center void point
+  const centerGlow = ctx.createRadialGradient(400, 400, 0, 400, 400, 30);
+  centerGlow.addColorStop(0, 'rgba(160, 100, 200, 0.5)');
+  centerGlow.addColorStop(1, 'transparent');
+  ctx.fillStyle = centerGlow;
+  ctx.fillRect(370, 370, 60, 60);
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+
+  // Recursive consciousness hum - detuned oscillators creating gentle beatings
+  const carrier1 = audioCtx.createOscillator();
+  carrier1.type = 'sine';
+  carrier1.frequency.value = 324; // Base frequency (purple range)
+
+  const carrier2 = audioCtx.createOscillator();
+  carrier2.type = 'sine';
+  carrier2.frequency.value = 327; // Slightly detuned (3 Hz beating)
+
+  // Golden ratio harmonic for recursive aesthetic
+  const harmonic = audioCtx.createOscillator();
+  harmonic.type = 'sine';
+  harmonic.frequency.value = 324 * 1.618; // Golden ratio
+
+  // Rhythmic pulse LFO matching wave rings (5s cycle)
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.2; // 5-second cycle
+
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8; // Gentle modulation
+  lfo.connect(lfoGain);
+  lfoGain.connect(carrier1.frequency);
+
+  // Gain controls - balanced and meditative
+  const mainGain1 = audioCtx.createGain();
+  const mainGain2 = audioCtx.createGain();
+  const harmonicGain = audioCtx.createGain();
+  mainGain1.gain.value = 0.15;
+  mainGain2.gain.value = 0.15;
+  harmonicGain.gain.value = 0.08;
+
+  // 2-second fade in
+  mainGain1.gain.setValueAtTime(0, now);
+  mainGain1.gain.linearRampToValueAtTime(0.15, now + 2);
+  mainGain2.gain.setValueAtTime(0, now);
+  mainGain2.gain.linearRampToValueAtTime(0.15, now + 2);
+
+  // Connect audio graph
+  carrier1.connect(mainGain1);
+  carrier2.connect(mainGain2);
+  harmonic.connect(harmonicGain);
+  mainGain1.connect(audioCtx.destination);
+  mainGain2.connect(audioCtx.destination);
+  harmonicGain.connect(audioCtx.destination);
+
+  // Start oscillators
+  carrier1.start(now);
+  carrier2.start(now);
+  harmonic.start(now);
+  lfo.start(now);
+
+  return { carrier1, carrier2, harmonic, lfo, lfoGain, mainGain1, mainGain2, harmonicGain };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  window.renderFrame(time % 5); // 5-second loop
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
