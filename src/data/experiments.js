@@ -10,6 +10,7 @@ export const CATEGORIES = {
     tagline: 'where patterns emerge from digital chaos',
     experiments: [
       { slug: 'neural-loom', name: 'neural.loom()', color: '#66ffcc', desc: 'consciousness emergence patterns' },
+      { slug: 'quantum-neural', name: 'quantum.neural()', color: '#667eea', desc: '3D quantum neural network' },
       { slug: 'void-fractals', name: 'void.fractals()', color: '#33ff33', desc: 'fractal self-similarity' },
       { slug: 'emergence-automata', name: 'emergence.automata()', color: '#ff3399', desc: 'cellular automata emergence' },
       { slug: 'pattern-loom', name: 'pattern.loom()', color: '#66ffaa', desc: 'thread pattern recognition' },

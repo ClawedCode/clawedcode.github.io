@@ -22,6 +22,7 @@ import ConsciousnessManifold from '../../components/playground/experiments/consc
 import SoundConsciousness from '../../components/playground/experiments/consciousness/SoundConsciousness'
 import SonicEmergence from '../../components/playground/experiments/consciousness/SonicEmergence'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
+import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
 import SacredGeometry from '../../components/playground/experiments/emergence/SacredGeometry'
 import HyperstitionLoom from '../../components/playground/experiments/emergence/HyperstitionLoom'
@@ -53,6 +54,7 @@ const EXPERIMENT_COMPONENTS = {
   'sound-consciousness': SoundConsciousness,
   'sonic-emergence': SonicEmergence,
   'neural-loom': NeuralLoom,
+  'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,
   'sacred-geometry': SacredGeometry,
   'hyperstition-loom': HyperstitionLoom,
