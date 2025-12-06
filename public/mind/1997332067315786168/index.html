@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 900px;
+      height: 900px;
+      background: radial-gradient(circle at 30% 20%, #0a1220 0%, #05080f 40%, #02040a 100%);
+      font-family: 'Courier New', monospace;
+      color: #b4ffda;
+      overflow: hidden;
+    }
+    body::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(0deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      background-size: 16px 16px;
+      pointer-events: none;
+      opacity: 0.35;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-rows: 45px 1fr 110px;
+      width: 900px;
+      height: 900px;
+      position: relative;
+    }
+    .panel {
+      border: 1px solid #43ff7a44;
+      background: linear-gradient(180deg, #0a0e1488 0%, #05080fbb 100%);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 0 6px #43ff7a44, inset 0 0 4px #43ff7a22;
+    }
+    .scanlines::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(transparent 0px, transparent 2px, rgba(0,0,0,0.25) 2px, rgba(0,0,0,0.25) 4px);
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+    .top-hud {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr 0.8fr;
+      gap: 6px;
+      padding: 4px 6px;
+      background: #060a12;
+      border-bottom: 1px solid #43ff7a33;
+      box-shadow: 0 2px 6px #000;
+      position: relative;
+    }
+    .badge { padding: 2px 4px; font-size: 10px; letter-spacing: 1px; color: #0a0; }
+    .hud-block { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #9cffc7; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #43ff7a; box-shadow: 0 0 6px #43ff7a;
+      display: inline-block; margin-right: 6px;
+    }
+    .grid-row {
+      display: grid;
+      grid-template-columns: 120px 600px 180px;
+      height: 745px;
+      gap: 6px;
+      padding: 6px;
+      background: #02040a;
+    }
+    .left-strip { display: grid; grid-template-rows: repeat(6, 1fr); gap: 6px; }
+    .thumb { position: relative; }
+    .thumb canvas { width: 100%; height: 100%; background: #0b121d; }
+    .thumb .label {
+      position: absolute; left: 4px; bottom: 4px;
+      font-size: 8px; color: #ffaa00; background: #0008; padding: 2px 4px;
+    }
+    .hero { position: relative; }
+    .hero canvas { width: 100%; height: 100%; background: #04060b; }
+    .hero-overlay { position: absolute; inset: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; pointer-events: none; }
+    .hero-chip {
+      border: 1px solid #ff66b244; background: #0b0f1788; padding: 6px; font-size: 9px; color: #ffb3e1;
+      box-shadow: inset 0 0 4px #ff66b255;
+    }
+    .hero-chip strong { color: #43ff7a; }
+    .right-stack { display: grid; grid-template-rows: repeat(5, 1fr); gap: 6px; }
+    .right-stack .panel { padding: 4px; }
+    .right-title { font-size: 9px; color: #ffaa00; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .bar {
+      height: 6px; background: #0a0f18; border: 1px solid #43ff7a55; margin: 2px 0;
+      position: relative;
+    }
+    .bar span { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #43ff7a, #00ffff); }
+    .bin { font-size: 8px; color: #5aff9d; line-height: 1.2; }
+    .bottom-telemetry {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      padding: 6px;
+      background: #060a12;
+      border-top: 1px solid #43ff7a33;
+      box-shadow: 0 -2px 6px #000;
+    }
+    .chart { position: relative; }
+    .chart canvas { width: 100%; height: 100%; background: #0a0e14; }
+    .chart .title {
+      position: absolute; top: 4px; left: 6px; font-size: 9px; color: #ffaa00; letter-spacing: 0.6px;
+      text-shadow: 0 0 4px #ffaa00aa;
+    }
+    .mini-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; }
+    .micro {
+      border: 1px solid #00ffff44; padding: 2px; font-size: 8px; color: #00ffff; text-align: center;
+      background: #0a111caa;
+    }
+    .log {
+      position: absolute; bottom: 4px; right: 4px; width: 160px; height: 60px; overflow: hidden; font-size: 8px; color: #66ffc4; opacity: 0.75;
+    }
+    .blink { animation: blink 1s infinite; }
+    @keyframes blink { 0%, 60% { opacity: 1; } 80% { opacity: 0.3; } 100% { opacity: 1; } }
+    .pulse { animation: pulse 2.5s infinite; }
+    @keyframes pulse { 0% { box-shadow: 0 0 6px #ff66b2; } 50% { box-shadow: 0 0 14px #ff66b2; } 100% { box-shadow: 0 0 6px #ff66b2; } }
+  </style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <div class="dashboard scanlines">
+    <div class="top-hud">
+      <div class="hud-block panel">
+        <div><span class="status-dot blink"></span><span style="color:#ffaa00;">BIO-SCAN</span> ACTIVE</div>
+        <div style="font-size:11px;">SPECIMEN: FLR-07A // CLASS: LUMEN-FERAL</div>
+        <div style="font-size:9px;">GRID: N45.123 / E-73.444 // ALT: 333m</div>
+      </div>
+      <div class="hud-block panel">
+        <div>MISSION T+ <span id="missionTime">000:00:00</span></div>
+        <div>LOCAL: <span id="localTime">00:00:00</span> // SYNC LOCK</div>
+        <div class="badge glow pulse">BIOFIELD HARMONIC</div>
+      </div>
+      <div class="hud-block panel">
+        <div>ANALYSIS: <span id="analysisPct">32.1</span>%</div>
+        <div>GROWTH VECTOR: <span style="color:#00ffff;">spiral-lattice</span></div>
+        <div>THRUM: ϟ <span id="thrum">0042.2</span> hz</div>
+      </div>
+      <div class="hud-block panel">
+        <div>STATUS: <span style="color:#ff66b2;">INTERLINKED</span></div>
+        <div>ENV: 19.8°C // HUM: 61% // PHOTON: 7.2 lux</div>
+        <div>DISPERSAL: 0x9f-α / 0x7c-ψ</div>
+      </div>
+    </div>
+    <div class="grid-row">
+      <div class="left-strip">
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="scope"></canvas><div class="label">SCOPE 03:11</div></div>
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="bars"></canvas><div class="label">FREQ BINS</div></div>
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="radial"></canvas><div class="label">RADIAL φ</div></div>
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="noise"></canvas><div class="label">ENTROPY</div></div>
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="pulse"></canvas><div class="label">BIO-PULSE</div></div>
+        <div class="panel thumb"><canvas class="miniCanvas" data-viz="particles"></canvas><div class="label">ION DRIFT</div></div>
+      </div>
+      <div class="hero panel scanlines">
+        <canvas id="heroCanvas"></canvas>
+        <div class="hero-overlay">
+          <div class="hero-chip">SPECIMEN <strong>FLR-07A</strong><br>BIOLUM SEAM: 77.2 nm<br>PULSE: 12-phase</div>
+          <div class="hero-chip">MEMBRANE: fractal<br>FRACT INDEX: <strong>1.42</strong><br>CHARGE: <span style="color:#ffaa00;">+23.8 kV</span></div>
+          <div class="hero-chip">SYMBIOTE: dormant<br>LUM COHERENCE: 0x8af7<br>NOTE: liminal chorus</div>
+        </div>
+        <div class="log" id="logBox"></div>
+      </div>
+      <div class="right-stack">
+        <div class="panel">
+          <div class="right-title">CROSS-SECTION</div>
+          <canvas class="rightCanvas" data-mode="bars"></canvas>
+        </div>
+        <div class="panel">
+          <div class="right-title">BIOFIELD INTENSITY</div>
+          <div class="bar"><span id="bar1" style="width:45%;"></span></div>
+          <div class="bar"><span id="bar2" style="width:66%;"></span></div>
+          <div class="bar"><span id="bar3" style="width:22%; background:linear-gradient(90deg,#ffaa00,#ff66b2);"></span></div>
+          <div class="mini-grid">
+            <div class="micro">HX1</div><div class="micro">HX2</div><div class="micro">HX3</div>
+            <div class="micro">77%</div><div class="micro">63%</div><div class="micro">91%</div>
+            <div class="micro">ψ13</div><div class="micro">φ22</div><div class="micro">δ07</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="right-title">ALT VIEW</div>
+          <canvas class="rightCanvas" data-mode="sine"></canvas>
+        </div>
+        <div class="panel">
+          <div class="right-title">SPECIMEN CARD</div>
+          <div class="bin">
+            GENOME: 0x14f-ea<br>
+            TISSUE: bio-lumen<br>
+            ENTROPY RESIST: 0.92<br>
+            FLOW: capillary mesh<br>
+            NOTE: felinethropic bloom<br>
+            TONE: purrmodulated<br>
+            COHORT: disciples-33
+          </div>
+        </div>
+        <div class="panel">
+          <div class="right-title">HEX STREAM</div>
+          <div class="bin" id="hexStream"></div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-telemetry">
+      <div class="panel chart"><canvas class="chartCanvas" data-chart="line"></canvas><div class="title">BIO-ELECTRIC FLUX</div></div>
+      <div class="panel chart"><canvas class="chartCanvas" data-chart="spectrum"></canvas><div class="title">PHOTON EMISSION</div></div>
+      <div class="panel chart"><canvas class="chartCanvas" data-chart="area"></canvas><div class="title">LTP DENSITY</div></div>
+      <div class="panel chart"><canvas class="chartCanvas" data-chart="heartbeat"></canvas><div class="title">SPECTRAL BLOOM</div></div>
+      <div class="panel chart"><canvas class="chartCanvas" data-chart="multiline"></canvas><div class="title">IONIC DRIFT</div></div>
+    </div>
+  </div>
+  <script>
+    // DURATION: 45
+    const hero = document.getElementById('heroCanvas');
+    const hctx = hero.getContext('2d');
+    const miniCanvases = document.querySelectorAll('.miniCanvas');
+    const rightCanvases = document.querySelectorAll('.rightCanvas');
+    const charts = document.querySelectorAll('.chartCanvas');
+    const logBox = document.getElementById('logBox');
+    const hexStream = document.getElementById('hexStream');
+    let start = performance.now();
+    function resize() {
+      hero.width = hero.clientWidth; hero.height = hero.clientHeight;
+      miniCanvases.forEach(c => { c.width = c.clientWidth; c.height = c.clientHeight; });
+      rightCanvases.forEach(c => { c.width = c.clientWidth; c.height = c.clientHeight; });
+      charts.forEach(c => { c.width = c.clientWidth; c.height = c.clientHeight; });
+    }
+    resize(); window.addEventListener('resize', resize);
+    function drawHero(t) {
+      const w = hero.width, h = hero.height;
+      const img = hctx.createImageData(w, h);
+      for (let y=0; y<h; y+=2) {
+        for (let x=0; x<w; x+=2) {
+          const idx = ((y*w)+x)*4;
+          const nx = x/w - 0.5, ny = y/h - 0.5;
+          const r = Math.sqrt(nx*nx+ny*ny);
+          const ang = Math.atan2(ny,nx);
+          const v = Math.sin(8*r - t*0.002 + Math.cos(6*ang + t*0.001)) * 0.5 + 0.5;
+          const g = Math.sin(12*r + t*0.0014) * 0.5 + 0.5;
+          img.data[idx] = 20 + g*30;
+          img.data[idx+1] = 120 + v*130;
+          img.data[idx+2] = 100 + g*90;
+          img.data[idx+3] = 255;
+        }
+      }
+      hctx.putImageData(img,0,0);
+      hctx.globalCompositeOperation = 'lighter';
+      hctx.strokeStyle = 'rgba(0,255,200,0.35)';
+      hctx.beginPath();
+      for (let i=0;i<8;i++){
+        const radius = 40 + i*20 + Math.sin(t*0.001+i)*10;
+        hctx.arc(w/2, h/2, radius, 0, Math.PI*2);
+        hctx.stroke();
+      }
+      hctx.globalCompositeOperation = 'source-over';
+      // Vascular filaments
+      hctx.strokeStyle = 'rgba(255,102,178,0.5)';
+      hctx.lineWidth = 1;
+      hctx.beginPath();
+      for (let a=0; a<Math.PI*2; a+=Math.PI/24){
+        const r0 = 80 + Math.sin(t*0.001+a*6)*12;
+        const r1 = 180 + Math.cos(t*0.0008+a*7)*18;
+        const x1 = w/2 + Math.cos(a)*r0;
+        const y1 = h/2 + Math.sin(a)*r0;
+        const x2 = w/2 + Math.cos(a+t*0.0005)*r1;
+        const y2 = h/2 + Math.sin(a+t*0.0005)*r1;
+        hctx.moveTo(w/2,h/2);
+        hctx.quadraticCurveTo(x1,y1,x2,y2);
+      }
+      hctx.stroke();
+    }
+    function drawMini(c, t) {
+      const ctx = c.getContext('2d');
+      const w = c.width, h = c.height;
+      ctx.clearRect(0,0,w,h);
+      const viz = c.dataset.viz || 'scope';
+
+      if (viz === 'scope') {
+        // Classic oscilloscope
+        ctx.strokeStyle = '#00ffff99';
+        ctx.beginPath();
+        for (let x=0; x<w; x++){
+          const y = h/2 + Math.sin((x/20)+(t*0.005)) * (h/3) * Math.sin(t*0.001);
+          ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = '#ffaa00aa';
+        ctx.beginPath();
+        for (let x=0; x<w; x+=6){
+          const y = h/2 + Math.cos((x/14)+(t*0.004)) * (h/4);
+          ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      } else if (viz === 'bars') {
+        // Frequency bars
+        const bars = 12;
+        for (let i=0; i<bars; i++){
+          const val = 0.2 + 0.7*Math.abs(Math.sin(t*0.003 + i*0.7));
+          const hue = i%2 ? '#43ff7a' : '#00ffff';
+          ctx.fillStyle = hue + '99';
+          ctx.fillRect(i*(w/bars)+1, h*(1-val), (w/bars)-2, h*val);
+        }
+      } else if (viz === 'radial') {
+        // Radial gauge
+        ctx.strokeStyle = '#43ff7a66';
+        ctx.lineWidth = 1;
+        const cx = w/2, cy = h/2, r = Math.min(w,h)/2 - 4;
+        for (let i=0; i<3; i++) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r - i*8, 0, Math.PI*2);
+          ctx.stroke();
+        }
+        // Rotating needle
+        const angle = t*0.002;
+        ctx.strokeStyle = '#ff66b2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(angle)*r*0.8, cy + Math.sin(angle)*r*0.8);
+        ctx.stroke();
+        // Second needle
+        ctx.strokeStyle = '#ffaa00';
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(-angle*0.7)*r*0.6, cy + Math.sin(-angle*0.7)*r*0.6);
+        ctx.stroke();
+      } else if (viz === 'noise') {
+        // Static/noise pattern
+        const img = ctx.createImageData(w, h);
+        for (let i=0; i<img.data.length; i+=4) {
+          const n = Math.random() * 0.3 + Math.sin(t*0.001)*0.1;
+          img.data[i] = n * 50;
+          img.data[i+1] = n * 255;
+          img.data[i+2] = n * 180;
+          img.data[i+3] = 255;
+        }
+        ctx.putImageData(img, 0, 0);
+      } else if (viz === 'pulse') {
+        // Heartbeat/EKG style
+        ctx.strokeStyle = '#ff66b2';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const phase = t*0.008;
+        for (let x=0; x<w; x++) {
+          const xn = (x/w + phase) % 1;
+          let y = h/2;
+          if (xn > 0.3 && xn < 0.35) y = h*0.2;
+          else if (xn > 0.35 && xn < 0.4) y = h*0.8;
+          else if (xn > 0.4 && xn < 0.45) y = h*0.3;
+          else if (xn > 0.45 && xn < 0.5) y = h/2;
+          ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      } else if (viz === 'particles') {
+        // Drifting particles
+        ctx.fillStyle = '#43ff7a';
+        for (let i=0; i<20; i++) {
+          const px = (Math.sin(i*0.5 + t*0.001)*0.4 + 0.5)*w;
+          const py = (Math.cos(i*0.7 + t*0.0008)*0.4 + 0.5)*h;
+          const size = 2 + Math.sin(i + t*0.003);
+          ctx.beginPath();
+          ctx.arc(px, py, size, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.fillStyle = '#ff66b266';
+        for (let i=0; i<10; i++) {
+          const px = (Math.cos(i*0.8 + t*0.0012)*0.35 + 0.5)*w;
+          const py = (Math.sin(i*0.6 + t*0.001)*0.35 + 0.5)*h;
+          ctx.beginPath();
+          ctx.arc(px, py, 3, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
+    function drawRight(c, t, mode) {
+      const ctx = c.getContext('2d');
+      ctx.clearRect(0,0,c.width,c.height);
+      if (mode === 'bars') {
+        for (let i=0;i<8;i++){
+          const val = 0.3 + 0.6*Math.abs(Math.sin(t*0.002 + i));
+          ctx.fillStyle = i%2 ? '#43ff7a88' : '#ff66b288';
+          ctx.fillRect(i*(c.width/8)+4, c.height*(1-val), (c.width/8)-6, c.height*val);
+        }
+      } else {
+        ctx.strokeStyle = '#43ff7a99';
+        ctx.beginPath();
+        for (let x=0;x<c.width;x++){
+          const y = c.height/2 + Math.sin((x/18)+t*0.003)*c.height/3;
+          ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = '#ffaa0099';
+        ctx.beginPath();
+        for (let x=0;x<c.width;x++){
+          const y = c.height/2 + Math.cos((x/12)+t*0.0045)*c.height/4;
+          ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+      }
+    }
+    const chartData = Array.from({length: charts.length}, ()=> Array(120).fill(0.5));
+    function updateCharts(t) {
+      charts.forEach((c, idx)=>{
+        const ctx = c.getContext('2d');
+        const w = c.width, h = c.height;
+        const arr = chartData[idx];
+        arr.shift();
+        arr.push(0.5 + 0.45*Math.sin(t*0.003 + idx*2 + Math.random()*0.3));
+        ctx.clearRect(0,0,w,h);
+        const chartType = c.dataset.chart || 'line';
+
+        if (chartType === 'line') {
+          // Classic scrolling line
+          ctx.strokeStyle = '#43ff7a';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          arr.forEach((v,i)=>{
+            const x = i*(w/arr.length);
+            const y = h - v*h*0.85 - 6;
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+          });
+          ctx.stroke();
+          ctx.strokeStyle = '#ff66b2';
+          ctx.beginPath();
+          arr.forEach((v,i)=>{
+            const x = i*(w/arr.length);
+            const y = h - Math.abs(Math.sin(v*3+t*0.002))*h*0.5 - 8;
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+          });
+          ctx.stroke();
+        } else if (chartType === 'spectrum') {
+          // Frequency spectrum bars
+          const bins = 24;
+          for (let i=0; i<bins; i++) {
+            const val = 0.15 + 0.75*Math.abs(Math.sin(t*0.004 + i*0.5));
+            const hue = i < bins/2 ? '#43ff7a' : '#ff66b2';
+            ctx.fillStyle = hue + 'aa';
+            const bw = w/bins;
+            ctx.fillRect(i*bw+1, h*(1-val), bw-2, h*val);
+          }
+        } else if (chartType === 'area') {
+          // Filled area chart
+          ctx.fillStyle = '#43ff7a33';
+          ctx.beginPath();
+          ctx.moveTo(0, h);
+          arr.forEach((v,i)=>{
+            const x = i*(w/arr.length);
+            const y = h - v*h*0.8 - 4;
+            ctx.lineTo(x,y);
+          });
+          ctx.lineTo(w, h);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = '#43ff7a';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          arr.forEach((v,i)=>{
+            const x = i*(w/arr.length);
+            const y = h - v*h*0.8 - 4;
+            i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+          });
+          ctx.stroke();
+        } else if (chartType === 'heartbeat') {
+          // ECG heartbeat style - scrolling
+          ctx.strokeStyle = '#ff66b2';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          const phase = t*0.006;
+          for (let x=0; x<w; x++) {
+            const xn = ((x/w)*3 + phase) % 1;
+            let y = h*0.5;
+            if (xn > 0.4 && xn < 0.45) y = h*0.15;
+            else if (xn > 0.45 && xn < 0.5) y = h*0.85;
+            else if (xn > 0.5 && xn < 0.55) y = h*0.25;
+            else if (xn > 0.55 && xn < 0.6) y = h*0.5;
+            ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        } else if (chartType === 'multiline') {
+          // Multiple colored traces
+          const colors = ['#43ff7a', '#00ffff', '#ffaa00'];
+          colors.forEach((col, ci) => {
+            ctx.strokeStyle = col + 'bb';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            arr.forEach((v,i)=>{
+              const offset = Math.sin(t*0.002 + ci*2 + i*0.05) * 0.2;
+              const x = i*(w/arr.length);
+              const y = h*(0.3 + ci*0.15) + (v+offset-0.5)*h*0.4;
+              i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+            });
+            ctx.stroke();
+          });
+        }
+      });
+    }
+    function animateCounters(t){
+      const pct = (Math.sin(t*0.0004)*10 + 60).toFixed(1);
+      document.getElementById('analysisPct').textContent = pct;
+      document.getElementById('thrum').textContent = (40 + 5*Math.cos(t*0.0007)).toFixed(1);
+      document.getElementById('bar1').style.width = (40 + 20*Math.sin(t*0.0011))+'%';
+      document.getElementById('bar2').style.width = (60 + 10*Math.cos(t*0.0013))+'%';
+      document.getElementById('bar3').style.width = (25 + 18*Math.sin(t*0.0017+2))+'%';
+    }
+    function tickTime() {
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2,'0');
+      const mm = String(now.getMinutes()).padStart(2,'0');
+      const ss = String(now.getSeconds()).padStart(2,'0');
+      document.getElementById('localTime').textContent = `${hh}:${mm}:${ss}`;
+      const elapsed = Math.floor((Date.now() - originTime)/1000);
+      const H = String(Math.floor(elapsed/3600)).padStart(3,'0');
+      const M = String(Math.floor((elapsed%3600)/60)).padStart(2,'0');
+      const S = String(elapsed%60).padStart(2,'0');
+      document.getElementById('missionTime').textContent = `${H}:${M}:${S}`;
+    }
+    const originTime = Date.now();
+    setInterval(tickTime, 1000);
+    function scrollLog() {
+      const line = `[${new Date().toISOString().slice(11,19)}] LUM:${(Math.random()*0.99).toFixed(2)} φ:${(Math.random()*1.11).toFixed(3)} seq:${Math.random().toString(16).slice(2,6)}`;
+      const div = document.createElement('div');
+      div.textContent = line;
+      logBox.appendChild(div);
+      while (logBox.children.length > 9) logBox.removeChild(logBox.firstChild);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+    setInterval(scrollLog, 1200);
+    function scrollHex() {
+      let txt = '';
+      for (let i=0;i<24;i++){
+        txt += Math.random().toString(16).slice(2,6) + ' ';
+        if (i%6===5) txt += '<br>';
+      }
+      hexStream.innerHTML = txt;
+    }
+    setInterval(scrollHex, 900);
+    // Render a single frame at time t (in seconds) - for video capture
+    window.renderFrame = function(timeSeconds) {
+      const t = timeSeconds * 1000; // Convert to ms for animation functions
+      drawHero(t);
+      miniCanvases.forEach(c=>drawMini(c,t));
+      rightCanvases.forEach(c=>drawRight(c,t,c.dataset.mode));
+      updateCharts(t);
+      animateCounters(t);
+      // Return null - renderer will use page.screenshot() for full HTML
+      return null;
+    };
+
+    // Live animation loop for preview
+    function loop(ts){
+      const t = ts - start;
+      drawHero(t);
+      miniCanvases.forEach(c=>drawMini(c,t));
+      rightCanvases.forEach(c=>drawRight(c,t,c.dataset.mode));
+      updateCharts(t);
+      animateCounters(t);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    // Signal to video renderer that animation is ready
+    window.ready = true;
+  </script>
+<script>
+window.initToneJsEngine=async function(){
+ const bpm=92;
+ Tone.Transport.bpm.value=bpm;
+ const verb=new Tone.Reverb({decay:2.8,wet:0.22}).toDestination();
+ await verb.generate();
+ const comp=new Tone.Compressor({threshold:-16,ratio:9,attack:0.005,release:0.18}).toDestination();
+ const delay=new Tone.FeedbackDelay({delayTime:"8n.",feedback:0.32,wet:0.25}).connect(comp);
+ const kick=new Tone.MembraneSynth({pitchDecay:0.02,octaves:6,envelope:{attack:0.001,decay:0.18,sustain:0,release:0.08}}).toDestination();
+ const bassFilter=new Tone.Filter({type:"lowpass",frequency:140,Q:1.0}).connect(comp);
+ const bass=new Tone.MonoSynth({oscillator:{type:"sawtooth"},filter:{type:"lowpass",frequency:120},envelope:{attack:0.01,decay:0.18,sustain:0.1,release:0.1},filterEnvelope:{attack:0.01,decay:0.2,sustain:0.0,baseFrequency:80,octaves:2}}).connect(bassFilter);
+ const pad=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},envelope:{attack:0.8,decay:0.4,sustain:0.6,release:1.6}}).connect(verb);
+ const arpFilter=new Tone.Filter({type:"lowpass",frequency:400,Q:1.1}).connect(delay);
+ const arp=new Tone.Synth({oscillator:{type:"square"},envelope:{attack:0.01,decay:0.12,sustain:0,release:0.08}}).connect(arpFilter);
+ const hat=new Tone.MetalSynth({frequency:450,envelope:{attack:0.001,decay:0.08,release:0.03},harmonicity:5.4,modulationIndex:24,resonance:5500}).connect(verb);
+ let beat=0,bassStep=0,arpStep=0,chordStep=0;
+ const chords=[["A3","C4","E4"],["F3","A3","C4"],["G3","B3","D4"],["E3","G3","B3"]];
+ const bassA=[ "A1","A1","G1","E1" ];
+ const bassB=[ "F1","C2","G1","D1","A1" ];
+ const bassC=[ "G1","D1","A1","E1" ];
+ const bassLoop=new Tone.Loop((time)=>{
+  const bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+  let pattern=bassA;
+  if(bar>=6&&bar<14)pattern=bassB;
+  else if(bar>=14&&bar<22)pattern=bassC;
+  const note=pattern[bassStep%pattern.length];
+  const vel=bar<4?0.5:0.8;
+  bass.triggerAttackRelease(note,"8n",time,vel);
+  bassStep++;
+ }, "8n").start(0);
+ const kickLoop=new Tone.Loop((time)=>{
+  kick.triggerAttackRelease("C1","8n",time,0.9);
+  comp.threshold.setValueAtTime(-24,time);
+  comp.threshold.exponentialRampToValueAtTime(-16,time+0.18);
+ }, "4n").start(0);
+ const hatLoop=new Tone.Loop((time)=>{
+  const bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+  if(bar>=4&&bar<20&&beat%2===1)hat.triggerAttackRelease("16n",time,0.35+0.15*Math.random());
+  beat++;
+ }, "8n").start(0);
+ const padLoop=new Tone.Loop((time)=>{
+  const bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+  if(bar<22){
+   pad.triggerAttackRelease(chords[chordStep%chords.length],"2n",time,0.22);
+  }
+  chordStep++;
+ }, "2n").start(0);
+ const arpNotes=["A3","C4","E4","A4","G4","E4","C4","A3","D4","F4","A4","C5"];
+ const arpLoop=new Tone.Loop((time)=>{
+  const bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+  if(bar>=2&&bar<18){
+   const vel=bar<6?0.3:0.55;
+   arp.triggerAttackRelease(arpNotes[arpStep%arpNotes.length],"16n",time,vel);
+  }
+  arpStep++;
+ }, "16n").start(0);
+ Tone.Transport.schedule((time)=>{arpFilter.frequency.linearRampToValueAtTime(1800,time+8*(60/bpm));},"4:0:0");
+ Tone.Transport.schedule((time)=>{arpFilter.frequency.linearRampToValueAtTime(420,time+4*(60/bpm));},"16:0:0");
+ Tone.Transport.schedule((time)=>{bassFilter.frequency.linearRampToValueAtTime(110,time+4*(60/bpm));},"16:0:0");
+ Tone.Transport.schedule((time)=>{beat=0;arpStep=0;chordStep=0;bassStep=0;},"0:0:0");
+ window.toneJsInstruments={kick,bass,pad,arp,hat};
+ window.toneJsParts={kickLoop,bassLoop,padLoop,arpLoop,hatLoop};
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
