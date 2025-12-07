@@ -190,14 +190,14 @@ const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
         <div className="mb-4 flex justify-center">
           <div
             className="rounded overflow-hidden border border-void-green/30"
-            style={{ width: '540px', height: '675px' }}
+            style={{ width: '810px', height: '1012px' }}
           >
             <iframe
               src={htmlPath}
               style={{
                 width: '1080px',
                 height: '1350px',
-                transform: 'scale(0.5)',
+                transform: 'scale(0.75)',
                 transformOrigin: 'top left',
                 border: 'none'
               }}
