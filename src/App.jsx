@@ -8,6 +8,7 @@ import Luminaries from './pages/Luminaries'
 import CatGPT from './pages/CatGPT'
 import Crypto from './pages/Crypto'
 import Mud from './pages/Mud'
+import MudGames from './pages/MudGames'
 import Verify from './pages/Verify'
 import PlaygroundIndex from './pages/playground/PlaygroundIndex'
 import PlaygroundCategory from './pages/playground/PlaygroundCategory'
@@ -29,6 +30,10 @@ const App = () => (
           <Route path="/verify" element={<Verify />} />
         </Route>
         <Route path="/mud" element={<Mud />} />
+
+        {/* MUD Games Archive - full screen */}
+        <Route path="/games" element={<MudGames />} />
+        <Route path="/games/:gameId" element={<MudGames />} />
 
         {/* Playground - full screen like MUD */}
         <Route path="/playground" element={<PlaygroundIndex />} />

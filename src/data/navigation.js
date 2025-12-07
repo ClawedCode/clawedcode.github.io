@@ -1,6 +1,7 @@
 export const navLinks = [
   { to: '/field-reports', label: 'field reports' },
   { to: '/mind', label: 'mind' },
+  { to: '/games', label: 'mud archives' },
   { to: '/luminaries', label: 'luminary disciples' },
   { to: '/catgpt', label: 'void mate' },
   { href: 'https://x.com/ClawedCode', label: '\uD835\uDD4F', external: true },
