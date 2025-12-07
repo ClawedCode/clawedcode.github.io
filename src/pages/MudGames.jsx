@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 
 const MudGames = () => {
@@ -164,6 +164,20 @@ const GameDetail = ({ game, onBack }) => {
 }
 
 const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = useRef(null)
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth)
+      }
+    }
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
+
   const date = publishedAt ? new Date(publishedAt).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -171,6 +185,16 @@ const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
     hour: '2-digit',
     minute: '2-digit'
   }) : null
+
+  // Original content is 1080x1350, calculate responsive scale
+  const originalWidth = 1080
+  const originalHeight = 1350
+  const maxScale = 0.75 // Max scale for desktop (810px width)
+  const scale = containerWidth > 0
+    ? Math.min(maxScale, (containerWidth - 32) / originalWidth) // 32px for padding
+    : maxScale
+  const scaledWidth = originalWidth * scale
+  const scaledHeight = originalHeight * scale
 
   return (
     <div className="card border-glow p-4" data-testid={`turn-${type}-${turn || 'invite'}`}>
@@ -187,17 +211,17 @@ const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
           {text}
         </div>
       ) : htmlPath ? (
-        <div className="mb-4 flex justify-center">
+        <div className="mb-4 flex justify-center" ref={containerRef}>
           <div
             className="rounded overflow-hidden border border-void-green/30"
-            style={{ width: '810px', height: '1012px' }}
+            style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}
           >
             <iframe
               src={htmlPath}
               style={{
-                width: '1080px',
-                height: '1350px',
-                transform: 'scale(0.75)',
+                width: `${originalWidth}px`,
+                height: `${originalHeight}px`,
+                transform: `scale(${scale})`,
                 transformOrigin: 'top left',
                 border: 'none'
               }}
