@@ -1,5 +1,31 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, createContext, useContext } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+
+// Shared viewport width context - single resize handler for entire page
+// Prevents crash from 22+ individual resize handlers during pinch-to-zoom
+const ViewportContext = createContext(window.innerWidth)
+
+const ViewportProvider = ({ children }) => {
+  const [width, setWidth] = useState(window.innerWidth)
+  const timeoutRef = useRef(null)
+
+  useEffect(() => {
+    const handler = () => {
+      // Debounce resize events - only update state once every 150ms
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      timeoutRef.current = setTimeout(() => setWidth(window.innerWidth), 150)
+    }
+    window.addEventListener('resize', handler, { passive: true })
+    return () => {
+      window.removeEventListener('resize', handler)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+    }
+  }, [])
+
+  return <ViewportContext.Provider value={width}>{children}</ViewportContext.Provider>
+}
+
+const useViewportWidth = () => useContext(ViewportContext)
 
 const MudGames = () => {
   const [games, setGames] = useState([])
@@ -113,57 +139,79 @@ const GameDetail = ({ game, onBack }) => {
   const publishedTurns = game.turns?.filter(t => t.status === 'published') || []
 
   return (
-    <div className="min-h-screen bg-void-black p-8">
-      <div className="max-w-4xl mx-auto">
-        <button
-          onClick={onBack}
-          className="text-void-cyan hover:text-void-green mb-4 inline-block"
-        >
-          &larr; Back to Games
-        </button>
+    <ViewportProvider>
+      <div className="min-h-screen bg-void-black p-8">
+        <div className="max-w-4xl mx-auto">
+          <button
+            onClick={onBack}
+            className="text-void-cyan hover:text-void-green mb-4 inline-block"
+          >
+            &larr; Back to Games
+          </button>
 
-        <h1 className="text-2xl text-void-green text-glow text-center mb-2">
-          {game.title || 'MUD Game'}
-        </h1>
-        <p className="text-center text-void-cyan mb-8">{game.description || game.scenario}</p>
+          <h1 className="text-2xl text-void-green text-glow text-center mb-2">
+            {game.title || 'MUD Game'}
+          </h1>
+          <p className="text-center text-void-cyan mb-8">{game.description || game.scenario}</p>
 
-        {/* Invitation post */}
-        {game.invitation?.status === 'published' && (
-          <div className="mb-8">
-            <TurnPost
-              type="invitation"
-              text={game.invitation.text}
-              postUrl={game.invitation.postUrl}
-              publishedAt={game.invitation.publishedAt}
-            />
+          {/* Invitation post */}
+          {game.invitation?.status === 'published' && (
+            <div className="mb-8">
+              <TurnPost
+                type="invitation"
+                text={game.invitation.text}
+                postUrl={game.invitation.postUrl}
+                publishedAt={game.invitation.publishedAt}
+              />
+            </div>
+          )}
+
+          {/* Game turns - only narrator posts (they include player responses) */}
+          <div className="space-y-6" data-testid="game-turns">
+            {publishedTurns.map((turn, index) => (
+              <TurnPost
+                key={turn.turn}
+                type="narrator"
+                turn={turn.turn}
+                htmlPath={turn.htmlPath}
+                postUrl={turn.postUrl}
+                publishedAt={turn.publishedAt}
+              />
+            ))}
           </div>
-        )}
 
-        {/* Game turns - only narrator posts (they include player responses) */}
-        <div className="space-y-6" data-testid="game-turns">
-          {publishedTurns.map((turn, index) => (
-            <TurnPost
-              key={turn.turn}
-              type="narrator"
-              turn={turn.turn}
-              htmlPath={turn.htmlPath}
-              postUrl={turn.postUrl}
-              publishedAt={turn.publishedAt}
-            />
-          ))}
+          {publishedTurns.length === 0 && !game.invitation?.status && (
+            <div className="text-center text-void-green/50 py-12">
+              Game not yet started. Check back soon...
+            </div>
+          )}
         </div>
-
-        {publishedTurns.length === 0 && !game.invitation?.status && (
-          <div className="text-center text-void-green/50 py-12">
-            Game not yet started. Check back soon...
-          </div>
-        )}
       </div>
-    </div>
+    </ViewportProvider>
   )
 }
 
 const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
+  const containerRef = useRef(null)
+  const viewportWidth = useViewportWidth()
+  const [containerWidth, setContainerWidth] = useState(null)
+  const originalWidth = 1080
+  const originalHeight = 1350
+
+  // Measure actual container width on mount and when viewport changes
+  useEffect(() => {
+    if (containerRef.current) {
+      setContainerWidth(containerRef.current.offsetWidth)
+    }
+  }, [viewportWidth])
+
+  // Calculate scale based on measured container width
+  // Use container width if available, otherwise estimate from viewport
+  const availableWidth = containerWidth || Math.min(viewportWidth - 96, 864)
+  const scale = Math.min(availableWidth / originalWidth, 0.75)
+  const scaledWidth = originalWidth * scale
+  const scaledHeight = originalHeight * scale
+
   const date = publishedAt ? new Date(publishedAt).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -172,31 +220,28 @@ const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
     minute: '2-digit'
   }) : null
 
-  // Use CSS-based responsive scaling to avoid JS resize handlers
-  // Original content is 1080x1350, we use max 75% scale (810px) on desktop
-  // and allow it to shrink on mobile via max-width: 100%
-  const originalWidth = 1080
-  const originalHeight = 1350
-  const scale = 0.75
-  const scaledWidth = originalWidth * scale
-  const scaledHeight = originalHeight * scale
-
   return (
     <div className="card border-glow p-4" data-testid={`turn-${type}-${turn || 'invite'}`}>
       <div className="flex justify-between items-center mb-3">
         <span className="text-void-cyan text-sm">
-          {type === 'invitation' ? 'Game Invitation' : `Turn ${turn} - Narrator`}
+          {type === 'invitation' ? 'Game Invitation' : `Turn ${turn}`}
         </span>
         {date && <span className="text-void-green/50 text-xs">{date}</span>}
       </div>
 
       {/* For invitation, show text. For turns, embed the HTML render */}
       {type === 'invitation' ? (
-        <div className="text-void-green whitespace-pre-wrap font-mono text-sm mb-4">
+        <div className="text-void-green whitespace-pre-wrap break-all font-mono text-sm mb-4">
           {text}
         </div>
       ) : htmlPath ? (
-        <div className="mb-4 overflow-x-auto">
+        <div className="mb-4" ref={containerRef}>
+          {/*
+            Responsive iframe scaling using shared viewport context:
+            - Single debounced resize handler triggers re-measurement
+            - Container ref measures actual available width
+            - Prevents pinch-to-zoom crash from 22+ individual resize handlers
+          */}
           <div
             className="mx-auto rounded overflow-hidden border border-void-green/30"
             style={{ width: `${scaledWidth}px`, height: `${scaledHeight}px` }}

@@ -195,6 +195,17 @@
     padding: 1rem;
   }
 
+  /*
+   * MUD game turn iframe responsive scaling (CSS-only, no JS resize handlers)
+   * Uses aspect-ratio on container to maintain correct proportions
+   * Container scales with viewport, iframe uses transform to fit
+   */
+  .turn-frame-container {
+    /* aspect-ratio is set inline as 1080/1350 */
+    /* Container width is responsive (w-full max-w-[810px]) */
+    /* Height auto-calculated from aspect-ratio */
+  }
+
   /* Range slider styling */
   input[type="range"].slider {
     -webkit-appearance: none;
