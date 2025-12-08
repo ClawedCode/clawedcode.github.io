@@ -1,7 +1,33 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
-const MUD_VERSION = '2.1.0-react'
+export const MUD_VERSION = '3.0.0-voidrealm'
 const STORAGE_KEY = 'voidMudState'
+const STATE_VERSION = 2
+
+// Migrate saved state to current version
+const migrateState = (state) => {
+  const version = state.stateVersion || 1
+
+  if (version < 2) {
+    // Add new player properties
+    state.player.abilities = state.player.abilities || []
+
+    // Add void realm tracking
+    state.voidRealmUnlocked = state.voidRealmUnlocked || false
+
+    // Ensure enemies have proper structure
+    Object.keys(state.world).forEach(roomId => {
+      const room = state.world[roomId]
+      if (room.enemy && !room.enemy.maxHp) {
+        room.enemy.maxHp = room.enemy.hp
+      }
+    })
+
+    state.stateVersion = 2
+  }
+
+  return state
+}
 
 // Load saved state from localStorage
 const loadSavedState = () => {
@@ -12,7 +38,7 @@ const loadSavedState = () => {
   if (parsed.discovered) {
     parsed.discovered = new Set(parsed.discovered)
   }
-  return parsed
+  return migrateState(parsed)
 }
 
 // Save state to localStorage
@@ -20,7 +46,9 @@ const saveState = (state) => {
   const toSave = {
     ...state,
     // Convert Set to array for JSON serialization
-    discovered: Array.from(state.discovered)
+    discovered: Array.from(state.discovered),
+    // Include state version for migration support
+    stateVersion: STATE_VERSION
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
 }
@@ -48,7 +76,12 @@ export const ITEMS = {
   'field-map': { name: 'field map', icon: '🗺️', type: 'tool', desc: 'Highlights points of interest.' },
   'plasma-torch': { name: 'plasma torch', icon: '🔦', type: 'equipment', desc: 'Weapon upgrade. Burns hot.', weapon: 'plasma torch' },
   'pulse-rifle': { name: 'pulse rifle', icon: '🔫', type: 'equipment', desc: 'Military grade. Burns hot.', weapon: 'pulse rifle' },
-  'data-chip': { name: 'data chip', icon: '💾', type: 'tool', desc: 'Station logs. Fragments of the truth.' }
+  'data-chip': { name: 'data chip', icon: '💾', type: 'tool', desc: 'Station logs. Fragments of the truth.' },
+  // Light weapons for fighting void creatures
+  'signal-flare': { name: 'signal flare', icon: '🎇', type: 'equipment', desc: 'Military-grade illumination. +8 bonus vs dark creatures.', weapon: 'signal flare', lightWeapon: true, lightBonus: 8 },
+  'sunblade': { name: 'sunblade', icon: '☀️', type: 'equipment', desc: 'Ancient weapon of pure light. +10 vs dark, illuminates rooms.', weapon: 'sunblade', lightWeapon: true, lightBonus: 10, providesLight: true },
+  // Artifacts (permanent abilities)
+  'crown-of-darkness': { name: 'Crown of Darkness', icon: '👑', type: 'artifact', desc: "The Grue Queen's crown. Grants permanent darkvision.", permanent: true, ability: 'darkvision' }
 }
 
 // Readable terminal content
@@ -219,6 +252,43 @@ You can't escape what you already are.
 I'll be waiting in the bay.
 I've been waiting for 247 years.
 I can wait a little longer.`
+  },
+  // Void Realm readables
+  'void-keeper': {
+    name: "Light Keeper's Log",
+    content: `KEEPER'S LOG - FINAL ENTRY
+
+They asked why I stayed when the others fled.
+I stayed because light needs a guardian.
+
+The sunblade is ready. The signal flares charged.
+Whoever finds this: the Queen can be killed.
+
+Coordinated light. Overwhelming brilliance.
+That is how you kill what birthed darkness itself.
+
+The Living Dark was just a scout.
+The Queen is still waiting.
+
+[END LOG]`
+  },
+  'grue-queen': {
+    name: "Ancient Inscription",
+    content: `THE VOID SPEAKS:
+
+Before light, there was Us.
+Before warmth, there was Us.
+Before you, there was Us.
+
+You bring light to kill darkness.
+But darkness does not die.
+Darkness WAITS.
+
+When your light fades—
+And all light fades—
+We will be here.
+
+WE HAVE ALWAYS BEEN HERE.`
   }
 }
 
@@ -307,9 +377,9 @@ const createWorld = () => ({
     name: 'Maintenance Shaft',
     abbr: 'MNT',
     coords: { x: 2, y: -1, z: 0 },
-    desc: "Pipes hiss with the station's last breath—recycled air from lungs that stopped breathing long ago. The scratches on the walls go only downward.",
+    desc: "Pipes hiss with the station's last breath—recycled air from lungs that stopped breathing long ago. The scratches on the walls go only downward. A military case lies open nearby.",
     exits: { north: 'lab', down: 'containment' },
-    items: ['patch-kit'],
+    items: ['patch-kit', 'signal-flare'],
     enemy: { name: 'Leak Drone', hp: 7, maxHp: 7, attack: 3, loot: 'ion-cell', desc: "A repair unit corrupted by something in the pipes." }
   },
   antenna: {
@@ -361,7 +431,7 @@ const createWorld = () => ({
     exits: { east: 'containment' },
     items: ['shield-weave', 'cryo-gel'],
     dark: true,
-    enemy: { name: 'Living Dark', hp: 999, maxHp: 999, attack: 99, fearLight: true, desc: 'Not a creature—an absence given hunger. Only light can banish it.' }
+    enemy: { name: 'Living Dark', hp: 150, maxHp: 150, attack: 12, fearLight: true, vulnerableToLight: true, onDefeat: 'unlockVoidRealm', desc: 'Not a creature—an absence given hunger. Light weapons can harm it.' }
   },
   cryogenics: {
     name: 'Cryogenics Bay',
@@ -410,6 +480,62 @@ const createWorld = () => ({
     items: ['pulse-rifle', 'stim-pack'],
     enemy: { name: 'Bridge Guardian', hp: 20, maxHp: 20, attack: 6, loot: 'keycard-alpha', desc: "The station's final officer, fused with the command systems." },
     readable: 'captain-log'
+  },
+  // === VOID REALM (Z=-2) - Secret level unlocked by defeating Living Dark ===
+  'void-antechamber': {
+    name: 'Void Antechamber',
+    abbr: 'VOID',
+    coords: { x: 1, y: 0, z: -2 },
+    desc: 'You emerge into anti-light. Not darkness—the opposite of seeing. Reality recoils from this place.',
+    exits: { up: 'cell-block', east: 'void-nursery', south: 'void-archive' },
+    items: ['med-patch'],
+    enemy: null,
+    dark: true,
+    voidRealm: true
+  },
+  'void-nursery': {
+    name: 'The Spawning Darkness',
+    abbr: 'NURS',
+    coords: { x: 2, y: 0, z: -2 },
+    desc: 'Pools of liquid shadow birth things that hunger. They are becoming what they always were.',
+    exits: { west: 'void-antechamber', east: 'void-sanctum' },
+    items: ['signal-flare'],
+    enemy: { name: 'Grue Spawn', hp: 35, maxHp: 35, attack: 6, vulnerableToLight: true, loot: 'cryo-gel', desc: 'A fragment of the Living Dark. Newborn hunger given form.' },
+    dark: true,
+    voidRealm: true
+  },
+  'void-archive': {
+    name: 'Archive of Lost Light',
+    abbr: 'ARCV',
+    coords: { x: 1, y: -1, z: -2 },
+    desc: 'Crystalline structures hold captured photons from before the void. Ancient weapons of light sleep here.',
+    exits: { north: 'void-antechamber' },
+    items: ['sunblade', 'stim-pack'],
+    enemy: { name: 'Void Wraith', hp: 45, maxHp: 45, attack: 7, vulnerableToLight: true, loot: 'ion-shard', desc: 'A consciousness that became nothing. It remembers light with hatred.' },
+    dark: false,
+    voidRealm: true,
+    readable: 'void-keeper'
+  },
+  'void-sanctum': {
+    name: 'Sanctum of Eternal Night',
+    abbr: 'SANC',
+    coords: { x: 3, y: 0, z: -2 },
+    desc: 'The heart of absence. Here dwells what birthed the Living Dark—the Grue Queen.',
+    exits: { west: 'void-nursery' },
+    items: [],
+    enemy: {
+      name: 'Grue Queen',
+      hp: 200,
+      maxHp: 200,
+      attack: 10,
+      boss: true,
+      vulnerableToLight: true,
+      loot: 'crown-of-darkness',
+      desc: 'Mother of all that hungers in the dark. She has waited eons for this meeting.'
+    },
+    dark: true,
+    voidRealm: true,
+    readable: 'grue-queen'
   }
 })
 
@@ -425,7 +551,8 @@ const createPlayer = () => ({
   ],
   weapon: 'shock baton',
   abilityCharge: null,
-  evading: false
+  evading: false,
+  abilities: []  // Permanent abilities like 'darkvision'
 })
 
 export const useMUD = (onOutput, playerName = 'wanderer') => {
@@ -502,16 +629,27 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
 
     print(`\n=== ${room.name.toUpperCase()} ===`, 'system')
 
-    const roomDesc = (!room.dark && room.descLit) ? room.descLit : room.desc
-    print(room.dark && !room.lit ? 'Pitch darkness. You cannot see.' : roomDesc)
+    // Check for darkvision ability
+    const hasDarkvision = player.abilities?.includes('darkvision')
+    const canSee = !room.dark || room.lit || hasDarkvision
 
-    if (!room.dark || room.lit) {
+    if (!canSee) {
+      print('Pitch darkness. You cannot see.')
+    } else {
+      const roomDesc = room.descLit || room.desc
+      if (hasDarkvision && room.dark && !room.lit) {
+        print('[Darkvision active]', 'system')
+      }
+      print(roomDesc)
+    }
+
+    if (canSee) {
       if (room.items?.length > 0) {
         const itemNames = room.items.map(id => `${ITEMS[id]?.icon} ${ITEMS[id]?.name}`).join(', ')
         print(`Items: ${itemNames}`, 'system')
       }
 
-      if (room.enemy) {
+      if (room.enemy && !room.enemy.defeated) {
         const scannedInfo = room.enemy.scanned
           ? `HP: ${room.enemy.hp}/${room.enemy.maxHp} | ATK: ${room.enemy.attack}`
           : 'HP: ???/??? | ATK: ???'
@@ -531,7 +669,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
       return dir
     }).join(', ')
     print(`Exits: ${exitList}`, 'system')
-  }, [getCurrentRoom, print, findInventoryEntry])
+  }, [getCurrentRoom, print, findInventoryEntry, player.abilities])
 
   const move = useCallback((direction) => {
     const room = getCurrentRoom()
@@ -539,6 +677,12 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
 
     if (!exit) {
       print(`You cannot go ${direction} from here.`, 'error')
+      return false
+    }
+
+    // Block movement if there's an undefeated enemy in the room
+    if (room.enemy && !room.enemy.defeated) {
+      print(`The ${room.enemy.name} blocks your path! You must defeat it first.`, 'error')
       return false
     }
 
@@ -640,15 +784,82 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
 
     if (item.special === 'light') {
       const room = getCurrentRoom()
-      if (room.dark && room.enemy?.fearLight) {
+
+      // Combat use: burst damage to light-vulnerable enemies
+      if (room.enemy?.vulnerableToLight && !room.enemy.defeated) {
+        const flareDamage = 25
+        const newHp = room.enemy.hp - flareDamage
+
+        print('The flare explodes with blinding intensity!', 'system')
+        print(`${room.enemy.name} takes ${flareDamage} damage!`, 'system')
+
+        if (newHp <= 0) {
+          // Handle enemy defeat
+          print(`${room.enemy.name} is defeated!`, 'system')
+
+          if (room.enemy.onDefeat === 'unlockVoidRealm') {
+            print('')
+            print('The Living Dark SHRIEKS—a sound that tears reality.', 'system')
+            print('Where it fell, a rift opens to somewhere DEEPER.', 'system')
+            print('A portal to the Void Realm appears. (Type "down" to enter)', 'system')
+
+            setWorld(prev => ({
+              ...prev,
+              'cell-block': {
+                ...prev['cell-block'],
+                exits: { ...prev['cell-block'].exits, down: 'void-antechamber' },
+                dark: false,
+                lit: true,
+                enemy: { ...prev['cell-block'].enemy, hp: 0, defeated: true }
+              }
+            }))
+          } else {
+            // Standard defeat
+            if (room.enemy.loot) {
+              addItemToInventory(room.enemy.loot)
+              print(`Looted: ${ITEMS[room.enemy.loot]?.icon} ${ITEMS[room.enemy.loot]?.name}`, 'system')
+            }
+            setWorld(prev => ({
+              ...prev,
+              [player.location]: {
+                ...prev[player.location],
+                dark: false,
+                lit: true,
+                enemy: { ...prev[player.location].enemy, hp: 0, defeated: true }
+              }
+            }))
+          }
+        } else {
+          // Enemy still alive, just damaged
+          setWorld(prev => ({
+            ...prev,
+            [player.location]: {
+              ...prev[player.location],
+              dark: false,
+              lit: true,
+              enemy: { ...prev[player.location].enemy, hp: newHp }
+            }
+          }))
+        }
+        consumed = true
+      } else if (room.dark && room.enemy?.fearLight && !room.enemy.vulnerableToLight) {
+        // Legacy banish behavior for fearLight-only enemies
         setWorld(prev => ({
           ...prev,
           [player.location]: { ...prev[player.location], dark: false, lit: true, enemy: null }
         }))
-        print('The flare ignites with blinding intensity! The Living Dark SHRIEKS—a sound like tearing reality—and dissolves into shadows.', 'system')
+        print('The flare ignites with blinding intensity! The creature SHRIEKS and dissolves into shadows.', 'system')
         consumed = true
       } else {
+        // No enemy or not vulnerable
         print('The flare burns bright. Shadows recoil briefly.')
+        if (room.dark) {
+          setWorld(prev => ({
+            ...prev,
+            [player.location]: { ...prev[player.location], dark: false, lit: true }
+          }))
+          print('The room is now illuminated.', 'system')
+        }
         consumed = true
       }
     }
@@ -768,20 +979,30 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
       return false
     }
 
-    if (room.dark && !room.lit) {
+    // Check for darkvision ability
+    const hasDarkvision = player.abilities?.includes('darkvision')
+    if (room.dark && !room.lit && !hasDarkvision) {
       print('You cannot fight what you cannot see!', 'error')
       return false
     }
 
     const enemy = room.enemy
 
-    // Can't attack Living Dark with weapons
-    if (enemy.fearLight) {
-      print(`Your weapon passes through the ${enemy.name} like it isn't there.`, 'error')
-      print('Physical attacks are useless. You need LIGHT.')
-      const damage = Math.max(3, Math.floor(Math.random() * 8) + 5)
+    // Check for light-vulnerable enemies (Living Dark, Grue Queen, etc.)
+    const weaponKey = Object.keys(ITEMS).find(k => ITEMS[k].weapon === player.weapon)
+    const currentWeapon = weaponKey ? ITEMS[weaponKey] : null
+    const hasLightWeapon = currentWeapon?.lightWeapon
+
+    if (enemy.vulnerableToLight && !hasLightWeapon) {
+      // Can't damage without light weapon
+      print(`Your ${player.weapon} passes through the ${enemy.name} like it isn't there.`, 'error')
+      print('Physical attacks are useless. You need LIGHT weapons.')
+
+      // Reduced counter-attack (not instant-kill like before)
+      const damage = Math.max(3, Math.floor(Math.random() * 6) + 3)
       setPlayer(prev => ({ ...prev, hp: prev.hp - damage }))
       print(`The darkness tears at you for ${damage} damage!`, 'error')
+
       if (player.hp - damage <= 0) {
         print('\n=== GAME OVER ===', 'error')
         print('The darkness consumes you utterly...', 'error')
@@ -791,8 +1012,17 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
     }
 
     // Calculate weapon modifier
-    const weaponMod = { 'shock baton': 1, 'plasma torch': 3, 'pulse rifle': 5 }
+    const weaponMod = { 'shock baton': 1, 'plasma torch': 3, 'pulse rifle': 5, 'signal flare': 4, 'sunblade': 6 }
     let baseDamage = Math.max(2, Math.floor(Math.random() * 4) + 3 + (weaponMod[player.weapon] || 1))
+
+    // Light weapon bonus damage vs vulnerable enemies
+    if (enemy.vulnerableToLight && hasLightWeapon) {
+      const lightBonus = currentWeapon.lightBonus || 0
+      baseDamage += lightBonus
+      if (lightBonus > 0) {
+        print(`Your ${player.weapon} blazes with searing light! +${lightBonus} damage`, 'system')
+      }
+    }
 
     // Surge ability
     if (player.abilityCharge === 'surge') {
@@ -837,7 +1067,60 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
     if (newEnemyHp <= 0) {
       print(`${enemy.name} is defeated!`, 'system')
 
-      // Boss victory
+      // Living Dark defeat -> Unlock Void Realm
+      if (enemy.onDefeat === 'unlockVoidRealm') {
+        print('')
+        print('The Living Dark SHRIEKS—a sound that tears reality.', 'system')
+        print('Where it fell, a rift opens to somewhere DEEPER.', 'system')
+        print('A portal to the Void Realm appears. (Type "down" to enter)', 'system')
+
+        // Add exit to void realm from cell-block
+        setWorld(prev => ({
+          ...prev,
+          'cell-block': {
+            ...prev['cell-block'],
+            exits: { ...prev['cell-block'].exits, down: 'void-antechamber' },
+            dark: false,
+            lit: true,
+            enemy: { ...enemy, hp: 0, defeated: true }
+          }
+        }))
+
+        if (enemy.loot) {
+          addItemToInventory(enemy.loot)
+          print(`Looted: ${ITEMS[enemy.loot]?.icon} ${ITEMS[enemy.loot]?.name}`, 'system')
+        }
+        return true
+      }
+
+      // Grue Queen defeat -> Ultimate victory
+      if (enemy.boss && enemy.name === 'Grue Queen') {
+        print('')
+        print('The Grue Queen screams as light pierces her eternal form.', 'system')
+        print('"You... have ended... the first darkness..."')
+        print('')
+        print('The Crown of Darkness falls at your feet.', 'system')
+        print('')
+        print('▓▓▓ THE VOID REALM IS CLEANSED ▓▓▓', 'system')
+        print('You have conquered what existed before light itself.', 'system')
+
+        // Grant crown artifact with ability
+        addItemToInventory('crown-of-darkness')
+        setPlayer(prev => ({
+          ...prev,
+          abilities: [...(prev.abilities || []), 'darkvision']
+        }))
+        print('ABILITY GAINED: DARKVISION', 'system')
+
+        setVictory(true)
+        setWorld(prev => ({
+          ...prev,
+          [player.location]: { ...prev[player.location], enemy: { ...enemy, hp: 0, defeated: true } }
+        }))
+        return true
+      }
+
+      // Void Warden boss victory (original escape victory)
       if (enemy.boss && enemy.name === 'Void Warden') {
         print('')
         print("Director Vasquez's form dissolves into shadow.")
@@ -1042,6 +1325,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
         print(`Weapon: ${player.weapon}`)
         if (player.abilityCharge) print(`Charged: ${player.abilityCharge}`)
         if (player.evading) print('Evade ready!')
+        if (player.abilities?.length > 0) print(`Abilities: ${player.abilities.join(', ')}`)
         return true
 
       case 'escape':

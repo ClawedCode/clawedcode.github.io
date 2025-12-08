@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useMUD, ITEMS, READABLES } from '../hooks/useMUD'
+import { useMUD, ITEMS, READABLES, MUD_VERSION } from '../hooks/useMUD'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 
 // ASCII Map Component
@@ -459,7 +459,7 @@ const Mud = () => {
     return (
       <div className="min-h-screen bg-void-dark flex flex-col items-center justify-center p-4">
         <div className="card max-w-md w-full text-center space-y-6">
-          <h1 className="text-void-green text-glow text-2xl">VOID MUD</h1>
+          <h1 className="text-void-green text-glow text-2xl">VOID MUD <span className="text-void-cyan/60 text-sm font-normal">v{MUD_VERSION}</span></h1>
           <p className="text-void-cyan">A text adventure in the liminal void</p>
           <div className="border-t border-void-green/30 pt-6">
             <p className="text-void-green/70 text-sm mb-4">Choose your handle, wanderer:</p>
@@ -505,7 +505,7 @@ const Mud = () => {
       {/* Header */}
       <header className="p-4 border-b border-void-green/30 flex justify-between items-center">
         <div>
-          <h1 className="text-void-green text-glow text-xl">VOID MUD</h1>
+          <h1 className="text-void-green text-glow text-xl">VOID MUD <span className="text-void-cyan/60 text-xs font-normal">v{MUD_VERSION}</span></h1>
           <p className="text-void-cyan text-sm">A text adventure in the liminal void</p>
         </div>
         <Link to="/" className="text-void-cyan hover:text-void-green text-sm">

@@ -261,7 +261,21 @@ async function executeRepeatUntil(action) {
     console.log('[Walkthrough] Repeat-until iteration', iteration);
 
     // Execute each sub-action
-    for (const subAction of actions) {
+    for (let i = 0; i < actions.length; i++) {
+      const subAction = actions[i];
+
+      // Notify parent of sub-action start (for UI updates like countdown timers)
+      window.parent.postMessage({
+        type: 'walkthrough-response',
+        query: 'sub-action-start',
+        data: {
+          action: subAction,
+          iteration,
+          subIndex: i,
+          totalSubActions: actions.length
+        }
+      }, '*');
+
       const result = await executeAction(subAction);
 
       // If a required action failed (element not found), end the loop
