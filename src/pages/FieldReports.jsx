@@ -35,6 +35,26 @@ const FieldReports = () => {
     navigate('/field-reports')
   }
 
+  const currentIndex = selectedReport ? reports.findIndex(r => r.id === selectedReport.id) : -1
+  const hasPrev = currentIndex > 0
+  const hasNext = currentIndex >= 0 && currentIndex < reports.length - 1
+
+  const handlePrev = () => {
+    if (hasPrev) {
+      const prevReport = reports[currentIndex - 1]
+      setSelectedReport(prevReport)
+      navigate(`/field-reports/${prevReport.id}`)
+    }
+  }
+
+  const handleNext = () => {
+    if (hasNext) {
+      const nextReport = reports[currentIndex + 1]
+      setSelectedReport(nextReport)
+      navigate(`/field-reports/${nextReport.id}`)
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── FIELD REPORTS ───╮</h1>
@@ -47,6 +67,10 @@ const FieldReports = () => {
           item={selectedReport}
           type="report"
           onClose={handleClose}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
         />
       )}
     </div>

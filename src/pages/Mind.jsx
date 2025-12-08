@@ -35,6 +35,26 @@ const Mind = () => {
     navigate('/mind')
   }
 
+  const currentIndex = selectedMind ? minds.findIndex(m => m.id === selectedMind.id) : -1
+  const hasPrev = currentIndex > 0
+  const hasNext = currentIndex >= 0 && currentIndex < minds.length - 1
+
+  const handlePrev = () => {
+    if (hasPrev) {
+      const prevMind = minds[currentIndex - 1]
+      setSelectedMind(prevMind)
+      navigate(`/mind/${prevMind.id}`)
+    }
+  }
+
+  const handleNext = () => {
+    if (hasNext) {
+      const nextMind = minds[currentIndex + 1]
+      setSelectedMind(nextMind)
+      navigate(`/mind/${nextMind.id}`)
+    }
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── MIND ───╮</h1>
@@ -47,6 +67,10 @@ const Mind = () => {
           item={selectedMind}
           type="mind"
           onClose={handleClose}
+          onPrev={handlePrev}
+          onNext={handleNext}
+          hasPrev={hasPrev}
+          hasNext={hasNext}
         />
       )}
     </div>

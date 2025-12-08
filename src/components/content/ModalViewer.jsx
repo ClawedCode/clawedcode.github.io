@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 
-const ModalViewer = ({ item, type, onClose }) => {
+const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) => {
   const width = item.dimensions?.width || 1080
   const height = item.dimensions?.height || 1350
   const tweetUrl = `https://x.com/ClawedCode/status/${item.id}`
@@ -15,17 +15,19 @@ const ModalViewer = ({ item, type, onClose }) => {
   })
 
   useEffect(() => {
-    const handleEscape = (e) => {
+    const handleKeydown = (e) => {
       if (e.key === 'Escape') onClose()
+      if (e.key === 'ArrowLeft' && hasPrev) onPrev()
+      if (e.key === 'ArrowRight' && hasNext) onNext()
     }
-    document.addEventListener('keydown', handleEscape)
+    document.addEventListener('keydown', handleKeydown)
     document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleEscape)
+      document.removeEventListener('keydown', handleKeydown)
       document.body.style.overflow = ''
     }
-  }, [onClose])
+  }, [onClose, onPrev, onNext, hasPrev, hasNext])
 
   // Calculate scale to fit viewport
   const maxWidth = window.innerWidth * 0.9
@@ -45,6 +47,26 @@ const ModalViewer = ({ item, type, onClose }) => {
       >
         ×
       </button>
+
+      {hasPrev && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onPrev() }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 text-void-green hover:text-void-cyan text-4xl px-2 cursor-pointer"
+          data-testid="modal-prev"
+        >
+          ‹
+        </button>
+      )}
+
+      {hasNext && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onNext() }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 text-void-green hover:text-void-cyan text-4xl px-2 cursor-pointer"
+          data-testid="modal-next"
+        >
+          ›
+        </button>
+      )}
 
       <div
         className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-4"
