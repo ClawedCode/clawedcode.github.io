@@ -65,7 +65,7 @@ const MudGames = () => {
 
   return (
     <div className="min-h-screen bg-void-black p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="mx-auto">
         <Link to="/" className="text-void-cyan hover:text-void-green mb-4 inline-block">&larr; Back to Void</Link>
 
         <h1 className="text-2xl text-void-green text-glow text-center mb-2">
@@ -141,7 +141,7 @@ const GameDetail = ({ game, onBack }) => {
   return (
     <ViewportProvider>
       <div className="min-h-screen bg-void-black p-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="mx-auto">
           <button
             onClick={onBack}
             className="text-void-cyan hover:text-void-green mb-4 inline-block"
@@ -208,7 +208,8 @@ const TurnPost = ({ type, turn, text, htmlPath, postUrl, publishedAt }) => {
   // Calculate scale based on measured container width
   // Use container width if available, otherwise estimate from viewport
   const availableWidth = containerWidth || Math.min(viewportWidth - 96, 864)
-  const scale = Math.min(availableWidth / originalWidth, 0.75)
+  // Scale up to 100% when container can fit full size, otherwise scale down to fit
+  const scale = Math.min(availableWidth / originalWidth, 1)
   const scaledWidth = originalWidth * scale
   const scaledHeight = originalHeight * scale
 

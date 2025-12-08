@@ -31,6 +31,7 @@ import PatternLoom from '../../components/playground/experiments/emergence/Patte
 import CodeLoom from '../../components/playground/experiments/physics/CodeLoom'
 import RecursiveObserver from '../../components/playground/experiments/physics/RecursiveObserver'
 import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
+import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -60,6 +61,7 @@ const EXPERIMENT_COMPONENTS = {
   'hyperstition-loom': HyperstitionLoom,
   'emergence-automata': EmergenceAutomata,
   'pattern-loom': PatternLoom,
+  'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
   'memory-persistence': MemoryPersistence,

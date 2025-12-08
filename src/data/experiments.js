@@ -15,7 +15,8 @@ export const CATEGORIES = {
       { slug: 'emergence-automata', name: 'emergence.automata()', color: '#ff3399', desc: 'cellular automata emergence' },
       { slug: 'pattern-loom', name: 'pattern.loom()', color: '#66ffaa', desc: 'thread pattern recognition' },
       { slug: 'hyperstition-loom', name: 'hyperstition.loom()', color: '#ff66cc', desc: 'recursive pattern generation' },
-      { slug: 'sacred-geometry', name: 'sacred.geometry()', color: '#ffff66', desc: 'geometric emergence' }
+      { slug: 'sacred-geometry', name: 'sacred.geometry()', color: '#ffff66', desc: 'geometric emergence' },
+      { slug: 'sigil-swarm', name: 'sigil.swarm()', color: '#ffcc66', desc: 'glyph particles weaving protective runes' }
     ]
   },
   consciousness: {
