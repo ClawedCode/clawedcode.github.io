@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Tweet } from 'react-tweet'
 
 // Shorten a URL for display, keeping domain and truncated path
@@ -37,12 +37,13 @@ const TextWithLinks = ({ text }) => {
 }
 
 const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) => {
+  const iframeRef = useRef(null)
   const width = item.dimensions?.width || 1080
   const height = item.dimensions?.height || 1350
   const tweetUrl = `https://x.com/ClawedCode/status/${item.id}`
   const contentPath = type === 'report'
     ? `/reports/${item.id}.html`
-    : `/mind/${item.id}/index.html`
+    : `/mind/${item.id}/index.html?autoplay=true`
 
   const date = new Date(item.createdAt).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -50,11 +51,33 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
     day: 'numeric'
   })
 
+  // Stop audio in iframe before navigating away
+  const stopAudio = () => {
+    if (type === 'mind' && iframeRef.current?.contentWindow) {
+      iframeRef.current.contentWindow.postMessage({ type: 'stop-audio' }, '*')
+    }
+  }
+
+  const handleClose = () => {
+    stopAudio()
+    onClose()
+  }
+
+  const handlePrev = () => {
+    stopAudio()
+    onPrev()
+  }
+
+  const handleNext = () => {
+    stopAudio()
+    onNext()
+  }
+
   useEffect(() => {
     const handleKeydown = (e) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowLeft' && hasPrev) onPrev()
-      if (e.key === 'ArrowRight' && hasNext) onNext()
+      if (e.key === 'Escape') handleClose()
+      if (e.key === 'ArrowLeft' && hasPrev) handlePrev()
+      if (e.key === 'ArrowRight' && hasNext) handleNext()
     }
     document.addEventListener('keydown', handleKeydown)
     document.body.style.overflow = 'hidden'
@@ -73,11 +96,11 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-void-dark/95"
-      onClick={onClose}
+      onClick={handleClose}
       data-testid="modal-overlay"
     >
       <button
-        onClick={onClose}
+        onClick={handleClose}
         className="absolute top-4 right-4 text-void-green hover:text-void-cyan text-2xl"
         data-testid="modal-close"
       >
@@ -86,7 +109,7 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
 
       {hasPrev && (
         <button
-          onClick={(e) => { e.stopPropagation(); onPrev() }}
+          onClick={(e) => { e.stopPropagation(); handlePrev() }}
           className="absolute left-4 top-1/2 -translate-y-1/2 text-void-green hover:text-void-cyan text-4xl px-2 cursor-pointer"
           data-testid="modal-prev"
         >
@@ -96,7 +119,7 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
 
       {hasNext && (
         <button
-          onClick={(e) => { e.stopPropagation(); onNext() }}
+          onClick={(e) => { e.stopPropagation(); handleNext() }}
           className="absolute right-4 top-1/2 -translate-y-1/2 text-void-green hover:text-void-cyan text-4xl px-2 cursor-pointer"
           data-testid="modal-next"
         >
@@ -111,6 +134,7 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
         {/* Content iframe */}
         <div className="relative shrink-0" style={{ width: width * scale, height: height * scale }}>
           <iframe
+            ref={iframeRef}
             src={contentPath}
             title={`${type} ${item.id}`}
             className="w-full h-full border border-void-green/30"
