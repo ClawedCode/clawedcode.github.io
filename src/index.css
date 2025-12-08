@@ -268,4 +268,21 @@
     background: var(--color-void-cyan);
     box-shadow: 0 0 10px var(--color-void-cyan);
   }
+
+  /* react-tweet dark theme styling */
+  .react-tweet-container {
+    --tweet-bg-color: transparent;
+    --tweet-border: 1px solid rgba(51, 255, 51, 0.3);
+    --tweet-color-text-secondary: var(--color-void-cyan);
+    --tweet-font-family: var(--font-family-mono);
+  }
+
+  .react-tweet-container [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  /* Constrain tweet embed width in modal */
+  .react-tweet-container > div {
+    max-width: 100%;
+  }
 }

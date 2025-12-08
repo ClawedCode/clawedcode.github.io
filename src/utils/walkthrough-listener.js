@@ -126,6 +126,173 @@ function simulateClick(element) {
   }, 50);
 }
 
+// Execute a single action and return result
+function executeAction(action) {
+  return new Promise((resolve) => {
+    switch (action.type) {
+      case 'click': {
+        const el = document.querySelector(action.selector);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            simulateClick(el);
+            resolve({ success: true });
+          }, 300);
+        } else {
+          console.warn('[Walkthrough] Element not found:', action.selector);
+          resolve({ success: false, reason: 'element_not_found', selector: action.selector });
+        }
+        break;
+      }
+
+      case 'click-if-exists': {
+        const el = document.querySelector(action.selector);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            simulateClick(el);
+            resolve({ success: true, clicked: true });
+          }, 300);
+        } else {
+          // Not an error - element just doesn't exist
+          resolve({ success: true, clicked: false });
+        }
+        break;
+      }
+
+      case 'scroll': {
+        smoothScroll(action.direction, action.speed, action.target || 'end', action.selector);
+        resolve({ success: true });
+        break;
+      }
+
+      case 'navigate': {
+        if (action.path.startsWith('#')) {
+          window.location.hash = action.path;
+        } else {
+          window.location.hash = '#' + action.path;
+        }
+        resolve({ success: true });
+        break;
+      }
+
+      case 'type': {
+        const input = document.querySelector(action.selector);
+        if (input) {
+          input.value = '';
+          typeText(input, action.text, action.delay || 50);
+          resolve({ success: true });
+        } else {
+          console.warn('[Walkthrough] Input not found:', action.selector);
+          resolve({ success: false, reason: 'element_not_found' });
+        }
+        break;
+      }
+
+      case 'hover': {
+        const target = document.querySelector(action.selector);
+        if (target) {
+          document.querySelectorAll('.walkthrough-hover').forEach(el => el.classList.remove('walkthrough-hover'));
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setTimeout(() => {
+            target.classList.add('walkthrough-hover');
+            target.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+            target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+            resolve({ success: true });
+          }, 300);
+        } else {
+          console.warn('[Walkthrough] Element not found:', action.selector);
+          resolve({ success: false, reason: 'element_not_found' });
+        }
+        break;
+      }
+
+      case 'wait': {
+        // For repeat-until loops, wait is handled client-side
+        // For regular actions, server timing handles it
+        if (action.duration) {
+          setTimeout(() => resolve({ success: true }), action.duration);
+        } else {
+          resolve({ success: true });
+        }
+        break;
+      }
+
+      default:
+        console.warn('[Walkthrough] Unknown action type:', action.type);
+        resolve({ success: false, reason: 'unknown_action' });
+    }
+  });
+}
+
+// Check if a condition is met
+function checkCondition(condition) {
+  switch (condition.type) {
+    case 'element-not-exists':
+      return !document.querySelector(condition.selector);
+    case 'element-exists':
+      return !!document.querySelector(condition.selector);
+    default:
+      console.warn('[Walkthrough] Unknown condition type:', condition.type);
+      return false;
+  }
+}
+
+// Execute repeat-until loop
+async function executeRepeatUntil(action) {
+  const { actions, stopWhen, maxIterations = 200 } = action;
+  let iteration = 0;
+
+  console.log('[Walkthrough] Starting repeat-until loop, stopWhen:', stopWhen);
+
+  while (iteration < maxIterations) {
+    // Check stop condition first
+    if (checkCondition(stopWhen)) {
+      console.log('[Walkthrough] Stop condition met after', iteration, 'iterations');
+      window.parent.postMessage({
+        type: 'walkthrough-response',
+        query: 'repeat-until-complete',
+        data: { iterations: iteration, reason: 'condition_met' }
+      }, '*');
+      return;
+    }
+
+    iteration++;
+    console.log('[Walkthrough] Repeat-until iteration', iteration);
+
+    // Execute each sub-action
+    for (const subAction of actions) {
+      const result = await executeAction(subAction);
+
+      // If a required action failed (element not found), end the loop
+      if (!result.success && subAction.type !== 'click-if-exists') {
+        console.log('[Walkthrough] Sub-action failed, ending loop:', result);
+        window.parent.postMessage({
+          type: 'walkthrough-response',
+          query: 'repeat-until-complete',
+          data: { iterations: iteration, reason: 'action_failed', result }
+        }, '*');
+        return;
+      }
+
+      // Wait between sub-actions if specified
+      if (subAction.waitAfter) {
+        await new Promise(r => setTimeout(r, subAction.waitAfter));
+      }
+    }
+
+    // Small delay between iterations to allow UI updates
+    await new Promise(r => setTimeout(r, 100));
+  }
+
+  console.log('[Walkthrough] Max iterations reached:', maxIterations);
+  window.parent.postMessage({
+    type: 'walkthrough-response',
+    query: 'repeat-until-complete',
+    data: { iterations: iteration, reason: 'max_iterations' }
+  }, '*');
+}
+
 // Listen for walkthrough control messages from parent
 window.addEventListener('message', (event) => {
   // Handle page info queries
@@ -157,76 +324,14 @@ window.addEventListener('message', (event) => {
 
   console.log('[Walkthrough] Received action:', action.type, action.description || '');
 
-  switch (action.type) {
-    case 'click': {
-      const el = document.querySelector(action.selector);
-      if (el) {
-        // Scroll element into view first
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        // Then click after scroll settles
-        setTimeout(() => simulateClick(el), 300);
-      } else {
-        console.warn('[Walkthrough] Element not found:', action.selector);
-      }
-      break;
-    }
-
-    case 'scroll': {
-      smoothScroll(action.direction, action.speed, action.target || 'end', action.selector);
-      break;
-    }
-
-    case 'navigate': {
-      // For hash-based routing (React Router with HashRouter)
-      if (action.path.startsWith('#')) {
-        window.location.hash = action.path;
-      } else {
-        // For browser router, update hash to match path
-        window.location.hash = '#' + action.path;
-      }
-      break;
-    }
-
-    case 'type': {
-      const input = document.querySelector(action.selector);
-      if (input) {
-        // Clear existing value first
-        input.value = '';
-        typeText(input, action.text, action.delay || 50);
-      } else {
-        console.warn('[Walkthrough] Input not found:', action.selector);
-      }
-      break;
-    }
-
-    case 'hover': {
-      const target = document.querySelector(action.selector);
-      if (target) {
-        // Remove any previous walkthrough hover
-        document.querySelectorAll('.walkthrough-hover').forEach(el => el.classList.remove('walkthrough-hover'));
-
-        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        setTimeout(() => {
-          // Add class to trigger hover styles (CSS :hover won't work with JS events)
-          target.classList.add('walkthrough-hover');
-          target.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-          target.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-        }, 300);
-      } else {
-        console.warn('[Walkthrough] Element not found:', action.selector);
-      }
-      break;
-    }
-
-    case 'wait': {
-      // Wait action is handled by the server timing
-      // Nothing to do here
-      break;
-    }
-
-    default:
-      console.warn('[Walkthrough] Unknown action type:', action.type);
+  // Handle repeat-until specially (it's async and reports completion)
+  if (action.type === 'repeat-until') {
+    executeRepeatUntil(action);
+    return;
   }
+
+  // Execute regular action
+  executeAction(action);
 });
 
 // Notify parent that listener is ready

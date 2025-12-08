@@ -1,4 +1,40 @@
 import { useEffect } from 'react'
+import { Tweet } from 'react-tweet'
+
+// Shorten a URL for display, keeping domain and truncated path
+const shortenUrl = (url) => {
+  const match = url.match(/^(https?:\/\/[^/]+)(\/.*)?$/)
+  if (!match) return url
+  const domain = match[1]
+  const path = match[2] || ''
+  if (path.length <= 10) return url
+  return `${domain}${path.slice(0, 8)}...`
+}
+
+// Parse text and convert URLs to clickable shortened links
+const TextWithLinks = ({ text }) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const parts = text.split(urlRegex)
+
+  return parts.map((part, i) => {
+    if (urlRegex.test(part)) {
+      // Reset regex lastIndex after test
+      urlRegex.lastIndex = 0
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-void-cyan hover:underline"
+        >
+          {shortenUrl(part)}
+        </a>
+      )
+    }
+    return part
+  })
+}
 
 const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) => {
   const width = item.dimensions?.width || 1080
@@ -69,11 +105,11 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
       )}
 
       <div
-        className="flex flex-col lg:flex-row gap-6 max-w-7xl mx-4"
+        className="flex flex-col lg:flex-row gap-8 mx-4 lg:mx-16"
         onClick={e => e.stopPropagation()}
       >
         {/* Content iframe */}
-        <div className="relative" style={{ width: width * scale, height: height * scale }}>
+        <div className="relative shrink-0" style={{ width: width * scale, height: height * scale }}>
           <iframe
             src={contentPath}
             title={`${type} ${item.id}`}
@@ -82,17 +118,20 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
           />
         </div>
 
-        {/* Info panel */}
-        <div className="lg:w-80 space-y-4">
-          <div className="text-void-cyan">{date}</div>
-          <p className="text-void-green whitespace-pre-wrap">{item.text}</p>
+        {/* Info panel - taller than iframe to fit source tweet without scroll */}
+        <div className="flex-1 min-w-[320px] max-w-[500px] space-y-4 overflow-y-auto max-h-[95vh] font-mono">
+          <div className="text-void-cyan text-sm">{date}</div>
+
+          <p className="text-void-green whitespace-pre-wrap text-sm leading-relaxed font-mono">
+            <TextWithLinks text={item.text} />
+          </p>
 
           <div className="flex flex-wrap gap-2">
             <a
               href={tweetUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn"
+              className="btn text-sm"
             >
               View on 𝕏
             </a>
@@ -102,12 +141,24 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
                 href={item.nftUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="btn border-void-cyan text-void-cyan"
+                className="btn border-void-cyan text-void-cyan text-sm"
               >
                 View NFT
               </a>
             )}
           </div>
+
+          {/* Source tweet embed - only show for replies/quotes */}
+          {item.source && (
+            <div className="border border-void-green/30 rounded p-3" data-testid="source-tweet">
+              <div className="text-xs text-void-cyan mb-2 font-mono">
+                {item.source.type === 'quote' ? 'Quoting' : 'Replying to'} @{item.source.author}
+              </div>
+              <div data-theme="dark" className="react-tweet-container">
+                <Tweet id={item.source.postId} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
