@@ -349,22 +349,11 @@ if (urlParams.get('autoplay') === 'true') {
   }, 500);
 }
 
-// postMessage handler for audio controls
+// postMessage handler for mute/unmute controls from AudioFingerprint
 window.addEventListener('message', (event) => {
   // Filter out non-audio-control messages
   if (!event.data || typeof event.data !== 'object') return;
-  if (!event.data.type) return;
-
-  // Handle stop-audio message from parent (modal close/navigation)
-  if (event.data.type === 'stop-audio') {
-    if (isPlaying) {
-      document.getElementById('audio-toggle').click();
-    }
-    return;
-  }
-
-  // Filter for mute/unmute messages
-  if (!['mute-instrument', 'unmute-instrument', 'mute-effect', 'unmute-effect'].includes(event.data.type)) return;
+  if (!event.data.type || !['mute-instrument', 'unmute-instrument', 'mute-effect', 'unmute-effect'].includes(event.data.type)) return;
 
   console.log('🎚️ Received audio control message:', event.data);
 
