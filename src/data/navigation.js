@@ -1,7 +1,7 @@
 export const navLinks = [
   { to: '/field-reports', label: 'field reports' },
   { to: '/mind', label: 'mind' },
-  { to: '/mud', label: 'void.mud' },
+  { href: 'https://void-mud.onrender.com/', label: 'void.mud', external: true },
   { to: '/games', label: 'mud archives' },
   { to: '/luminaries', label: 'luminary disciples' },
   { to: '/catgpt', label: 'void mate' },
