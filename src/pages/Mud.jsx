@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useMUD, ITEMS, READABLES, MUD_VERSION } from '../hooks/useMUD'
 import { useMultiplayer } from '../hooks/useMultiplayer'
+import { initMudWalkthroughBridge, isWalkthroughMode, getWalkthroughPlayer } from '../utils/mud-walkthrough-bridge'
 
 // ASCII Map Component
 const AsciiMap = ({ world, player, discovered, mapUnlocked }) => {
@@ -301,9 +302,25 @@ const Mud = () => {
   const [input, setInput] = useState('')
   const [output, setOutput] = useState([])
   const [confirmReset, setConfirmReset] = useState(false)
-  const [playerName, setPlayerName] = useState(() => localStorage.getItem('voidMudHandle') || '')
+
+  // In walkthrough mode, auto-select player name based on player number
+  const getWalkthroughHandle = () => {
+    if (!isWalkthroughMode()) return null
+    const playerId = getWalkthroughPlayer()
+    return playerId === '1' ? 'clawedcode' : playerId === '2' ? 'catgpt' : null
+  }
+
+  const [playerName, setPlayerName] = useState(() => {
+    const walkthroughHandle = getWalkthroughHandle()
+    if (walkthroughHandle) return walkthroughHandle
+    return localStorage.getItem('voidMudHandle') || ''
+  })
   const [handleInput, setHandleInput] = useState('')
-  const [gameStarted, setGameStarted] = useState(() => !!localStorage.getItem('voidMudHandle'))
+  const [gameStarted, setGameStarted] = useState(() => {
+    // In walkthrough mode, auto-start the game
+    if (isWalkthroughMode()) return true
+    return !!localStorage.getItem('voidMudHandle')
+  })
   const inputRef = useRef(null)
   const handleInputRef = useRef(null)
   const scrollContainerRef = useRef(null)
@@ -348,11 +365,14 @@ const Mud = () => {
     linkCode,
     voidmates,
     connectionStatus,
+    pendingConnection,
+    connectionError,
     peerCount,
     connect,
     connectToPeer,
     sendChat,
-    broadcastLocation
+    broadcastLocation,
+    clearConnectionError
   } = useMultiplayer(playerName, player.location, handleMultiplayerMessage)
 
   // Connect to mesh on mount (empty deps - only run once)
@@ -428,7 +448,36 @@ const Mud = () => {
     setOutput(prev => [...prev, { text: `> ${cmd}`, type: 'input' }])
     const result = handleCommand(cmd)
     processCommandResult(result)
+    return true // Return success for walkthrough bridge
   }, [handleCommand, processCommandResult])
+
+  // Initialize walkthrough bridge if in walkthrough mode (must come after executeCommand is defined)
+  useEffect(() => {
+    if (!isWalkthroughMode()) return
+
+    const walkthroughPlayerId = getWalkthroughPlayer()
+
+    const getState = () => ({
+      linkCode,
+      player,
+      world,
+      gameOver,
+      victory,
+      connected: connectionStatus === 'connected',
+      voidmates,
+      currentRoom: getCurrentRoom(),
+      playerName,
+      discovered: [...discovered]
+    })
+
+    const cleanup = initMudWalkthroughBridge({
+      getState,
+      executeCommand,
+      player: walkthroughPlayerId
+    })
+
+    return cleanup
+  }, [linkCode, player, world, gameOver, victory, connectionStatus, voidmates, getCurrentRoom, playerName, discovered, executeCommand])
 
   const handleResetConfirm = useCallback((confirmed) => {
     setConfirmReset(false)
@@ -810,6 +859,30 @@ const Mud = () => {
                 <span className="text-void-green/70">Connected</span>
                 <span className="text-void-green">{peerCount}</span>
               </div>
+              {pendingConnection && (
+                <div className="mt-2 pt-2 border-t border-void-green/20">
+                  <div className="flex items-center gap-2 text-yellow-400">
+                    <span className="animate-pulse">●</span>
+                    <span>Connecting to {pendingConnection.peerId.slice(0, 12)}...</span>
+                  </div>
+                </div>
+              )}
+              {connectionError && (
+                <div className="mt-2 pt-2 border-t border-red-500/30">
+                  <div className="text-red-400 text-xs mb-2">
+                    Connection failed
+                  </div>
+                  <p className="text-red-300/70 text-xs leading-relaxed">
+                    {connectionError.message}
+                  </p>
+                  <button
+                    onClick={clearConnectionError}
+                    className="mt-2 text-void-cyan/70 hover:text-void-cyan text-xs"
+                  >
+                    dismiss
+                  </button>
+                </div>
+              )}
               {peerCount > 0 && (
                 <div className="mt-2 pt-2 border-t border-void-green/20 space-y-1">
                   {Object.entries(voidmates).map(([id, mate]) => (

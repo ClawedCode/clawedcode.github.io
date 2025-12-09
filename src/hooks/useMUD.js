@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
-export const MUD_VERSION = '3.0.0-voidrealm'
+export const MUD_VERSION = '3.0.1'
 const STORAGE_KEY = 'voidMudState'
 const STATE_VERSION = 2
 

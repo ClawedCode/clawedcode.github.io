@@ -31,14 +31,19 @@ const saveLink = (peerId) => {
   }
 }
 
+const CONNECTION_TIMEOUT = 15000 // 15 seconds to establish connection
+
 export const useMultiplayer = (playerName, currentRoom, onMessage) => {
   const [linkCode, setLinkCode] = useState(null)
   const [connected, setConnected] = useState(false)
   const [voidmates, setVoidmates] = useState({})
   const [connectionStatus, setConnectionStatus] = useState('disconnected')
+  const [pendingConnection, setPendingConnection] = useState(null) // { peerId, startTime }
+  const [connectionError, setConnectionError] = useState(null)
 
   const peerRef = useRef(null)
   const connectionsRef = useRef(new Map())
+  const connectionTimeoutRef = useRef(null)
   const playerNameRef = useRef(playerName)
   const currentRoomRef = useRef(currentRoom)
 
@@ -114,12 +119,29 @@ export const useMultiplayer = (playerName, currentRoom, onMessage) => {
     }
   }, [onMessage])
 
+  // Clear pending connection state
+  const clearPendingConnection = useCallback((peerId) => {
+    setPendingConnection(prev => {
+      if (prev?.peerId === peerId) {
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current)
+          connectionTimeoutRef.current = null
+        }
+        return null
+      }
+      return prev
+    })
+  }, [])
+
   // Attach handlers to a connection
   const attachHandlers = useCallback((conn) => {
     const peerId = conn.peer
 
     conn.on('open', () => {
       connectionsRef.current.set(peerId, conn)
+      // Clear pending connection on success
+      clearPendingConnection(peerId)
+      setConnectionError(null)
       // Send hello
       conn.send({
         type: 'hello',
@@ -148,9 +170,10 @@ export const useMultiplayer = (playerName, currentRoom, onMessage) => {
 
     conn.on('error', () => {
       connectionsRef.current.delete(peerId)
+      clearPendingConnection(peerId)
       setConnected(connectionsRef.current.size > 0)
     })
-  }, [handleSignal])
+  }, [handleSignal, clearPendingConnection])
 
   // Connect to a peer by ID
   const connectToPeer = useCallback((targetId) => {
@@ -165,6 +188,32 @@ export const useMultiplayer = (playerName, currentRoom, onMessage) => {
     if (targetId === peerRef.current.id) {
       return { success: false, error: 'Cannot connect to yourself' }
     }
+
+    // Clear any previous error
+    setConnectionError(null)
+
+    // Set pending connection state
+    setPendingConnection({ peerId: targetId, startTime: Date.now() })
+
+    // Start timeout for connection
+    if (connectionTimeoutRef.current) {
+      clearTimeout(connectionTimeoutRef.current)
+    }
+    connectionTimeoutRef.current = setTimeout(() => {
+      setPendingConnection(prev => {
+        if (prev?.peerId === targetId) {
+          setConnectionError({
+            peerId: targetId,
+            message: 'Connection timed out. P2P connections require both players to have compatible network configurations. ' +
+              'If you or your voidmate are behind Symmetric NAT (common in corporate/university networks) or strict firewalls, ' +
+              'direct connections may not be possible without a TURN relay server.'
+          })
+          return null
+        }
+        return prev
+      })
+      connectionTimeoutRef.current = null
+    }, CONNECTION_TIMEOUT)
 
     const conn = peerRef.current.connect(targetId, {
       reliable: false,
@@ -289,6 +338,9 @@ export const useMultiplayer = (playerName, currentRoom, onMessage) => {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      if (connectionTimeoutRef.current) {
+        clearTimeout(connectionTimeoutRef.current)
+      }
       if (peerRef.current) {
         broadcast('leave')
         peerRef.current.destroy()
@@ -301,13 +353,16 @@ export const useMultiplayer = (playerName, currentRoom, onMessage) => {
     connected,
     voidmates,
     connectionStatus,
+    pendingConnection,
+    connectionError,
     peerCount: Object.keys(voidmates).length,
     connect,
     disconnect,
     connectToPeer,
     sendChat,
     broadcastLocation,
-    broadcastEnemyState
+    broadcastEnemyState,
+    clearConnectionError: useCallback(() => setConnectionError(null), [])
   }
 }
 
