@@ -2,7 +2,7 @@
 
 import { randomInt } from '../utils'
 
-export const miscCommands = ({ navigate, startMud }) => ({
+export const miscCommands = () => ({
   grep: {
     desc: 'Search for patterns',
     exec: (args) => {
@@ -63,14 +63,10 @@ Encoding: quantum-purr modulation`
   },
 
   mud: {
-    desc: 'Void MUD (STUN-only multiplayer prototype)',
+    desc: 'Enter the void.mud',
     exec: () => {
-      if (startMud) {
-        startMud()
-      } else {
-        navigate('/mud')
-      }
-      return null
+      window.open('https://void-mud.onrender.com/', '_blank')
+      return '*opens portal to void.mud*'
     }
   },
 
