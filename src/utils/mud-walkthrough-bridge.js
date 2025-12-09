@@ -52,6 +52,27 @@ const handleMessage = (event) => {
     // Reload to apply handle
     window.location.reload()
   }
+
+  if (type === 'mud-walkthrough-reset') {
+    // Get current handle to clear the right storage key
+    const handle = localStorage.getItem('voidMudHandle')
+
+    // Clear handle-specific state
+    if (handle) {
+      localStorage.removeItem(`voidMudState-${handle.toLowerCase()}`)
+    }
+    // Also clear legacy state key
+    localStorage.removeItem('voidMudState')
+    // Clear handle
+    localStorage.removeItem('voidMudHandle')
+
+    window.parent.postMessage({
+      type: 'mud-walkthrough-reset-complete',
+      playerId
+    }, '*')
+    // Reload to apply reset
+    window.location.reload()
+  }
 }
 
 // Initialize the bridge with state getter and command executor functions
@@ -99,6 +120,21 @@ export const isWalkthroughMode = () => {
 export const getWalkthroughPlayer = () => {
   const params = getHashParams()
   return params.get('player') || '1'
+}
+
+// Check if fresh start is requested (clears saved state before loading)
+export const shouldResetOnLoad = () => {
+  const params = getHashParams()
+  return params.get('reset') === '1'
+}
+
+// Clear state for walkthrough fresh start (call BEFORE useMUD initializes)
+export const clearWalkthroughState = (handle) => {
+  if (!handle) return
+  const storageKey = `voidMudState-${handle.toLowerCase()}`
+  localStorage.removeItem(storageKey)
+  localStorage.removeItem('voidMudState') // legacy key
+  console.log(`[MUD Walkthrough] Cleared state for ${handle}`)
 }
 
 export default { initMudWalkthroughBridge, isWalkthroughMode, getWalkthroughPlayer }

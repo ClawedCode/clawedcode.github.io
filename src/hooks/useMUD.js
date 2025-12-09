@@ -1,8 +1,14 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 
 export const MUD_VERSION = '3.0.1'
-const STORAGE_KEY = 'voidMudState'
+const LEGACY_STORAGE_KEY = 'voidMudState'
 const STATE_VERSION = 2
+
+// Get storage key for a specific handle
+const getStorageKey = (handle) => {
+  if (!handle) return null
+  return `voidMudState-${handle.toLowerCase()}`
+}
 
 // Migrate saved state to current version
 const migrateState = (state) => {
@@ -29,9 +35,34 @@ const migrateState = (state) => {
   return state
 }
 
-// Load saved state from localStorage
-const loadSavedState = () => {
-  const saved = localStorage.getItem(STORAGE_KEY)
+// Migrate legacy storage to handle-based storage
+const migrateLegacyStorage = (handle) => {
+  if (!handle) return
+
+  const legacyData = localStorage.getItem(LEGACY_STORAGE_KEY)
+  if (!legacyData) return
+
+  const newKey = getStorageKey(handle)
+
+  // Only migrate if the new key doesn't exist yet
+  if (!localStorage.getItem(newKey)) {
+    localStorage.setItem(newKey, legacyData)
+    console.log(`[MUD] Migrated legacy state to ${newKey}`)
+  }
+
+  // Remove legacy key after migration
+  localStorage.removeItem(LEGACY_STORAGE_KEY)
+}
+
+// Load saved state from localStorage for a specific handle
+const loadSavedState = (handle) => {
+  // First, try to migrate any legacy data
+  migrateLegacyStorage(handle)
+
+  const storageKey = getStorageKey(handle)
+  if (!storageKey) return null
+
+  const saved = localStorage.getItem(storageKey)
   if (!saved) return null
   const parsed = JSON.parse(saved)
   // Convert discovered array back to Set
@@ -41,8 +72,11 @@ const loadSavedState = () => {
   return migrateState(parsed)
 }
 
-// Save state to localStorage
-const saveState = (state) => {
+// Save state to localStorage for a specific handle
+const saveState = (state, handle) => {
+  const storageKey = getStorageKey(handle)
+  if (!storageKey) return
+
   const toSave = {
     ...state,
     // Convert Set to array for JSON serialization
@@ -50,12 +84,17 @@ const saveState = (state) => {
     // Include state version for migration support
     stateVersion: STATE_VERSION
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave))
+  localStorage.setItem(storageKey, JSON.stringify(toSave))
 }
 
-// Clear saved state
-const clearSavedState = () => {
-  localStorage.removeItem(STORAGE_KEY)
+// Clear saved state for a specific handle
+const clearSavedState = (handle) => {
+  const storageKey = getStorageKey(handle)
+  if (storageKey) {
+    localStorage.removeItem(storageKey)
+  }
+  // Also clear legacy key if it exists
+  localStorage.removeItem(LEGACY_STORAGE_KEY)
 }
 
 // Item definitions
@@ -556,8 +595,12 @@ const createPlayer = () => ({
 })
 
 export const useMUD = (onOutput, playerName = 'wanderer') => {
-  // Try to load saved state
-  const savedState = useRef(loadSavedState())
+  // Store handle in ref for use in save/load functions
+  const handleRef = useRef(playerName)
+  handleRef.current = playerName
+
+  // Try to load saved state for this handle
+  const savedState = useRef(loadSavedState(playerName))
   const isRestored = useRef(!!savedState.current)
   const hasInitialized = useRef(false)
 
@@ -1221,7 +1264,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
   const handleCommand = useCallback((input) => {
     if (gameOver) {
       if (input.toLowerCase() === 'restart') {
-        clearSavedState()
+        clearSavedState(handleRef.current)
         setWorld(createWorld())
         setPlayer(createPlayer())
         setDiscovered(new Set(['airlock']))
@@ -1359,7 +1402,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
         return { action: 'say', message: args.join(' ') }
 
       case 'confirm-reset':
-        clearSavedState()
+        clearSavedState(handleRef.current)
         setWorld(createWorld())
         setPlayer(createPlayer())
         setDiscovered(new Set(['airlock']))
@@ -1380,6 +1423,9 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
   // Auto-save state whenever it changes
   useEffect(() => {
     // Don't save on initial mount before state is ready
+    // Also don't save if no handle is set
+    if (!handleRef.current) return
+
     const timeoutId = setTimeout(() => {
       saveState({
         world,
@@ -1388,7 +1434,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
         gameOver,
         victory,
         mapUnlocked
-      })
+      }, handleRef.current)
     }, 100)
     return () => clearTimeout(timeoutId)
   }, [world, player, discovered, gameOver, victory, mapUnlocked])

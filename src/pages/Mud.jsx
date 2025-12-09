@@ -2,7 +2,17 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useMUD, ITEMS, READABLES, MUD_VERSION } from '../hooks/useMUD'
 import { useMultiplayer } from '../hooks/useMultiplayer'
-import { initMudWalkthroughBridge, isWalkthroughMode, getWalkthroughPlayer } from '../utils/mud-walkthrough-bridge'
+import { initMudWalkthroughBridge, isWalkthroughMode, getWalkthroughPlayer, shouldResetOnLoad, clearWalkthroughState } from '../utils/mud-walkthrough-bridge'
+
+// Clear state synchronously BEFORE React mounts if reset=1 is in URL
+// This must happen before useMUD initializes to prevent loading old state
+if (isWalkthroughMode() && shouldResetOnLoad()) {
+  const playerId = getWalkthroughPlayer()
+  const handle = playerId === '1' ? 'clawedcode' : playerId === '2' ? 'catgpt' : null
+  if (handle) {
+    clearWalkthroughState(handle)
+  }
+}
 
 // ASCII Map Component
 const AsciiMap = ({ world, player, discovered, mapUnlocked }) => {
