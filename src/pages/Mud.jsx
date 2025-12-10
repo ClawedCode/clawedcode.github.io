@@ -4,6 +4,13 @@ import { useMUD, ITEMS, READABLES, MUD_VERSION } from '../hooks/useMUD'
 import { useMultiplayer } from '../hooks/useMultiplayer'
 import { initMudWalkthroughBridge, isWalkthroughMode, getWalkthroughPlayer, shouldResetOnLoad, clearWalkthroughState } from '../utils/mud-walkthrough-bridge'
 
+// REDIRECT: MUD has moved to dedicated server
+// Keep this code for potential resurrection, but redirect all traffic
+const VOID_MUD_URL = 'https://void-mud.onrender.com'
+if (typeof window !== 'undefined' && !isWalkthroughMode()) {
+  window.location.replace(VOID_MUD_URL)
+}
+
 // Clear state synchronously BEFORE React mounts if reset=1 is in URL
 // This must happen before useMUD initializes to prevent loading old state
 if (isWalkthroughMode() && shouldResetOnLoad()) {
