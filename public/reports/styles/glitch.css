@@ -13,6 +13,18 @@ body {
   overflow: hidden;
 }
 
+/* Pixelart background - must be behind content */
+.pixelart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.3;
+}
+
 .content {
   white-space: pre-wrap;
   position: absolute;
