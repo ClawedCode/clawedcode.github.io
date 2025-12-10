@@ -351,6 +351,17 @@ const Mud = () => {
 
   const handleOutput = useCallback((line) => {
     setOutput(prev => [...prev, line])
+
+    // In walkthrough mode, send error outputs to parent for detection
+    if (isWalkthroughMode() && line.type === 'error') {
+      const walkthroughPlayerId = getWalkthroughPlayer()
+      window.parent.postMessage({
+        type: 'mud-walkthrough-game-error',
+        playerId: walkthroughPlayerId,
+        message: line.text,
+        errorType: 'game-error'
+      }, '*')
+    }
   }, [])
 
   const {

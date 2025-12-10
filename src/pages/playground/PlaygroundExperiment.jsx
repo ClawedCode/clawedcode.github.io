@@ -32,6 +32,7 @@ import CodeLoom from '../../components/playground/experiments/physics/CodeLoom'
 import RecursiveObserver from '../../components/playground/experiments/physics/RecursiveObserver'
 import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
 import ComputroniumBloom from '../../components/playground/experiments/physics/ComputroniumBloom'
+import AuroraFlux from '../../components/playground/experiments/physics/AuroraFlux'
 import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
 
 // Map of experiment slugs to components
@@ -65,6 +66,7 @@ const EXPERIMENT_COMPONENTS = {
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
+  'aurora-flux': AuroraFlux,
   'computronium-bloom': ComputroniumBloom,
   'memory-persistence': MemoryPersistence,
   // Add more as we convert them:

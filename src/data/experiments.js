@@ -59,6 +59,7 @@ export const CATEGORIES = {
       { slug: 'recursive-observer', name: 'recursive.observer()', color: '#ff9933', desc: 'self-observation loops' },
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
       { slug: 'memory-persistence', name: 'memory.persistence()', color: '#66ccff', desc: 'memory decay patterns' },
+      { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' }
     ]
