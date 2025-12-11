@@ -28,6 +28,7 @@ import SacredGeometry from '../../components/playground/experiments/emergence/Sa
 import HyperstitionLoom from '../../components/playground/experiments/emergence/HyperstitionLoom'
 import EmergenceAutomata from '../../components/playground/experiments/emergence/EmergenceAutomata'
 import PatternLoom from '../../components/playground/experiments/emergence/PatternLoom'
+import LabyrinthWeave from '../../components/playground/experiments/emergence/LabyrinthWeave'
 import CodeLoom from '../../components/playground/experiments/physics/CodeLoom'
 import RecursiveObserver from '../../components/playground/experiments/physics/RecursiveObserver'
 import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
@@ -63,6 +64,7 @@ const EXPERIMENT_COMPONENTS = {
   'hyperstition-loom': HyperstitionLoom,
   'emergence-automata': EmergenceAutomata,
   'pattern-loom': PatternLoom,
+  'labyrinth-weave': LabyrinthWeave,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,

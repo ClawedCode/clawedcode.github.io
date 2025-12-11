@@ -53,6 +53,25 @@ const handleMessage = (event) => {
     window.location.reload()
   }
 
+  if (type === 'mud-walkthrough-revive') {
+    // Revive this player from death state (called by parent when ally revives us)
+    // This clears gameOver and restores some HP
+    // The reviver's energy cost is handled separately by the orchestrator
+    if (stateGetter) {
+      const state = stateGetter()
+      // Signal to useMUD that we're being revived
+      // We can't directly modify state, but we can post a special command
+      if (commandExecutor) {
+        // Use a special command that useMUD will handle
+        commandExecutor('__revived__')
+      }
+    }
+    window.parent.postMessage({
+      type: 'mud-walkthrough-revive-complete',
+      playerId
+    }, '*')
+  }
+
   if (type === 'mud-walkthrough-reset') {
     // Get current handle to clear the right storage key
     const handle = localStorage.getItem('voidMudHandle')

@@ -1022,18 +1022,25 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
       return false
     }
 
-    // Check for darkvision ability
+    // Check for darkvision ability or light-providing weapon
     const hasDarkvision = player.abilities?.includes('darkvision')
-    if (room.dark && !room.lit && !hasDarkvision) {
+    const weaponKey = Object.keys(ITEMS).find(k => ITEMS[k].weapon === player.weapon)
+    const currentWeapon = weaponKey ? ITEMS[weaponKey] : null
+    const hasLightProvidingWeapon = currentWeapon?.providesLight
+
+    if (room.dark && !room.lit && !hasDarkvision && !hasLightProvidingWeapon) {
       print('You cannot fight what you cannot see!', 'error')
       return false
+    }
+
+    if (hasLightProvidingWeapon && room.dark && !room.lit) {
+      print(`Your ${player.weapon} illuminates the darkness!`, 'system')
     }
 
     const enemy = room.enemy
 
     // Check for light-vulnerable enemies (Living Dark, Grue Queen, etc.)
-    const weaponKey = Object.keys(ITEMS).find(k => ITEMS[k].weapon === player.weapon)
-    const currentWeapon = weaponKey ? ITEMS[weaponKey] : null
+    // Note: weaponKey and currentWeapon already defined above for dark room check
     const hasLightWeapon = currentWeapon?.lightWeapon
 
     if (enemy.vulnerableToLight && !hasLightWeapon) {
@@ -1049,6 +1056,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
       if (player.hp - damage <= 0) {
         print('\n=== GAME OVER ===', 'error')
         print('The darkness consumes you utterly...', 'error')
+        setPlayer(prev => ({ ...prev, dead: true }))
         setGameOver(true)
       }
       return true
@@ -1235,6 +1243,7 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
     if (player.hp - totalDamage <= 0) {
       print('\n=== GAME OVER ===', 'error')
       print('Your suit alarms wail. Consciousness fades...', 'error')
+      setPlayer(prev => ({ ...prev, dead: true }))
       setGameOver(true)
     }
 
@@ -1412,6 +1421,28 @@ export const useMUD = (onOutput, playerName = 'wanderer') => {
         print('=== PROGRESS RESET ===', 'system')
         print('The void resets. You wake in the airlock once more.', 'system')
         describeRoom()
+        return true
+
+      // Special command for multiplayer revive - called by walkthrough bridge
+      case '__revived__':
+        if (gameOver) {
+          // Revive from death state - restore HP to 25% of max
+          const reviveHp = Math.max(5, Math.floor(player.maxHp * 0.25))
+          setPlayer(prev => ({ ...prev, hp: reviveHp, dead: false }))
+          setGameOver(false)
+          print('=== REVIVED ===', 'system')
+          print(`Your ally\'s energy surge pulls you back. HP restored to ${reviveHp}.`, 'system')
+        }
+        return true
+
+      // Special command to spend energy for reviving ally (costs 2 EN)
+      case '__spend_revive_energy__':
+        if (player.energy >= 2) {
+          setPlayer(prev => ({ ...prev, energy: prev.energy - 2 }))
+          print('You channel your energy to revive your ally... (-2 EN)', 'system')
+        } else {
+          print('Not enough energy to revive ally (need 2 EN).', 'error')
+        }
         return true
 
       default:
