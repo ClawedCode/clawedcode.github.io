@@ -7,6 +7,7 @@ import EntropyGarden from '../../components/playground/experiments/physics/Entro
 import QuantumEntanglement from '../../components/playground/experiments/physics/QuantumEntanglement'
 import TemporalDrift from '../../components/playground/experiments/physics/TemporalDrift'
 import NetworkResonance from '../../components/playground/experiments/physics/NetworkResonance'
+import DominoSignal from '../../components/playground/experiments/physics/DominoSignal'
 import GlitchPoetry from '../../components/playground/experiments/linguistics/GlitchPoetry'
 import VoidPoetry from '../../components/playground/experiments/linguistics/VoidPoetry'
 import TextMetamorphosis from '../../components/playground/experiments/linguistics/TextMetamorphosis'
@@ -42,6 +43,7 @@ const EXPERIMENT_COMPONENTS = {
   'entropy-garden': EntropyGarden,
   'quantum-entanglement': QuantumEntanglement,
   'temporal-drift': TemporalDrift,
+  'domino-signal': DominoSignal,
   'network-resonance': NetworkResonance,
   'glitch-poetry': GlitchPoetry,
   'void-poetry': VoidPoetry,

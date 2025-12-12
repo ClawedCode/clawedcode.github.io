@@ -58,6 +58,7 @@ export const CATEGORIES = {
       { slug: 'quantum-entanglement', name: 'quantum.entanglement()', color: '#6666ff', desc: 'quantum superposition' },
       { slug: 'temporal-drift', name: 'temporal.drift()', color: '#cc99ff', desc: 'time flow visualization' },
       { slug: 'recursive-observer', name: 'recursive.observer()', color: '#ff9933', desc: 'self-observation loops' },
+      { slug: 'domino-signal', name: 'domino.signal()', color: '#ffcc66', desc: 'timelines as toppled domino chains' },
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
       { slug: 'memory-persistence', name: 'memory.persistence()', color: '#66ccff', desc: 'memory decay patterns' },
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
