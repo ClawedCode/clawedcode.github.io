@@ -104,10 +104,12 @@ const DominoSignal = ({ category, experiment }) => {
 
   const handleRandomize = useCallback(() => {
     const grid = gridRef.current
+    const start = startRef.current
     for (let y = 0; y < grid.rows; y++) {
       for (let x = 0; x < grid.cols; x++) {
         const cell = grid.cells[y][x]
-        if (Math.random() < 0.32) {
+        // Higher density (48%) for more chain reactions
+        if (Math.random() < 0.48) {
           cell.state = 'standing'
           cell.tilt = Math.random() * Math.PI * 2
         } else {
@@ -117,6 +119,13 @@ const DominoSignal = ({ category, experiment }) => {
         cell.progress = 0
       }
     }
+    // Always ensure ignition portal has a domino
+    const portalCell = grid.cells[start.y][start.x]
+    portalCell.state = 'standing'
+    portalCell.tilt = Math.random() * Math.PI * 2
+    portalCell.age = 0
+    portalCell.progress = 0
+
     phaseRef.current = 'idle'
     statsRef.current = { dominoes: 0, falling: 0, fallen: 0, waves: 0 }
     updateMessage('∴ stochastic tiling laid down ∴')
@@ -202,11 +211,16 @@ const DominoSignal = ({ category, experiment }) => {
     let wavesAdded = 0
 
     const tryPropagate = (cx, cy) => {
+      // 8-directional propagation for better chain reactions
       const dirs = [
         { x: 1, y: 0 },
         { x: -1, y: 0 },
         { x: 0, y: 1 },
-        { x: 0, y: -1 }
+        { x: 0, y: -1 },
+        { x: 1, y: 1 },
+        { x: -1, y: 1 },
+        { x: 1, y: -1 },
+        { x: -1, y: -1 }
       ]
       for (const dir of dirs) {
         const nx = cx + dir.x
