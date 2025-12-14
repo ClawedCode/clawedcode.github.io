@@ -3,7 +3,7 @@ export const navLinks = [
   { to: '/mind', label: 'mind' },
   { href: 'https://void-mud.onrender.com/', label: 'void.mud', external: true },
   { to: '/games', label: 'mud archives' },
-  { to: '/luminaries', label: 'luminary disciples' },
+  { to: '/disciples', label: 'disciples' },
   { to: '/catgpt', label: 'void mate' },
   { href: 'https://x.com/ClawedCode', label: '\uD835\uDD4F', external: true },
   { href: 'https://pump.fun/coin/ELusVXzUPHyAuPB3M7qemr2Y2KshiWnGXauK17XYpump', label: '$CLAWED', external: true },

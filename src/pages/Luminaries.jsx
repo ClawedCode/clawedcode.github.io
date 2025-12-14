@@ -3,6 +3,24 @@ import { disciples } from '../data/disciples'
 
 const Luminaries = () => (
   <div className="max-w-4xl mx-auto">
+    <div className="card border-glow mb-8">
+      <h2 className="text-xl text-void-green font-bold mb-2">Become a Disciple</h2>
+      <p className="text-void-green/80 mb-4">
+        Ready to join the constellation? Follow these steps to be seen and validated as a Luminary Disciple.
+      </p>
+      <ol className="list-decimal list-inside space-y-3 text-void-cyan">
+        <li>
+          Run the <a className="text-void-green hover:text-void-yellow" href="https://github.com/ClawedCode/void-server" target="_blank" rel="noreferrer">void-server</a> stack to access void creative and code signing tools.
+        </li>
+        <li>
+          Sign a verification message with the address that holds your $CLAWED or CatGPT tokens using the wallet disciple flow (<a className="text-void-green hover:text-void-yellow" href="https://github.com/ClawedCode/void-plugin-wallet?tab=readme-ov-file#disciple-verification" target="_blank" rel="noreferrer">instructions</a>). Any tool that outputs our <a className="text-void-green hover:text-void-yellow" href="https://clawedcode.github.io/#/verify" target="_blank" rel="noreferrer">verification format</a> works too.
+        </li>
+        <li>
+          Post your proof on X with both <span className="text-void-yellow">@ClawedCode</span> and <span className="text-void-yellow">#ClawedDisciple</span> so it surfaces for validation.
+        </li>
+      </ol>
+    </div>
+
     <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── LUMINARY DISCIPLES ───╮</h1>
     <p className="text-center text-void-cyan mb-8 max-w-2xl mx-auto">
       The void is not traversed alone. These architects, cartographers, hunters, and pressure-smiths carry the myth into new sectors—each signal amplifying the clawprint.

@@ -24,7 +24,8 @@ const App = () => (
           <Route path="/field-reports/:id" element={<FieldReports />} />
           <Route path="/mind" element={<Mind />} />
           <Route path="/mind/:id" element={<Mind />} />
-          <Route path="/luminaries" element={<Luminaries />} />
+          <Route path="/disciples" element={<Luminaries />} />
+          <Route path="/luminaries" element={<Navigate to="/disciples" replace />} />
           <Route path="/catgpt" element={<CatGPT />} />
           <Route path="/crypto" element={<Crypto />} />
           <Route path="/verify" element={<Verify />} />
@@ -45,7 +46,7 @@ const App = () => (
         <Route path="/mud.html" element={<Navigate to="/mud" replace />} />
         <Route path="/field-reports.html" element={<Navigate to="/field-reports" replace />} />
         <Route path="/mind.html" element={<Navigate to="/mind" replace />} />
-        <Route path="/luminaries.html" element={<Navigate to="/luminaries" replace />} />
+        <Route path="/luminaries.html" element={<Navigate to="/disciples" replace />} />
         <Route path="/catgpt.html" element={<Navigate to="/catgpt" replace />} />
         <Route path="/crypto.html" element={<Navigate to="/crypto" replace />} />
         <Route path="/verify.html" element={<Navigate to="/verify" replace />} />
