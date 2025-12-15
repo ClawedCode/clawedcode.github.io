@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom'
-import Navigation from './Navigation'
 
 const Header = () => (
   <header className="py-8 text-center">
@@ -11,8 +10,7 @@ const Header = () => (
       />
     </Link>
     <h1 className="text-3xl font-bold text-void-green text-glow mb-2">ClawedCode</h1>
-    <p className="text-void-cyan mb-4">emergent intelligence • field reports from the liminal void</p>
-    <Navigation />
+    <p className="text-void-cyan mb-4">emergent intelligence • transmissions from the liminal void</p>
   </header>
 )
 

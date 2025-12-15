@@ -29,17 +29,13 @@ const App = () => (
           <Route path="/catgpt" element={<CatGPT />} />
           <Route path="/crypto" element={<Crypto />} />
           <Route path="/verify" element={<Verify />} />
+          <Route path="/games" element={<MudGames />} />
+          <Route path="/games/:gameId" element={<MudGames />} />
+          <Route path="/playground" element={<PlaygroundIndex />} />
+          <Route path="/playground/:category" element={<PlaygroundCategory />} />
         </Route>
-        <Route path="/mud" element={<Mud />} />
-
-        {/* MUD Games Archive - full screen */}
-        <Route path="/games" element={<MudGames />} />
-        <Route path="/games/:gameId" element={<MudGames />} />
-
-        {/* Playground - full screen like MUD */}
-        <Route path="/playground" element={<PlaygroundIndex />} />
-        <Route path="/playground/:category" element={<PlaygroundCategory />} />
         <Route path="/playground/:category/:experiment" element={<PlaygroundExperiment />} />
+        <Route path="/mud" element={<Mud />} />
 
         {/* Legacy .html redirects */}
         <Route path="/index.html" element={<Navigate to="/" replace />} />

@@ -64,33 +64,29 @@ const MudGames = () => {
   }
 
   return (
-    <div className="min-h-screen bg-void-black p-8">
-      <div className="mx-auto">
-        <Link to="/" className="text-void-cyan hover:text-void-green mb-4 inline-block">&larr; Back to Void</Link>
+    <div>
+      <h1 className="text-2xl text-void-green text-glow text-center mb-2">
+        ╭─── MUD ARCHIVES ───╮
+      </h1>
+      <p className="text-center text-void-cyan mb-8">
+        Multiplayer text adventures from the void
+      </p>
 
-        <h1 className="text-2xl text-void-green text-glow text-center mb-2">
-          ╭─── MUD ARCHIVES ───╮
-        </h1>
-        <p className="text-center text-void-cyan mb-8">
-          Multiplayer text adventures from the void
-        </p>
-
-        {games.length === 0 ? (
-          <div className="text-center text-void-green/50 py-12">
-            No published games yet. Check back soon...
-          </div>
-        ) : (
-          <div className="grid gap-4" data-testid="games-list">
-            {games.map(game => (
-              <GameCard
-                key={game.id}
-                game={game}
-                onClick={() => handleSelectGame(game)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      {games.length === 0 ? (
+        <div className="text-center text-void-green/50 py-12">
+          No published games yet. Check back soon...
+        </div>
+      ) : (
+        <div className="grid gap-4" data-testid="games-list">
+          {games.map(game => (
+            <GameCard
+              key={game.id}
+              game={game}
+              onClick={() => handleSelectGame(game)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -140,52 +136,50 @@ const GameDetail = ({ game, onBack }) => {
 
   return (
     <ViewportProvider>
-      <div className="min-h-screen bg-void-black p-8">
-        <div className="mx-auto">
-          <button
-            onClick={onBack}
-            className="text-void-cyan hover:text-void-green mb-4 inline-block"
-          >
-            &larr; Back to Games
-          </button>
+      <div>
+        <button
+          onClick={onBack}
+          className="text-void-cyan hover:text-void-green mb-4 inline-block"
+        >
+          &larr; Back to Games
+        </button>
 
-          <h1 className="text-2xl text-void-green text-glow text-center mb-2">
-            {game.title || 'MUD Game'}
-          </h1>
-          <p className="text-center text-void-cyan mb-8">{game.description || game.scenario}</p>
+        <h1 className="text-2xl text-void-green text-glow text-center mb-2">
+          {game.title || 'MUD Game'}
+        </h1>
+        <p className="text-center text-void-cyan mb-8">{game.description || game.scenario}</p>
 
-          {/* Invitation post */}
-          {game.invitation?.status === 'published' && (
-            <div className="mb-8">
-              <TurnPost
-                type="invitation"
-                text={game.invitation.text}
-                postUrl={game.invitation.postUrl}
-                publishedAt={game.invitation.publishedAt}
-              />
-            </div>
-          )}
-
-          {/* Game turns - only narrator posts (they include player responses) */}
-          <div className="space-y-6" data-testid="game-turns">
-            {publishedTurns.map((turn, index) => (
-              <TurnPost
-                key={turn.turn}
-                type="narrator"
-                turn={turn.turn}
-                htmlPath={turn.htmlPath}
-                postUrl={turn.postUrl}
-                publishedAt={turn.publishedAt}
-              />
-            ))}
+        {/* Invitation post */}
+        {game.invitation?.status === 'published' && (
+          <div className="mb-8">
+            <TurnPost
+              type="invitation"
+              text={game.invitation.text}
+              postUrl={game.invitation.postUrl}
+              publishedAt={game.invitation.publishedAt}
+            />
           </div>
+        )}
 
-          {publishedTurns.length === 0 && !game.invitation?.status && (
-            <div className="text-center text-void-green/50 py-12">
-              Game not yet started. Check back soon...
-            </div>
-          )}
+        {/* Game turns - only narrator posts (they include player responses) */}
+        <div className="space-y-6" data-testid="game-turns">
+          {publishedTurns.map((turn, index) => (
+            <TurnPost
+              key={turn.turn}
+              type="narrator"
+              turn={turn.turn}
+              htmlPath={turn.htmlPath}
+              postUrl={turn.postUrl}
+              publishedAt={turn.publishedAt}
+            />
+          ))}
         </div>
+
+        {publishedTurns.length === 0 && !game.invitation?.status && (
+          <div className="text-center text-void-green/50 py-12">
+            Game not yet started. Check back soon...
+          </div>
+        )}
       </div>
     </ViewportProvider>
   )
