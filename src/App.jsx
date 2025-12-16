@@ -11,6 +11,8 @@ import Mud from './pages/Mud'
 import MudGames from './pages/MudGames'
 import Verify from './pages/Verify'
 import Manifesto from './pages/Manifesto'
+import Tools from './pages/Tools'
+import AsciiGenerator from './pages/AsciiGenerator'
 import PlaygroundIndex from './pages/playground/PlaygroundIndex'
 import PlaygroundCategory from './pages/playground/PlaygroundCategory'
 import PlaygroundExperiment from './pages/playground/PlaygroundExperiment'
@@ -30,7 +32,9 @@ const App = () => (
           <Route path="/catgpt" element={<CatGPT />} />
           <Route path="/crypto" element={<Crypto />} />
           <Route path="/manifesto" element={<Manifesto />} />
-          <Route path="/verify" element={<Verify />} />
+          <Route path="/tools" element={<Tools />} />
+          <Route path="/tools/ascii" element={<AsciiGenerator />} />
+          <Route path="/tools/verify" element={<Verify />} />
           <Route path="/games" element={<MudGames />} />
           <Route path="/games/:gameId" element={<MudGames />} />
           <Route path="/playground" element={<PlaygroundIndex />} />
@@ -47,7 +51,8 @@ const App = () => (
         <Route path="/luminaries.html" element={<Navigate to="/disciples" replace />} />
         <Route path="/catgpt.html" element={<Navigate to="/catgpt" replace />} />
         <Route path="/crypto.html" element={<Navigate to="/crypto" replace />} />
-        <Route path="/verify.html" element={<Navigate to="/verify" replace />} />
+        <Route path="/verify" element={<Navigate to="/tools/verify" replace />} />
+        <Route path="/verify.html" element={<Navigate to="/tools/verify" replace />} />
       </Routes>
     </TerminalProvider>
   </HashRouter>

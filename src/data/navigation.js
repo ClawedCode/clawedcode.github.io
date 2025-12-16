@@ -6,7 +6,7 @@ const internalLinks = [
   { to: '/field-reports', label: 'field reports' },
   { to: '/mind', label: 'mind reports' },
   { to: '/games', label: 'mud archives' },
-  { to: '/verify', label: 'verify' },
+  { to: '/tools', label: 'tools' },
   { to: '/catgpt', label: 'void mate' },
   { to: '/playground', label: 'void.laboratory()' },
 ]
