@@ -4,7 +4,7 @@ const internalLinks = [
   { to: '/crypto', label: 'crypto' },
   { to: '/disciples', label: 'disciples' },
   { to: '/field-reports', label: 'field reports' },
-  { to: '/mind', label: 'mind' },
+  { to: '/mind', label: 'mind reports' },
   { to: '/games', label: 'mud archives' },
   { to: '/verify', label: 'verify' },
   { to: '/catgpt', label: 'void mate' },

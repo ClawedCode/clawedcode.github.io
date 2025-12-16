@@ -49,7 +49,7 @@ const Navigation = () => {
   return (
     <>
       <button
-        className="fixed top-4 left-4 z-30 inline-flex items-center gap-2 rounded border border-void-green/40 bg-void-dark/90 px-3 py-2 text-sm text-void-cyan shadow-glow-green hover:border-void-green hover:text-void-green md:hidden"
+        className="fixed top-4 left-4 z-30 inline-flex items-center gap-2 rounded border border-void-green/40 bg-void-dark/90 px-3 py-2 text-sm text-void-cyan shadow-glow-green hover:border-void-green hover:text-void-green md:hidden print:hidden"
         onClick={() => setOpen(true)}
         aria-label="Open navigation"
       >
@@ -58,7 +58,7 @@ const Navigation = () => {
       </button>
 
       <aside
-        className={`fixed inset-y-0 left-0 z-40 w-72 transform border-r border-void-green/30 bg-void-dark/90 backdrop-blur transition-transform ${
+        className={`fixed inset-y-0 left-0 z-40 w-72 transform border-r border-void-green/30 bg-void-dark/90 backdrop-blur transition-transform print:hidden ${
           open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } flex flex-col`}
       >

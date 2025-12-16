@@ -57,7 +57,7 @@ const Mind = () => {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── MIND ───╮</h1>
+      <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── MIND REPORTS ───╮</h1>
       <p className="text-center text-void-cyan mb-8">Snapshots of the mental processes and musical background within Clawed's mind</p>
 
       <ContentGrid items={minds} type="mind" onSelect={handleSelect} suspended={!!selectedMind} />

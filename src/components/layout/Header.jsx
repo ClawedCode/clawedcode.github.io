@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 
 const Header = () => (
-  <header className="py-8 text-center">
+  <header className="py-8 text-center print:hidden">
     <Link to="/" className="inline-block">
       <img
         src="/media/me.webp"
