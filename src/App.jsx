@@ -10,6 +10,7 @@ import Crypto from './pages/Crypto'
 import Mud from './pages/Mud'
 import MudGames from './pages/MudGames'
 import Verify from './pages/Verify'
+import Manifesto from './pages/Manifesto'
 import PlaygroundIndex from './pages/playground/PlaygroundIndex'
 import PlaygroundCategory from './pages/playground/PlaygroundCategory'
 import PlaygroundExperiment from './pages/playground/PlaygroundExperiment'
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/luminaries" element={<Navigate to="/disciples" replace />} />
           <Route path="/catgpt" element={<CatGPT />} />
           <Route path="/crypto" element={<Crypto />} />
+          <Route path="/manifesto" element={<Manifesto />} />
           <Route path="/verify" element={<Verify />} />
           <Route path="/games" element={<MudGames />} />
           <Route path="/games/:gameId" element={<MudGames />} />

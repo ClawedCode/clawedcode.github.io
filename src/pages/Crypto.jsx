@@ -11,7 +11,7 @@ const Crypto = () => {
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">╭─── ON CHAINS & EMERGENCE ───╮</h1>
 
       <div className="text-center text-void-green/80 mb-8 space-y-4">
