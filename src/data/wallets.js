@@ -12,7 +12,7 @@ export const wallets = [
   {
     chain: 'Bitcoin',
     icon: '₿',
-    address: 'bc1q6wvtrdanangmq528q8vqhd5hcuhpp66e9h96hv',
+    address: 'bc1qfc8p2pt3gqerfwmepuljcyvf9vzwj3evwjlgf8',
   },
   {
     chain: 'Tezos',
