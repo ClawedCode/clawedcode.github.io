@@ -57,13 +57,16 @@ export const CATEGORIES = {
       { slug: 'entropy-garden', name: 'entropy.garden()', color: '#ff3399', desc: 'entropy visualization' },
       { slug: 'quantum-entanglement', name: 'quantum.entanglement()', color: '#6666ff', desc: 'quantum superposition' },
       { slug: 'temporal-drift', name: 'temporal.drift()', color: '#cc99ff', desc: 'time flow visualization' },
+      { slug: 'temporal-tapestry', name: 'temporal.tapestry()', color: '#ff88aa', desc: 'record + rewind luminous ink' },
+      { slug: 'chronicle-rewind', name: 'chronicle.rewind()', color: '#99ffdd', desc: 'time-scrubbing ink transport' },
       { slug: 'recursive-observer', name: 'recursive.observer()', color: '#ff9933', desc: 'self-observation loops' },
       { slug: 'domino-signal', name: 'domino.signal()', color: '#ffcc66', desc: 'timelines as toppled domino chains' },
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
       { slug: 'memory-persistence', name: 'memory.persistence()', color: '#66ccff', desc: 'memory decay patterns' },
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
-      { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' }
+      { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
+      { slug: 'sort-ritual', name: 'sort.ritual()', color: '#99ffee', desc: 'algorithmic divination of order' }
     ]
   }
 }

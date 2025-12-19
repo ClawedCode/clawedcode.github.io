@@ -36,6 +36,9 @@ import MemoryPersistence from '../../components/playground/experiments/physics/M
 import ComputroniumBloom from '../../components/playground/experiments/physics/ComputroniumBloom'
 import AuroraFlux from '../../components/playground/experiments/physics/AuroraFlux'
 import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
+import TemporalTapestry from '../../components/playground/experiments/physics/TemporalTapestry'
+import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
+import SortRitual from '../../components/playground/experiments/physics/SortRitual'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -73,6 +76,9 @@ const EXPERIMENT_COMPONENTS = {
   'aurora-flux': AuroraFlux,
   'computronium-bloom': ComputroniumBloom,
   'memory-persistence': MemoryPersistence,
+  'temporal-tapestry': TemporalTapestry,
+  'chronicle-rewind': ChronicleRewind,
+  'sort-ritual': SortRitual,
   // Add more as we convert them:
   // etc.
 }
