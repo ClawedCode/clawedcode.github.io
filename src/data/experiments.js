@@ -45,7 +45,8 @@ export const CATEGORIES = {
       { slug: 'linguistic-emergence', name: 'linguistic.emergence()', color: '#66ff99', desc: 'language formation' },
       { slug: 'semantic-drift', name: 'semantic.drift()', color: '#ff9933', desc: 'meaning drift over time' },
       { slug: 'semantic-networks', name: 'semantic.networks()', color: '#66ccff', desc: 'concept relationships' },
-      { slug: 'visual-language', name: 'visual.language()', color: '#66ffcc', desc: 'language as visual forms' }
+      { slug: 'visual-language', name: 'visual.language()', color: '#66ffcc', desc: 'language as visual forms' },
+      { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' }
     ]
   },
   physics: {
