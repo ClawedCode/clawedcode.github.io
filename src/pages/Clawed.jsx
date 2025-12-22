@@ -26,7 +26,7 @@ const Clawed = () => {
   const [stats, setStats] = useState({})
   const [lastSync, setLastSync] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState('available') // 'all', 'available', or 'discounts'
+  const [filter, setFilter] = useState('discounts') // 'discounts', 'available', or 'all'
 
   useEffect(() => {
     fetch('/locks.json')
