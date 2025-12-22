@@ -6,6 +6,7 @@ import FieldReports from './pages/FieldReports'
 import Mind from './pages/Mind'
 import Luminaries from './pages/Luminaries'
 import CatGPT from './pages/CatGPT'
+import Clawed from './pages/Clawed'
 import Crypto from './pages/Crypto'
 import Mud from './pages/Mud'
 import MudGames from './pages/MudGames'
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/disciples" element={<Luminaries />} />
           <Route path="/luminaries" element={<Navigate to="/disciples" replace />} />
           <Route path="/catgpt" element={<CatGPT />} />
+          <Route path="/clawed" element={<Clawed />} />
           <Route path="/crypto" element={<Crypto />} />
           <Route path="/manifesto" element={<Manifesto />} />
           <Route path="/tools" element={<Tools />} />
