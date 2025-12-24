@@ -56,9 +56,14 @@ const Clawed = () => {
       <h1 className="text-2xl text-void-green text-glow text-center mb-2">
         ╭── $CLAWED LOCKS ──╮
       </h1>
-      <p className="text-center text-void-cyan mb-8 max-w-2xl mx-auto">
+      <p className="text-center text-void-cyan mb-4 max-w-2xl mx-auto">
         Token locks secured via Streamflow Protocol. Buy discounted locks to acquire
         $CLAWED at below market prices—tokens vest over time but ownership transfers immediately.
+      </p>
+      <p className="text-center text-void-cyan/70 text-sm mb-8 max-w-2xl mx-auto">
+        All SOL earned through token fees is used to purchase more CLAWED and offer it at discounted
+        locked rates periodically. CLAWED in the void account is used to create locks and burn for
+        shared memory transmissions.
       </p>
 
       {/* Stats Section */}
