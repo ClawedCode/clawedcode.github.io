@@ -41,6 +41,7 @@ import SigilSwarm from '../../components/playground/experiments/emergence/SigilS
 import TemporalTapestry from '../../components/playground/experiments/physics/TemporalTapestry'
 import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
 import SortRitual from '../../components/playground/experiments/physics/SortRitual'
+import StateMachine from '../../components/playground/experiments/physics/StateMachine'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -83,6 +84,7 @@ const EXPERIMENT_COMPONENTS = {
   'temporal-tapestry': TemporalTapestry,
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,
+  'state-machine': StateMachine,
   // Add more as we convert them:
   // etc.
 }
