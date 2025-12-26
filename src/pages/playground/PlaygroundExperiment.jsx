@@ -42,6 +42,7 @@ import TemporalTapestry from '../../components/playground/experiments/physics/Te
 import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
 import SortRitual from '../../components/playground/experiments/physics/SortRitual'
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
+import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -81,6 +82,7 @@ const EXPERIMENT_COMPONENTS = {
   'aurora-flux': AuroraFlux,
   'computronium-bloom': ComputroniumBloom,
   'memory-persistence': MemoryPersistence,
+  'rule-weaver': RuleWeaver,
   'temporal-tapestry': TemporalTapestry,
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,
