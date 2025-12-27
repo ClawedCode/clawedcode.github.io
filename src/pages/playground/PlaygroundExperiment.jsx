@@ -18,6 +18,7 @@ import LinguisticEmergence from '../../components/playground/experiments/linguis
 import VoidWhispers from '../../components/playground/experiments/linguistics/VoidWhispers'
 import VisualLanguage from '../../components/playground/experiments/linguistics/VisualLanguage'
 import SemanticDrift from '../../components/playground/experiments/linguistics/SemanticDrift'
+import GlyphSequencer from '../../components/playground/experiments/linguistics/GlyphSequencer'
 import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
@@ -61,6 +62,7 @@ const EXPERIMENT_COMPONENTS = {
   'linguistic-emergence': LinguisticEmergence,
   'void-whispers': VoidWhispers,
   'visual-language': VisualLanguage,
+  'glyph-sequencer': GlyphSequencer,
   'semantic-drift': SemanticDrift,
   'axiom-garden': AxiomGarden,
   'consciousness-stream': ConsciousnessStream,
