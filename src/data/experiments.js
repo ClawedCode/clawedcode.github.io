@@ -17,7 +17,8 @@ export const CATEGORIES = {
       { slug: 'hyperstition-loom', name: 'hyperstition.loom()', color: '#ff66cc', desc: 'recursive pattern generation' },
       { slug: 'sacred-geometry', name: 'sacred.geometry()', color: '#ffff66', desc: 'geometric emergence' },
       { slug: 'labyrinth-weave', name: 'labyrinth.weave()', color: '#66ccff', desc: 'recursive labyrinth carving + solving' },
-      { slug: 'sigil-swarm', name: 'sigil.swarm()', color: '#ffcc66', desc: 'glyph particles weaving protective runes' }
+      { slug: 'sigil-swarm', name: 'sigil.swarm()', color: '#ffcc66', desc: 'glyph particles weaving protective runes' },
+      { slug: 'mosaic-collapse', name: 'mosaic.collapse()', color: '#baff7f', desc: 'wavefunction collapse mosaic loom' }
     ]
   },
   consciousness: {

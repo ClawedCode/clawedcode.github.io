@@ -44,6 +44,7 @@ import ChronicleRewind from '../../components/playground/experiments/physics/Chr
 import SortRitual from '../../components/playground/experiments/physics/SortRitual'
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
 import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
+import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -78,6 +79,7 @@ const EXPERIMENT_COMPONENTS = {
   'emergence-automata': EmergenceAutomata,
   'pattern-loom': PatternLoom,
   'labyrinth-weave': LabyrinthWeave,
+  'mosaic-collapse': MosaicCollapse,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
