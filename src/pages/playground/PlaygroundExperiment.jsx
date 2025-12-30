@@ -45,6 +45,7 @@ import SortRitual from '../../components/playground/experiments/physics/SortRitu
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
 import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
+import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -80,6 +81,7 @@ const EXPERIMENT_COMPONENTS = {
   'pattern-loom': PatternLoom,
   'labyrinth-weave': LabyrinthWeave,
   'mosaic-collapse': MosaicCollapse,
+  'voronoi-architect': VoronoiArchitect,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
