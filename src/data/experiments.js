@@ -73,6 +73,7 @@ export const CATEGORIES = {
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
       { slug: 'sort-ritual', name: 'sort.ritual()', color: '#99ffee', desc: 'algorithmic divination of order' },
+      { slug: 'turing-tape', name: 'turing.tape()', color: '#ddff77', desc: 'rewindable turing head chronicle' },
       { slug: 'state-machine', name: 'state.machine()', color: '#77ffc9', desc: 'visible finite-state chants' }
     ]
   }

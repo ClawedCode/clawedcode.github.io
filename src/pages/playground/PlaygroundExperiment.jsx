@@ -46,6 +46,7 @@ import StateMachine from '../../components/playground/experiments/physics/StateM
 import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
+import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -92,6 +93,7 @@ const EXPERIMENT_COMPONENTS = {
   'temporal-tapestry': TemporalTapestry,
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,
+  'turing-tape': TuringTape,
   'state-machine': StateMachine,
   // Add more as we convert them:
   // etc.
