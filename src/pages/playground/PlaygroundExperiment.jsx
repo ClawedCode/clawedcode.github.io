@@ -47,6 +47,7 @@ import RuleWeaver from '../../components/playground/experiments/physics/RuleWeav
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
+import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -83,6 +84,7 @@ const EXPERIMENT_COMPONENTS = {
   'labyrinth-weave': LabyrinthWeave,
   'mosaic-collapse': MosaicCollapse,
   'voronoi-architect': VoronoiArchitect,
+  'isometric-cathedral': IsometricCathedral,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
