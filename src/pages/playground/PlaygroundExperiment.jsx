@@ -47,6 +47,7 @@ import RuleWeaver from '../../components/playground/experiments/physics/RuleWeav
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
+import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 
 // Map of experiment slugs to components
@@ -96,6 +97,7 @@ const EXPERIMENT_COMPONENTS = {
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,
   'turing-tape': TuringTape,
+  'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
   // Add more as we convert them:
   // etc.
