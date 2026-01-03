@@ -38,6 +38,7 @@ import RecursiveObserver from '../../components/playground/experiments/physics/R
 import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
 import ComputroniumBloom from '../../components/playground/experiments/physics/ComputroniumBloom'
 import AuroraFlux from '../../components/playground/experiments/physics/AuroraFlux'
+import FourierLoom from '../../components/playground/experiments/physics/FourierLoom'
 import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
 import TemporalTapestry from '../../components/playground/experiments/physics/TemporalTapestry'
 import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
@@ -93,6 +94,7 @@ const EXPERIMENT_COMPONENTS = {
   'computronium-bloom': ComputroniumBloom,
   'memory-persistence': MemoryPersistence,
   'rule-weaver': RuleWeaver,
+  'fourier-loom': FourierLoom,
   'temporal-tapestry': TemporalTapestry,
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,

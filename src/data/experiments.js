@@ -73,6 +73,7 @@ export const CATEGORIES = {
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
+      { slug: 'fourier-loom', name: 'fourier.loom()', color: '#88ddff', desc: 'drawn strokes reborn as epicycles' },
       { slug: 'sort-ritual', name: 'sort.ritual()', color: '#99ffee', desc: 'algorithmic divination of order' },
       { slug: 'rhythm-lattice', name: 'rhythm.lattice()', color: '#aaf0ff', desc: 'polyrhythmic step loom' },
       { slug: 'turing-tape', name: 'turing.tape()', color: '#ddff77', desc: 'rewindable turing head chronicle' },
