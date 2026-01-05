@@ -51,6 +51,7 @@ import VoronoiArchitect from '../../components/playground/experiments/emergence/
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
+import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -103,6 +104,7 @@ const EXPERIMENT_COMPONENTS = {
   'turing-tape': TuringTape,
   'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
+  'quadtree-compress': QuadtreeCompress,
   // Add more as we convert them:
   // etc.
 }

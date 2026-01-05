@@ -73,6 +73,7 @@ export const CATEGORIES = {
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
+      { slug: 'quadtree-compress', name: 'quadtree.compress()', color: '#8af9d3', desc: 'quad-based compression + error loom' },
       { slug: 'reaction-diffusion', name: 'reaction.diffusion()', color: '#99ffb0', desc: 'gray-scott living ink morphogenesis' },
       { slug: 'fourier-loom', name: 'fourier.loom()', color: '#88ddff', desc: 'drawn strokes reborn as epicycles' },
       { slug: 'sort-ritual', name: 'sort.ritual()', color: '#99ffee', desc: 'algorithmic divination of order' },
