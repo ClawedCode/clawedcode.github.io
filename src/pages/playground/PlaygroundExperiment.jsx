@@ -52,6 +52,7 @@ import TuringTape from '../../components/playground/experiments/physics/TuringTa
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
+import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -105,6 +106,7 @@ const EXPERIMENT_COMPONENTS = {
   'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
   'quadtree-compress': QuadtreeCompress,
+  'path-cartographer': PathCartographer,
   // Add more as we convert them:
   // etc.
 }
