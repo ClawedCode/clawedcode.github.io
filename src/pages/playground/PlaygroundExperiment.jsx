@@ -53,6 +53,7 @@ import RhythmLattice from '../../components/playground/experiments/physics/Rhyth
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
+import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -107,6 +108,7 @@ const EXPERIMENT_COMPONENTS = {
   'state-machine': StateMachine,
   'quadtree-compress': QuadtreeCompress,
   'path-cartographer': PathCartographer,
+  'prime-constellations': PrimeConstellations,
   // Add more as we convert them:
   // etc.
 }

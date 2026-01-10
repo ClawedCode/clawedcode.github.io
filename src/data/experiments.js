@@ -69,6 +69,7 @@ export const CATEGORIES = {
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
       { slug: 'crystal-forge', name: 'crystal.forge()', color: '#88e0ff', desc: 'dendritic crystalline growth' },
       { slug: 'memory-persistence', name: 'memory.persistence()', color: '#66ccff', desc: 'memory decay patterns' },
+      { slug: 'prime-constellations', name: 'prime.constellations()', color: '#e1ff99', desc: 'ulam lattice + arithmetic starlines' },
       { slug: 'rule-weaver', name: 'rule.weaver()', color: '#b1ff80', desc: 'elementary automata ribbon loom' },
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
