@@ -45,6 +45,7 @@ import TemporalTapestry from '../../components/playground/experiments/physics/Te
 import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
 import SortRitual from '../../components/playground/experiments/physics/SortRitual'
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
+import StackOracle from '../../components/playground/experiments/physics/StackOracle'
 import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
@@ -106,6 +107,7 @@ const EXPERIMENT_COMPONENTS = {
   'turing-tape': TuringTape,
   'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
+  'stack-oracle': StackOracle,
   'quadtree-compress': QuadtreeCompress,
   'path-cartographer': PathCartographer,
   'prime-constellations': PrimeConstellations,

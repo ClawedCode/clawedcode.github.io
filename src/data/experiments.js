@@ -81,6 +81,7 @@ export const CATEGORIES = {
       { slug: 'rhythm-lattice', name: 'rhythm.lattice()', color: '#aaf0ff', desc: 'polyrhythmic step loom' },
       { slug: 'turing-tape', name: 'turing.tape()', color: '#ddff77', desc: 'rewindable turing head chronicle' },
       { slug: 'state-machine', name: 'state.machine()', color: '#77ffc9', desc: 'visible finite-state chants' },
+      { slug: 'stack-oracle', name: 'stack.oracle()', color: '#caff88', desc: 'pushdown glyph interpreter' },
       { slug: 'path-cartographer', name: 'path.cartographer()', color: '#9ef7c8', desc: 'weighted pathfinding oracle + portal brush' }
     ]
   }
