@@ -72,6 +72,7 @@ export const CATEGORIES = {
       { slug: 'prime-constellations', name: 'prime.constellations()', color: '#e1ff99', desc: 'ulam lattice + arithmetic starlines' },
       { slug: 'rule-weaver', name: 'rule.weaver()', color: '#b1ff80', desc: 'elementary automata ribbon loom' },
       { slug: 'aurora-flux', name: 'aurora.flux()', color: '#99ffcc', desc: 'magnetized aurora filaments' },
+      { slug: 'mirror-ritual', name: 'mirror.ritual()', color: '#7ee3ff', desc: 'specular maze of ricocheting beams' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
       { slug: 'quadtree-compress', name: 'quadtree.compress()', color: '#8af9d3', desc: 'quad-based compression + error loom' },

@@ -38,6 +38,7 @@ import RecursiveObserver from '../../components/playground/experiments/physics/R
 import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
 import ComputroniumBloom from '../../components/playground/experiments/physics/ComputroniumBloom'
 import AuroraFlux from '../../components/playground/experiments/physics/AuroraFlux'
+import MirrorRitual from '../../components/playground/experiments/physics/MirrorRitual'
 import FourierLoom from '../../components/playground/experiments/physics/FourierLoom'
 import ReactionDiffusion from '../../components/playground/experiments/physics/ReactionDiffusion'
 import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
@@ -96,6 +97,7 @@ const EXPERIMENT_COMPONENTS = {
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
   'aurora-flux': AuroraFlux,
+  'mirror-ritual': MirrorRitual,
   'computronium-bloom': ComputroniumBloom,
   'memory-persistence': MemoryPersistence,
   'rule-weaver': RuleWeaver,
