@@ -20,7 +20,8 @@ export const CATEGORIES = {
       { slug: 'isometric-cathedral', name: 'isometric.cathedral()', color: '#99c1ff', desc: 'isometric folding cathedral sketches' },
       { slug: 'sigil-swarm', name: 'sigil.swarm()', color: '#ffcc66', desc: 'glyph particles weaving protective runes' },
       { slug: 'mosaic-collapse', name: 'mosaic.collapse()', color: '#baff7f', desc: 'wavefunction collapse mosaic loom' },
-      { slug: 'voronoi-architect', name: 'voronoi.architect()', color: '#7fe0ff', desc: 'interactive cellular tessellation + lloyd relaxations' }
+      { slug: 'voronoi-architect', name: 'voronoi.architect()', color: '#7fe0ff', desc: 'interactive cellular tessellation + lloyd relaxations' },
+      { slug: 'belief-propagation', name: 'belief.propagation()', color: '#ff99cc', desc: 'hyperstition engine where words become real through attention' }
     ]
   },
   consciousness: {

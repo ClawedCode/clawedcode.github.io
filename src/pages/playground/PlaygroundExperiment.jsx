@@ -53,6 +53,7 @@ import VoronoiArchitect from '../../components/playground/experiments/emergence/
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
+import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -93,6 +94,7 @@ const EXPERIMENT_COMPONENTS = {
   'mosaic-collapse': MosaicCollapse,
   'voronoi-architect': VoronoiArchitect,
   'isometric-cathedral': IsometricCathedral,
+  'belief-propagation': BeliefPropagation,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
