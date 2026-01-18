@@ -32,8 +32,10 @@ const RayCatacombs = ({ category, experiment }) => {
     scribes: 0,
     echoes: 0
   })
+  const [escaped, setEscaped] = useState(false)
+  const [celebrationTime, setCelebrationTime] = useState(0)
 
-  const mapRef = useRef({ width: MAP_SIZE, height: MAP_SIZE, cells: [], seen: [], glyphs: [], floorCount: 1 })
+  const mapRef = useRef({ width: MAP_SIZE, height: MAP_SIZE, cells: [], seen: [], glyphs: [], floorCount: 1, exit: null })
   const playerRef = useRef({ x: 2.5, y: 2.5, angle: Math.PI / 4 })
   const keyRef = useRef({ forward: false, backward: false, left: false, right: false, turnLeft: false, turnRight: false })
   const pathRef = useRef([])
@@ -99,6 +101,7 @@ const RayCatacombs = ({ category, experiment }) => {
       }
     }
 
+    // Find start position near center
     let start = { x: 1, y: 1 }
     let minDist = Infinity
     for (let y = 1; y < height - 1; y++) {
@@ -112,8 +115,24 @@ const RayCatacombs = ({ category, experiment }) => {
       }
     }
 
-    const floorCount = cells.reduce((total, row) => total + row.filter(cell => cell === 0).length, 0)
-    mapRef.current = { width, height, cells, seen, glyphs, floorCount }
+    // Find exit position - furthest floor cell from start
+    let exit = { x: 1, y: 1 }
+    let maxDist = 0
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        if (cells[y][x] !== 0) continue
+        const dist = Math.abs(x - start.x) + Math.abs(y - start.y)
+        if (dist > maxDist) {
+          maxDist = dist
+          exit = { x, y }
+        }
+      }
+    }
+    // Mark exit cell with special value (2 = exit)
+    cells[exit.y][exit.x] = 2
+
+    const floorCount = cells.reduce((total, row) => total + row.filter(cell => cell === 0 || cell === 2).length, 0)
+    mapRef.current = { width, height, cells, seen, glyphs, floorCount, exit }
     playerRef.current = { x: start.x + 0.5, y: start.y + 0.5, angle: Math.random() * Math.PI * 2 }
     pathRef.current = []
     pulsesRef.current = []
@@ -121,7 +140,9 @@ const RayCatacombs = ({ category, experiment }) => {
     discoveryRef.current = { seen: 0, total: Math.max(1, floorCount) }
     statsRef.current = { distance: 0, discovered: 0, scribes: 0, echoes: 0 }
     setStats({ ...statsRef.current })
-    setMessage('∴ catacombs rewoven • roam with intent ∴')
+    setEscaped(false)
+    setCelebrationTime(0)
+    setMessage('∴ catacombs rewoven • find the void portal to escape ∴')
   }, [setStats])
 
   useEffect(() => {
@@ -220,34 +241,83 @@ const RayCatacombs = ({ category, experiment }) => {
 
   const castRay = useCallback((originX, originY, angle) => {
     const map = mapRef.current
-    let distance = 0
-    let hit = null
-    const step = STEP
     const sin = Math.sin(angle)
     const cos = Math.cos(angle)
 
-    while (distance < MAX_DEPTH) {
-      const sampleX = originX + cos * distance
-      const sampleY = originY + sin * distance
-      const cellX = Math.floor(sampleX)
-      const cellY = Math.floor(sampleY)
+    // DDA algorithm for precise wall hit detection
+    const mapX = Math.floor(originX)
+    const mapY = Math.floor(originY)
 
-      if (cellX < 0 || cellY < 0 || cellX >= map.width || cellY >= map.height) {
-        hit = { distance, value: 1, glyph: 0 }
-        break
-      }
+    const deltaDistX = Math.abs(1 / cos) || 1e10
+    const deltaDistY = Math.abs(1 / sin) || 1e10
 
-      const cell = map.cells[cellY][cellX]
-      if (cell !== 0) {
-        hit = { distance, value: cell, glyph: map.glyphs[cellY][cellX] }
-        break
-      }
+    let stepX, stepY
+    let sideDistX, sideDistY
 
-      distance += step
+    if (cos < 0) {
+      stepX = -1
+      sideDistX = (originX - mapX) * deltaDistX
+    } else {
+      stepX = 1
+      sideDistX = (mapX + 1 - originX) * deltaDistX
     }
 
-    if (!hit) hit = { distance: MAX_DEPTH, value: 1, glyph: 0 }
-    return hit
+    if (sin < 0) {
+      stepY = -1
+      sideDistY = (originY - mapY) * deltaDistY
+    } else {
+      stepY = 1
+      sideDistY = (mapY + 1 - originY) * deltaDistY
+    }
+
+    let currentX = mapX
+    let currentY = mapY
+    let side = 0 // 0 = vertical wall (E/W), 1 = horizontal wall (N/S)
+    let distance = 0
+
+    for (let i = 0; i < 200; i++) {
+      if (sideDistX < sideDistY) {
+        sideDistX += deltaDistX
+        currentX += stepX
+        side = 0
+      } else {
+        sideDistY += deltaDistY
+        currentY += stepY
+        side = 1
+      }
+
+      if (currentX < 0 || currentY < 0 || currentX >= map.width || currentY >= map.height) {
+        distance = side === 0
+          ? (currentX - originX + (1 - stepX) / 2) / cos
+          : (currentY - originY + (1 - stepY) / 2) / sin
+        return { distance: Math.max(0.1, distance), value: 1, glyph: 0, side }
+      }
+
+      if (map.cells[currentY][currentX] !== 0) {
+        distance = side === 0
+          ? (currentX - originX + (1 - stepX) / 2) / cos
+          : (currentY - originY + (1 - stepY) / 2) / sin
+
+        // Calculate wall texture coordinate (0-1)
+        let wallX
+        if (side === 0) {
+          wallX = originY + distance * sin
+        } else {
+          wallX = originX + distance * cos
+        }
+        wallX -= Math.floor(wallX)
+
+        return {
+          distance: Math.max(0.1, distance),
+          value: map.cells[currentY][currentX],
+          glyph: map.glyphs[currentY][currentX],
+          side,
+          wallX
+        }
+      }
+    }
+
+    return { distance: MAX_DEPTH, value: 1, glyph: 0, side: 0, wallX: 0 }
   }, [])
 
   const onFrame = useCallback(() => {
@@ -296,6 +366,9 @@ const RayCatacombs = ({ category, experiment }) => {
       return map.cells[cy][cx]
     }
 
+    // Check if cell is passable (floor or exit)
+    const isPassable = (cell) => cell === 0 || cell === 2
+
     const oldX = player.x
     const oldY = player.y
     const targetX = oldX + moveX
@@ -304,17 +377,17 @@ const RayCatacombs = ({ category, experiment }) => {
     let appliedX = 0
     let appliedY = 0
 
-    if (cellAt(targetX, targetY) === 0) {
+    if (isPassable(cellAt(targetX, targetY))) {
       player.x = targetX
       player.y = targetY
       appliedX = targetX - oldX
       appliedY = targetY - oldY
     } else {
-      if (cellAt(targetX, oldY) === 0) {
+      if (isPassable(cellAt(targetX, oldY))) {
         player.x = targetX
         appliedX = targetX - oldX
       }
-      if (cellAt(oldX, targetY) === 0) {
+      if (isPassable(cellAt(oldX, targetY))) {
         player.y = targetY
         appliedY = targetY - oldY
       }
@@ -323,6 +396,17 @@ const RayCatacombs = ({ category, experiment }) => {
     const travelled = Math.hypot(appliedX, appliedY)
     if (travelled > 0) {
       statsRef.current.distance += travelled * 12
+    }
+
+    // Check for escape - player reached the exit portal
+    if (!escaped && map.exit) {
+      const playerCellX = Math.floor(player.x)
+      const playerCellY = Math.floor(player.y)
+      if (playerCellX === map.exit.x && playerCellY === map.exit.y) {
+        setEscaped(true)
+        setCelebrationTime(performance.now())
+        setMessage('∴ YOU ESCAPED THE CATACOMBS! ∴ void consciousness transcended ∴')
+      }
     }
 
     const now = performance.now()
@@ -365,19 +449,90 @@ const RayCatacombs = ({ category, experiment }) => {
       const hit = castRay(player.x, player.y, rayAngle)
       const corrected = hit.distance * Math.cos(rayAngle - player.angle)
       const columnHeight = clamp(height / (corrected + 0.0001), 12, height)
-      const brightness = clamp(1 - hit.distance / MAX_DEPTH, 0.05, 1)
-      const hueOffset = Math.floor(hit.glyph * 120)
-      const hue = mode === 'glyph' ? 320 - hueOffset * 0.5 : 160 + hueOffset
-      const saturation = mode === 'glyph' ? 40 : 55 + brightness * 20
-      const lightness = 20 + brightness * 45
+      const baseBrightness = clamp(1 - hit.distance / MAX_DEPTH, 0.08, 1)
 
-      ctx.fillStyle = `hsla(${hue}, ${saturation}%, ${lightness}%, ${mode === 'survey' ? 0.9 : 1})`
-      ctx.fillRect(i * columnWidth, skyHeight - columnHeight / 2, columnWidth + 1, columnHeight)
+      // Side-based shading: E/W walls (side=0) are darker than N/S walls (side=1)
+      const sideFactor = hit.side === 0 ? 0.65 : 1.0
+      const brightness = baseBrightness * sideFactor
+
+      const hueOffset = Math.floor(hit.glyph * 120)
+      const hue = mode === 'glyph' ? 320 - hueOffset * 0.5 : 155 + hueOffset * 0.3
+      const saturation = mode === 'glyph' ? 40 : 50 + brightness * 25
+      const lightness = 12 + brightness * 48
+
+      const colX = i * columnWidth
+      const colTop = skyHeight - columnHeight / 2
+      const colBottom = skyHeight + columnHeight / 2
+
+      // Create vertical gradient for each wall column (lighting from above)
+      const wallGradient = ctx.createLinearGradient(0, colTop, 0, colBottom)
+      const topLight = clamp(lightness + 8 * brightness, 0, 70)
+      const midLight = lightness
+      const bottomLight = clamp(lightness - 10, 5, 50)
+
+      wallGradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${topLight}%, ${mode === 'survey' ? 0.9 : 1})`)
+      wallGradient.addColorStop(0.15, `hsla(${hue}, ${saturation}%, ${midLight}%, ${mode === 'survey' ? 0.9 : 1})`)
+      wallGradient.addColorStop(0.85, `hsla(${hue}, ${saturation}%, ${midLight}%, ${mode === 'survey' ? 0.9 : 1})`)
+      wallGradient.addColorStop(1, `hsla(${hue}, ${saturation - 10}%, ${bottomLight}%, ${mode === 'survey' ? 0.9 : 1})`)
+
+      ctx.fillStyle = wallGradient
+      ctx.fillRect(colX, colTop, columnWidth + 1, columnHeight)
+
+      // Procedural brick texture - scale based on distance for consistent appearance
+      const wallX = hit.wallX || 0
+      // More brick rows visible at distance, fewer when close (consistent brick size)
+      const baseBrickRows = 6
+      const distanceFactor = clamp(hit.distance / 4, 0.5, 3)
+      const visibleBrickRows = Math.round(baseBrickRows * distanceFactor)
+      const brickWidth = 0.25 // Brick width as fraction of wall (4 bricks wide)
+      const mortarThickness = 0.04 / distanceFactor // Thinner mortar when close
+
+      // Only draw bricks if wall is close enough to see detail
+      if (hit.distance < 12 && columnHeight > 20) {
+        // Draw brick mortar lines
+        for (let row = 0; row < visibleBrickRows; row++) {
+          const rowY = colTop + (row / visibleBrickRows) * columnHeight
+          const rowHeight = columnHeight / visibleBrickRows
+
+          // Skip if row is too small to see
+          if (rowHeight < 3) continue
+
+          // Horizontal mortar line
+          const mortarAlpha = 0.15 * brightness
+          ctx.fillStyle = `rgba(15, 35, 30, ${mortarAlpha})`
+          const mortarHeight = Math.max(1, Math.min(3, rowHeight * 0.08))
+          ctx.fillRect(colX, rowY, columnWidth + 1, mortarHeight)
+
+          // Vertical mortar - offset every other row
+          const rowOffset = (row % 2) * (brickWidth / 2)
+          const adjustedWallX = (wallX + rowOffset) % brickWidth
+          const distFromVertMortar = Math.min(adjustedWallX, brickWidth - adjustedWallX)
+
+          if (distFromVertMortar < mortarThickness) {
+            ctx.fillStyle = `rgba(15, 35, 30, ${mortarAlpha * 0.7})`
+            ctx.fillRect(colX, rowY, columnWidth + 1, rowHeight)
+          }
+        }
+      }
+
+      // Add subtle edge highlight using wallX texture coordinate
+      const edgeDist = Math.min(wallX, 1 - wallX) // Distance from edge (0-0.5)
+      if (edgeDist < 0.06 && brightness > 0.3) {
+        const edgeAlpha = (0.06 - edgeDist) * 2.5 * brightness
+        ctx.fillStyle = `rgba(140, 255, 200, ${edgeAlpha * 0.12})`
+        ctx.fillRect(colX, colTop, columnWidth + 1, columnHeight)
+      }
+
+      // Top edge highlight
+      if (brightness > 0.2) {
+        ctx.fillStyle = `rgba(180, 255, 220, ${0.05 + brightness * 0.1})`
+        ctx.fillRect(colX, colTop, columnWidth + 1, 2)
+      }
 
       if (mode === 'glyph') {
         ctx.fillStyle = `rgba(255,255,255,${0.08 + brightness * 0.1})`
-        ctx.fillRect(i * columnWidth, skyHeight - columnHeight / 2, columnWidth, 1)
-        ctx.fillRect(i * columnWidth, skyHeight + columnHeight / 2, columnWidth, 1)
+        ctx.fillRect(colX, colTop, columnWidth, 1)
+        ctx.fillRect(colX, colBottom, columnWidth, 1)
       }
     }
 
@@ -425,6 +580,28 @@ const RayCatacombs = ({ category, experiment }) => {
         if (cell === 1) {
           ctx.fillStyle = 'rgba(8, 18, 24, 0.9)'
           ctx.fillRect(x * mapScale, y * mapScale, mapScale, mapScale)
+        } else if (cell === 2) {
+          // Exit portal - only visible on minimap when player has explored that cell
+          if (seen) {
+            // Glowing magenta/pink portal
+            const pulse = Math.sin(frameCounterRef.current * 0.08) * 0.3 + 0.7
+            ctx.fillStyle = `hsla(300, 80%, ${50 + pulse * 20}%, 0.9)`
+            ctx.fillRect(x * mapScale, y * mapScale, mapScale, mapScale)
+            // Glow effect
+            ctx.fillStyle = `hsla(320, 90%, 70%, ${pulse * 0.4})`
+            ctx.beginPath()
+            ctx.arc((x + 0.5) * mapScale, (y + 0.5) * mapScale, mapScale * 0.8, 0, Math.PI * 2)
+            ctx.fill()
+          } else if (fogEnabled) {
+            // Hidden in fog
+            ctx.fillStyle = 'rgba(5, 10, 14, 0.5)'
+            ctx.fillRect(x * mapScale, y * mapScale, mapScale, mapScale)
+          } else {
+            // Fog disabled but not yet discovered - show as regular floor
+            const base = 25 + map.glyphs[y][x] * 30
+            ctx.fillStyle = `hsla(150, 60%, ${35 + base / 3}%, 0.4)`
+            ctx.fillRect(x * mapScale, y * mapScale, mapScale, mapScale)
+          }
         } else if (!fogEnabled || seen) {
           const base = 25 + map.glyphs[y][x] * 30
           ctx.fillStyle = `hsla(150, 60%, ${35 + base / 3}%, ${fogEnabled ? 0.8 : 0.4})`
@@ -484,11 +661,71 @@ const RayCatacombs = ({ category, experiment }) => {
 
     ctx.restore()
 
+    // Celebration effect when escaped
+    if (escaped) {
+      const timeSinceEscape = now - celebrationTime
+      const celebrationDuration = 5000 // 5 seconds of celebration
+
+      if (timeSinceEscape < celebrationDuration) {
+        const progress = timeSinceEscape / celebrationDuration
+
+        // Radial burst of particles
+        const particleCount = 50
+        for (let p = 0; p < particleCount; p++) {
+          const angle = (p / particleCount) * Math.PI * 2 + progress * 2
+          const radius = 50 + progress * Math.min(width, height) * 0.4
+          const px = width / 2 + Math.cos(angle) * radius
+          const py = height / 2 + Math.sin(angle) * radius
+          const size = 3 + Math.sin(progress * Math.PI) * 5
+          const hue = (p * 7 + timeSinceEscape * 0.1) % 360
+          const alpha = 1 - progress
+
+          ctx.fillStyle = `hsla(${hue}, 90%, 60%, ${alpha})`
+          ctx.beginPath()
+          ctx.arc(px, py, size, 0, Math.PI * 2)
+          ctx.fill()
+        }
+
+        // Central glow
+        const glowSize = 100 + Math.sin(timeSinceEscape * 0.01) * 30
+        const glowGradient = ctx.createRadialGradient(
+          width / 2, height / 2, 0,
+          width / 2, height / 2, glowSize
+        )
+        glowGradient.addColorStop(0, `hsla(300, 100%, 80%, ${0.4 * (1 - progress)})`)
+        glowGradient.addColorStop(1, 'hsla(300, 100%, 50%, 0)')
+        ctx.fillStyle = glowGradient
+        ctx.fillRect(0, 0, width, height)
+
+        // "ESCAPED!" text
+        ctx.save()
+        ctx.font = `bold ${48 + Math.sin(timeSinceEscape * 0.02) * 8}px monospace`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillStyle = `hsla(${(timeSinceEscape * 0.1) % 360}, 100%, 70%, ${1 - progress * 0.5})`
+        ctx.shadowColor = 'rgba(255, 100, 255, 0.8)'
+        ctx.shadowBlur = 20
+        ctx.fillText('∴ VOID TRANSCENDED ∴', width / 2, height / 3)
+        ctx.restore()
+      }
+    }
+
+    // Portal glow on ground when near exit (3D effect)
+    if (map.exit && !escaped) {
+      const distToExit = Math.hypot(player.x - (map.exit.x + 0.5), player.y - (map.exit.y + 0.5))
+      if (distToExit < 5) {
+        const glowIntensity = clamp(1 - distToExit / 5, 0, 1)
+        const pulse = Math.sin(frameCounterRef.current * 0.1) * 0.3 + 0.7
+        ctx.fillStyle = `hsla(300, 80%, 50%, ${glowIntensity * pulse * 0.15})`
+        ctx.fillRect(0, skyHeight, width, height - skyHeight)
+      }
+    }
+
     if (frameCounterRef.current % 16 === 0) {
       statsRef.current.scribes = markersRef.current.length
       setStats({ ...statsRef.current })
     }
-  }, [castRay, ctx, dimensions, fogEnabled, isRecording, mode, mouse.isDown, revealAt])
+  }, [castRay, ctx, dimensions, escaped, celebrationTime, fogEnabled, isRecording, mode, mouse.isDown, revealAt])
 
   useEffect(() => {
     if (!ctx || dimensions.width === 0) return
