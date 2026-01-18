@@ -11,7 +11,7 @@ const MODES = [
   { id: 'stream', label: 'view.stream()' }
 ]
 
-const SPEED_STEPS = [0.8, 1.4, 2.2, 3.4]
+const SPEED_STEPS = [0.15, 0.35, 0.6, 1.0]
 const MAX_LENGTH = 600
 
 const SAMPLE_TEXTS = [
