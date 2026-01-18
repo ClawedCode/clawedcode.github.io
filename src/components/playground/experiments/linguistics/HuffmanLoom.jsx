@@ -208,6 +208,35 @@ const HuffmanLoom = ({ category, experiment }) => {
   const encodedBits = useMemo(() => encodeText(sourceText, codes), [sourceText, codes])
   const treeLayout = useMemo(() => computeLayout(tree), [tree])
 
+  // Build character boundaries for playhead tracking
+  const charBoundaries = useMemo(() => {
+    const boundaries = []
+    let bitPos = 0
+    for (const char of sourceText) {
+      const code = codes[char] || ''
+      boundaries.push({ char, code, start: bitPos, end: bitPos + code.length })
+      bitPos += code.length
+    }
+    return boundaries
+  }, [sourceText, codes])
+
+  // Get the active path through tree for a given code string
+  const getTreePath = useCallback((code, treeRoot) => {
+    if (!code || !treeRoot) return { nodeIds: new Set(), linkKeys: new Set() }
+    const nodeIds = new Set()
+    const linkKeys = new Set()
+    let current = treeRoot
+    nodeIds.add(current.id)
+    for (const bit of code) {
+      const next = bit === '0' ? current.left : current.right
+      if (!next) break
+      linkKeys.add(`${current.id}-${next.id}`)
+      nodeIds.add(next.id)
+      current = next
+    }
+    return { nodeIds, linkKeys }
+  }, [])
+
   useEffect(() => {
     mouseBoundsRef.current = mouse.isInBounds
   }, [mouse.isInBounds])
@@ -360,6 +389,16 @@ const HuffmanLoom = ({ category, experiment }) => {
       playheadRef.current = (playheadRef.current + playSpeed) % encodedBits.length
     }
 
+    // Calculate active path when playing
+    let activePath = { nodeIds: new Set(), linkKeys: new Set() }
+    if (isPlaying && charBoundaries.length && tree) {
+      const head = Math.floor(playheadRef.current)
+      const currentChar = charBoundaries.find(b => head >= b.start && head < b.end)
+      if (currentChar) {
+        activePath = getTreePath(currentChar.code, tree)
+      }
+    }
+
     ctx.fillStyle = 'rgba(0, 2, 8, 0.4)'
     ctx.fillRect(0, 0, dimensions.width, dimensions.height)
 
@@ -407,12 +446,17 @@ const HuffmanLoom = ({ category, experiment }) => {
         positions.set(entry.id, { x, y, entry })
       })
 
-      ctx.lineWidth = 1
       treeLayout.links.forEach(link => {
         const from = positions.get(link.from)
         const to = positions.get(link.to)
         if (!from || !to) return
-        ctx.strokeStyle = `rgba(102, 255, 204, ${0.25 * treeAlpha})`
+        const linkKey = `${link.from}-${link.to}`
+        const isLinkActive = activePath.linkKeys.has(linkKey)
+
+        ctx.strokeStyle = isLinkActive
+          ? 'rgba(255, 255, 100, 0.9)'
+          : `rgba(102, 255, 204, ${0.25 * treeAlpha})`
+        ctx.lineWidth = isLinkActive ? 3 : 1
         ctx.beginPath()
         ctx.moveTo(from.x, from.y)
         ctx.lineTo(to.x, to.y)
@@ -420,8 +464,10 @@ const HuffmanLoom = ({ category, experiment }) => {
 
         const labelX = (from.x + to.x) / 2
         const labelY = (from.y + to.y) / 2
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * treeAlpha})`
-        ctx.font = '10px "JetBrains Mono", monospace'
+        ctx.fillStyle = isLinkActive
+          ? 'rgba(255, 255, 100, 1)'
+          : `rgba(255, 255, 255, ${0.5 * treeAlpha})`
+        ctx.font = isLinkActive ? 'bold 12px "JetBrains Mono", monospace' : '10px "JetBrains Mono", monospace'
         ctx.fillText(link.bit.toString(), labelX + 4, labelY - 2)
       })
 
@@ -429,16 +475,17 @@ const HuffmanLoom = ({ category, experiment }) => {
         const pos = positions.get(entry.id)
         if (!pos) return
         const isLeaf = entry.char !== null && entry.char !== undefined
+        const isNodeActive = activePath.nodeIds.has(entry.id)
 
         const radius = isLeaf ? 12 : 10
-        let isActive = false
+        let isHovered = false
 
         if (pointer.active) {
           const dx = pointer.x - pos.x
           const dy = pointer.y - pos.y
           const dist = Math.sqrt(dx * dx + dy * dy)
           if (dist < radius + 6) {
-            isActive = true
+            isHovered = true
             if (!nextHover) {
               nextHover = {
                 type: 'node',
@@ -454,23 +501,32 @@ const HuffmanLoom = ({ category, experiment }) => {
         }
 
         const hoverMatch = hoverRef.current && hoverRef.current.type === 'node' && hoverRef.current.id === entry.id
-        const fillAlpha = treeAlpha * (hoverMatch || isActive ? 0.9 : 0.55)
-        ctx.fillStyle = `rgba(102, 255, 204, ${fillAlpha})`
+        const highlighted = hoverMatch || isHovered || isNodeActive
+
+        // Active path nodes glow yellow, others are teal
+        if (isNodeActive) {
+          ctx.fillStyle = 'rgba(255, 255, 100, 0.95)'
+        } else {
+          const fillAlpha = treeAlpha * (highlighted ? 0.9 : 0.55)
+          ctx.fillStyle = `rgba(102, 255, 204, ${fillAlpha})`
+        }
         ctx.beginPath()
-        ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2)
+        ctx.arc(pos.x, pos.y, isNodeActive ? radius + 2 : radius, 0, Math.PI * 2)
         ctx.fill()
 
-        ctx.strokeStyle = `rgba(10, 30, 40, ${hoverMatch || isActive ? 0.9 : 0.4})`
-        ctx.lineWidth = hoverMatch || isActive ? 2 : 1
+        ctx.strokeStyle = isNodeActive
+          ? 'rgba(255, 200, 0, 0.9)'
+          : `rgba(10, 30, 40, ${highlighted ? 0.9 : 0.4})`
+        ctx.lineWidth = highlighted || isNodeActive ? 2 : 1
         ctx.beginPath()
-        ctx.arc(pos.x, pos.y, radius + 1, 0, Math.PI * 2)
+        ctx.arc(pos.x, pos.y, (isNodeActive ? radius + 2 : radius) + 1, 0, Math.PI * 2)
         ctx.stroke()
 
-        ctx.fillStyle = 'rgba(0, 20, 30, 0.9)'
-        ctx.font = '10px "JetBrains Mono", monospace'
+        ctx.fillStyle = isNodeActive ? 'rgba(40, 20, 0, 0.95)' : 'rgba(0, 20, 30, 0.9)'
+        ctx.font = isNodeActive ? 'bold 11px "JetBrains Mono", monospace' : '10px "JetBrains Mono", monospace'
         if (isLeaf) {
-          ctx.fillText(formatSymbol(entry.char), pos.x - radius, pos.y - radius - 2)
-          ctx.fillText(codes[entry.char] || '', pos.x - radius, pos.y + radius + 10)
+          ctx.fillText(formatSymbol(entry.char), pos.x - radius, pos.y - radius - 4)
+          ctx.fillText(codes[entry.char] || '', pos.x - radius, pos.y + radius + 12)
         } else {
           ctx.fillText(entry.weight.toString(), pos.x - radius / 1.6, pos.y + 4)
         }
@@ -555,7 +611,7 @@ const HuffmanLoom = ({ category, experiment }) => {
     }
 
     updateHoverInfo(pointer.active ? nextHover : null)
-  }, [ctx, dimensions.height, dimensions.width, treeLayout, freqData, codes, mode, isPlaying, speedIndex, encodedBits.length, updateHoverInfo])
+  }, [ctx, dimensions.height, dimensions.width, treeLayout, freqData, codes, mode, isPlaying, speedIndex, encodedBits.length, updateHoverInfo, charBoundaries, tree, getTreePath])
 
   useEffect(() => {
     if (!ctx || dimensions.width === 0) return
