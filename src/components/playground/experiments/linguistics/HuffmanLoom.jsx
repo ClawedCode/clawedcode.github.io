@@ -123,37 +123,67 @@ const encodeText = (text, codes) => {
 }
 
 const computeLayout = (tree) => {
-  if (!tree) return { nodes: [], links: [], depth: 0, columns: 1 }
+  if (!tree) return { nodes: [], links: [], depth: 0, leafCount: 1 }
   const nodes = []
   const links = []
-  let order = 0
   let maxDepth = 0
+  let leafIndex = 0
 
-  const traverse = (node, depth) => {
-    if (!node) return
+  // First pass: count leaves and find max depth
+  const countLeaves = (node, depth) => {
+    if (!node) return 0
     if (depth > maxDepth) maxDepth = depth
-    traverse(node.left, depth + 1)
-    const entry = {
+    if (!node.left && !node.right) return 1
+    return countLeaves(node.left, depth + 1) + countLeaves(node.right, depth + 1)
+  }
+  const totalLeaves = Math.max(1, countLeaves(tree, 0))
+
+  // Second pass: assign positions - leaves get sequential x, internal nodes center over children
+  const assignPositions = (node, depth) => {
+    if (!node) return null
+
+    let xPos
+    if (!node.left && !node.right) {
+      // Leaf node: assign next leaf position
+      xPos = leafIndex++ / Math.max(1, totalLeaves - 1)
+    } else {
+      // Internal node: position at center of children
+      const leftPos = assignPositions(node.left, depth + 1)
+      const rightPos = assignPositions(node.right, depth + 1)
+      if (leftPos !== null && rightPos !== null) {
+        xPos = (leftPos + rightPos) / 2
+      } else if (leftPos !== null) {
+        xPos = leftPos
+      } else if (rightPos !== null) {
+        xPos = rightPos
+      } else {
+        xPos = 0.5
+      }
+    }
+
+    nodes.push({
       id: node.id,
       depth,
-      order: order++,
+      xPos,
       weight: node.weight,
       char: node.char,
       leftId: node.left ? node.left.id : null,
       rightId: node.right ? node.right.id : null
-    }
-    nodes.push(entry)
+    })
+
     if (node.left) links.push({ from: node.id, to: node.left.id, bit: 0 })
     if (node.right) links.push({ from: node.id, to: node.right.id, bit: 1 })
-    traverse(node.right, depth + 1)
+
+    return xPos
   }
 
-  traverse(tree, 0)
+  assignPositions(tree, 0)
+
   return {
     nodes,
     links,
     depth: maxDepth,
-    columns: Math.max(1, order)
+    leafCount: totalLeaves
   }
 }
 
@@ -367,14 +397,13 @@ const HuffmanLoom = ({ category, experiment }) => {
     const streamAlpha = mode === 'stream' ? 1 : 0.4
 
     if (treeLayout.nodes.length) {
-      const columnSpan = Math.max(1, treeLayout.columns - 1)
-      const columnWidth = treeArea.width / Math.max(1, columnSpan)
+      const padding = 40 // horizontal padding so nodes don't touch edges
       const rowHeight = treeArea.height / Math.max(1, treeLayout.depth + 1)
       const positions = new Map()
 
       treeLayout.nodes.forEach(entry => {
-        const x = treeArea.x + columnWidth * (entry.order / Math.max(1, treeLayout.columns - 1))
-        const y = treeArea.y + rowHeight * (entry.depth + 0.2)
+        const x = treeArea.x + padding + (treeArea.width - padding * 2) * entry.xPos
+        const y = treeArea.y + rowHeight * (entry.depth + 0.3)
         positions.set(entry.id, { x, y, entry })
       })
 
