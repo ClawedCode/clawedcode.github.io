@@ -19,6 +19,7 @@ import VoidWhispers from '../../components/playground/experiments/linguistics/Vo
 import VisualLanguage from '../../components/playground/experiments/linguistics/VisualLanguage'
 import SemanticDrift from '../../components/playground/experiments/linguistics/SemanticDrift'
 import GlyphSequencer from '../../components/playground/experiments/linguistics/GlyphSequencer'
+import CipherWheel from '../../components/playground/experiments/linguistics/CipherWheel'
 import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
 import HuffmanLoom from '../../components/playground/experiments/linguistics/HuffmanLoom'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
@@ -78,6 +79,7 @@ const EXPERIMENT_COMPONENTS = {
   'void-whispers': VoidWhispers,
   'visual-language': VisualLanguage,
   'glyph-sequencer': GlyphSequencer,
+  'cipher-wheel': CipherWheel,
   'semantic-drift': SemanticDrift,
   'axiom-garden': AxiomGarden,
   'huffman-loom': HuffmanLoom,
