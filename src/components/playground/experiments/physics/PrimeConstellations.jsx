@@ -358,8 +358,8 @@ const PrimeConstellations = ({ category, experiment }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1 className="text-xl text-glow hidden sm:block" style={{ color: experiment.color }}>
             {experiment.name}

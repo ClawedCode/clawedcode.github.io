@@ -524,8 +524,8 @@ const TemporalDrift = ({ category, experiment }) => {
   return (
     <div className={`fixed inset-0 flex flex-col temporal-stage ${timelineState}`}>
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -538,7 +538,7 @@ const TemporalDrift = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex items-center justify-between p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <ExperimentControls
           controls={controls}
         />
@@ -556,7 +556,7 @@ const TemporalDrift = ({ category, experiment }) => {
         />
 
         {/* Event Log */}
-        <div className="absolute left-4 bottom-4 max-w-md pointer-events-none">
+        <div className="absolute left-4 bottom-4 max-w-[calc(100%-1rem)] sm:max-w-md pointer-events-none">
           <div className="space-y-1">
             {eventLog.map(entry => (
               <div

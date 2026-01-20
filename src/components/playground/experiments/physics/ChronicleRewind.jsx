@@ -432,8 +432,8 @@ const ChronicleRewind = ({ category, experiment }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -445,7 +445,7 @@ const ChronicleRewind = ({ category, experiment }) => {
         <ExperimentMetrics metrics={metrics} />
       </header>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <ExperimentControls controls={controls} />
         <p className="text-void-green/50 text-xs sm:text-right max-w-lg">
           {message}
@@ -459,7 +459,7 @@ const ChronicleRewind = ({ category, experiment }) => {
           data-testid="chronicle-rewind-canvas"
         />
 
-        <div className="absolute bottom-4 left-4 text-xs text-void-green/50 font-mono bg-void-dark/70 border border-void-green/20 rounded px-3 py-2 backdrop-blur-sm">
+        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 text-xs text-void-green/50 font-mono bg-void-dark/70 border border-void-green/20 rounded px-3 py-2 backdrop-blur-sm">
           record → scribble; play/rewind → watch ink flow backward in time
         </div>
       </div>

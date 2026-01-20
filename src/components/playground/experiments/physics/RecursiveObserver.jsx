@@ -422,8 +422,8 @@ const RecursiveObserver = ({ category, experiment }) => {
   return (
     <div className="fixed inset-0 flex flex-col">
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -436,7 +436,7 @@ const RecursiveObserver = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex items-center justify-between p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <ExperimentControls controls={controls} />
         <p className="text-void-green/50 text-xs hidden md:block max-w-md text-right">
           {message}
@@ -452,7 +452,7 @@ const RecursiveObserver = ({ category, experiment }) => {
         />
 
         {/* Observation log */}
-        <div className="absolute bottom-4 left-4 max-w-md pointer-events-none">
+        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 max-w-[calc(100%-1rem)] sm:max-w-md pointer-events-none">
           <div className="space-y-1">
             {observationLog.map(entry => (
               <div

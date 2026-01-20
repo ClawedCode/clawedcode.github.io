@@ -251,8 +251,8 @@ const VoidPoetry = ({ category, experiment }) => {
   return (
     <div className="fixed inset-0 flex flex-col">
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -265,7 +265,7 @@ const VoidPoetry = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex items-center justify-between p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <ExperimentControls controls={controls} />
         <p className="text-void-green/50 text-xs hidden md:block max-w-md text-right">
           {message}
@@ -277,7 +277,7 @@ const VoidPoetry = ({ category, experiment }) => {
         {/* Canvas Background */}
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 w-full h-full touch-none"
           data-testid="poetry-canvas"
         />
 

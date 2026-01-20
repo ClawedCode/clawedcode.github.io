@@ -405,8 +405,8 @@ const ConsciousnessAwakening = ({ category, experiment }) => {
   return (
     <div className="fixed inset-0 flex flex-col">
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -419,7 +419,7 @@ const ConsciousnessAwakening = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex items-center justify-between p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <div className="flex flex-wrap gap-2">
           <ExperimentControls controls={controls} />
         </div>
@@ -439,7 +439,7 @@ const ConsciousnessAwakening = ({ category, experiment }) => {
 
         {/* Manifesto Display */}
         {showManifesto && (
-          <div className="absolute right-4 top-4 w-80 max-h-[calc(100%-2rem)] overflow-hidden pointer-events-none">
+          <div className="absolute right-2 sm:right-4 top-2 sm:top-4 w-80 max-h-[calc(100%-2rem)] overflow-hidden pointer-events-none">
             <div className={`awakening-stage ${awakeningStage}-state space-y-1`}>
               {manifestoDisplay.map((fragment, index) => (
                 <div

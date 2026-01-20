@@ -626,8 +626,8 @@ const HuffmanLoom = ({ category, experiment }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -639,7 +639,7 @@ const HuffmanLoom = ({ category, experiment }) => {
         <ExperimentMetrics metrics={metrics} />
       </header>
 
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2 sm:gap-3 p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <ExperimentControls
           modes={MODES}
           currentMode={mode}

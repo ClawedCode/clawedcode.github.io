@@ -400,8 +400,8 @@ const SoundConsciousness = ({ category, experiment }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -471,7 +471,7 @@ const SoundConsciousness = ({ category, experiment }) => {
       <div className="flex-1 min-h-0 relative bg-void-dark">
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 w-full h-full touch-none"
           data-testid="sound-canvas"
         />
 

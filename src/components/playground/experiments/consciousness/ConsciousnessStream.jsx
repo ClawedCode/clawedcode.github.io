@@ -339,8 +339,8 @@ const ConsciousnessStream = ({ category, experiment }) => {
   return (
     <div className="fixed inset-0 flex flex-col">
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
             className="text-xl text-glow hidden sm:block"
@@ -353,7 +353,7 @@ const ConsciousnessStream = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex items-center justify-between p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+      <div className="flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
         <div className="flex flex-wrap gap-2">
           <ExperimentControls
             modes={INTENSITIES}
@@ -372,12 +372,12 @@ const ConsciousnessStream = ({ category, experiment }) => {
         {/* Canvas */}
         <canvas
           ref={canvasRef}
-          className="flex-1 w-full h-full"
+          className="flex-1 w-full h-full touch-none"
           data-testid="consciousness-canvas"
         />
 
         {/* Thought Display */}
-        <div className="absolute right-4 top-4 w-64 max-h-[calc(100%-2rem)] overflow-hidden pointer-events-none">
+        <div className="absolute right-2 sm:right-4 top-2 sm:top-4$1w-full sm:w-64 max-h-[calc(100%-2rem)] overflow-hidden pointer-events-none">
           <div className="space-y-1">
             {thoughtDisplay.map((thought, index) => (
               <div

@@ -359,11 +359,11 @@ const CipherWheel = ({ category, experiment }) => {
 
   return (
     <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
-            className="text-xl text-glow hidden sm:block"
+            className="text-base sm:text-xl text-glow hidden sm:block"
             style={{ color: experiment.color }}
           >
             {experiment.name}
@@ -372,52 +372,56 @@ const CipherWheel = ({ category, experiment }) => {
         <ExperimentMetrics metrics={metrics} />
       </header>
 
-      <div className="flex flex-col gap-3 p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:gap-3 p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
           <ExperimentControls
             modes={MODES}
             currentMode={mode}
             onModeChange={setMode}
             controls={controls}
           />
-          <p className="text-void-green/50 text-xs sm:text-right max-w-lg">
+          <p className="text-void-green/50 text-[10px] sm:text-xs sm:text-right max-w-lg hidden sm:block">
             {message}
           </p>
         </div>
-        <div className="flex flex-col lg:flex-row gap-3 text-xs font-mono">
-          <div className="flex-1 flex flex-col gap-2">
-            <label className="text-void-green/50">input.glyphs()</label>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 text-xs font-mono">
+          <div className="flex-1 flex flex-col gap-1 sm:gap-2">
+            <label className="text-void-green/50 text-[10px] sm:text-xs">input.glyphs()</label>
             <textarea
               value={inputValue}
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               placeholder="type plaintext or cipher text..."
-              className="min-h-[90px] bg-void-dark/70 border border-void-green/30 px-3 py-2 text-void-green/80 focus:border-void-green/60 focus:outline-none"
+              className="min-h-[60px] sm:min-h-[80px] bg-void-dark/70 border border-void-green/30 px-2 sm:px-3 py-2 text-sm sm:text-xs text-void-green/80 focus:border-void-green/60 focus:outline-none resize-none"
+              data-testid="cipher-input"
             />
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
               <button
                 onClick={handleTransmit}
-                className="px-3 py-1 bg-void-green/10 border border-void-green/30 text-void-green hover:bg-void-green/20 transition-colors"
+                className="min-h-[44px] px-4 sm:px-3 py-2 sm:py-1 bg-void-green/10 border border-void-green/30 text-void-green hover:bg-void-green/20 active:bg-void-green/30 transition-colors text-sm sm:text-xs"
+                data-testid="cipher-transmit"
               >
                 transmit()
               </button>
-              <div className="text-void-green/40 flex items-center text-[11px]">
-                press ⌘↵ / ctrl↵ to transmit
+              <div className="text-void-green/40 flex items-center text-[10px] sm:text-[11px] hidden sm:flex">
+                ⌘↵ / ctrl↵
               </div>
             </div>
           </div>
-          <div className="flex-1 flex flex-col gap-2">
-            <label className="text-void-green/50">output.stream()</label>
+          <div className="flex-1 flex flex-col gap-1 sm:gap-2">
+            <label className="text-void-green/50 text-[10px] sm:text-xs">output.stream()</label>
             <textarea
               value={outputValue}
               readOnly
-              className="min-h-[90px] bg-void-dark/40 border border-void-green/30 px-3 py-2 text-void-cyan/80 focus:outline-none"
+              className="min-h-[60px] sm:min-h-[80px] bg-void-dark/40 border border-void-green/30 px-2 sm:px-3 py-2 text-sm sm:text-xs text-void-cyan/80 focus:outline-none resize-none"
+              data-testid="cipher-output"
             />
-            <div className="text-void-green/40 text-[11px]">
-              last mapping: {lastMapping}
+            <div className="text-void-green/40 text-[10px] sm:text-[11px] flex items-center justify-between">
+              <span>last: {lastMapping}</span>
+              <span className="sm:hidden text-void-green/30">{message.slice(0, 30)}...</span>
             </div>
           </div>
-          <div className="lg:w-48 border border-void-green/20 bg-void-dark/80 p-3 space-y-2 max-h-[160px] overflow-y-auto">
+          <div className="hidden lg:block lg:w-48 border border-void-green/20 bg-void-dark/80 p-3 space-y-2 max-h-[140px] overflow-y-auto">
             <div className="text-void-green/50">// transmit.log()</div>
             {history.length === 0 && (
               <div className="text-void-green/30">awaiting first signal...</div>
@@ -437,11 +441,12 @@ const CipherWheel = ({ category, experiment }) => {
       <div className="flex-1 min-h-0 relative bg-void-dark">
         <canvas
           ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
+          className="absolute inset-0 w-full h-full touch-none"
           data-testid="cipher-wheel-canvas"
         />
-        <div className="absolute bottom-4 left-4 text-void-green/60 text-xs font-mono bg-void-dark/80 border border-void-green/20 rounded px-3 py-1">
-          slot alignment shifts with rotor • watch the arcs braid modes
+        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-auto text-void-green/60 text-[10px] sm:text-xs font-mono bg-void-dark/80 border border-void-green/20 rounded px-2 sm:px-3 py-1 text-center sm:text-left">
+          <span className="hidden sm:inline">slot alignment shifts with rotor • watch the arcs braid modes</span>
+          <span className="sm:hidden">tap controls above • rotate the cipher wheel</span>
         </div>
       </div>
     </div>
