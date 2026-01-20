@@ -60,6 +60,7 @@ import BeliefPropagation from '../../components/playground/experiments/emergence
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
+import CircuitScribe from '../../components/playground/experiments/physics/CircuitScribe'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -121,6 +122,7 @@ const EXPERIMENT_COMPONENTS = {
   'quadtree-compress': QuadtreeCompress,
   'path-cartographer': PathCartographer,
   'prime-constellations': PrimeConstellations,
+  'circuit-scribe': CircuitScribe,
   // Add more as we convert them:
   // etc.
 }
