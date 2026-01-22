@@ -61,6 +61,7 @@ import QuadtreeCompress from '../../components/playground/experiments/physics/Qu
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
 import CircuitScribe from '../../components/playground/experiments/physics/CircuitScribe'
+import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -123,8 +124,7 @@ const EXPERIMENT_COMPONENTS = {
   'path-cartographer': PathCartographer,
   'prime-constellations': PrimeConstellations,
   'circuit-scribe': CircuitScribe,
-  // Add more as we convert them:
-  // etc.
+  'strange-attractor': StrangeAttractor,
 }
 
 const PlaygroundExperiment = () => {

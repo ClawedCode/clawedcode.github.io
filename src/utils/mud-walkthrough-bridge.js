@@ -92,6 +92,31 @@ const handleMessage = (event) => {
     // Reload to apply reset
     window.location.reload()
   }
+
+  if (type === 'mud-walkthrough-merge-discovered') {
+    // Merge discovered rooms from all players into this player's state
+    const { mergedDiscovered } = event.data
+    const handle = localStorage.getItem('voidMudHandle')
+
+    if (handle && mergedDiscovered) {
+      const storageKey = `voidMudState-${handle.toLowerCase()}`
+      const saved = localStorage.getItem(storageKey)
+
+      if (saved) {
+        const state = JSON.parse(saved)
+        // Merge: union of current discovered + merged discovered
+        const currentDiscovered = new Set(state.discovered || [])
+        mergedDiscovered.forEach(room => currentDiscovered.add(room))
+        state.discovered = Array.from(currentDiscovered)
+        localStorage.setItem(storageKey, JSON.stringify(state))
+      }
+    }
+
+    window.parent.postMessage({
+      type: 'mud-walkthrough-merge-discovered-complete',
+      playerId
+    }, '*')
+  }
 }
 
 // Initialize the bridge with state getter and command executor functions
