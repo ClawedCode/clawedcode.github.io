@@ -62,6 +62,7 @@ import PathCartographer from '../../components/playground/experiments/physics/Pa
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
 import CircuitScribe from '../../components/playground/experiments/physics/CircuitScribe'
 import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
+import GravityWell from '../../components/playground/experiments/physics/GravityWell'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -125,6 +126,7 @@ const EXPERIMENT_COMPONENTS = {
   'prime-constellations': PrimeConstellations,
   'circuit-scribe': CircuitScribe,
   'strange-attractor': StrangeAttractor,
+  'gravity-well': GravityWell,
 }
 
 const PlaygroundExperiment = () => {
