@@ -55,6 +55,7 @@ import MosaicCollapse from '../../components/playground/experiments/emergence/Mo
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
+import SandpileRitual from '../../components/playground/experiments/physics/SandpileRitual'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
@@ -118,6 +119,7 @@ const EXPERIMENT_COMPONENTS = {
   'chronicle-rewind': ChronicleRewind,
   'sort-ritual': SortRitual,
   'turing-tape': TuringTape,
+  'sandpile-ritual': SandpileRitual,
   'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
   'stack-oracle': StackOracle,
