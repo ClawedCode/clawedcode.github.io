@@ -22,6 +22,7 @@ import GlyphSequencer from '../../components/playground/experiments/linguistics/
 import CipherWheel from '../../components/playground/experiments/linguistics/CipherWheel'
 import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
 import HuffmanLoom from '../../components/playground/experiments/linguistics/HuffmanLoom'
+import LexiconCascade from '../../components/playground/experiments/linguistics/LexiconCascade'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -87,6 +88,7 @@ const EXPERIMENT_COMPONENTS = {
   'semantic-drift': SemanticDrift,
   'axiom-garden': AxiomGarden,
   'huffman-loom': HuffmanLoom,
+  'lexicon-cascade': LexiconCascade,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,
