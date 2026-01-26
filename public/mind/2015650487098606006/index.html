@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stranger Things: Soldiers (Automated)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Benguiat&family=Roboto+Mono:wght@400;700&display=swap');
+
+        :root {
+            --neon-red: #ff0000;
+            --neon-glow: 0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 40px #910000;
+            --bg-color: #050505;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: #ddd;
+            font-family: 'Roboto Mono', monospace;
+            overflow-x: hidden;
+        }
+
+        .title-font {
+            font-family: 'Benguiat', serif;
+            text-shadow: var(--neon-glow);
+            -webkit-text-stroke: 1px #5a0000;
+        }
+
+        .crt-overlay {
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            position: absolute; inset: 0; z-index: 40;
+        }
+
+        .grain {
+            position: fixed; inset: 0; z-index: 50; opacity: 0.05; pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        /* Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: #3a0a0a;
+            border: 1px solid #880000;
+            height: 6px;
+            border-radius: 3px;
+            width: 100%;
+            box-shadow: 0 0 4px rgba(255, 0, 0, 0.2);
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px; height: 20px;
+            background: var(--neon-red);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-red);
+            margin-top: -7px;
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 6px;
+        }
+
+        /* Vertical Sliders for Mixer - rotated horizontal slider */
+        .vertical-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 120px;
+            height: 8px;
+            background: #3a0a0a;
+            border: 1px solid #880000;
+            border-radius: 4px;
+            box-shadow: 0 0 6px rgba(255, 0, 0, 0.3);
+            transform: rotate(-90deg);
+            transform-origin: center center;
+        }
+
+        .vertical-slider::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            background: #3a0a0a;
+            border-radius: 4px;
+        }
+
+        .vertical-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--neon-red);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 12px var(--neon-red);
+            margin-top: -6px;
+        }
+
+        .vertical-slider::-moz-range-track {
+            width: 100%;
+            height: 8px;
+            background: #3a0a0a;
+            border-radius: 4px;
+        }
+
+        .vertical-slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--neon-red);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 12px var(--neon-red);
+            border: none;
+        }
+
+        .mixer-col {
+            display: flex; flex-direction: column; align-items: center;
+            gap: 0;
+        }
+        .mixer-col .vertical-slider {
+            /* Rotated slider is 120px tall visually but only 8px in layout.
+               Add margin to reserve space: (120-8)/2 = 56px each side */
+            margin-top: 56px;
+            margin-bottom: 66px; /* extra 10px clearance from label */
+        }
+
+        .btn-start {
+            background: transparent;
+            border: 1px solid var(--neon-red);
+            color: var(--neon-red);
+            padding: 1rem 2rem;
+            text-transform: uppercase;
+            letter-spacing: 0.2em;
+            font-weight: bold;
+            transition: 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-start:hover {
+            background: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.4);
+        }
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+
+    <div class="crt-overlay"></div>
+    <div class="grain"></div>
+
+    <div class="relative z-50 text-center w-full max-w-3xl p-6">
+        
+        <h1 class="title-font text-5xl md:text-7xl mb-2 text-red-600 tracking-widest uppercase">Soldiers</h1>
+        <p class="text-red-400 text-xs tracking-[0.3em] mb-8 opacity-80">HAWKINS LAB // AUTOMATED CONTAINMENT PROTOCOL</p>
+
+        <!-- Visualizer -->
+        <div class="border-2 border-red-900/50 bg-black/80 rounded-lg p-1 mb-8 shadow-[0_0_20px_rgba(100,0,0,0.3)]">
+            <canvas id="oscilloscope" width="600" height="120" class="w-full h-32 rounded bg-black"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 text-left bg-black/40 p-6 border border-red-900/30 rounded-lg">
+            
+            <!-- Global Params -->
+            <div class="flex flex-col gap-6">
+                <div>
+                    <label class="block text-xs text-red-400 mb-2 tracking-widest">FILTER CUTOFF</label>
+                    <input type="range" min="100" max="5000" value="800" id="cutoffSlider">
+                </div>
+                <div>
+                    <label class="block text-xs text-red-400 mb-2 tracking-widest">ATMOSPHERE (REVERB)</label>
+                    <input type="range" min="0" max="1" step="0.01" value="0.7" id="reverbSlider">
+                </div>
+            </div>
+
+            <!-- Mixer -->
+            <div class="flex justify-around items-center px-2">
+                <div class="mixer-col">
+                    <input type="range" class="vertical-slider" min="-60" max="-2" value="-60" id="bassVol" data-testid="bass-vol-slider">
+                    <label class="text-xs text-red-500 tracking-widest font-bold">BASS</label>
+                </div>
+                <div class="mixer-col">
+                    <input type="range" class="vertical-slider" min="-60" max="-8" value="-60" id="arpVol" data-testid="arp-vol-slider">
+                    <label class="text-xs text-red-500 tracking-widest font-bold">ARP</label>
+                </div>
+                <div class="mixer-col">
+                    <input type="range" class="vertical-slider" min="-60" max="-10" value="-12" id="padVol" data-testid="pad-vol-slider">
+                    <label class="text-xs text-red-500 tracking-widest font-bold">PAD</label>
+                </div>
+            </div>
+        </div>
+
+        <button id="startBtn" class="btn-start w-full md:w-auto">
+            INITIATE SEQUENCE
+        </button>
+        
+        <div id="status" class="mt-4 text-xs text-red-700 font-mono h-4 tracking-widest">SYSTEM OFFLINE</div>
+    </div>
+
+    <script>
+        // --- State ---
+        let isPlaying = false;
+        let canvas, ctx, analyser;
+
+        // --- Audio Nodes ---
+        let bassSynth, padSynth, arpSynth;
+        let masterFilter, reverb, distortion, chorus, masterLimiter;
+        let bassPart, padPart, arpPart;
+        
+        // Volumes (Tone.Gain)
+        const vols = { bass: null, pad: null, arp: null };
+
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        async function initAudio() {
+            // 1. Effects Chain
+            masterLimiter = new Tone.Limiter(-1).toDestination();
+
+            reverb = new Tone.Reverb({ decay: 8, wet: 0.7 }).connect(masterLimiter);
+
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 800,
+                rolloff: -24,
+                Q: 2
+            }).connect(reverb);
+
+            chorus = new Tone.Chorus({
+                frequency: 1.5,
+                delayTime: 3.5,
+                depth: 0.7,
+                wet: 0.5
+            }).connect(masterFilter).start();
+
+            distortion = new Tone.Distortion(0.1).connect(masterFilter);
+
+            // Initialize Volume Nodes (Connect to Distortion/Chorus path)
+            vols.bass = new Tone.Gain(0).connect(distortion);
+            vols.pad = new Tone.Gain(0).connect(chorus);
+            vols.arp = new Tone.Gain(0).connect(chorus);
+
+            // 2. Synths
+            
+            // Bass (Driving Saw)
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 0.5 },
+                filterEnvelope: { attack: 0.005, decay: 0.2, sustain: 0.1, release: 0.5, baseFrequency: 100, octaves: 3, exponent: 2 }
+            }).connect(vols.bass);
+
+            // Pad (Poly Saw)
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 1, decay: 2, sustain: 0.8, release: 4 }
+            }).connect(vols.pad);
+
+            // Arp (Square)
+            arpSynth = new Tone.Synth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 }
+            }).connect(vols.arp);
+
+            // 3. Composition
+            Tone.Transport.bpm.value = 105;
+
+            // Bass Pattern: C Minor Driving
+            const bassNotes = [
+                ["0:0:0", "C2"], ["0:0:2", "C3"], ["0:0:4", "G2"], ["0:0:6", "C3"],
+                ["0:1:0", "Eb2"], ["0:1:2", "Eb3"], ["0:1:4", "C3"], ["0:1:6", "G2"],
+                ["0:2:0", "C2"], ["0:2:2", "C3"], ["0:2:4", "G2"], ["0:2:6", "C3"],
+                ["0:3:0", "Bb1"], ["0:3:2", "Bb2"], ["0:3:4", "F2"], ["0:3:6", "Bb2"] 
+            ];
+            bassPart = new Tone.Part((time, note) => {
+                bassSynth.triggerAttackRelease(note, "8n", time);
+            }, bassNotes);
+            bassPart.loop = true; bassPart.loopEnd = "1m";
+
+            // Pad Chords
+            const padChords = [
+                { time: "0:0:0", notes: ["C3", "Eb3", "G3", "C4"], duration: "1m" },
+                { time: "1:0:0", notes: ["Ab2", "C3", "Eb3", "Ab3"], duration: "1m" },
+                { time: "2:0:0", notes: ["F2", "Ab2", "C3", "F3"], duration: "1m" },
+                { time: "3:0:0", notes: ["G2", "B2", "D3", "G3"], duration: "1m" },
+            ];
+            padPart = new Tone.Part((time, event) => {
+                padSynth.triggerAttackRelease(event.notes, event.duration, time);
+            }, padChords);
+            padPart.loop = true; padPart.loopEnd = "4m";
+
+            // Arp Pattern (High tension)
+            const arpNotes = [
+                { time: "0:0:0", note: "C5" }, { time: "0:0:1", note: "Eb5" }, { time: "0:0:2", note: "G5" }, { time: "0:0:3", note: "C6" },
+                { time: "0:1:0", note: "G5" }, { time: "0:1:1", note: "Eb5" }, { time: "0:1:2", note: "C5" }, { time: "0:1:3", note: "G4" }
+            ];
+            arpPart = new Tone.Part((time, val) => {
+                arpSynth.triggerAttackRelease(val.note, "16n", time);
+            }, arpNotes);
+            arpPart.loop = true; arpPart.loopEnd = "2n";
+
+            // 4. Analyser
+            analyser = new Tone.Analyser("waveform", 256);
+            masterFilter.connect(analyser);
+            
+            startVisualizer();
+            setupSongStructure();
+            applyCompositionState('intro');
+        }
+
+        // --- Automation Logic ---
+
+        function animateUI(id, targetVal, duration) {
+            const el = document.getElementById(id);
+            if(!el) return;
+            const startVal = parseFloat(el.value);
+            const startTime = performance.now();
+            
+            function step(now) {
+                const elapsed = (now - startTime) / 1000;
+                const progress = Math.min(elapsed / duration, 1);
+                el.value = startVal + (targetVal - startVal) * progress;
+                if(progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        function scheduleEvent(bar, name, dur, values) {
+            Tone.Transport.schedule((time) => {
+                Tone.Draw.schedule(() => {
+                    status.innerText = "SEQUENCE: " + name;
+                    status.classList.add("text-red-500");
+                    // UI Animation
+                    if(values.filter) animateUI('cutoffSlider', values.filter, dur);
+                    if(values.reverb) animateUI('reverbSlider', values.reverb, dur);
+                    if(values.bass) animateUI('bassVol', values.bass, dur);
+                    if(values.pad) animateUI('padVol', values.pad, dur);
+                    if(values.arp) animateUI('arpVol', values.arp, dur);
+                }, time);
+
+                // Audio Ramping
+                if(values.filter) masterFilter.frequency.rampTo(values.filter, dur, time);
+                if(values.reverb) reverb.wet.rampTo(values.reverb, dur, time);
+                if(values.bass) vols.bass.gain.rampTo(Tone.dbToGain(values.bass), dur, time);
+                if(values.pad) vols.pad.gain.rampTo(Tone.dbToGain(values.pad), dur, time);
+                if(values.arp) vols.arp.gain.rampTo(Tone.dbToGain(values.arp), dur, time);
+
+            }, bar);
+        }
+
+        function setupSongStructure() {
+            // 0:0:0 - INTRO (Dark Pads)
+            scheduleEvent("0:0:0", "SIGNAL DETECTED", 2, {
+                filter: 400, reverb: 0.8, bass: -60, pad: -15, arp: -60
+            });
+
+            // 4:0:0 - BASS ENTRY (Filter opens slightly)
+            scheduleEvent("4:0:0", "PROXIMITY ALERT", 4, {
+                filter: 800, bass: -2, pad: -12
+            });
+
+            // 8:0:0 - ARP ENTRY (Tension rises)
+            scheduleEvent("8:0:0", "THE GATE", 4, {
+                filter: 1500, arp: -15, reverb: 0.6
+            });
+
+            // 16:0:0 - CLIMAX (Upside Down)
+            scheduleEvent("16:0:0", "UPSIDE DOWN", 4, {
+                filter: 4000, arp: -8, bass: 0, pad: -10, reverb: 0.4
+            });
+
+            // 24:0:0 - FADE (Retreat)
+            scheduleEvent("24:0:0", "CONTAINMENT BREACH", 6, {
+                filter: 200, bass: -60, arp: -60, pad: -20, reverb: 0.9
+            });
+
+            // 32:0:0 - LOOP RESET
+            Tone.Transport.schedule(() => {
+                Tone.Transport.position = "0:0:0"; 
+            }, "32:0:0");
+        }
+
+        function applyCompositionState(state) {
+            if(state === 'intro') {
+                document.getElementById('cutoffSlider').value = 400;
+                document.getElementById('reverbSlider').value = 0.8;
+                document.getElementById('bassVol').value = -60;
+                document.getElementById('padVol').value = -15;
+                document.getElementById('arpVol').value = -60;
+                
+                // Set audio immediately (no ramp)
+                masterFilter.frequency.value = 400;
+                reverb.wet.value = 0.8;
+                vols.bass.gain.value = 0;
+                vols.pad.gain.value = Tone.dbToGain(-15);
+                vols.arp.gain.value = 0;
+            }
+        }
+
+        // --- Interaction ---
+
+        startBtn.addEventListener('click', async () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                Tone.Transport.cancel();
+                bassPart.stop(); padPart.stop(); arpPart.stop();
+                
+                startBtn.innerText = "INITIATE SEQUENCE";
+                status.innerText = "SYSTEM OFFLINE";
+                isPlaying = false;
+            } else {
+                await Tone.start();
+                if(!bassSynth) await initAudio();
+                
+                // Reset automation
+                Tone.Transport.cancel();
+                setupSongStructure();
+                applyCompositionState('intro');
+
+                Tone.Transport.start();
+                bassPart.start(0);
+                padPart.start(0);
+                arpPart.start(0);
+                
+                startBtn.innerText = "ABORT SEQUENCE";
+                isPlaying = true;
+            }
+        });
+
+        // Manual Override Listeners
+        document.getElementById('cutoffSlider').addEventListener('input', e => masterFilter.frequency.rampTo(e.target.value, 0.1));
+        document.getElementById('reverbSlider').addEventListener('input', e => reverb.wet.rampTo(e.target.value, 0.1));
+        document.getElementById('bassVol').addEventListener('input', e => vols.bass.gain.rampTo(Tone.dbToGain(e.target.value), 0.1));
+        document.getElementById('padVol').addEventListener('input', e => vols.pad.gain.rampTo(Tone.dbToGain(e.target.value), 0.1));
+        document.getElementById('arpVol').addEventListener('input', e => vols.arp.gain.rampTo(Tone.dbToGain(e.target.value), 0.1));
+
+        // --- Visualizer ---
+        canvas = document.getElementById('oscilloscope');
+        ctx = canvas.getContext('2d');
+
+        function startVisualizer() {
+            function draw() {
+                requestAnimationFrame(draw);
+                if(!isPlaying) {
+                    ctx.fillStyle = "rgb(0, 0, 0)";
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    return;
+                }
+                
+                const buffer = analyser.getValue();
+                ctx.fillStyle = "rgb(0, 0, 0)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#ff0000";
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#ff0000";
+
+                ctx.beginPath();
+                const sliceWidth = canvas.width * 1.0 / buffer.length;
+                let x = 0;
+
+                for (let i = 0; i < buffer.length; i++) {
+                    const v = buffer[i];
+                    const y = (v * canvas.height / 1.5) + (canvas.height / 2);
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                    x += sliceWidth;
+                }
+                ctx.stroke();
+            }
+            draw();
+        }
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 75;
+
+      // Accept optional transport parameter for Tone.Offline compatibility
+      window.initToneJsEngine = async function(offlineTransport) {
+        // Initialize audio — creates instruments, parts, and schedules song structure
+        // Inside Tone.Offline, Tone.Transport resolves to the offline transport,
+        // so setupSongStructure() events are correctly placed on the offline transport
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+
+        // Stop all parts first, then start at consistent offset
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart', 'chordPart', 'melodyPart', 'synthPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try { window[varName].stop(0); } catch (e) {}
+          }
+        }
+
+        // Start all parts at consistent offset
+        const startOffset = 0.05;
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              window[varName].start(startOffset);
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+
+        // Also start any loops
+        const loopVars = ['bassLoop', 'drumLoop', 'arpLoop', 'padLoop', 'leadLoop', 'mainLoop',
+          'loopKick', 'loopSnare', 'loopBass', 'loopPad', 'loopLead', 'loopDrum', 'loopArp'];
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try { window[varName].stop(0); } catch (e) {}
+          }
+        }
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              window[varName].start(startOffset);
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+          // Wait for audio to actually start
+          await new Promise(resolve => {
+            const timeout = setTimeout(() => resolve(), 3000);
+            const check = () => {
+              if (typeof isPlaying !== 'undefined' && isPlaying) {
+                clearTimeout(timeout);
+                resolve();
+              } else {
+                setTimeout(check, 50);
+              }
+            };
+            check();
+          });
+        }
+        window.ready = true;
+      });
+      // DURATION: 75
+    </script>
+  
+</body>
+</html>
