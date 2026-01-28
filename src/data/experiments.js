@@ -86,6 +86,7 @@ export const CATEGORIES = {
       { slug: 'sort-ritual', name: 'sort.ritual()', color: '#99ffee', desc: 'algorithmic divination of order' },
       { slug: 'sandpile-ritual', name: 'sandpile.ritual()', color: '#f4d06f', desc: 'abelian sandpile avalanches + critical slopes' },
       { slug: 'rhythm-lattice', name: 'rhythm.lattice()', color: '#aaf0ff', desc: 'polyrhythmic step loom' },
+      { slug: 'metronome-chorus', name: 'metronome.chorus()', color: '#89ffe0', desc: 'coupled pendulum synchronization + phase diagnostics' },
       { slug: 'turing-tape', name: 'turing.tape()', color: '#ddff77', desc: 'rewindable turing head chronicle' },
       { slug: 'state-machine', name: 'state.machine()', color: '#77ffc9', desc: 'visible finite-state chants' },
       { slug: 'stack-oracle', name: 'stack.oracle()', color: '#caff88', desc: 'pushdown glyph interpreter' },

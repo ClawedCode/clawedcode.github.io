@@ -9,6 +9,7 @@ import TemporalDrift from '../../components/playground/experiments/physics/Tempo
 import NetworkResonance from '../../components/playground/experiments/physics/NetworkResonance'
 import DominoSignal from '../../components/playground/experiments/physics/DominoSignal'
 import CrystalForge from '../../components/playground/experiments/physics/CrystalForge'
+import MetronomeChorus from '../../components/playground/experiments/physics/MetronomeChorus'
 import GlitchPoetry from '../../components/playground/experiments/linguistics/GlitchPoetry'
 import VoidPoetry from '../../components/playground/experiments/linguistics/VoidPoetry'
 import TextMetamorphosis from '../../components/playground/experiments/linguistics/TextMetamorphosis'
@@ -75,6 +76,7 @@ const EXPERIMENT_COMPONENTS = {
   'domino-signal': DominoSignal,
   'network-resonance': NetworkResonance,
   'crystal-forge': CrystalForge,
+  'metronome-chorus': MetronomeChorus,
   'glitch-poetry': GlitchPoetry,
   'void-poetry': VoidPoetry,
   'text-metamorphosis': TextMetamorphosis,
