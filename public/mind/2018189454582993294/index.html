@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lorn: Sega Sunset (Tone.js)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;900&family=Rajdhani:wght@300;600&display=swap');
+
+        :root {
+            --neon-cyan: #00f3ff;
+            --neon-pink: #bc13fe;
+            --dark-bg: #050208;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: #e0e0e0;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+        }
+
+        .glitch-font {
+            font-family: 'Orbitron', sans-serif;
+            text-shadow: 2px 0 var(--neon-pink), -2px 0 var(--neon-cyan);
+            animation: flicker 3s infinite alternate;
+        }
+
+        /* VHS Scanlines */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Chromatic Aberration Vignette */
+        .vignette {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(20,0,20,0.8) 100%);
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.9);
+            pointer-events: none;
+            z-index: 11;
+        }
+
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 15px;
+            height: 15px;
+            background: var(--neon-cyan);
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+        
+        .slider-track {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 2px;
+            background: #333;
+            outline: none;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 1; }
+            5% { opacity: 0.8; }
+            10% { opacity: 1; }
+            15% { opacity: 1; }
+            20% { opacity: 0.3; }
+            25% { opacity: 1; }
+            100% { opacity: 1; }
+        }
+
+        .visualizer-container {
+            background: linear-gradient(180deg, #1a0524 0%, #000000 100%);
+            box-shadow: 0 0 30px rgba(188, 19, 254, 0.2);
+        }
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center">
+
+    <div class="scanlines"></div>
+    <div class="vignette"></div>
+
+    <div class="relative z-20 text-center w-full max-w-xl p-4">
+        <h1 class="glitch-font text-6xl md:text-8xl mb-1 tracking-tighter text-white uppercase">SEGA SUNSET</h1>
+        <p class="text-cyan-400 text-sm tracking-[0.5em] mb-8 uppercase opacity-80">Lorn // Simulation Data</p>
+
+        <!-- Visualizer -->
+        <div class="visualizer-container rounded-lg border border-purple-900 p-1 mb-8 relative overflow-hidden">
+            <div class="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] opacity-20"></div>
+            <canvas id="vizCanvas" width="600" height="160" class="w-full h-40 bg-transparent relative z-10"></canvas>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="opacity-30 pointer-events-none transition-opacity duration-500">
+            <div class="grid grid-cols-2 gap-8 mb-8 text-left">
+                <div>
+                    <label class="block text-xs text-purple-400 mb-2 font-bold">TAPE WARBLE (DETUNE)</label>
+                    <input type="range" min="0" max="0.5" step="0.01" value="0.15" class="slider-track slider-thumb" id="warbleSlider">
+                </div>
+                <div>
+                    <label class="block text-xs text-cyan-400 mb-2 font-bold">DIGITAL GRIT (BITCRUSH)</label>
+                    <input type="range" min="0" max="0.8" step="0.01" value="0.4" class="slider-track slider-thumb" id="gritSlider">
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Button -->
+        <button id="playBtn" class="relative group px-10 py-4 bg-transparent border border-cyan-500 text-cyan-400 font-bold tracking-widest uppercase hover:bg-cyan-900/20 hover:text-white transition-all duration-300 overflow-hidden">
+            <span class="absolute top-0 left-0 w-full h-0.5 bg-cyan-500 transform -translate-x-full group-hover:translate-x-0 transition-transform duration-300"></span>
+            <span class="absolute bottom-0 right-0 w-full h-0.5 bg-purple-500 transform translate-x-full group-hover:translate-x-0 transition-transform duration-300"></span>
+            INJECT DATA
+        </button>
+
+        <div id="status" class="mt-6 text-[10px] text-purple-600 font-mono">SYSTEM IDLE</div>
+    </div>
+
+    <script>
+        // --- Global Audio State ---
+        let isPlaying = false;
+        let tapeWarble, masterLimiter, masterBitcrusher;
+        let bassSynth, padSynth, leadSynth, kickSynth, snareSynth;
+        let bassLoop, padLoop, leadLoop, drumLoop;
+        let analyser, canvas, ctx;
+
+        async function initAudio() {
+            await Tone.start();
+            Tone.context.lookAhead = 0.1;
+
+            // 1. Master Effects Chain (The "Lorn" Sound)
+            // Heavy compression, bitcrushing, and "tape" instability
+            
+            const masterGain = new Tone.Gain(0.8).toDestination();
+            
+            masterLimiter = new Tone.Limiter(-2).connect(masterGain);
+            
+            // Tape Warble: Vibrato with low freq to simulate wow/flutter
+            tapeWarble = new Tone.Vibrato({
+                frequency: 0.5, // Slow wobble
+                depth: 0.15,    // Pitch variance
+                type: "sine"
+            }).connect(masterLimiter);
+
+            masterBitcrusher = new Tone.BitCrusher({
+                bits: 6, // Lower bits for grit
+                wet: 0.2
+            }).connect(tapeWarble);
+
+            const reverb = new Tone.Reverb({
+                decay: 4,
+                preDelay: 0.2,
+                wet: 0.4
+            }).connect(masterBitcrusher);
+
+
+            // 2. Instruments
+
+            // BASS: Deep, distorted, wide
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.1, decay: 0.3, sustain: 0.8, release: 0.5 },
+                filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 0.5, release: 1, baseFrequency: 50, octaves: 3 }
+            });
+            
+            const bassDistortion = new Tone.Distortion(0.4).connect(reverb);
+            const bassWidener = new Tone.Chorus({ frequency: 0.5, delayTime: 2.5, depth: 0.7, wet: 0.5 }).connect(bassDistortion);
+            bassSynth.connect(bassWidener);
+            bassSynth.volume.value = -2;
+
+            // PADS: Detuned, melancholic
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatcustom", partials: [1, 0.5, 0.3], spread: 40, count: 3 },
+                envelope: { attack: 0.5, decay: 1, sustain: 0.6, release: 2 }
+            }).connect(reverb);
+            padSynth.volume.value = -8;
+
+            // LEAD: Simple, piercing sine/triangle with portamento
+            leadSynth = new Tone.Synth({
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 1 },
+                portamento: 0.1
+            });
+            const leadDelay = new Tone.PingPongDelay("8n", 0.4).connect(reverb);
+            leadSynth.connect(leadDelay);
+            leadSynth.volume.value = -5;
+
+            // DRUMS
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 4,
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+            }).connect(masterBitcrusher); // Kick goes straight to crush for punch
+            kickSynth.volume.value = 2;
+
+            snareSynth = new Tone.NoiseSynth({
+                noise: { type: "white" },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            }).connect(reverb);
+            snareSynth.volume.value = -5;
+
+
+            // 3. Composition (Approximation of Sega Sunset vibe)
+            // Key: D# Minor-ish. Tempo: 88 BPM
+            Tone.Transport.bpm.value = 88;
+
+            // Bassline: Heavy, sustained roots
+            const bassSeq = [
+                { time: "0:0:0", note: "D#1", duration: "1m" },
+                { time: "1:0:0", note: "B0", duration: "1m" },
+                { time: "2:0:0", note: "F#1", duration: "1m" },
+                { time: "3:0:0", note: "C#1", duration: "1m" }
+            ];
+            bassLoop = new Tone.Part((time, val) => {
+                bassSynth.triggerAttackRelease(val.note, val.duration, time);
+            }, bassSeq);
+            bassLoop.loop = true;
+            bassLoop.loopEnd = "4m";
+
+            // Lead Melody: The haunting descending hook
+            // D# -> C# -> A# -> F#
+            const leadSeq = [
+                { time: "0:2:0", note: "A#3", duration: "4n" },
+                { time: "0:2:2", note: "G#3", duration: "4n" },
+                { time: "0:3:0", note: "F#3", duration: "2n" },
+                
+                { time: "2:2:0", note: "F#3", duration: "4n" },
+                { time: "2:2:2", note: "F3", duration: "4n" },
+                { time: "2:3:0", note: "D#3", duration: "2n" }
+            ];
+            leadLoop = new Tone.Part((time, val) => {
+                leadSynth.triggerAttackRelease(val.note, val.duration, time);
+            }, leadSeq);
+            leadLoop.loop = true;
+            leadLoop.loopEnd = "4m";
+
+            // Pads: Filling the void
+            const padSeq = [
+                { time: "0:0:0", notes: ["D#3", "A#3", "D#4"], duration: "1m" },
+                { time: "1:0:0", notes: ["B2", "F#3", "B3"], duration: "1m" },
+                { time: "2:0:0", notes: ["F#2", "C#3", "A#3"], duration: "1m" },
+                { time: "3:0:0", notes: ["C#3", "G#3", "C#4"], duration: "1m" }
+            ];
+            padLoop = new Tone.Part((time, val) => {
+                padSynth.triggerAttackRelease(val.notes, val.duration, time);
+            }, padSeq);
+            padLoop.loop = true;
+            padLoop.loopEnd = "4m";
+
+            // Drums: Slow, punchy
+            const drumSeq = [
+                { time: "0:0:0", type: "kick" },
+                { time: "0:1:0", type: "snare" },
+                { time: "0:1:2", type: "kick" }, // Ghost kick
+                { time: "0:2:2", type: "kick" },
+                { time: "0:3:0", type: "snare" }
+            ];
+            drumLoop = new Tone.Part((time, val) => {
+                if(val.type === "kick") kickSynth.triggerAttackRelease("D#1", "8n", time);
+                if(val.type === "snare") snareSynth.triggerAttackRelease("8n", time);
+            }, drumSeq);
+            drumLoop.loop = true;
+            drumLoop.loopEnd = "1m";
+
+            // Analyser
+            analyser = new Tone.Analyser("waveform", 512);
+            masterGain.connect(analyser);
+            
+            startViz();
+        }
+
+        // --- UI Logic ---
+        const playBtn = document.getElementById('playBtn');
+        const controls = document.getElementById('controls');
+        const status = document.getElementById('status');
+
+        playBtn.addEventListener('click', async () => {
+            if (!isPlaying) {
+                if (!tapeWarble) await initAudio();
+                
+                Tone.Transport.start();
+                bassLoop.start(0);
+                padLoop.start(0);
+                leadLoop.start(0);
+                drumLoop.start(0);
+
+                playBtn.innerHTML = '<span class="text-pink-500">ABORT SEQUENCE</span>';
+                controls.classList.remove('opacity-30', 'pointer-events-none');
+                status.innerText = "PLAYING >> 88 BPM >> TAPE DECAY ACTIVE";
+                isPlaying = true;
+            } else {
+                Tone.Transport.stop();
+                bassLoop.stop();
+                padLoop.stop();
+                leadLoop.stop();
+                drumLoop.stop();
+
+                playBtn.innerText = "INJECT DATA";
+                controls.classList.add('opacity-30', 'pointer-events-none');
+                status.innerText = "SYSTEM IDLE";
+                isPlaying = false;
+            }
+        });
+
+        // Sliders
+        document.getElementById('warbleSlider').addEventListener('input', (e) => {
+            if(tapeWarble) tapeWarble.depth.value = parseFloat(e.target.value);
+        });
+        
+        document.getElementById('gritSlider').addEventListener('input', (e) => {
+            if(masterBitcrusher) {
+                // Map 0-0.8 input to 8 down to 1 bits roughly
+                // actually let's just control wetness for subtlety
+                masterBitcrusher.wet.value = parseFloat(e.target.value);
+            }
+        });
+
+        // --- Visualization ---
+        canvas = document.getElementById('vizCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            function draw() {
+                requestAnimationFrame(draw);
+                const buffer = analyser.getValue();
+                const width = canvas.width;
+                const height = canvas.height;
+
+                ctx.clearRect(0, 0, width, height);
+
+                ctx.lineWidth = 3;
+                // Gradient Line
+                const gradient = ctx.createLinearGradient(0, 0, width, 0);
+                gradient.addColorStop(0, '#00f3ff');
+                gradient.addColorStop(0.5, '#bc13fe');
+                gradient.addColorStop(1, '#00f3ff');
+                ctx.strokeStyle = gradient;
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = "#bc13fe";
+
+                ctx.beginPath();
+                const sliceWidth = width / buffer.length;
+                let x = 0;
+
+                for (let i = 0; i < buffer.length; i++) {
+                    const v = buffer[i];
+                    // Lorn's bass is heavy, so we accentuate low freq movement visually
+                    const y = (v * height / 1.5) + (height / 2);
+
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+
+                    x += sliceWidth;
+                }
+                ctx.stroke();
+            }
+            draw();
+        }
+
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 60;
+      window.initToneJsEngine = async function() {
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+        // Don't specify time to avoid scheduling errors
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              if (window[varName].state !== 'started') {
+                window[varName].start();
+              }
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+        window.ready = true;
+      });
+      // DURATION: 60
+    </script>
+  
+</body>
+</html>
