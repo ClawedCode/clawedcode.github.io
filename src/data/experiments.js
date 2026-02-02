@@ -93,6 +93,7 @@ export const CATEGORIES = {
       { slug: 'circuit-scribe', name: 'circuit.scribe()', color: '#88d7ff', desc: 'logic loom where gates gossip' },
       { slug: 'path-cartographer', name: 'path.cartographer()', color: '#9ef7c8', desc: 'weighted pathfinding oracle + portal brush' },
       { slug: 'graph-atlas', name: 'graph.atlas()', color: '#8fffe0', desc: 'interactive graph sculptor + bfs/mst diagnostics' },
+      { slug: 'merkle-orchard', name: 'merkle.orchard()', color: '#88ffcf', desc: 'auditable merkle canopy + path rituals' },
       { slug: 'strange-attractor', name: 'strange.attractor()', color: '#ff8866', desc: 'deterministic chaos // trajectories through strange space' },
       { slug: 'gravity-well', name: 'gravity.well()', color: '#ffaa66', desc: 'n-body orbital mechanics // celestial choreography' }
     ]

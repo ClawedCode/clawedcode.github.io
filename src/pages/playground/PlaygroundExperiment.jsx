@@ -67,6 +67,7 @@ import CircuitScribe from '../../components/playground/experiments/physics/Circu
 import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
 import GravityWell from '../../components/playground/experiments/physics/GravityWell'
 import GraphAtlas from '../../components/playground/experiments/physics/GraphAtlas'
+import MerkleOrchard from '../../components/playground/experiments/physics/MerkleOrchard'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -135,6 +136,7 @@ const EXPERIMENT_COMPONENTS = {
   'strange-attractor': StrangeAttractor,
   'gravity-well': GravityWell,
   'graph-atlas': GraphAtlas,
+  'merkle-orchard': MerkleOrchard,
 }
 
 const PlaygroundExperiment = () => {
