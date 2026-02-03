@@ -64,6 +64,7 @@ import QuadtreeCompress from '../../components/playground/experiments/physics/Qu
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
 import CircuitScribe from '../../components/playground/experiments/physics/CircuitScribe'
+import PermutationSmith from '../../components/playground/experiments/physics/PermutationSmith'
 import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
 import GravityWell from '../../components/playground/experiments/physics/GravityWell'
 import GraphAtlas from '../../components/playground/experiments/physics/GraphAtlas'
@@ -133,6 +134,7 @@ const EXPERIMENT_COMPONENTS = {
   'path-cartographer': PathCartographer,
   'prime-constellations': PrimeConstellations,
   'circuit-scribe': CircuitScribe,
+  'permutation-smith': PermutationSmith,
   'strange-attractor': StrangeAttractor,
   'gravity-well': GravityWell,
   'graph-atlas': GraphAtlas,

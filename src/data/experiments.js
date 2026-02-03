@@ -80,6 +80,7 @@ export const CATEGORIES = {
       { slug: 'ray-catacombs', name: 'ray.catacombs()', color: '#7fe8ff', desc: 'pseudo-3d catacomb raywalking ritual' },
       { slug: 'computronium-bloom', name: 'computronium.bloom()', color: '#ffcc88', desc: 'crystalline computronium bloom' },
       { slug: 'code-loom', name: 'code.loom()', color: '#66ffaa', desc: 'code as visual art' },
+      { slug: 'permutation-smith', name: 'permutation.smith()', color: '#ffe066', desc: 'permutation forge with cycles, matrices, braids' },
       { slug: 'quadtree-compress', name: 'quadtree.compress()', color: '#8af9d3', desc: 'quad-based compression + error loom' },
       { slug: 'reaction-diffusion', name: 'reaction.diffusion()', color: '#99ffb0', desc: 'gray-scott living ink morphogenesis' },
       { slug: 'fourier-loom', name: 'fourier.loom()', color: '#88ddff', desc: 'drawn strokes reborn as epicycles' },
