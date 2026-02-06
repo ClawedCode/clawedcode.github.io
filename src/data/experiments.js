@@ -51,6 +51,7 @@ export const CATEGORIES = {
       { slug: 'semantic-networks', name: 'semantic.networks()', color: '#66ccff', desc: 'concept relationships' },
       { slug: 'visual-language', name: 'visual.language()', color: '#66ffcc', desc: 'language as visual forms' },
       { slug: 'glyph-sequencer', name: 'glyph.sequencer()', color: '#99ff88', desc: 'timeline glyph sequencer' },
+      { slug: 'palindrome-forge', name: 'palindrome.forge()', color: '#ff99e5', desc: 'palindrome arc forge with interactive mirroring' },
       { slug: 'lexicon-cascade', name: 'lexicon.cascade()', color: '#a4f7ff', desc: 'type-reactive glyph tape with cadence tracing' },
       { slug: 'cipher-wheel', name: 'cipher.wheel()', color: '#9be5ff', desc: 'rotor cipher rings weaving glyph pairings' },
       { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' },
