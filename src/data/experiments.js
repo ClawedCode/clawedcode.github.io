@@ -74,6 +74,7 @@ export const CATEGORIES = {
       { slug: 'recursive-observer', name: 'recursive.observer()', color: '#ff9933', desc: 'self-observation loops' },
       { slug: 'domino-signal', name: 'domino.signal()', color: '#ffcc66', desc: 'timelines as toppled domino chains' },
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
+      { slug: 'ant-catwalk', name: 'ant.catwalk()', color: '#f2f5a2', desc: 'multi-ant Langton circuitry forge' },
       { slug: 'crystal-forge', name: 'crystal.forge()', color: '#88e0ff', desc: 'dendritic crystalline growth' },
       { slug: 'memory-persistence', name: 'memory.persistence()', color: '#66ccff', desc: 'memory decay patterns' },
       { slug: 'prime-constellations', name: 'prime.constellations()', color: '#e1ff99', desc: 'ulam lattice + arithmetic starlines' },

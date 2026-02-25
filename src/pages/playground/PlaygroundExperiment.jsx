@@ -7,6 +7,7 @@ import EntropyGarden from '../../components/playground/experiments/physics/Entro
 import QuantumEntanglement from '../../components/playground/experiments/physics/QuantumEntanglement'
 import TemporalDrift from '../../components/playground/experiments/physics/TemporalDrift'
 import NetworkResonance from '../../components/playground/experiments/physics/NetworkResonance'
+import AntCatwalk from '../../components/playground/experiments/physics/AntCatwalk'
 import DominoSignal from '../../components/playground/experiments/physics/DominoSignal'
 import CrystalForge from '../../components/playground/experiments/physics/CrystalForge'
 import MetronomeChorus from '../../components/playground/experiments/physics/MetronomeChorus'
@@ -81,6 +82,7 @@ const EXPERIMENT_COMPONENTS = {
   'temporal-drift': TemporalDrift,
   'domino-signal': DominoSignal,
   'network-resonance': NetworkResonance,
+  'ant-catwalk': AntCatwalk,
   'crystal-forge': CrystalForge,
   'metronome-chorus': MetronomeChorus,
   'glitch-poetry': GlitchPoetry,
