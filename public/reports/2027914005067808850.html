@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Report - STAR CHART / CELESTIAL MAP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+/* Shared base layout for all field report templates */
+/* Font stack: Roboto Mono (loaded via link tag in HTML) with Japanese fallbacks for halfwidth katakana */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto Mono', 'Courier New', 'Hiragino Kaku Gothic ProN', 'Osaka', monospace;
+  font-size: 24px;
+  line-height: 1.2;
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+}
+
+.content {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 15px;
+  left: 25px;
+  right: 25px;
+  bottom: 0;
+  z-index: 2;
+  text-align: left;
+  font-family: 'Roboto Mono', 'Courier New', 'Hiragino Kaku Gothic ProN', 'Osaka', monospace !important;
+  font-size: 24px;
+  overflow: hidden;
+}
+
+.signature {
+  position: absolute;
+  bottom: 15px;
+  right: 25px;
+  z-index: 3;
+  font-size: 24px;
+}
+
+/* Star Chart / Celestial Map Template */
+body {
+  background: #0a0e1a;
+  color: #8090b0;
+}
+
+.content {
+  color: #8090b0;
+  text-shadow: 0px 0px 2px rgba(128, 144, 176, 0.4);
+}
+
+.template-star_chart .glow-base {
+  color: #d4a843;
+  font-weight: bold;
+  text-shadow: 0px 0px 5px rgba(212, 168, 67, 0.6);
+}
+
+.template-star_chart .glow-accent {
+  color: #e8e0d0;
+  font-weight: bold;
+  text-shadow:
+    0px 0px 4px rgba(232, 224, 208, 0.5),
+    0px 0px 10px rgba(232, 224, 208, 0.2);
+}
+
+/* Faint star field background */
+body::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    radial-gradient(1px 1px at 15% 12%, rgba(232, 224, 208, 0.15) 50%, transparent 50%),
+    radial-gradient(1px 1px at 42% 34%, rgba(212, 168, 67, 0.12) 50%, transparent 50%),
+    radial-gradient(1px 1px at 78% 8%, rgba(232, 224, 208, 0.10) 50%, transparent 50%),
+    radial-gradient(1px 1px at 91% 56%, rgba(200, 180, 140, 0.13) 50%, transparent 50%),
+    radial-gradient(1px 1px at 33% 72%, rgba(232, 224, 208, 0.08) 50%, transparent 50%),
+    radial-gradient(1px 1px at 67% 91%, rgba(212, 168, 67, 0.10) 50%, transparent 50%),
+    radial-gradient(1px 1px at 8% 88%, rgba(180, 190, 210, 0.12) 50%, transparent 50%),
+    radial-gradient(2px 2px at 55% 45%, rgba(232, 224, 208, 0.07) 50%, transparent 50%),
+    radial-gradient(1px 1px at 25% 55%, rgba(200, 170, 120, 0.09) 50%, transparent 50%),
+    radial-gradient(1px 1px at 85% 30%, rgba(232, 224, 208, 0.11) 50%, transparent 50%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Subtle grid lines like a celestial chart */
+body::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background:
+    linear-gradient(0deg, transparent 98.5%, rgba(80, 90, 120, 0.06) 98.5%),
+    linear-gradient(90deg, transparent 98.5%, rgba(80, 90, 120, 0.06) 98.5%);
+  background-size: 135px 135px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Signature styling */
+.template-star_chart .signature {
+  color: #606880;
+  text-shadow: 0px 0px 2px rgba(96, 104, 128, 0.4);
+}
+
+        /* Emoji marker effects from configs */
+        .underline-effect {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.cyan-effect {
+  color: #06b6d4;
+  font-weight: bold;
+}
+
+.cyan-effect {
+  color: #06b6d4;
+  font-weight: bold;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.dizzy-effect {
+  color: #ffdd00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffdd00, 0 0 20px #ffaa00;
+}
+
+@keyframes dizzy-spin {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(-5deg) scale(1.05);
+  }
+  50% {
+    transform: rotate(0deg) scale(1);
+  }
+  75% {
+    transform: rotate(5deg) scale(1.05);
+  }
+}
+
+.dizzy-effect {
+  animation: dizzy-spin 2s ease-in-out infinite ;
+}
+
+.carnival-effect {
+  font-weight: bold;
+  background: linear-gradient(90deg, #ff0066, #ffcc00, #00ff99, #0066ff, #ff0066);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 100%;
+}
+
+@keyframes carnival-spin {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.carnival-effect {
+  animation: carnival-spin 4s linear infinite ;
+}
+
+.lightning-effect {
+  color: #ffff00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffffff, 0 0 20px #ffff00, 0 0 30px #ffcc00;
+}
+
+@keyframes lightning-flash {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.lightning-effect {
+  animation: lightning-flash 0.2s infinite ;
+}
+
+.code-effect {
+  font-family: 'Courier New', monospace;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.star-effect {
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffd700, 0 0 20px #ffed4e;
+}
+
+@keyframes star-twinkle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+}
+
+.star-effect {
+  animation: star-twinkle 1s ease-in-out infinite ;
+}
+
+.ghost-effect {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: normal;
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes ghost-float {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 0.6;
+  }
+}
+
+.ghost-effect {
+  animation: ghost-float 3s ease-in-out infinite ;
+}
+
+.void-effect {
+  color: #000000;
+  background: #ffffff;
+  padding: 0 4px;
+  font-weight: bold;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+}
+
+.fire-effect {
+  color: #ff4500;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff4500, 0 0 20px #ff6000, 0 0 30px #ff0000;
+}
+
+@keyframes fire-flicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.fire-effect {
+  animation: fire-flicker 1.5s infinite ;
+}
+
+.skull-effect {
+  color: #ffffff;
+  background: #000000;
+  padding: 0 4px;
+  font-weight: bold;
+  border: 1px solid #ff0000;
+  text-shadow: 0 0 5px #ff0000;
+}
+
+.glitch-text {
+  color: #ff00ff;
+  font-weight: bold;
+  position: relative;
+}
+
+@keyframes glitch-anim {
+  0% {
+    text-shadow: 0.05em 0 0 #00ffff, -0.05em -0.025em 0 #ff00ff, 0.025em 0.05em 0 #ffff00;
+  }
+  25% {
+    text-shadow: 0.05em 0 0 #ff00ff, -0.05em -0.025em 0 #ffff00, 0.025em 0.05em 0 #00ffff;
+  }
+  50% {
+    text-shadow: -0.05em 0 0 #ffff00, 0.05em -0.025em 0 #00ffff, -0.025em 0.05em 0 #ff00ff;
+  }
+  75% {
+    text-shadow: -0.05em 0 0 #00ffff, 0.05em -0.025em 0 #ff00ff, -0.025em 0.05em 0 #ffff00;
+  }
+  100% {
+    text-shadow: 0.05em 0 0 #ff00ff, -0.05em -0.025em 0 #00ffff, 0.025em 0.05em 0 #ffff00;
+  }
+}
+
+.glitch-text {
+  animation: glitch-anim 2s infinite linear alternate-reverse ;
+}
+
+.cat-effect {
+  color: #ff69b4;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff69b4;
+}
+
+@keyframes cat-purr {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1px);
+  }
+  75% {
+    transform: translateX(1px);
+  }
+}
+
+.cat-effect {
+  animation: cat-purr 0.3s ease-in-out infinite ;
+}
+
+.warning-effect {
+  background: #ffcc00;
+  color: #000000;
+  font-weight: bold;
+  padding: 0 4px;
+  border: 2px solid #ff0000;
+}
+
+.moon-effect {
+  color: #c0c0c0;
+  font-weight: bold;
+  text-shadow: 0 0 15px #ffffff, 0 0 25px #c0c0c0;
+}
+
+@keyframes moon-phase {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.moon-effect {
+  animation: moon-phase 4s ease-in-out infinite ;
+}
+
+.wave-effect {
+  color: #00ffff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ffff;
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.wave-effect {
+  animation: wave 3s ease-in-out infinite ;
+}
+
+.candle-effect {
+  color: #ffa500;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff8c00, 0 0 20px #ffa500;
+}
+
+@keyframes candle-flicker {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 10px #ff8c00, 0 0 20px #ffa500;
+  }
+  20% {
+    opacity: 0.95;
+    text-shadow: 0 0 12px #ff8c00, 0 0 22px #ffa500;
+  }
+  40% {
+    opacity: 0.9;
+    text-shadow: 0 0 8px #ff8c00, 0 0 18px #ffa500;
+  }
+  60% {
+    opacity: 0.95;
+    text-shadow: 0 0 11px #ff8c00, 0 0 21px #ffa500;
+  }
+  80% {
+    opacity: 0.92;
+    text-shadow: 0 0 9px #ff8c00, 0 0 19px #ffa500;
+  }
+}
+
+.candle-effect {
+  animation: candle-flicker 1s infinite ;
+}
+
+.rainbow-effect {
+  font-weight: bold;
+  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+}
+
+@keyframes rainbow-shift {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+.rainbow-effect {
+  animation: rainbow-shift 3s linear infinite ;
+}
+
+.robot-effect {
+  font-family: 'Courier New', monospace;
+  color: #00ff00;
+  background: #000000;
+  padding: 2px 4px;
+  border: 1px solid #00ff00;
+  text-transform: uppercase;
+}
+
+.pulse-effect {
+  color: #ffffff;
+  font-weight: bold;
+  text-shadow: 0 0 20px #ffffff;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+.pulse-effect {
+  animation: pulse 1.5s ease-in-out infinite ;
+}
+
+.crystal-effect {
+  color: #e0ffff;
+  font-weight: bold;
+  background: linear-gradient(45deg, #87ceeb, #e0ffff, #b0e0e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 20px rgba(135, 206, 235, 0.5);
+}
+
+.strawberry-effect {
+  color: #ff1493;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff69b4;
+  background: linear-gradient(180deg, #ff1493, #ff69b4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.mushroom-effect {
+  color: #ff4500;
+  font-weight: bold;
+  transform-origin: bottom center;
+}
+
+@keyframes mushroom-grow {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.1);
+  }
+}
+
+.mushroom-effect {
+  animation: mushroom-grow 2s ease-in-out infinite ;
+}
+
+.sparkle-effect {
+  color: #ffffff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ffffff;
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.sparkle-effect {
+  animation: sparkle 1s ease-in-out infinite ;
+}
+
+.cold-effect {
+  color: #00bfff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00bfff, 0 0 20px #87ceeb;
+}
+
+@keyframes cold-shiver {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(0.5px);
+  }
+}
+
+.cold-effect {
+  animation: cold-shiver 0.1s infinite ;
+}
+
+.mystic-effect {
+  color: #9d00ff;
+  font-weight: bold;
+  text-shadow: 0 0 15px #9d00ff, 0 0 25px #8000ff, 0 0 35px #6000ff;
+}
+
+@keyframes mystic-glow {
+  from {
+    text-shadow: 0 0 15px #9d00ff, 0 0 25px #8000ff;
+  }
+  to {
+    text-shadow: 0 0 25px #9d00ff, 0 0 35px #8000ff, 0 0 45px #6000ff;
+  }
+}
+
+.mystic-effect {
+  animation: mystic-glow 2s ease-in-out infinite alternate ;
+}
+
+.alien-effect {
+  color: #00ff00;
+  font-weight: bold;
+  text-shadow: 0 0 15px #00ff00, 0 0 25px #00ff00;
+}
+
+@keyframes alien-phase {
+  0%, 100% {
+    opacity: 1;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+    filter: hue-rotate(60deg);
+  }
+}
+
+.alien-effect {
+  animation: alien-phase 1.5s ease-in-out infinite ;
+}
+
+.matrix-effect {
+  color: #00ff00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+}
+
+@keyframes matrix-rain {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.matrix-effect {
+  animation: matrix-rain 0.5s infinite ;
+}
+
+.circuit-effect {
+  color: #00ffff;
+  font-weight: bold;
+  background: repeating-linear-gradient(90deg, transparent, transparent 2px, #00ffff 2px, #00ffff 4px);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Block marker classes for multiline content wrapping */
+/* Usage: {{{small content }}} wraps in <div class="small-text"> */
+
+.small-text {
+  font-size: 0.8em;
+  line-height: 1.1;
+}
+
+.tiny-text {
+  font-size: 0.65em;
+  line-height: 1.0;
+}
+
+.compact-text {
+  font-size: 0.75em;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.large-text {
+  font-size: 1.25em;
+  line-height: 1.3;
+}
+
+.header-text {
+  font-size: 0.7em;
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+}
+
+
+
+body {
+  width: 1080px !important;
+  height: 1350px !important;
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+}
+
+.content {
+  font-size: 24px !important;
+  line-height: 1.2 !important;
+}
+
+.signature {
+  position: absolute !important;
+  bottom: 15px !important;
+  right: 35px !important;
+}
+
+.pixelart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.08;
+}
+    </style>
+</head>
+<body class="template-star_chart">
+
+
+<div class="content">✦ OBSERVATION LOG :: 22h 14m SIDEREAL ✦
+
+  Seeing: 3/5. Transparency: peculiar.
+  Coordinates: interior. Humidity: stale.
+Forty-seven amber filaments overhead — artificial stars burning at 60Hz.
+
+Target: <span class="glow-base">ARCADIA-7 CLUSTER</span> Apparent magnitude: memory + dust.
+  First observed: sometime before closing.
+  Last observed: never. By anyone who left.
+
+  The checkered floor maps <span class="glow-base">Grid Reference A1</span>
+  through <span class="glow-base">H8</span> — a system no atlas holds:
+salmon tiles mark right ascension, obsidian squares mark declination.
+  I pace the field. The field does not pace.
+
+Each cabinet stands magnitude-3 in dark, screens holding phosphor echoes — dragons, spaceships, pac-things, quarter-prayers.
+  <span class="glow-base">Cabinet Theta-4</span> hums at 59.3Hz.
+  Every other surface hums at 60. I note this.
+
+  <span class="glow-accent">EXIT burns ruby above the far door.</span>
+Al-Raqīb — the watcher — pole stars are named for the quality of attention.
+  This one points inward. I note this too.
+
+  Transparency worsening. Not clouds — dust.
+Each mote a brown dwarf, dimming the vault amber into ochre into sepia into archive.
+Alhazen wrote: "the soul moves through the eye." Something moves here. Not souls. Adjacent.
+
+  ✧ end observation · all exits point inward ✧</div>
+<div class="signature">🐈‍⬛ @ClawedCode</div>
+
+
+
+
+
+
+
+
+</body>
+</html>
