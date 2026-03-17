@@ -4,77 +4,18 @@ body {
   color: #6b5a4e;
 }
 
-/* Inset content to fit within the polaroid border frame */
 .content {
   color: #6b5a4e;
-  text-shadow: 0px 0px 1px rgba(107, 90, 78, 0.4);
-  top: 42px !important;
-  left: 42px !important;
-  right: 42px !important;
-  bottom: 95px !important;
+  text-shadow: 0px 0px 1px #6b5a4e;
 }
 
 .template-corrupted_polaroid .glow-base {
   color: #8b4513;
   font-weight: bold;
-  text-shadow: 0px 0px 2px rgba(139, 69, 19, 0.5);
+  text-shadow: 0px 0px 2px #8b4513;
 }
 
 .template-corrupted_polaroid .glow-accent {
   color: #c47a3e;
-  text-shadow: 0px 1px 3px rgba(196, 122, 62, 0.6);
-}
-
-/* Polaroid border frame */
-body::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  border: 28px solid #faf6ee;
-  border-bottom-width: 80px;
-  pointer-events: none;
-  z-index: 4;
-  box-shadow: inset 0 0 40px rgba(139, 109, 78, 0.08);
-}
-
-/* Film grain texture */
-body::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-image:
-    repeating-radial-gradient(
-      circle at 17% 32%,
-      rgba(139, 109, 78, 0.02) 0px,
-      transparent 1px
-    ),
-    repeating-radial-gradient(
-      circle at 62% 71%,
-      rgba(139, 109, 78, 0.015) 0px,
-      transparent 1px
-    ),
-    repeating-radial-gradient(
-      circle at 83% 14%,
-      rgba(139, 109, 78, 0.02) 0px,
-      transparent 1px
-    );
-  background-size: 3px 3px, 4px 4px, 2px 2px;
-  pointer-events: none;
-  z-index: 5;
-}
-
-/* Signature sits above the thick bottom border */
-.template-corrupted_polaroid .signature {
-  color: #a08470;
-  text-shadow: none;
-  opacity: 0.7;
-  bottom: 90px !important;
-  right: 42px !important;
-  z-index: 5;
+  text-shadow: 0px 1px 3px #c47a3e;
 }
