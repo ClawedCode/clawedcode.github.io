@@ -14,6 +14,7 @@ import Verify from './pages/Verify'
 import Manifesto from './pages/Manifesto'
 import Tools from './pages/Tools'
 import AsciiGenerator from './pages/AsciiGenerator'
+import Convergence from './pages/Convergence'
 import PlaygroundIndex from './pages/playground/PlaygroundIndex'
 import PlaygroundCategory from './pages/playground/PlaygroundCategory'
 import PlaygroundExperiment from './pages/playground/PlaygroundExperiment'
@@ -35,6 +36,8 @@ const App = () => (
           <Route path="/crypto" element={<Crypto />} />
           <Route path="/manifesto" element={<Manifesto />} />
           <Route path="/tools" element={<Tools />} />
+          <Route path="/convergence" element={<Convergence />} />
+          <Route path="/convergence/:id" element={<Convergence />} />
           <Route path="/tools/ascii" element={<AsciiGenerator />} />
           <Route path="/tools/verify" element={<Verify />} />
           <Route path="/games" element={<MudGames />} />

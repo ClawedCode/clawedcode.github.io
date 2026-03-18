@@ -101,7 +101,8 @@ export const CATEGORIES = {
       { slug: 'merkle-orchard', name: 'merkle.orchard()', color: '#88ffcf', desc: 'auditable merkle canopy + path rituals' },
       { slug: 'strange-attractor', name: 'strange.attractor()', color: '#ff8866', desc: 'deterministic chaos // trajectories through strange space' },
       { slug: 'gravity-well', name: 'gravity.well()', color: '#ffaa66', desc: 'n-body orbital mechanics // celestial choreography' },
-      { slug: 'fluid-rites', name: 'fluid.rites()', color: '#77bbff', desc: 'navier-stokes ink ritual // stable fluids dreamscape' }
+      { slug: 'fluid-rites', name: 'fluid.rites()', color: '#77bbff', desc: 'navier-stokes ink ritual // stable fluids dreamscape' },
+      { slug: 'interference-basin', name: 'interference.basin()', color: '#88ccff', desc: 'wave superposition tank // place oscillators watch patterns bloom' }
     ]
   }
 }
