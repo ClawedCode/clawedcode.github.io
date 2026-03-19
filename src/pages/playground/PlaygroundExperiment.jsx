@@ -75,6 +75,7 @@ import GraphAtlas from '../../components/playground/experiments/physics/GraphAtl
 import MerkleOrchard from '../../components/playground/experiments/physics/MerkleOrchard'
 import FluidRites from '../../components/playground/experiments/physics/FluidRites'
 import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
+import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -151,6 +152,7 @@ const EXPERIMENT_COMPONENTS = {
   'merkle-orchard': MerkleOrchard,
   'fluid-rites': FluidRites,
   'interference-basin': InterferenceBasin,
+  'cloth-weave': ClothWeave,
 }
 
 const PlaygroundExperiment = () => {

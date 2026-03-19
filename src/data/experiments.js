@@ -102,7 +102,8 @@ export const CATEGORIES = {
       { slug: 'strange-attractor', name: 'strange.attractor()', color: '#ff8866', desc: 'deterministic chaos // trajectories through strange space' },
       { slug: 'gravity-well', name: 'gravity.well()', color: '#ffaa66', desc: 'n-body orbital mechanics // celestial choreography' },
       { slug: 'fluid-rites', name: 'fluid.rites()', color: '#77bbff', desc: 'navier-stokes ink ritual // stable fluids dreamscape' },
-      { slug: 'interference-basin', name: 'interference.basin()', color: '#88ccff', desc: 'wave superposition tank // place oscillators watch patterns bloom' }
+      { slug: 'interference-basin', name: 'interference.basin()', color: '#88ccff', desc: 'wave superposition tank // place oscillators watch patterns bloom' },
+      { slug: 'cloth-weave', name: 'cloth.weave()', color: '#e8cc88', desc: 'verlet cloth simulation // tear pin push the fabric of space' }
     ]
   }
 }
