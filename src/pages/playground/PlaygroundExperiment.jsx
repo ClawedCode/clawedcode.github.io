@@ -76,6 +76,7 @@ import MerkleOrchard from '../../components/playground/experiments/physics/Merkl
 import FluidRites from '../../components/playground/experiments/physics/FluidRites'
 import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
 import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
+import Harmonograph from '../../components/playground/experiments/physics/Harmonograph'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -153,6 +154,7 @@ const EXPERIMENT_COMPONENTS = {
   'fluid-rites': FluidRites,
   'interference-basin': InterferenceBasin,
   'cloth-weave': ClothWeave,
+  'harmonograph': Harmonograph,
 }
 
 const PlaygroundExperiment = () => {
