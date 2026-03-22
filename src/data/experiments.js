@@ -104,7 +104,8 @@ export const CATEGORIES = {
       { slug: 'fluid-rites', name: 'fluid.rites()', color: '#77bbff', desc: 'navier-stokes ink ritual // stable fluids dreamscape' },
       { slug: 'interference-basin', name: 'interference.basin()', color: '#88ccff', desc: 'wave superposition tank // place oscillators watch patterns bloom' },
       { slug: 'cloth-weave', name: 'cloth.weave()', color: '#e8cc88', desc: 'verlet cloth simulation // tear pin push the fabric of space' },
-      { slug: 'harmonograph', name: 'harmonograph()', color: '#d4aaff', desc: 'damped pendulum drawing machine // ink traces harmonic decay' }
+      { slug: 'harmonograph', name: 'harmonograph()', color: '#d4aaff', desc: 'damped pendulum drawing machine // ink traces harmonic decay' },
+      { slug: 'bifurcation-cartography', name: 'bifurcation.cartography()', color: '#ff6655', desc: 'period-doubling atlas // zoom into the fractal edge of chaos' }
     ]
   }
 }

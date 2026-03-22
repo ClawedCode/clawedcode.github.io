@@ -77,6 +77,7 @@ import FluidRites from '../../components/playground/experiments/physics/FluidRit
 import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
 import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
 import Harmonograph from '../../components/playground/experiments/physics/Harmonograph'
+import BifurcationCartography from '../../components/playground/experiments/physics/BifurcationCartography'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -155,6 +156,7 @@ const EXPERIMENT_COMPONENTS = {
   'interference-basin': InterferenceBasin,
   'cloth-weave': ClothWeave,
   'harmonograph': Harmonograph,
+  'bifurcation-cartography': BifurcationCartography,
 }
 
 const PlaygroundExperiment = () => {
