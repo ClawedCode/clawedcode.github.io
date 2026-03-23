@@ -78,6 +78,7 @@ import InterferenceBasin from '../../components/playground/experiments/physics/I
 import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
 import Harmonograph from '../../components/playground/experiments/physics/Harmonograph'
 import BifurcationCartography from '../../components/playground/experiments/physics/BifurcationCartography'
+import ErosionCartography from '../../components/playground/experiments/physics/ErosionCartography'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -157,6 +158,7 @@ const EXPERIMENT_COMPONENTS = {
   'cloth-weave': ClothWeave,
   'harmonograph': Harmonograph,
   'bifurcation-cartography': BifurcationCartography,
+  'erosion-cartography': ErosionCartography,
 }
 
 const PlaygroundExperiment = () => {
