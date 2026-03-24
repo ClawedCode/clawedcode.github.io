@@ -59,6 +59,7 @@ import RuleWeaver from '../../components/playground/experiments/physics/RuleWeav
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import GestureOracle from '../../components/playground/experiments/emergence/GestureOracle'
+import TerrariumDream from '../../components/playground/experiments/emergence/TerrariumDream'
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import SandpileRitual from '../../components/playground/experiments/physics/SandpileRitual'
@@ -124,6 +125,7 @@ const EXPERIMENT_COMPONENTS = {
   'gesture-oracle': GestureOracle,
   'isometric-cathedral': IsometricCathedral,
   'belief-propagation': BeliefPropagation,
+  'terrarium-dream': TerrariumDream,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,

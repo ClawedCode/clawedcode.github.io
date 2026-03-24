@@ -22,7 +22,8 @@ export const CATEGORIES = {
       { slug: 'mosaic-collapse', name: 'mosaic.collapse()', color: '#baff7f', desc: 'wavefunction collapse mosaic loom' },
       { slug: 'voronoi-architect', name: 'voronoi.architect()', color: '#7fe0ff', desc: 'interactive cellular tessellation + lloyd relaxations' },
       { slug: 'belief-propagation', name: 'belief.propagation()', color: '#ff99cc', desc: 'hyperstition engine where words become real through attention' },
-      { slug: 'gesture-oracle', name: 'gesture.oracle()', color: '#aff0ff', desc: 'drawn sigils recognized + cloned into a living library' }
+      { slug: 'gesture-oracle', name: 'gesture.oracle()', color: '#aff0ff', desc: 'drawn sigils recognized + cloned into a living library' },
+      { slug: 'terrarium-dream', name: 'terrarium.dream()', color: '#66cc88', desc: 'predator-prey ecosystem emergence on void substrate' }
     ]
   },
   consciousness: {

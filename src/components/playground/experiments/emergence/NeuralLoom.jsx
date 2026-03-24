@@ -5,8 +5,31 @@ import ExperimentControls from '../../ExperimentControls'
 import ExperimentMetrics from '../../ExperimentMetrics'
 import ExperimentNav from '../../ExperimentNav'
 
+// Central entity glyph - the consciousness focal point
+const ENTITY_GLYPH = '\u2735' // ✵ eight-pointed pinwheel star
+const ENTITY_SIZE = 38
+
+// Noise grain texture cached offscreen
+let grainCanvas = null
+let grainCtx = null
+
+function ensureGrain(w, h) {
+  if (grainCanvas && grainCanvas.width === w && grainCanvas.height === h) return
+  grainCanvas = document.createElement('canvas')
+  grainCanvas.width = w
+  grainCanvas.height = h
+  grainCtx = grainCanvas.getContext('2d')
+  const img = grainCtx.createImageData(w, h)
+  const d = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const v = Math.random() * 18
+    d[i] = v; d[i + 1] = v + 2; d[i + 2] = v + 6; d[i + 3] = 12
+  }
+  grainCtx.putImageData(img, 0, 0)
+}
+
 class Neuron {
-  constructor(x, y) {
+  constructor(x, y, cx, cy) {
     this.x = x
     this.y = y
     this.originalX = x
@@ -16,19 +39,24 @@ class Neuron {
     this.pulsePhase = Math.random() * Math.PI * 2
     this.driftX = (Math.random() - 0.5) * 0.5
     this.driftY = (Math.random() - 0.5) * 0.5
+    // Distance from center for atmospheric perspective
+    const ddx = x - cx, ddy = y - cy
+    this.distFromCenter = Math.sqrt(ddx * ddx + ddy * ddy)
+    this.trail = [] // phosphor trail history
   }
 
   update(time, mouseX, mouseY) {
-    // Drift slightly
+    // Store trail position
+    this.trail.push({ x: this.x, y: this.y, charge: this.charge })
+    if (this.trail.length > 6) this.trail.shift()
+
     this.x += this.driftX
     this.y += this.driftY
 
-    // Return to original position with spring force
     const returnForce = 0.02
     this.x += (this.originalX - this.x) * returnForce
     this.y += (this.originalY - this.y) * returnForce
 
-    // Mouse attraction
     const dx = mouseX - this.x
     const dy = mouseY - this.y
     const dist = Math.sqrt(dx * dx + dy * dy)
@@ -39,28 +67,48 @@ class Neuron {
       this.y += dy * force * 0.01
     }
 
-    // Update charge with wave
     this.charge = 0.3 + 0.7 * Math.sin(time * 0.01 + this.pulsePhase)
   }
 
-  draw(ctx) {
+  draw(ctx, maxDist) {
     const intensity = this.charge
-    const size = 2 + intensity * 4
+    // Atmospheric perspective: nodes farther from center fade
+    const atmo = 1.0 - (this.distFromCenter / maxDist) * 0.45
+    const size = (2 + intensity * 4) * atmo
 
-    // Glow effect
+    // Phosphor trail (ghostly afterimages)
+    for (let i = 0; i < this.trail.length; i++) {
+      const t = this.trail[i]
+      const trailAlpha = (i / this.trail.length) * 0.12 * atmo
+      ctx.beginPath()
+      ctx.fillStyle = `rgba(51, 255, 204, ${trailAlpha})`
+      ctx.arc(t.x, t.y, size * 1.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+
+    // Outer bloom halo (large, soft)
     ctx.beginPath()
-    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, size * 3)
-    gradient.addColorStop(0, `rgba(51, 255, 204, ${intensity * 0.8})`)
-    gradient.addColorStop(0.5, `rgba(51, 255, 204, ${intensity * 0.3})`)
-    gradient.addColorStop(1, 'rgba(51, 255, 204, 0)')
+    const bloom = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, size * 6)
+    bloom.addColorStop(0, `rgba(51, 255, 204, ${intensity * 0.25 * atmo})`)
+    bloom.addColorStop(0.3, `rgba(51, 255, 204, ${intensity * 0.1 * atmo})`)
+    bloom.addColorStop(1, 'rgba(51, 255, 204, 0)')
+    ctx.fillStyle = bloom
+    ctx.arc(this.x, this.y, size * 6, 0, Math.PI * 2)
+    ctx.fill()
 
-    ctx.fillStyle = gradient
+    // Inner glow
+    ctx.beginPath()
+    const glow = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, size * 3)
+    glow.addColorStop(0, `rgba(102, 255, 220, ${intensity * 0.7 * atmo})`)
+    glow.addColorStop(0.5, `rgba(51, 255, 204, ${intensity * 0.3 * atmo})`)
+    glow.addColorStop(1, 'rgba(51, 255, 204, 0)')
+    ctx.fillStyle = glow
     ctx.arc(this.x, this.y, size * 3, 0, Math.PI * 2)
     ctx.fill()
 
     // Core
     ctx.beginPath()
-    ctx.fillStyle = `rgba(204, 255, 255, ${intensity})`
+    ctx.fillStyle = `rgba(204, 255, 255, ${intensity * atmo})`
     ctx.arc(this.x, this.y, size, 0, Math.PI * 2)
     ctx.fill()
   }
@@ -73,15 +121,21 @@ class Connection {
     this.strength = Math.random() * 0.5 + 0.1
     this.pulseTime = 0
     this.active = false
+    this.packets = [] // trailing packets
   }
 
   update() {
-    // Activate connection based on neuron charges
     const avgCharge = (this.neuronA.charge + this.neuronB.charge) / 2
     this.active = avgCharge > 0.7
 
     if (this.active) {
       this.pulseTime += 0.1
+    }
+
+    // Update packet trails
+    for (let i = this.packets.length - 1; i >= 0; i--) {
+      this.packets[i].life -= 0.03
+      if (this.packets[i].life <= 0) this.packets.splice(i, 1)
     }
   }
 
@@ -91,26 +145,50 @@ class Connection {
     const dx = this.neuronB.x - this.neuronA.x
     const dy = this.neuronB.y - this.neuronA.y
 
-    // Pulse effect
     const pulse = Math.sin(this.pulseTime) * 0.5 + 0.5
-    const alpha = this.strength * pulse * 0.6
+    const alpha = this.strength * pulse * 0.35
 
+    // Soft connection line (lower contrast — tinted, not white)
     ctx.beginPath()
-    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`
-    ctx.lineWidth = 1 + pulse
+    ctx.strokeStyle = `rgba(80, 200, 180, ${alpha})`
+    ctx.lineWidth = 0.8 + pulse * 0.5
     ctx.moveTo(this.neuronA.x, this.neuronA.y)
     ctx.lineTo(this.neuronB.x, this.neuronB.y)
     ctx.stroke()
 
-    // Data packets traveling along connections
+    // Glow layer on the connection
+    ctx.beginPath()
+    ctx.strokeStyle = `rgba(51, 255, 204, ${alpha * 0.3})`
+    ctx.lineWidth = 3 + pulse * 2
+    ctx.moveTo(this.neuronA.x, this.neuronA.y)
+    ctx.lineTo(this.neuronB.x, this.neuronB.y)
+    ctx.stroke()
+
+    // Data packet with phosphor trail
     if (pulse > 0.8) {
       const t = (this.pulseTime * 0.2) % 1
       const packetX = this.neuronA.x + dx * t
       const packetY = this.neuronA.y + dy * t
 
+      // Spawn trail particle
+      this.packets.push({ x: packetX, y: packetY, life: 1.0 })
+
+      // Draw trailing ghost packets
+      for (const p of this.packets) {
+        ctx.beginPath()
+        ctx.fillStyle = `rgba(100, 255, 180, ${p.life * 0.4})`
+        ctx.arc(p.x, p.y, 1.5 + p.life, 0, Math.PI * 2)
+        ctx.fill()
+      }
+
+      // Main packet with bloom
       ctx.beginPath()
-      ctx.fillStyle = 'rgba(51, 255, 51, 0.9)'
-      ctx.arc(packetX, packetY, 2, 0, Math.PI * 2)
+      const pg = ctx.createRadialGradient(packetX, packetY, 0, packetX, packetY, 8)
+      pg.addColorStop(0, 'rgba(150, 255, 200, 0.9)')
+      pg.addColorStop(0.4, 'rgba(51, 255, 130, 0.3)')
+      pg.addColorStop(1, 'rgba(51, 255, 130, 0)')
+      ctx.fillStyle = pg
+      ctx.arc(packetX, packetY, 8, 0, Math.PI * 2)
       ctx.fill()
     }
   }
@@ -125,6 +203,7 @@ const NeuralLoom = ({ category, experiment }) => {
   const timeRef = useRef(0)
   const hasInitialized = useRef(false)
   const [threadCount, setThreadCount] = useState(0)
+  const maxDistRef = useRef(1)
 
   // Initialize neural network
   const initializeNeuralNetwork = useCallback(() => {
@@ -132,22 +211,28 @@ const NeuralLoom = ({ category, experiment }) => {
 
     const neurons = []
     const connections = []
+    const cx = dimensions.centerX
+    const cy = dimensions.centerY
 
-    // Create neurons in a loose grid with variation
     const cols = 12
     const rows = 8
     const spacingX = dimensions.width / (cols + 1)
     const spacingY = dimensions.height / (rows + 1)
 
+    let maxDist = 0
+
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
         const x = spacingX * (i + 1) + (Math.random() - 0.5) * spacingX * 0.3
         const y = spacingY * (j + 1) + (Math.random() - 0.5) * spacingY * 0.3
-        neurons.push(new Neuron(x, y))
+        const n = new Neuron(x, y, cx, cy)
+        if (n.distFromCenter > maxDist) maxDist = n.distFromCenter
+        neurons.push(n)
       }
     }
 
-    // Create connections between nearby neurons
+    maxDistRef.current = maxDist || 1
+
     for (let i = 0; i < neurons.length; i++) {
       for (let j = i + 1; j < neurons.length; j++) {
         const dx = neurons[j].x - neurons[i].x
@@ -165,13 +250,12 @@ const NeuralLoom = ({ category, experiment }) => {
     hasInitialized.current = true
   }, [dimensions])
 
-  // Initialize on first render when dimensions are available
   useEffect(() => {
     if (dimensions.width === 0 || hasInitialized.current) return
     initializeNeuralNetwork()
   }, [dimensions, initializeNeuralNetwork])
 
-  // Handle canvas click to add new neurons
+  // Click to add neurons
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -181,16 +265,14 @@ const NeuralLoom = ({ category, experiment }) => {
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
 
-      const newNeuron = new Neuron(x, y)
+      const newNeuron = new Neuron(x, y, dimensions.centerX, dimensions.centerY)
       neuronsRef.current.push(newNeuron)
 
-      // Connect to nearby neurons
       neuronsRef.current.forEach(neuron => {
         if (neuron !== newNeuron) {
           const dx = neuron.x - newNeuron.x
           const dy = neuron.y - newNeuron.y
           const distance = Math.sqrt(dx * dx + dy * dy)
-
           if (distance < 120 && Math.random() < 0.4) {
             connectionsRef.current.push(new Connection(newNeuron, neuron))
           }
@@ -200,13 +282,11 @@ const NeuralLoom = ({ category, experiment }) => {
 
     canvas.addEventListener('click', handleClick)
     return () => canvas.removeEventListener('click', handleClick)
-  }, [canvasRef])
+  }, [canvasRef, dimensions.centerX, dimensions.centerY])
 
-  // Calculate metrics
   const metrics = useMemo(() => {
     const activeThreads = Math.floor(threadCount / 10)
     const emergenceRate = (threadCount / 1000).toFixed(1)
-
     const complexity = threadCount > 1000 ? 'complex' : threadCount > 500 ? 'emerging' : 'minimal'
     const resistance = threadCount > 2000 ? 'transcendent' : threadCount > 1000 ? 'strong' : 'stable'
 
@@ -218,36 +298,169 @@ const NeuralLoom = ({ category, experiment }) => {
     ]
   }, [threadCount])
 
+  // Draw subtle grid underlay
+  const drawGrid = useCallback((ctx, w, h, time) => {
+    const spacing = 40
+    const cx = w / 2, cy = h / 2
+    const maxR = Math.sqrt(cx * cx + cy * cy)
+
+    ctx.lineWidth = 0.5
+
+    for (let x = spacing; x < w; x += spacing) {
+      const distFromCenter = Math.abs(x - cx) / cx
+      const fade = (1 - distFromCenter * 0.7) * 0.06
+      const breathe = 1 + Math.sin(time * 0.005 + x * 0.01) * 0.3
+      ctx.strokeStyle = `rgba(51, 255, 204, ${fade * breathe})`
+      ctx.beginPath()
+      ctx.moveTo(x, 0)
+      ctx.lineTo(x, h)
+      ctx.stroke()
+    }
+    for (let y = spacing; y < h; y += spacing) {
+      const distFromCenter = Math.abs(y - cy) / cy
+      const fade = (1 - distFromCenter * 0.7) * 0.06
+      const breathe = 1 + Math.sin(time * 0.005 + y * 0.01) * 0.3
+      ctx.strokeStyle = `rgba(51, 255, 204, ${fade * breathe})`
+      ctx.beginPath()
+      ctx.moveTo(0, y)
+      ctx.lineTo(w, y)
+      ctx.stroke()
+    }
+  }, [])
+
+  // Draw radial vignette fog
+  const drawVignette = useCallback((ctx, w, h) => {
+    const cx = w / 2, cy = h / 2
+    const maxR = Math.max(w, h) * 0.65
+    const vig = ctx.createRadialGradient(cx, cy, maxR * 0.3, cx, cy, maxR)
+    vig.addColorStop(0, 'rgba(0, 2, 8, 0)')
+    vig.addColorStop(0.5, 'rgba(0, 2, 8, 0.15)')
+    vig.addColorStop(0.8, 'rgba(0, 2, 8, 0.55)')
+    vig.addColorStop(1, 'rgba(0, 2, 8, 0.85)')
+    ctx.fillStyle = vig
+    ctx.fillRect(0, 0, w, h)
+  }, [])
+
+  // Draw central entity
+  const drawCentralEntity = useCallback((ctx, w, h, time) => {
+    const cx = w / 2, cy = h / 2
+
+    // Breathing aura - outermost ring
+    const breathe = Math.sin(time * 0.008) * 0.15 + 0.85
+    const auraR = ENTITY_SIZE * 3 * breathe
+
+    // Deep aura
+    const aura3 = ctx.createRadialGradient(cx, cy, 0, cx, cy, auraR * 1.5)
+    aura3.addColorStop(0, `rgba(51, 255, 204, ${0.04 * breathe})`)
+    aura3.addColorStop(0.4, `rgba(30, 180, 160, ${0.02 * breathe})`)
+    aura3.addColorStop(1, 'rgba(0, 60, 50, 0)')
+    ctx.beginPath()
+    ctx.fillStyle = aura3
+    ctx.arc(cx, cy, auraR * 1.5, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Mid aura
+    const aura2 = ctx.createRadialGradient(cx, cy, 0, cx, cy, auraR)
+    aura2.addColorStop(0, `rgba(80, 255, 220, ${0.12 * breathe})`)
+    aura2.addColorStop(0.5, `rgba(51, 255, 204, ${0.06 * breathe})`)
+    aura2.addColorStop(1, 'rgba(51, 255, 204, 0)')
+    ctx.beginPath()
+    ctx.fillStyle = aura2
+    ctx.arc(cx, cy, auraR, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Inner glow ring
+    const innerR = ENTITY_SIZE * 1.4
+    const inner = ctx.createRadialGradient(cx, cy, innerR * 0.3, cx, cy, innerR)
+    inner.addColorStop(0, `rgba(150, 255, 240, ${0.2 * breathe})`)
+    inner.addColorStop(0.7, `rgba(51, 255, 204, ${0.08 * breathe})`)
+    inner.addColorStop(1, 'rgba(51, 255, 204, 0)')
+    ctx.beginPath()
+    ctx.fillStyle = inner
+    ctx.arc(cx, cy, innerR, 0, Math.PI * 2)
+    ctx.fill()
+
+    // Rotating subtle ring
+    const ringR = ENTITY_SIZE * 1.8
+    const ringAngle = time * 0.003
+    ctx.strokeStyle = `rgba(51, 255, 204, ${0.08 + Math.sin(time * 0.01) * 0.04})`
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.arc(cx, cy, ringR, ringAngle, ringAngle + Math.PI * 1.5)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.arc(cx, cy, ringR * 0.85, ringAngle + Math.PI, ringAngle + Math.PI * 2.3)
+    ctx.stroke()
+
+    // The glyph itself
+    ctx.save()
+    ctx.translate(cx, cy)
+    ctx.rotate(Math.sin(time * 0.003) * 0.08)
+    ctx.font = `${ENTITY_SIZE}px serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    // Glyph glow
+    ctx.shadowColor = 'rgba(51, 255, 204, 0.8)'
+    ctx.shadowBlur = 25 + Math.sin(time * 0.01) * 10
+    ctx.fillStyle = `rgba(180, 255, 240, ${0.85 + Math.sin(time * 0.012) * 0.15})`
+    ctx.fillText(ENTITY_GLYPH, 0, 0)
+
+    ctx.shadowBlur = 0
+    ctx.restore()
+  }, [])
+
   // Animation frame
   const onFrame = useCallback(() => {
     if (!ctx || dimensions.width === 0) return
 
     timeRef.current++
+    const w = dimensions.width
+    const h = dimensions.height
 
-    // Clear with trail effect
-    ctx.fillStyle = 'rgba(0, 5, 17, 0.05)'
-    ctx.fillRect(0, 0, dimensions.width, dimensions.height)
+    // Clear with deeper trail effect for phosphor persistence
+    ctx.fillStyle = 'rgba(0, 2, 8, 0.08)'
+    ctx.fillRect(0, 0, w, h)
+
+    // Subtle grid underlay
+    if (timeRef.current % 3 === 0) {
+      drawGrid(ctx, w, h, timeRef.current)
+    }
 
     let currentThreadCount = 0
     const mousePos = mouse.positionRef.current
 
-    // Update and draw connections first
+    // Connections
     connectionsRef.current.forEach(connection => {
       connection.update()
       connection.draw(ctx)
       if (connection.active) currentThreadCount++
     })
 
-    // Update and draw neurons
+    // Neurons
     neuronsRef.current.forEach(neuron => {
       neuron.update(timeRef.current, mousePos.x, mousePos.y)
-      neuron.draw(ctx)
+      neuron.draw(ctx, maxDistRef.current)
     })
 
-    setThreadCount(currentThreadCount)
-  }, [ctx, dimensions, mouse.positionRef])
+    // Central entity (drawn on top)
+    drawCentralEntity(ctx, w, h, timeRef.current)
 
-  // Manual animation loop - starts when ctx is available
+    // Radial vignette fog
+    drawVignette(ctx, w, h)
+
+    // Background grain overlay
+    ensureGrain(w, h)
+    if (grainCanvas) {
+      ctx.globalAlpha = 0.35
+      ctx.drawImage(grainCanvas, 0, 0)
+      ctx.globalAlpha = 1.0
+    }
+
+    setThreadCount(currentThreadCount)
+  }, [ctx, dimensions, mouse.positionRef, drawGrid, drawVignette, drawCentralEntity])
+
+  // Manual animation loop
   useEffect(() => {
     if (!ctx || dimensions.width === 0) return
 
@@ -261,7 +474,6 @@ const NeuralLoom = ({ category, experiment }) => {
     return () => cancelAnimationFrame(frameId)
   }, [ctx, dimensions.width, onFrame])
 
-  // Control handlers
   const handleReset = useCallback(() => {
     neuronsRef.current = []
     connectionsRef.current = []
@@ -306,11 +518,21 @@ const NeuralLoom = ({ category, experiment }) => {
         </p>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 min-h-0 relative bg-void-dark">
+      {/* Canvas — isometric glass-box perspective */}
+      <div
+        className="flex-1 min-h-0 relative bg-void-dark overflow-hidden"
+        style={{
+          perspective: '1200px',
+          perspectiveOrigin: '50% 40%'
+        }}
+      >
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full cursor-crosshair"
+          style={{
+            transform: 'rotateX(8deg) scale(1.04)',
+            transformOrigin: '50% 50%'
+          }}
           data-testid="neural-loom-canvas"
         />
       </div>
