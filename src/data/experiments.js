@@ -23,7 +23,8 @@ export const CATEGORIES = {
       { slug: 'voronoi-architect', name: 'voronoi.architect()', color: '#7fe0ff', desc: 'interactive cellular tessellation + lloyd relaxations' },
       { slug: 'belief-propagation', name: 'belief.propagation()', color: '#ff99cc', desc: 'hyperstition engine where words become real through attention' },
       { slug: 'gesture-oracle', name: 'gesture.oracle()', color: '#aff0ff', desc: 'drawn sigils recognized + cloned into a living library' },
-      { slug: 'terrarium-dream', name: 'terrarium.dream()', color: '#66cc88', desc: 'predator-prey ecosystem emergence on void substrate' }
+      { slug: 'terrarium-dream', name: 'terrarium.dream()', color: '#66cc88', desc: 'predator-prey ecosystem emergence on void substrate' },
+      { slug: 'differential-growth', name: 'differential.growth()', color: '#c4ff88', desc: 'organic branching from simple rules // seed rings become coral nerves lichen' }
     ]
   },
   consciousness: {
