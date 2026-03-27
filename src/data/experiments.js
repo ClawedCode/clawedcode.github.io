@@ -108,7 +108,8 @@ export const CATEGORIES = {
       { slug: 'cloth-weave', name: 'cloth.weave()', color: '#e8cc88', desc: 'verlet cloth simulation // tear pin push the fabric of space' },
       { slug: 'harmonograph', name: 'harmonograph()', color: '#d4aaff', desc: 'damped pendulum drawing machine // ink traces harmonic decay' },
       { slug: 'bifurcation-cartography', name: 'bifurcation.cartography()', color: '#ff6655', desc: 'period-doubling atlas // zoom into the fractal edge of chaos' },
-      { slug: 'erosion-cartography', name: 'erosion.cartography()', color: '#77ccaa', desc: 'hydraulic erosion ritual // paint rain watch rivers carve themselves' }
+      { slug: 'erosion-cartography', name: 'erosion.cartography()', color: '#77ccaa', desc: 'hydraulic erosion ritual // paint rain watch rivers carve themselves' },
+      { slug: 'moire-weave', name: 'moire.weave()', color: '#88ddaa', desc: 'optical interference from overlapping geometric patterns' }
     ]
   }
 }
