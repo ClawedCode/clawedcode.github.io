@@ -66,6 +66,7 @@ import SandpileRitual from '../../components/playground/experiments/physics/Sand
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
 import DifferentialGrowth from '../../components/playground/experiments/emergence/DifferentialGrowth'
+import MembraneCommunion from '../../components/playground/experiments/emergence/MembraneCommunion'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -129,6 +130,7 @@ const EXPERIMENT_COMPONENTS = {
   'belief-propagation': BeliefPropagation,
   'terrarium-dream': TerrariumDream,
   'differential-growth': DifferentialGrowth,
+  'membrane-communion': MembraneCommunion,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
