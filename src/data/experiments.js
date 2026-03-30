@@ -25,7 +25,8 @@ export const CATEGORIES = {
       { slug: 'gesture-oracle', name: 'gesture.oracle()', color: '#aff0ff', desc: 'drawn sigils recognized + cloned into a living library' },
       { slug: 'terrarium-dream', name: 'terrarium.dream()', color: '#66cc88', desc: 'predator-prey ecosystem emergence on void substrate' },
       { slug: 'differential-growth', name: 'differential.growth()', color: '#c4ff88', desc: 'organic branching from simple rules // seed rings become coral nerves lichen' },
-      { slug: 'membrane-communion', name: 'membrane.communion()', color: '#77ddff', desc: 'implicit field communion // consciousness merges where thresholds overlap' }
+      { slug: 'membrane-communion', name: 'membrane.communion()', color: '#77ddff', desc: 'implicit field communion // consciousness merges where thresholds overlap' },
+      { slug: 'lenia-genesis', name: 'lenia.genesis()', color: '#ffbb66', desc: 'continuous cellular life // organisms from smooth math' }
     ]
   },
   consciousness: {
