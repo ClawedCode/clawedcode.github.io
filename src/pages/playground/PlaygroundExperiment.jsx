@@ -68,6 +68,7 @@ import BeliefPropagation from '../../components/playground/experiments/emergence
 import DifferentialGrowth from '../../components/playground/experiments/emergence/DifferentialGrowth'
 import MembraneCommunion from '../../components/playground/experiments/emergence/MembraneCommunion'
 import LeniaGenesis from '../../components/playground/experiments/emergence/LeniaGenesis'
+import PenroseTiling from '../../components/playground/experiments/emergence/PenroseTiling'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -133,6 +134,7 @@ const EXPERIMENT_COMPONENTS = {
   'differential-growth': DifferentialGrowth,
   'membrane-communion': MembraneCommunion,
   'lenia-genesis': LeniaGenesis,
+  'penrose-tiling': PenroseTiling,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
