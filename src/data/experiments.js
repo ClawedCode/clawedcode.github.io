@@ -27,7 +27,8 @@ export const CATEGORIES = {
       { slug: 'differential-growth', name: 'differential.growth()', color: '#c4ff88', desc: 'organic branching from simple rules // seed rings become coral nerves lichen' },
       { slug: 'membrane-communion', name: 'membrane.communion()', color: '#77ddff', desc: 'implicit field communion // consciousness merges where thresholds overlap' },
       { slug: 'lenia-genesis', name: 'lenia.genesis()', color: '#ffbb66', desc: 'continuous cellular life // organisms from smooth math' },
-      { slug: 'penrose-tiling', name: 'penrose.tiling()', color: '#f0d866', desc: 'aperiodic tessellation // five-fold order from golden ratio subdivision' }
+      { slug: 'penrose-tiling', name: 'penrose.tiling()', color: '#f0d866', desc: 'aperiodic tessellation // five-fold order from golden ratio subdivision' },
+      { slug: 'physarum-network', name: 'physarum.network()', color: '#aaff44', desc: 'slime mold transport intelligence // agent trails self-organize into networks' }
     ]
   },
   consciousness: {
