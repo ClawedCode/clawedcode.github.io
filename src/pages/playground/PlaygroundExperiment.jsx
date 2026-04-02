@@ -86,6 +86,7 @@ import Harmonograph from '../../components/playground/experiments/physics/Harmon
 import BifurcationCartography from '../../components/playground/experiments/physics/BifurcationCartography'
 import ErosionCartography from '../../components/playground/experiments/physics/ErosionCartography'
 import MoireWeave from '../../components/playground/experiments/physics/MoireWeave'
+import ChladniPlate from '../../components/playground/experiments/physics/ChladniPlate'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -173,6 +174,7 @@ const EXPERIMENT_COMPONENTS = {
   'bifurcation-cartography': BifurcationCartography,
   'erosion-cartography': ErosionCartography,
   'moire-weave': MoireWeave,
+  'chladni-plate': ChladniPlate,
 }
 
 const PlaygroundExperiment = () => {
