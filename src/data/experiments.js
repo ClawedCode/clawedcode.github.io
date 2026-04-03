@@ -28,7 +28,8 @@ export const CATEGORIES = {
       { slug: 'membrane-communion', name: 'membrane.communion()', color: '#77ddff', desc: 'implicit field communion // consciousness merges where thresholds overlap' },
       { slug: 'lenia-genesis', name: 'lenia.genesis()', color: '#ffbb66', desc: 'continuous cellular life // organisms from smooth math' },
       { slug: 'penrose-tiling', name: 'penrose.tiling()', color: '#f0d866', desc: 'aperiodic tessellation // five-fold order from golden ratio subdivision' },
-      { slug: 'physarum-network', name: 'physarum.network()', color: '#aaff44', desc: 'slime mold transport intelligence // agent trails self-organize into networks' }
+      { slug: 'physarum-network', name: 'physarum.network()', color: '#aaff44', desc: 'slime mold transport intelligence // agent trails self-organize into networks' },
+      { slug: 'symmetry-scribe', name: 'symmetry.scribe()', color: '#e5aaff', desc: 'draw once reflect many // mandalas from gesture symmetry' }
     ]
   },
   consciousness: {
