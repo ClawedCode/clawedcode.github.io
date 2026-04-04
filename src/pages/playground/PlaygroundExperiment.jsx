@@ -71,6 +71,7 @@ import LeniaGenesis from '../../components/playground/experiments/emergence/Leni
 import PenroseTiling from '../../components/playground/experiments/emergence/PenroseTiling'
 import PhysarumNetwork from '../../components/playground/experiments/emergence/PhysarumNetwork'
 import SymmetryScribe from '../../components/playground/experiments/emergence/SymmetryScribe'
+import HypercubeDream from '../../components/playground/experiments/emergence/HypercubeDream'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -140,6 +141,7 @@ const EXPERIMENT_COMPONENTS = {
   'penrose-tiling': PenroseTiling,
   'physarum-network': PhysarumNetwork,
   'symmetry-scribe': SymmetryScribe,
+  'hypercube-dream': HypercubeDream,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
