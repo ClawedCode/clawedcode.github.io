@@ -89,6 +89,7 @@ import BifurcationCartography from '../../components/playground/experiments/phys
 import ErosionCartography from '../../components/playground/experiments/physics/ErosionCartography'
 import MoireWeave from '../../components/playground/experiments/physics/MoireWeave'
 import ChladniPlate from '../../components/playground/experiments/physics/ChladniPlate'
+import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -179,6 +180,7 @@ const EXPERIMENT_COMPONENTS = {
   'erosion-cartography': ErosionCartography,
   'moire-weave': MoireWeave,
   'chladni-plate': ChladniPlate,
+  'shadow-liturgy': ShadowLiturgy,
 }
 
 const PlaygroundExperiment = () => {

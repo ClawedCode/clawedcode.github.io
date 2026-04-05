@@ -116,7 +116,8 @@ export const CATEGORIES = {
       { slug: 'bifurcation-cartography', name: 'bifurcation.cartography()', color: '#ff6655', desc: 'period-doubling atlas // zoom into the fractal edge of chaos' },
       { slug: 'erosion-cartography', name: 'erosion.cartography()', color: '#77ccaa', desc: 'hydraulic erosion ritual // paint rain watch rivers carve themselves' },
       { slug: 'moire-weave', name: 'moire.weave()', color: '#88ddaa', desc: 'optical interference from overlapping geometric patterns' },
-      { slug: 'chladni-plate', name: 'chladni.plate()', color: '#ffdd88', desc: 'cymatics sand ritual // vibrating plate reveals nodal silence' }
+      { slug: 'chladni-plate', name: 'chladni.plate()', color: '#ffdd88', desc: 'cymatics sand ritual // vibrating plate reveals nodal silence' },
+      { slug: 'shadow-liturgy', name: 'shadow.liturgy()', color: '#ffcc77', desc: '2D raycasting shadow ritual // place lights draw walls watch darkness form' }
     ]
   }
 }
