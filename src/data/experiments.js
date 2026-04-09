@@ -30,7 +30,8 @@ export const CATEGORIES = {
       { slug: 'penrose-tiling', name: 'penrose.tiling()', color: '#f0d866', desc: 'aperiodic tessellation // five-fold order from golden ratio subdivision' },
       { slug: 'physarum-network', name: 'physarum.network()', color: '#aaff44', desc: 'slime mold transport intelligence // agent trails self-organize into networks' },
       { slug: 'symmetry-scribe', name: 'symmetry.scribe()', color: '#e5aaff', desc: 'draw once reflect many // mandalas from gesture symmetry' },
-      { slug: 'hypercube-dream', name: 'hypercube.dream()', color: '#aa88ff', desc: '4D polytopes rotating through hyperspace // stereographic projections of the impossible' }
+      { slug: 'hypercube-dream', name: 'hypercube.dream()', color: '#aa88ff', desc: '4D polytopes rotating through hyperspace // stereographic projections of the impossible' },
+      { slug: 'suminagashi-ritual', name: 'suminagashi.ritual()', color: '#e8b888', desc: 'Japanese ink marbling // drop ink comb water capture impermanence' }
     ]
   },
   consciousness: {

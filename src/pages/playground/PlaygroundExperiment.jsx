@@ -72,6 +72,7 @@ import PenroseTiling from '../../components/playground/experiments/emergence/Pen
 import PhysarumNetwork from '../../components/playground/experiments/emergence/PhysarumNetwork'
 import SymmetryScribe from '../../components/playground/experiments/emergence/SymmetryScribe'
 import HypercubeDream from '../../components/playground/experiments/emergence/HypercubeDream'
+import SuminagashiRitual from '../../components/playground/experiments/emergence/SuminagashiRitual'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -143,6 +144,7 @@ const EXPERIMENT_COMPONENTS = {
   'physarum-network': PhysarumNetwork,
   'symmetry-scribe': SymmetryScribe,
   'hypercube-dream': HypercubeDream,
+  'suminagashi-ritual': SuminagashiRitual,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
