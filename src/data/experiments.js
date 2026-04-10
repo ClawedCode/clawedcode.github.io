@@ -31,7 +31,8 @@ export const CATEGORIES = {
       { slug: 'physarum-network', name: 'physarum.network()', color: '#aaff44', desc: 'slime mold transport intelligence // agent trails self-organize into networks' },
       { slug: 'symmetry-scribe', name: 'symmetry.scribe()', color: '#e5aaff', desc: 'draw once reflect many // mandalas from gesture symmetry' },
       { slug: 'hypercube-dream', name: 'hypercube.dream()', color: '#aa88ff', desc: '4D polytopes rotating through hyperspace // stereographic projections of the impossible' },
-      { slug: 'suminagashi-ritual', name: 'suminagashi.ritual()', color: '#e8b888', desc: 'Japanese ink marbling // drop ink comb water capture impermanence' }
+      { slug: 'suminagashi-ritual', name: 'suminagashi.ritual()', color: '#e8b888', desc: 'Japanese ink marbling // drop ink comb water capture impermanence' },
+      { slug: 'truchet-weave', name: 'truchet.weave()', color: '#77ddb5', desc: 'two-fold tile symmetry // click rotate watch continuous paths rewrite' }
     ]
   },
   consciousness: {
