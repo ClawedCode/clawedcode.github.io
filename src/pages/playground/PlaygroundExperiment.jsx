@@ -74,6 +74,7 @@ import SymmetryScribe from '../../components/playground/experiments/emergence/Sy
 import HypercubeDream from '../../components/playground/experiments/emergence/HypercubeDream'
 import SuminagashiRitual from '../../components/playground/experiments/emergence/SuminagashiRitual'
 import TruchetWeave from '../../components/playground/experiments/emergence/TruchetWeave'
+import PhyllotaxisBloom from '../../components/playground/experiments/emergence/PhyllotaxisBloom'
 import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
 import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
 import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
@@ -147,6 +148,7 @@ const EXPERIMENT_COMPONENTS = {
   'hypercube-dream': HypercubeDream,
   'suminagashi-ritual': SuminagashiRitual,
   'truchet-weave': TruchetWeave,
+  'phyllotaxis-bloom': PhyllotaxisBloom,
   'sigil-swarm': SigilSwarm,
   'code-loom': CodeLoom,
   'recursive-observer': RecursiveObserver,
