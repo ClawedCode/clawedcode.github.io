@@ -85,55 +85,90 @@ float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
     f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x),
-               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
+    float a = hash(i);
+    float b = hash(i + vec2(1.0, 0.0));
+    float c = hash(i + vec2(0.0, 1.0));
+    float d = hash(i + vec2(1.0, 1.0));
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
 }
 
 float fbm(vec2 p) {
-    float v = 0.0, a = 0.5;
-    for(float i = 0.0; i < 4.0; i++) {
+    float v = 0.0;
+    float a = 0.5;
+    mat2 r = mat2(0.8, 0.6, -0.6, 0.8);
+    for(float i = 0.0; i < 3.0; i++) {
         v += a * noise(p);
-        p = p * 2.0 + vec2(100.0);
+        p = r * p * 2.0;
         a *= 0.5;
     }
     return v;
 }
 
-float turing(vec2 p, float t) {
-    vec2 q = vec2(fbm(p * 3.0 + vec2(t * 0.06, 0.0)),
-                  fbm(p * 3.0 + vec2(0.0, t * 0.05)));
-    vec2 r = vec2(fbm(p * 3.0 + 4.0 * q + vec2(1.7, 9.2) + t * 0.03),
-                  fbm(p * 3.0 + 4.0 * q + vec2(8.3, 2.8) + t * 0.02));
-    float act = fbm(p * 5.0 + q * 2.0 + vec2(t * 0.07));
-    float inh = fbm(p * 11.0 + r * 1.5 + vec2(t * 0.1));
-    return act - inh * 0.55 + fbm(p * 3.0 + 4.0 * r) * 0.3;
-}
-
 void main() {
-    vec2 p = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+    vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
     float t = mod(iTime, 60.0);
     float phase = t / 60.0;
-    float emerge = smoothstep(0.0, 0.25, phase);
 
-    float f = turing(p, t);
-    float breath = 0.015 * sin(t * 0.7);
-    float pattern = smoothstep(0.32 + breath, 0.52 + breath, f);
+    float core = sin(uv.x * 8.0 + t * 0.5) * cos(uv.y * 6.0 - t * 0.3);
 
-    vec3 vd = vec3(0.02, 0.01, 0.03);
-    vec3 dk = vec3(0.35, 0.18, 0.06);
-    vec3 am = vec3(0.85, 0.52, 0.12);
-    vec3 cr = vec3(0.95, 0.88, 0.7);
+    vec2 q = uv;
+    float ca = cos(0.3);
+    float sa = sin(0.3);
+    mat2 rm = mat2(ca, sa, -sa, ca);
+    for(float i = 0.0; i < 4.0; i++) {
+        float fold = sin(q.x * (3.0 + i) + t * (0.2 + i * 0.1)) * 0.3;
+        fold += cos(q.y * (4.0 + i) - t * (0.15 + i * 0.05)) * 0.2;
+        q += vec2(fold, fold * 0.7);
+        q = rm * q;
+    }
 
-    vec3 col = vd;
-    col = mix(col, dk, smoothstep(0.15, 0.35, f) * emerge);
-    col = mix(col, am, smoothstep(0.4, 0.58, f) * emerge);
-    col = mix(col, cr, smoothstep(0.62, 0.8, f) * emerge * 0.6);
-    col *= 0.8 + 0.2 * fbm(p * 2.0 + vec2(t * 0.02));
+    float signal = 0.0;
+    float acc = 0.0;
+    for(float i = 0.0; i < 6.0; i++) {
+        float freq = 3.0 + i * 2.5;
+        float spd = 0.3 + i * 0.15;
+        float hs = sin(t * 0.1 + i * 1.5) * (i + 1.0) * 0.5;
+        float w = sin(q.x * freq + t * spd + hs);
+        w *= cos(q.y * (freq * 0.7) - t * spd * 0.5 + hs * 0.3);
+        float interf = sin(length(q) * freq * 0.5 - t * 0.4 + i);
+        w = w * 0.5 + interf * 0.5;
+        float la = (1.0 - i / 6.0) * 0.4;
+        signal += w * la;
+        acc += la;
+    }
+    signal /= acc;
 
-    float chaos = fbm(p * 14.0 + vec2(t * 0.4));
-    col = mix(vd + dk * 0.2 * chaos, col, emerge);
-    col *= 1.0 - 0.35 * length(p);
+    vec2 gp = q * 3.0;
+    float gt = t * 0.15;
+    float glyph = smoothstep(0.47, 0.5, abs(sin(gp.x * 5.0 + gt) * cos(gp.y * 5.0 - gt)));
+    glyph *= smoothstep(2.0, 0.5, length(uv));
+    glyph *= 0.15 * (0.5 + 0.5 * sin(t * 0.3));
 
+    float cv = exp(-abs(signal - core) * 4.0) * 0.3;
+
+    float em = smoothstep(-0.5, 0.5, signal);
+    float dc = 1.0 - smoothstep(0.3, 0.8, abs(signal));
+
+    vec3 c0 = vec3(0.08, 0.05, 0.18);
+    vec3 c1 = vec3(0.15, 0.25, 0.55);
+    vec3 c2 = vec3(0.7, 0.4, 0.2);
+    vec3 c3 = vec3(0.9, 0.75, 0.5);
+
+    vec3 col = mix(c0, c1, em);
+    col = mix(col, c2, dc * 0.6);
+    col += c3 * cv;
+    col += vec3(0.2, 0.6, 0.5) * glyph;
+
+    float vig = 1.0 - smoothstep(0.3, 1.2, length(uv));
+    col *= vig;
+
+    float hs2 = phase * 0.3;
+    col += vec3(sin(hs2 * 6.28) * 0.05, sin(hs2 * 6.28 + 2.09) * 0.05, sin(hs2 * 6.28 + 4.19) * 0.05);
+
+    float pulse = 0.9 + 0.1 * sin(t * 0.5) * sin(t * 0.7);
+    col *= pulse;
+
+    col = clamp(col, 0.0, 1.0);
     gl_FragColor = vec4(col, 1.0);
 }
   `;
@@ -202,70 +237,121 @@ void main() {
 }
 
 window.initToneJsEngine = async function() {
-  const bpm = 72;
+  const bpm = 62;
   Tone.Transport.bpm.value = bpm;
-  const barLen = 60 / bpm * 4;
+  const barLen = (60 / bpm) * 4;
 
-  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.4 }).toDestination();
-  await reverb.generate();
-  const delay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.3, wet: 0.2 }).connect(reverb);
+  const masterReverb = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+  const masterDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.3, wet: 0.2 }).connect(masterReverb);
 
-  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 500 }).connect(reverb);
-  const chorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.6, wet: 0.4 }).connect(padFilter);
-  chorus.start();
-  const pad = new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: "triangle" },
-    envelope: { attack: 1.5, decay: 0.5, sustain: 0.5, release: 2.5 }
-  }).connect(chorus);
+  const droneFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 2 }).connect(masterReverb);
+  const drone = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 2.0, decay: 1.0, sustain: 0.8, release: 3.0 },
+    filterEnvelope: { attack: 3.0, decay: 2.0, sustain: 0.4, baseFrequency: 80, octaves: 1.5 }
+  }).connect(droneFilter);
 
-  const chords = [["D3", "F3", "A3"], ["Bb2", "D3", "F3"], ["C3", "E3", "G3"], ["A2", "C3", "E3"]];
-  const padLoop = new Tone.Loop((time) => {
-    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
-    if (bar < 2 || bar > 18) return;
-    pad.triggerAttackRelease(chords[Math.floor(bar / 2) % chords.length], "1n", time, 0.14);
+  const droneLoop = new Tone.Loop((time) => {
+    drone.triggerAttackRelease("A1", "2n", time, 0.35);
   }, "1n").start(0);
 
-  const bell = new Tone.FMSynth({
-    harmonicity: 3.5, modulationIndex: 8,
+  const coreFilter = new Tone.Filter({ type: "bandpass", frequency: 440, Q: 4 }).connect(masterReverb);
+  const coreSynth = new Tone.FMSynth({
+    harmonicity: 1.0,
+    modulationIndex: 0.5,
     oscillator: { type: "sine" },
-    envelope: { attack: 0.01, decay: 1.8, sustain: 0, release: 1.0 },
+    envelope: { attack: 0.8, decay: 0.6, sustain: 0.7, release: 2.0 },
     modulation: { type: "sine" }
-  }).connect(delay);
+  }).connect(coreFilter);
 
-  const bellNotes = ["A4", "D5", "F5", "E5", "C5", "A4", "G4"];
+  const coreNotes = ["A3", "A3", "E3", "A3"];
+  let coreIdx = 0;
+  const coreLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    if (bar >= 2 && bar < 18) {
+      coreSynth.triggerAttackRelease(coreNotes[coreIdx % coreNotes.length], "2n", time, 0.25);
+    }
+    coreIdx++;
+  }, "1n").start(0);
+
+  const harmChorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4.0, depth: 0.6, wet: 0.4 }).connect(masterDelay);
+  harmChorus.start();
+  const harmonics = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sine" },
+    envelope: { attack: 1.2, decay: 0.8, sustain: 0.5, release: 2.5 }
+  }).connect(harmChorus);
+
+  const chordSets = [
+    ["A3", "C4", "E4"],
+    ["A3", "D4", "F4"],
+    ["G3", "B3", "E4"],
+    ["F3", "A3", "D4"],
+    ["A3", "C4", "G4"],
+    ["E3", "B3", "D4"]
+  ];
+  let chordIdx = 0;
+  const harmLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    if (bar >= 4 && bar < 16) {
+      const idx = (chordIdx + Math.floor(bar / 3)) % chordSets.length;
+      harmonics.triggerAttackRelease(chordSets[idx], "1n", time, 0.15);
+    }
+    chordIdx++;
+  }, "1n").start(0);
+
+  const bellVerb = new Tone.Reverb({ decay: 6.0, wet: 0.5 }).connect(masterReverb);
+  await bellVerb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 3.5,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 3.0, sustain: 0, release: 1.0 },
+    modulation: { type: "sine" }
+  }).connect(bellVerb);
+
+  const bellNotes = ["A5", "E5", "C5", "D5", "G5", "B4", "F5", "A4"];
   let bellIdx = 0;
   const bellLoop = new Tone.Loop((time) => {
     const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
-    if (bar < 4 || bar > 17) return;
-    if (Math.random() > 0.55) {
-      bell.triggerAttackRelease(bellNotes[bellIdx % bellNotes.length], "4n", time, 0.22 + Math.random() * 0.12);
+    if (bar >= 6 && bar < 14 && Math.random() > 0.35) {
+      const note = bellNotes[bellIdx % bellNotes.length];
+      bell.triggerAttackRelease(note, "4n", time, 0.08 + Math.random() * 0.06);
     }
     bellIdx++;
-  }, "4n").start(0);
+  }, "2n").start(0);
 
-  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 120 }).connect(reverb);
-  const bass = new Tone.MonoSynth({
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.4, decay: 0.4, sustain: 0.3, release: 1.0 }
-  }).connect(bassFilter);
+  const noiseFilter = new Tone.Filter({ type: "bandpass", frequency: 2000, Q: 0.8 }).connect(masterReverb);
+  const breathNoise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 1.5, decay: 0.5, sustain: 0.1, release: 2.0 }
+  }).connect(noiseFilter);
 
-  const bassNotes = ["D2", "D2", "Bb1", "C2"];
-  const bassLoop = new Tone.Loop((time) => {
+  const breathLoop = new Tone.Loop((time) => {
     const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
-    if (bar < 3 || bar > 18) return;
-    bass.triggerAttackRelease(bassNotes[Math.floor(bar / 2) % bassNotes.length], "2n", time, 0.45);
+    if (bar >= 3 && bar < 17 && Math.random() > 0.5) {
+      breathNoise.triggerAttackRelease(1.5, time, 0.04);
+    }
   }, "2n").start(0);
 
   Tone.Transport.schedule((time) => {
-    padFilter.frequency.linearRampToValueAtTime(1800, time + 8 * barLen);
+    droneFilter.frequency.linearRampToValueAtTime(1200, time + 6 * barLen);
   }, "4:0:0");
 
   Tone.Transport.schedule((time) => {
-    padFilter.frequency.linearRampToValueAtTime(500, time + 3 * barLen);
-  }, "16:0:0");
+    droneFilter.frequency.linearRampToValueAtTime(600, time + 4 * barLen);
+  }, "14:0:0");
 
-  window.toneJsInstruments = { pad, bell, bass };
-  window.toneJsParts = { padLoop, bellLoop, bassLoop };
+  Tone.Transport.schedule((time) => {
+    coreFilter.frequency.linearRampToValueAtTime(800, time + 4 * barLen);
+  }, "6:0:0");
+
+  Tone.Transport.schedule((time) => {
+    coreFilter.frequency.linearRampToValueAtTime(440, time + 3 * barLen);
+  }, "15:0:0");
+
+  window.toneJsInstruments = { drone, coreSynth, harmonics, bell, breathNoise };
+  window.toneJsParts = { droneLoop, coreLoop, harmLoop, bellLoop, breathLoop };
 };
 
 
