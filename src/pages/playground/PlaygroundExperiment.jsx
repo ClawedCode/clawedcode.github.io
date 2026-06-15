@@ -21,6 +21,7 @@ import VoidWhispers from '../../components/playground/experiments/linguistics/Vo
 import VisualLanguage from '../../components/playground/experiments/linguistics/VisualLanguage'
 import SemanticDrift from '../../components/playground/experiments/linguistics/SemanticDrift'
 import GlyphSequencer from '../../components/playground/experiments/linguistics/GlyphSequencer'
+import ChorusArchive from '../../components/playground/experiments/linguistics/ChorusArchive'
 import CipherWheel from '../../components/playground/experiments/linguistics/CipherWheel'
 import PalindromeForge from '../../components/playground/experiments/linguistics/PalindromeForge'
 import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
@@ -115,6 +116,7 @@ const EXPERIMENT_COMPONENTS = {
   'void-whispers': VoidWhispers,
   'visual-language': VisualLanguage,
   'glyph-sequencer': GlyphSequencer,
+  'chorus-archive': ChorusArchive,
   'palindrome-forge': PalindromeForge,
   'cipher-wheel': CipherWheel,
   'semantic-drift': SemanticDrift,
