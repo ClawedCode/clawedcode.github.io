@@ -57,6 +57,7 @@ import SortRitual from '../../components/playground/experiments/physics/SortRitu
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
 import StackOracle from '../../components/playground/experiments/physics/StackOracle'
 import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
+import PetriChorus from '../../components/playground/experiments/physics/PetriChorus'
 import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import GestureOracle from '../../components/playground/experiments/emergence/GestureOracle'
@@ -172,6 +173,7 @@ const EXPERIMENT_COMPONENTS = {
   'rhythm-lattice': RhythmLattice,
   'state-machine': StateMachine,
   'stack-oracle': StackOracle,
+  'petri-chorus': PetriChorus,
   'quadtree-compress': QuadtreeCompress,
   'path-cartographer': PathCartographer,
   'prime-constellations': PrimeConstellations,

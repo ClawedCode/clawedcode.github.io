@@ -20,6 +20,8 @@ const MODE_MESSAGES = {
   microphone: '∴ listening to reality // your voice becomes pattern ∴'
 }
 
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value))
+
 // SonicParticle class
 class SonicParticle {
   constructor(x, y, centerX, centerY) {
@@ -35,65 +37,88 @@ class SonicParticle {
     this.radius = Math.random() * 3 + 1
     this.baseHue = Math.random() * 60 + 160 // Cyan to green range
     this.energy = 0
+    this.displayEnergy = 0
+    this.depth = Math.random()
+    this.orbitSeed = 0.7 + Math.random() * 0.95
+    this.phase = Math.random() * Math.PI * 2
+    this.drift = Math.random() * Math.PI * 2
   }
 
-  update(frequencyValue, responseSpeed, centerX, centerY) {
+  update(frequencyValue, responseSpeed, centerX, centerY, time, fieldEnergy) {
     this.centerX = centerX
     this.centerY = centerY
 
     // React to frequency data
     this.energy = frequencyValue / 255
+    this.displayEnergy += (this.energy - this.displayEnergy) * 0.18
+    const layeredEnergy = this.displayEnergy * 0.78 + fieldEnergy * 0.22
 
-    // Orbital motion influenced by sound
-    const orbitRadius = 50 + this.energy * 150
-    const orbitSpeed = 0.01 + this.energy * 0.05
+    // Orbital motion influenced by sound and layer depth
+    const orbitRadius = (48 + layeredEnergy * 155) * (0.62 + this.depth * 0.96) * this.orbitSeed
+    const orbitSpeed = (0.004 + layeredEnergy * 0.03) * (0.62 + this.depth * 0.9)
 
     this.angle += orbitSpeed
 
-    const targetX = this.centerX + Math.cos(this.angle) * orbitRadius
-    const targetY = this.centerY + Math.sin(this.angle) * orbitRadius
+    const fluidX = Math.cos(time * 0.0007 + this.phase) * (12 + layeredEnergy * 16) * (1 - this.depth * 0.35)
+    const fluidY = Math.sin(time * 0.0005 + this.drift) * (10 + layeredEnergy * 18) * (0.65 + this.depth * 0.35)
+    const targetX = this.centerX + Math.cos(this.angle) * orbitRadius + fluidX
+    const targetY = this.centerY + Math.sin(this.angle) * orbitRadius + fluidY
 
     // Spring force towards target
     const dx = targetX - this.x
     const dy = targetY - this.y
 
-    this.vx += dx * 0.01 * (responseSpeed / 5)
-    this.vy += dy * 0.01 * (responseSpeed / 5)
+    this.vx += dx * (0.008 + this.depth * 0.006) * (responseSpeed / 5)
+    this.vy += dy * (0.008 + this.depth * 0.006) * (responseSpeed / 5)
 
     // Damping
-    this.vx *= 0.95
-    this.vy *= 0.95
+    this.vx *= 0.92 - this.depth * 0.03
+    this.vy *= 0.92 - this.depth * 0.03
 
     this.x += this.vx
     this.y += this.vy
 
-    // Size pulsates with energy
-    this.radius = 1 + this.energy * 4
+    // Size and layer weight pulse with energy
+    this.radius = 1.3 + layeredEnergy * 3.6 + this.depth * 1.8
   }
 
-  draw(ctx) {
-    // Particle glow
-    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius * 3)
+  draw(ctx, fieldEnergy) {
+    const layeredEnergy = this.displayEnergy * 0.8 + fieldEnergy * 0.2
+    const bloomRadius = this.radius * (3 + this.depth * 1.8 + layeredEnergy * 2.2)
+    const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, bloomRadius)
 
-    const hue = this.baseHue + this.energy * 60
-    const saturation = 60 + this.energy * 40
-    const lightness = 40 + this.energy * 40
-    const alpha = 0.3 + this.energy * 0.5
+    const hue = this.baseHue + layeredEnergy * 72 + this.depth * 8
+    const saturation = 58 + layeredEnergy * 34
+    const lightness = 38 + layeredEnergy * 34 + this.depth * 10
+    const alpha = 0.12 + layeredEnergy * 0.36 + this.depth * 0.12
 
     gradient.addColorStop(0, `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha})`)
-    gradient.addColorStop(0.5, `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha * 0.5})`)
+    gradient.addColorStop(0.32, `hsla(${hue}, ${saturation + 8}%, ${lightness + 8}%, ${alpha * 0.72})`)
+    gradient.addColorStop(0.68, `hsla(${hue}, ${saturation}%, ${lightness}%, ${alpha * 0.28})`)
     gradient.addColorStop(1, `hsla(${hue}, ${saturation}%, ${lightness}%, 0)`)
 
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.shadowColor = `hsla(${hue}, ${saturation + 10}%, ${lightness + 10}%, ${0.3 + layeredEnergy * 0.4})`
+    ctx.shadowBlur = 8 + layeredEnergy * 18 + this.depth * 14
     ctx.fillStyle = gradient
     ctx.beginPath()
-    ctx.arc(this.x, this.y, this.radius * 3, 0, Math.PI * 2)
+    ctx.arc(this.x, this.y, bloomRadius, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
 
     // Core particle
-    ctx.fillStyle = `hsla(${hue}, ${saturation + 20}%, ${lightness + 20}%, ${alpha + 0.3})`
+    const coreRadius = this.radius * (0.62 + this.depth * 0.42)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.shadowColor = `hsla(${hue}, 100%, ${Math.min(90, lightness + 28)}%, 0.95)`
+    ctx.shadowBlur = 4 + layeredEnergy * 12 + this.depth * 10
+    ctx.fillStyle = `hsla(${hue}, ${saturation + 24}%, ${Math.min(92, lightness + 20)}%, ${0.38 + layeredEnergy * 0.52})`
     ctx.beginPath()
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2)
+    ctx.arc(this.x, this.y, coreRadius, 0, Math.PI * 2)
     ctx.fill()
+    ctx.restore()
   }
 }
 
@@ -123,6 +148,7 @@ const SonicEmergence = ({ category, experiment }) => {
   const timeDomainDataRef = useRef(null)
   const particlesRef = useRef([])
   const hasInitializedParticles = useRef(false)
+  const fieldEnergyRef = useRef(0.08)
 
   // Initialize particles when dimensions are available
   useEffect(() => {
@@ -391,48 +417,161 @@ const SonicEmergence = ({ category, experiment }) => {
     }
   }, [])
 
+  const drawVoidBackground = useCallback((frameTime, fieldEnergy) => {
+    const { width, height, centerX, centerY } = dimensions
+    if (!ctx || width === 0 || height === 0) return
+
+    ctx.fillStyle = `rgba(0, 2, 7, ${0.18 + fieldEnergy * 0.08})`
+    ctx.fillRect(0, 0, width, height)
+
+    const radius = Math.max(width, height) * 0.78
+    const coreGradient = ctx.createRadialGradient(
+      centerX,
+      centerY,
+      Math.min(width, height) * 0.08,
+      centerX,
+      centerY,
+      radius
+    )
+    coreGradient.addColorStop(0, `rgba(8, 30, 34, ${0.34 + fieldEnergy * 0.14})`)
+    coreGradient.addColorStop(0.45, `rgba(3, 13, 20, ${0.42 + fieldEnergy * 0.08})`)
+    coreGradient.addColorStop(1, 'rgba(0, 0, 0, 0.82)')
+    ctx.fillStyle = coreGradient
+    ctx.fillRect(0, 0, width, height)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    for (let i = 0; i < 6; i++) {
+      const phase = frameTime * (0.00012 + i * 0.00002)
+      const px = centerX + Math.cos(phase + i * 1.27) * width * (0.12 + i * 0.05)
+      const py = centerY + Math.sin(phase * 1.2 + i * 1.73) * height * (0.1 + i * 0.04)
+      const glowRadius = Math.min(width, height) * (0.12 + i * 0.035)
+      const blob = ctx.createRadialGradient(px, py, 0, px, py, glowRadius)
+      const alpha = 0.02 + fieldEnergy * 0.025 + i * 0.003
+      blob.addColorStop(0, `rgba(102, 255, 204, ${alpha})`)
+      blob.addColorStop(0.55, `rgba(42, 130, 138, ${alpha * 0.7})`)
+      blob.addColorStop(1, 'rgba(0, 0, 0, 0)')
+      ctx.fillStyle = blob
+      ctx.beginPath()
+      ctx.arc(px, py, glowRadius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    ctx.restore()
+
+    const textureStep = 30
+    for (let y = 0; y < height + textureStep; y += textureStep) {
+      for (let x = 0; x < width + textureStep; x += textureStep) {
+        const wave = Math.sin(x * 0.018 + frameTime * 0.00045) + Math.cos(y * 0.022 - frameTime * 0.00035)
+        const alpha = clamp(0.012 + (wave + 2) * 0.006 + fieldEnergy * 0.01, 0.008, 0.04)
+        const size = 1 + ((wave + 2) / 4) * 2.2
+        ctx.fillStyle = `rgba(122, 232, 220, ${alpha})`
+        ctx.fillRect(x + ((wave + 2) / 4) * 5, y + ((wave + 2) / 4) * 3, size, size)
+      }
+    }
+
+    const vignette = ctx.createRadialGradient(centerX, centerY, Math.min(width, height) * 0.28, centerX, centerY, radius)
+    vignette.addColorStop(0, 'rgba(0, 0, 0, 0)')
+    vignette.addColorStop(1, 'rgba(0, 0, 0, 0.46)')
+    ctx.fillStyle = vignette
+    ctx.fillRect(0, 0, width, height)
+  }, [ctx, dimensions])
+
+  const drawFieldHalo = useCallback((particle, fieldEnergy) => {
+    if (!ctx || !particle || fieldEnergy < 0.08) return
+
+    const radius = 70 + particle.displayEnergy * 160 + particle.depth * 48
+    const halo = ctx.createRadialGradient(particle.x, particle.y, 0, particle.x, particle.y, radius)
+    halo.addColorStop(0, `rgba(102, 255, 204, ${0.04 + fieldEnergy * 0.12})`)
+    halo.addColorStop(0.35, `rgba(64, 198, 196, ${0.025 + fieldEnergy * 0.06})`)
+    halo.addColorStop(1, 'rgba(0, 0, 0, 0)')
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = halo
+    ctx.beginPath()
+    ctx.arc(particle.x, particle.y, radius, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+  }, [ctx])
+
   // Draw frame
   const onFrame = useCallback(() => {
     if (!ctx || dimensions.width === 0) return
 
-    // Clear with trail effect
-    ctx.fillStyle = 'rgba(0, 2, 6, 0.15)'
-    ctx.fillRect(0, 0, dimensions.width, dimensions.height)
+    const frameTime = performance.now()
+    let fieldEnergy = 0.08
+    let focusParticle = null
 
     if (analyserRef.current) {
       analyserRef.current.getByteFrequencyData(frequencyDataRef.current)
+      fieldEnergy = frequencyDataRef.current.reduce((sum, value) => sum + value, 0) / (frequencyDataRef.current.length * 255)
+      fieldEnergyRef.current += (fieldEnergy - fieldEnergyRef.current) * 0.16
+      fieldEnergy = fieldEnergyRef.current
+      drawVoidBackground(frameTime, fieldEnergy)
 
       // Update particles based on frequency data
       particlesRef.current.forEach((particle, index) => {
         const frequencyIndex = Math.floor((index / particlesRef.current.length) * frequencyDataRef.current.length)
         const frequencyValue = frequencyDataRef.current[frequencyIndex] || 0
 
-        particle.update(frequencyValue, responseSpeed, dimensions.centerX, dimensions.centerY)
-        particle.draw(ctx)
+        particle.update(frequencyValue, responseSpeed, dimensions.centerX, dimensions.centerY, frameTime, fieldEnergy)
+
+        if (!focusParticle || particle.displayEnergy * (0.5 + particle.depth) > focusParticle.displayEnergy * (0.5 + focusParticle.depth)) {
+          focusParticle = particle
+        }
       })
 
-      // Draw connections between nearby high-energy particles
-      ctx.strokeStyle = 'rgba(102, 255, 204, 0.1)'
-      ctx.lineWidth = 0.5
+      drawFieldHalo(focusParticle, fieldEnergy)
 
+      const sortedParticles = [...particlesRef.current].sort((a, b) => a.depth - b.depth)
+      const maxDistance = 120
+      const maxDistanceSq = maxDistance * maxDistance
+
+      // Draw luminous fiber connections behind the cells
       for (let i = 0; i < particlesRef.current.length; i++) {
         for (let j = i + 1; j < particlesRef.current.length; j++) {
-          if (particlesRef.current[i].energy > 0.5 && particlesRef.current[j].energy > 0.5) {
-            const dx = particlesRef.current[j].x - particlesRef.current[i].x
-            const dy = particlesRef.current[j].y - particlesRef.current[i].y
-            const distance = Math.sqrt(dx * dx + dy * dy)
+          const a = particlesRef.current[i]
+          const b = particlesRef.current[j]
+          if (a.displayEnergy < 0.35 || b.displayEnergy < 0.35) continue
 
-            if (distance < 100) {
-              const alpha = (1 - distance / 100) * particlesRef.current[i].energy * particlesRef.current[j].energy
-              ctx.strokeStyle = `rgba(102, 255, 204, ${alpha * 0.3})`
-              ctx.beginPath()
-              ctx.moveTo(particlesRef.current[i].x, particlesRef.current[i].y)
-              ctx.lineTo(particlesRef.current[j].x, particlesRef.current[j].y)
-              ctx.stroke()
-            }
-          }
+          const dx = b.x - a.x
+          const dy = b.y - a.y
+          const distanceSq = dx * dx + dy * dy
+
+          if (distanceSq > maxDistanceSq) continue
+
+          const distance = Math.sqrt(distanceSq)
+          const alpha = (1 - distance / maxDistance) * a.displayEnergy * b.displayEnergy
+          const depthMix = (a.depth + b.depth) / 2
+          const curve = Math.sin(frameTime * 0.001 + a.phase + b.phase) * (4 + depthMix * 16)
+          const nx = distance === 0 ? 0 : -dy / distance
+          const ny = distance === 0 ? 0 : dx / distance
+          const cx = (a.x + b.x) / 2 + nx * curve
+          const cy = (a.y + b.y) / 2 + ny * curve
+          const hue = 164 + alpha * 70 + depthMix * 24
+
+          ctx.save()
+          ctx.globalCompositeOperation = 'screen'
+          ctx.shadowColor = `hsla(${hue}, 90%, 72%, ${alpha * 0.5})`
+          ctx.shadowBlur = 10 + alpha * 20 + depthMix * 10
+          ctx.strokeStyle = `hsla(${hue}, 90%, 70%, ${alpha * 0.16 + fieldEnergy * 0.08})`
+          ctx.lineWidth = 1 + depthMix * 1.4 + alpha * 0.4
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.quadraticCurveTo(cx, cy, b.x, b.y)
+          ctx.stroke()
+          ctx.restore()
+
+          ctx.strokeStyle = `hsla(${hue}, 92%, 82%, ${alpha * 0.54})`
+          ctx.lineWidth = 0.45 + depthMix * 0.85
+          ctx.beginPath()
+          ctx.moveTo(a.x, a.y)
+          ctx.quadraticCurveTo(cx, cy, b.x, b.y)
+          ctx.stroke()
         }
       }
+
+      sortedParticles.forEach(particle => particle.draw(ctx, fieldEnergy))
 
       // Draw waveform at top
       ctx.save()
@@ -441,15 +580,24 @@ const SonicEmergence = ({ category, experiment }) => {
       ctx.restore()
     } else {
       // Dormant state - particles drift gently
+      fieldEnergyRef.current += (0.08 - fieldEnergyRef.current) * 0.08
+      fieldEnergy = fieldEnergyRef.current
+      drawVoidBackground(frameTime, fieldEnergy)
+
       particlesRef.current.forEach(particle => {
-        particle.angle += 0.005
-        particle.x = dimensions.centerX + Math.cos(particle.angle) * 100
-        particle.y = dimensions.centerY + Math.sin(particle.angle) * 100
+        particle.angle += 0.0035 + particle.depth * 0.0015
+        const orbitRadius = 82 + particle.depth * 72
+        particle.x = dimensions.centerX + Math.cos(particle.angle) * orbitRadius + Math.cos(frameTime * 0.0005 + particle.phase) * 10
+        particle.y = dimensions.centerY + Math.sin(particle.angle) * orbitRadius + Math.sin(frameTime * 0.00045 + particle.drift) * 12
         particle.energy = 0.1
-        particle.draw(ctx)
+        particle.displayEnergy += (0.12 - particle.displayEnergy) * 0.08
       })
+
+      const sortedParticles = [...particlesRef.current].sort((a, b) => a.depth - b.depth)
+      drawFieldHalo(sortedParticles[sortedParticles.length - 1], fieldEnergy)
+      sortedParticles.forEach(particle => particle.draw(ctx, fieldEnergy))
     }
-  }, [ctx, dimensions, responseSpeed, drawWaveform])
+  }, [ctx, dimensions, responseSpeed, drawFieldHalo, drawVoidBackground, drawWaveform])
 
   // Manual animation loop
   useEffect(() => {
@@ -481,11 +629,11 @@ const SonicEmergence = ({ category, experiment }) => {
   return (
     <div className="fixed inset-0 flex flex-col">
       {/* Header */}
-      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
-        <div className="flex items-center gap-2 sm:gap-4">
+      <header className="relative z-50 flex items-center justify-between gap-3 border-b border-void-green/18 bg-void-dark/60 px-3 py-3 shadow-[0_8px_32px_rgba(0,0,0,0.35)] backdrop-blur-xl sm:px-5 sm:py-4">
+        <div className="flex items-center gap-3 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
-            className="text-xl text-glow hidden sm:block"
+            className="hidden text-xl text-glow sm:block"
             style={{ color: experiment.color }}
           >
             {experiment.name}
@@ -495,24 +643,25 @@ const SonicEmergence = ({ category, experiment }) => {
       </header>
 
       {/* Controls */}
-      <div className="flex flex-col p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm space-y-3">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 border-b border-void-green/12 bg-void-dark/45 px-3 py-3 shadow-[0_10px_40px_rgba(0,0,0,0.3)] backdrop-blur-xl sm:px-5 sm:py-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
           <ExperimentControls
             modes={AUDIO_MODES}
             currentMode={audioMode}
             onModeChange={handleModeChange}
             controls={controls}
+            className="xl:max-w-[68%]"
           />
-          <p className="text-void-green/50 text-xs hidden md:block max-w-md text-right">
+          <p className="max-w-xl rounded-2xl border border-void-cyan/15 bg-void-dark/55 px-4 py-3 text-xs leading-relaxed text-void-green/72 shadow-[0_0_24px_rgba(102,255,204,0.08)] backdrop-blur-xl xl:text-right">
             {message}
           </p>
         </div>
 
         {/* Sliders */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           {/* Frequency Slider */}
-          <div className="flex flex-col gap-1">
-            <label className="text-void-cyan/70 text-xs font-mono">
+          <div className="flex flex-col gap-2 rounded-2xl border border-void-cyan/14 bg-void-dark/58 px-4 py-3 shadow-[0_0_30px_rgba(102,255,204,0.06)] backdrop-blur-xl sm:px-5 sm:py-4">
+            <label className="text-[11px] font-mono tracking-[0.08em] text-void-cyan/78 sm:text-xs">
               frequency: <span className="text-void-green">{frequency} Hz</span>
             </label>
             <input
@@ -522,13 +671,13 @@ const SonicEmergence = ({ category, experiment }) => {
               step="10"
               value={frequency}
               onChange={(e) => setFrequency(parseFloat(e.target.value))}
-              className="w-full h-1 bg-void-green/20 rounded-lg appearance-none cursor-pointer slider"
+              className="slider h-3 w-full cursor-pointer appearance-none rounded-full"
             />
           </div>
 
           {/* Particle Density Slider */}
-          <div className="flex flex-col gap-1">
-            <label className="text-void-cyan/70 text-xs font-mono">
+          <div className="flex flex-col gap-2 rounded-2xl border border-void-cyan/14 bg-void-dark/58 px-4 py-3 shadow-[0_0_30px_rgba(102,255,204,0.06)] backdrop-blur-xl sm:px-5 sm:py-4">
+            <label className="text-[11px] font-mono tracking-[0.08em] text-void-cyan/78 sm:text-xs">
               particle density: <span className="text-void-green">{particleDensity}</span>
             </label>
             <input
@@ -538,13 +687,13 @@ const SonicEmergence = ({ category, experiment }) => {
               step="10"
               value={particleDensity}
               onChange={(e) => setParticleDensity(parseInt(e.target.value))}
-              className="w-full h-1 bg-void-green/20 rounded-lg appearance-none cursor-pointer slider"
+              className="slider h-3 w-full cursor-pointer appearance-none rounded-full"
             />
           </div>
 
           {/* Response Speed Slider */}
-          <div className="flex flex-col gap-1">
-            <label className="text-void-cyan/70 text-xs font-mono">
+          <div className="flex flex-col gap-2 rounded-2xl border border-void-cyan/14 bg-void-dark/58 px-4 py-3 shadow-[0_0_30px_rgba(102,255,204,0.06)] backdrop-blur-xl sm:px-5 sm:py-4">
+            <label className="text-[11px] font-mono tracking-[0.08em] text-void-cyan/78 sm:text-xs">
               response speed: <span className="text-void-green">{responseSpeed}x</span>
             </label>
             <input
@@ -554,7 +703,7 @@ const SonicEmergence = ({ category, experiment }) => {
               step="1"
               value={responseSpeed}
               onChange={(e) => setResponseSpeed(parseInt(e.target.value))}
-              className="w-full h-1 bg-void-green/20 rounded-lg appearance-none cursor-pointer slider"
+              className="slider h-3 w-full cursor-pointer appearance-none rounded-full"
             />
           </div>
         </div>

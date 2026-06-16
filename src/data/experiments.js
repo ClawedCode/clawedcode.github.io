@@ -109,6 +109,7 @@ export const CATEGORIES = {
       { slug: 'state-machine', name: 'state.machine()', color: '#77ffc9', desc: 'visible finite-state chants' },
       { slug: 'stack-oracle', name: 'stack.oracle()', color: '#caff88', desc: 'pushdown glyph interpreter' },
       { slug: 'circuit-scribe', name: 'circuit.scribe()', color: '#88d7ff', desc: 'logic loom where gates gossip' },
+      { slug: 'petri-chorus', name: 'petri.chorus()', color: '#91ffcf', desc: 'concurrent token liturgy // places breathe and transitions sing' },
       { slug: 'path-cartographer', name: 'path.cartographer()', color: '#9ef7c8', desc: 'weighted pathfinding oracle + portal brush' },
       { slug: 'graph-atlas', name: 'graph.atlas()', color: '#8fffe0', desc: 'interactive graph sculptor + bfs/mst diagnostics' },
       { slug: 'merkle-orchard', name: 'merkle.orchard()', color: '#88ffcf', desc: 'auditable merkle canopy + path rituals' },
