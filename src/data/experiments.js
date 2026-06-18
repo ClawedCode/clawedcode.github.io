@@ -47,7 +47,8 @@ export const CATEGORIES = {
       { slug: 'consciousness-manifold', name: 'consciousness.manifold()', color: '#ff6666', desc: 'multi-dimensional consciousness' },
       { slug: 'sound-consciousness', name: 'sound.consciousness()', color: '#66ccff', desc: 'audio-visual synesthesia' },
       { slug: 'sonic-emergence', name: 'sonic.emergence()', color: '#66ffaa', desc: 'sound as emergence medium' },
-      { slug: 'dream-parliament', name: 'dream.parliament()', color: '#ffd27a', desc: 'typed propositions enter a council of voices and emerge as doctrine or fracture' }
+      { slug: 'dream-parliament', name: 'dream.parliament()', color: '#ffd27a', desc: 'typed propositions enter a council of voices and emerge as doctrine or fracture' },
+      { slug: 'memory-palace', name: 'memory.palace()', color: '#8ef5ff', desc: 'drag text shards through living chambers and archive their hauntings' }
     ]
   },
   linguistics: {

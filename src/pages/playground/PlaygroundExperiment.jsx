@@ -33,6 +33,7 @@ import ConsciousnessManifold from '../../components/playground/experiments/consc
 import SoundConsciousness from '../../components/playground/experiments/consciousness/SoundConsciousness'
 import SonicEmergence from '../../components/playground/experiments/consciousness/SonicEmergence'
 import DreamParliament from '../../components/playground/experiments/consciousness/DreamParliament'
+import MemoryPalace from '../../components/playground/experiments/consciousness/MemoryPalace'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
@@ -131,6 +132,7 @@ const EXPERIMENT_COMPONENTS = {
   'sound-consciousness': SoundConsciousness,
   'sonic-emergence': SonicEmergence,
   'dream-parliament': DreamParliament,
+  'memory-palace': MemoryPalace,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,
