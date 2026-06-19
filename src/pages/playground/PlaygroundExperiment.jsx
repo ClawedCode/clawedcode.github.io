@@ -64,6 +64,7 @@ import MosaicCollapse from '../../components/playground/experiments/emergence/Mo
 import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
 import GestureOracle from '../../components/playground/experiments/emergence/GestureOracle'
 import TerrariumDream from '../../components/playground/experiments/emergence/TerrariumDream'
+import ReliquaryGrid from '../../components/playground/experiments/emergence/ReliquaryGrid'
 import TuringTape from '../../components/playground/experiments/physics/TuringTape'
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import SandpileRitual from '../../components/playground/experiments/physics/SandpileRitual'
@@ -147,6 +148,7 @@ const EXPERIMENT_COMPONENTS = {
   'isometric-cathedral': IsometricCathedral,
   'belief-propagation': BeliefPropagation,
   'terrarium-dream': TerrariumDream,
+  'reliquary-grid': ReliquaryGrid,
   'differential-growth': DifferentialGrowth,
   'membrane-communion': MembraneCommunion,
   'lenia-genesis': LeniaGenesis,
