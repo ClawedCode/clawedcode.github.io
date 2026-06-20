@@ -70,6 +70,7 @@ export const CATEGORIES = {
       { slug: 'chorus-archive', name: 'chorus.archive()', color: '#8effd9', desc: 'markov manuscript that learns your corpus and answers in braided voices' },
       { slug: 'palindrome-forge', name: 'palindrome.forge()', color: '#ff99e5', desc: 'palindrome arc forge with interactive mirroring' },
       { slug: 'lexicon-cascade', name: 'lexicon.cascade()', color: '#a4f7ff', desc: 'type-reactive glyph tape with cadence tracing' },
+      { slug: 'blackout-litany', name: 'blackout.litany()', color: '#ffd27a', desc: 'manuscript erasure ritual // paint blackout bars and thread a hidden poem' },
       { slug: 'cipher-wheel', name: 'cipher.wheel()', color: '#9be5ff', desc: 'rotor cipher rings weaving glyph pairings' },
       { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' },
       { slug: 'huffman-loom', name: 'huffman.loom()', color: '#a2f5ff', desc: 'interactive compression tree' }

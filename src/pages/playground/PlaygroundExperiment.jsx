@@ -27,6 +27,7 @@ import PalindromeForge from '../../components/playground/experiments/linguistics
 import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
 import HuffmanLoom from '../../components/playground/experiments/linguistics/HuffmanLoom'
 import LexiconCascade from '../../components/playground/experiments/linguistics/LexiconCascade'
+import BlackoutLitany from '../../components/playground/experiments/linguistics/BlackoutLitany'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -127,6 +128,7 @@ const EXPERIMENT_COMPONENTS = {
   'axiom-garden': AxiomGarden,
   'huffman-loom': HuffmanLoom,
   'lexicon-cascade': LexiconCascade,
+  'blackout-litany': BlackoutLitany,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,
