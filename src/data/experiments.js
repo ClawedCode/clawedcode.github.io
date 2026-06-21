@@ -18,6 +18,7 @@ export const CATEGORIES = {
       { slug: 'sacred-geometry', name: 'sacred.geometry()', color: '#ffff66', desc: 'geometric emergence' },
       { slug: 'labyrinth-weave', name: 'labyrinth.weave()', color: '#66ccff', desc: 'recursive labyrinth carving + solving' },
       { slug: 'isometric-cathedral', name: 'isometric.cathedral()', color: '#99c1ff', desc: 'isometric folding cathedral sketches' },
+      { slug: 'origami-oracle', name: 'origami.oracle()', color: '#ffe7a1', desc: 'drag crease lines through a suspended sheet // pseudo-3d fold memory' },
       { slug: 'sigil-swarm', name: 'sigil.swarm()', color: '#ffcc66', desc: 'glyph particles weaving protective runes' },
       { slug: 'mosaic-collapse', name: 'mosaic.collapse()', color: '#baff7f', desc: 'wavefunction collapse mosaic loom' },
       { slug: 'voronoi-architect', name: 'voronoi.architect()', color: '#7fe0ff', desc: 'interactive cellular tessellation + lloyd relaxations' },

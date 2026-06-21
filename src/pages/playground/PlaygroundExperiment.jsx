@@ -70,6 +70,7 @@ import TuringTape from '../../components/playground/experiments/physics/TuringTa
 import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
 import SandpileRitual from '../../components/playground/experiments/physics/SandpileRitual'
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
+import OrigamiOracle from '../../components/playground/experiments/emergence/OrigamiOracle'
 import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
 import DifferentialGrowth from '../../components/playground/experiments/emergence/DifferentialGrowth'
 import MembraneCommunion from '../../components/playground/experiments/emergence/MembraneCommunion'
@@ -148,6 +149,7 @@ const EXPERIMENT_COMPONENTS = {
   'voronoi-architect': VoronoiArchitect,
   'gesture-oracle': GestureOracle,
   'isometric-cathedral': IsometricCathedral,
+  'origami-oracle': OrigamiOracle,
   'belief-propagation': BeliefPropagation,
   'terrarium-dream': TerrariumDream,
   'reliquary-grid': ReliquaryGrid,
