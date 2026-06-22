@@ -93,6 +93,7 @@ import GraphAtlas from '../../components/playground/experiments/physics/GraphAtl
 import MerkleOrchard from '../../components/playground/experiments/physics/MerkleOrchard'
 import FluidRites from '../../components/playground/experiments/physics/FluidRites'
 import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
+import AlchemicalBasin from '../../components/playground/experiments/physics/AlchemicalBasin'
 import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
 import Harmonograph from '../../components/playground/experiments/physics/Harmonograph'
 import BifurcationCartography from '../../components/playground/experiments/physics/BifurcationCartography'
@@ -195,6 +196,7 @@ const EXPERIMENT_COMPONENTS = {
   'merkle-orchard': MerkleOrchard,
   'fluid-rites': FluidRites,
   'interference-basin': InterferenceBasin,
+  'alchemical-basin': AlchemicalBasin,
   'cloth-weave': ClothWeave,
   'harmonograph': Harmonograph,
   'bifurcation-cartography': BifurcationCartography,
