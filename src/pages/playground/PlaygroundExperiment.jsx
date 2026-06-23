@@ -90,6 +90,7 @@ import PermutationSmith from '../../components/playground/experiments/physics/Pe
 import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
 import GravityWell from '../../components/playground/experiments/physics/GravityWell'
 import GraphAtlas from '../../components/playground/experiments/physics/GraphAtlas'
+import KnotTheory from '../../components/playground/experiments/physics/KnotTheory'
 import MerkleOrchard from '../../components/playground/experiments/physics/MerkleOrchard'
 import FluidRites from '../../components/playground/experiments/physics/FluidRites'
 import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
@@ -193,6 +194,7 @@ const EXPERIMENT_COMPONENTS = {
   'strange-attractor': StrangeAttractor,
   'gravity-well': GravityWell,
   'graph-atlas': GraphAtlas,
+  'knot-theory': KnotTheory,
   'merkle-orchard': MerkleOrchard,
   'fluid-rites': FluidRites,
   'interference-basin': InterferenceBasin,
