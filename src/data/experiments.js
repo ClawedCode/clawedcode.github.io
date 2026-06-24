@@ -73,6 +73,7 @@ export const CATEGORIES = {
       { slug: 'lexicon-cascade', name: 'lexicon.cascade()', color: '#a4f7ff', desc: 'type-reactive glyph tape with cadence tracing' },
       { slug: 'blackout-litany', name: 'blackout.litany()', color: '#ffd27a', desc: 'manuscript erasure ritual // paint blackout bars and thread a hidden poem' },
       { slug: 'cipher-wheel', name: 'cipher.wheel()', color: '#9be5ff', desc: 'rotor cipher rings weaving glyph pairings' },
+      { slug: 'quipu-oracle', name: 'quipu.oracle()', color: '#ffc98a', desc: 'hanging knot-script divination // inscribe words drag weight braid meanings' },
       { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' },
       { slug: 'huffman-loom', name: 'huffman.loom()', color: '#a2f5ff', desc: 'interactive compression tree' }
     ]

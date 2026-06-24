@@ -28,6 +28,7 @@ import AxiomGarden from '../../components/playground/experiments/linguistics/Axi
 import HuffmanLoom from '../../components/playground/experiments/linguistics/HuffmanLoom'
 import LexiconCascade from '../../components/playground/experiments/linguistics/LexiconCascade'
 import BlackoutLitany from '../../components/playground/experiments/linguistics/BlackoutLitany'
+import QuipuOracle from '../../components/playground/experiments/linguistics/QuipuOracle'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -132,6 +133,7 @@ const EXPERIMENT_COMPONENTS = {
   'huffman-loom': HuffmanLoom,
   'lexicon-cascade': LexiconCascade,
   'blackout-litany': BlackoutLitany,
+  'quipu-oracle': QuipuOracle,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,
