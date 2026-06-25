@@ -73,6 +73,7 @@ import SandpileRitual from '../../components/playground/experiments/physics/Sand
 import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
 import OrigamiOracle from '../../components/playground/experiments/emergence/OrigamiOracle'
 import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
+import ThresholdFold from '../../components/playground/experiments/emergence/ThresholdFold'
 import DifferentialGrowth from '../../components/playground/experiments/emergence/DifferentialGrowth'
 import MembraneCommunion from '../../components/playground/experiments/emergence/MembraneCommunion'
 import LeniaGenesis from '../../components/playground/experiments/emergence/LeniaGenesis'
@@ -155,6 +156,7 @@ const EXPERIMENT_COMPONENTS = {
   'isometric-cathedral': IsometricCathedral,
   'origami-oracle': OrigamiOracle,
   'belief-propagation': BeliefPropagation,
+  'threshold-fold': ThresholdFold,
   'terrarium-dream': TerrariumDream,
   'reliquary-grid': ReliquaryGrid,
   'differential-growth': DifferentialGrowth,

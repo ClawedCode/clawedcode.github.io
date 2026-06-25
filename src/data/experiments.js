@@ -26,6 +26,7 @@ export const CATEGORIES = {
       { slug: 'gesture-oracle', name: 'gesture.oracle()', color: '#aff0ff', desc: 'drawn sigils recognized + cloned into a living library' },
       { slug: 'terrarium-dream', name: 'terrarium.dream()', color: '#66cc88', desc: 'predator-prey ecosystem emergence on void substrate' },
       { slug: 'reliquary-grid', name: 'reliquary.grid()', color: '#ffd98a', desc: 'turn-based salvage lattice // harvest signal anchor stone outrun fractures' },
+      { slug: 'threshold-fold', name: 'threshold.fold()', color: '#8ff7ff', desc: 'draft chambers stitch thresholds drag the floorplan until adjacency breaks' },
       { slug: 'differential-growth', name: 'differential.growth()', color: '#c4ff88', desc: 'organic branching from simple rules // seed rings become coral nerves lichen' },
       { slug: 'membrane-communion', name: 'membrane.communion()', color: '#77ddff', desc: 'implicit field communion // consciousness merges where thresholds overlap' },
       { slug: 'lenia-genesis', name: 'lenia.genesis()', color: '#ffbb66', desc: 'continuous cellular life // organisms from smooth math' },
