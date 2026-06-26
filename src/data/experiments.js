@@ -132,7 +132,8 @@ export const CATEGORIES = {
       { slug: 'erosion-cartography', name: 'erosion.cartography()', color: '#77ccaa', desc: 'hydraulic erosion ritual // paint rain watch rivers carve themselves' },
       { slug: 'moire-weave', name: 'moire.weave()', color: '#88ddaa', desc: 'optical interference from overlapping geometric patterns' },
       { slug: 'chladni-plate', name: 'chladni.plate()', color: '#ffdd88', desc: 'cymatics sand ritual // vibrating plate reveals nodal silence' },
-      { slug: 'shadow-liturgy', name: 'shadow.liturgy()', color: '#ffcc77', desc: '2D raycasting shadow ritual // place lights draw walls watch darkness form' }
+      { slug: 'shadow-liturgy', name: 'shadow.liturgy()', color: '#ffcc77', desc: '2D raycasting shadow ritual // place lights draw walls watch darkness form' },
+      { slug: 'wireworld-vigil', name: 'wireworld.vigil()', color: '#7fffd4', desc: 'paint conductive scripture // electron heads patrol the trace-grid' }
     ]
   }
 }

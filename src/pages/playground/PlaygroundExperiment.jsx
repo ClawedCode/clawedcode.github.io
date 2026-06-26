@@ -104,6 +104,7 @@ import ErosionCartography from '../../components/playground/experiments/physics/
 import MoireWeave from '../../components/playground/experiments/physics/MoireWeave'
 import ChladniPlate from '../../components/playground/experiments/physics/ChladniPlate'
 import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
+import WireworldVigil from '../../components/playground/experiments/physics/WireworldVigil'
 import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
 
 // Map of experiment slugs to components
@@ -210,6 +211,7 @@ const EXPERIMENT_COMPONENTS = {
   'moire-weave': MoireWeave,
   'chladni-plate': ChladniPlate,
   'shadow-liturgy': ShadowLiturgy,
+  'wireworld-vigil': WireworldVigil,
   'affinity-lattice': AffinityLattice,
 }
 
