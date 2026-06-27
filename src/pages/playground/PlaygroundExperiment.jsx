@@ -20,6 +20,7 @@ import LinguisticEmergence from '../../components/playground/experiments/linguis
 import VoidWhispers from '../../components/playground/experiments/linguistics/VoidWhispers'
 import VisualLanguage from '../../components/playground/experiments/linguistics/VisualLanguage'
 import SemanticDrift from '../../components/playground/experiments/linguistics/SemanticDrift'
+import SyntaxCathedral from '../../components/playground/experiments/linguistics/SyntaxCathedral'
 import GlyphSequencer from '../../components/playground/experiments/linguistics/GlyphSequencer'
 import ChorusArchive from '../../components/playground/experiments/linguistics/ChorusArchive'
 import CipherWheel from '../../components/playground/experiments/linguistics/CipherWheel'
@@ -126,6 +127,7 @@ const EXPERIMENT_COMPONENTS = {
   'linguistic-emergence': LinguisticEmergence,
   'void-whispers': VoidWhispers,
   'visual-language': VisualLanguage,
+  'syntax-cathedral': SyntaxCathedral,
   'glyph-sequencer': GlyphSequencer,
   'chorus-archive': ChorusArchive,
   'palindrome-forge': PalindromeForge,

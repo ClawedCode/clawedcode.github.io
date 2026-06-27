@@ -68,6 +68,7 @@ export const CATEGORIES = {
       { slug: 'semantic-drift', name: 'semantic.drift()', color: '#ff9933', desc: 'meaning drift over time' },
       { slug: 'semantic-networks', name: 'semantic.networks()', color: '#66ccff', desc: 'concept relationships' },
       { slug: 'visual-language', name: 'visual.language()', color: '#66ffcc', desc: 'language as visual forms' },
+      { slug: 'syntax-cathedral', name: 'syntax.cathedral()', color: '#ffd6a0', desc: 'typed language rises into recursive vaults and stress fractures' },
       { slug: 'glyph-sequencer', name: 'glyph.sequencer()', color: '#99ff88', desc: 'timeline glyph sequencer' },
       { slug: 'chorus-archive', name: 'chorus.archive()', color: '#8effd9', desc: 'markov manuscript that learns your corpus and answers in braided voices' },
       { slug: 'palindrome-forge', name: 'palindrome.forge()', color: '#ff99e5', desc: 'palindrome arc forge with interactive mirroring' },
