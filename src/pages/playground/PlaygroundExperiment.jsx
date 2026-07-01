@@ -30,6 +30,7 @@ import HuffmanLoom from '../../components/playground/experiments/linguistics/Huf
 import LexiconCascade from '../../components/playground/experiments/linguistics/LexiconCascade'
 import BlackoutLitany from '../../components/playground/experiments/linguistics/BlackoutLitany'
 import QuipuOracle from '../../components/playground/experiments/linguistics/QuipuOracle'
+import CombinatorCalculus from '../../components/playground/experiments/linguistics/CombinatorCalculus'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -138,6 +139,7 @@ const EXPERIMENT_COMPONENTS = {
   'lexicon-cascade': LexiconCascade,
   'blackout-litany': BlackoutLitany,
   'quipu-oracle': QuipuOracle,
+  'combinator-calculus': CombinatorCalculus,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,

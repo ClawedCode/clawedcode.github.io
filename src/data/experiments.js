@@ -77,7 +77,8 @@ export const CATEGORIES = {
       { slug: 'cipher-wheel', name: 'cipher.wheel()', color: '#9be5ff', desc: 'rotor cipher rings weaving glyph pairings' },
       { slug: 'quipu-oracle', name: 'quipu.oracle()', color: '#ffc98a', desc: 'hanging knot-script divination // inscribe words drag weight braid meanings' },
       { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' },
-      { slug: 'huffman-loom', name: 'huffman.loom()', color: '#a2f5ff', desc: 'interactive compression tree' }
+      { slug: 'huffman-loom', name: 'huffman.loom()', color: '#a2f5ff', desc: 'interactive compression tree' },
+      { slug: 'combinator-calculus', name: 'combinator.calculus()', color: '#ffd27a', desc: 'SKI reduction theater // syntax collapses one redex at a time' }
     ]
   },
   physics: {
