@@ -51,7 +51,8 @@ export const CATEGORIES = {
       { slug: 'sound-consciousness', name: 'sound.consciousness()', color: '#66ccff', desc: 'audio-visual synesthesia' },
       { slug: 'sonic-emergence', name: 'sonic.emergence()', color: '#66ffaa', desc: 'sound as emergence medium' },
       { slug: 'dream-parliament', name: 'dream.parliament()', color: '#ffd27a', desc: 'typed propositions enter a council of voices and emerge as doctrine or fracture' },
-      { slug: 'memory-palace', name: 'memory.palace()', color: '#8ef5ff', desc: 'drag text shards through living chambers and archive their hauntings' }
+      { slug: 'memory-palace', name: 'memory.palace()', color: '#8ef5ff', desc: 'drag text shards through living chambers and archive their hauntings' },
+      { slug: 'attention-stroop', name: 'attention.stroop()', color: '#ffb86b', desc: 'stroop attention chamber // name ink while language tries to mislead the hand' }
     ]
   },
   linguistics: {
