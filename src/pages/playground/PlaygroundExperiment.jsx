@@ -31,6 +31,7 @@ import LexiconCascade from '../../components/playground/experiments/linguistics/
 import BlackoutLitany from '../../components/playground/experiments/linguistics/BlackoutLitany'
 import QuipuOracle from '../../components/playground/experiments/linguistics/QuipuOracle'
 import CombinatorCalculus from '../../components/playground/experiments/linguistics/CombinatorCalculus'
+import ProsodyCartography from '../../components/playground/experiments/linguistics/ProsodyCartography'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -141,6 +142,7 @@ const EXPERIMENT_COMPONENTS = {
   'blackout-litany': BlackoutLitany,
   'quipu-oracle': QuipuOracle,
   'combinator-calculus': CombinatorCalculus,
+  'prosody-cartography': ProsodyCartography,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,
