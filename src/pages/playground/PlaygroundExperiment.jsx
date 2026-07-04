@@ -107,6 +107,7 @@ import BifurcationCartography from '../../components/playground/experiments/phys
 import ErosionCartography from '../../components/playground/experiments/physics/ErosionCartography'
 import MoireWeave from '../../components/playground/experiments/physics/MoireWeave'
 import ChladniPlate from '../../components/playground/experiments/physics/ChladniPlate'
+import CompassProof from '../../components/playground/experiments/physics/CompassProof'
 import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
 import WireworldVigil from '../../components/playground/experiments/physics/WireworldVigil'
 import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
@@ -218,6 +219,7 @@ const EXPERIMENT_COMPONENTS = {
   'erosion-cartography': ErosionCartography,
   'moire-weave': MoireWeave,
   'chladni-plate': ChladniPlate,
+  'compass-proof': CompassProof,
   'shadow-liturgy': ShadowLiturgy,
   'wireworld-vigil': WireworldVigil,
   'affinity-lattice': AffinityLattice,
