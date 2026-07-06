@@ -61,6 +61,7 @@ import SigilSwarm from '../../components/playground/experiments/emergence/SigilS
 import TemporalTapestry from '../../components/playground/experiments/physics/TemporalTapestry'
 import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
 import TimeScribe from '../../components/playground/experiments/physics/TimeScribe'
+import CausalCone from '../../components/playground/experiments/physics/CausalCone'
 import SortRitual from '../../components/playground/experiments/physics/SortRitual'
 import StateMachine from '../../components/playground/experiments/physics/StateMachine'
 import StackOracle from '../../components/playground/experiments/physics/StackOracle'
@@ -193,6 +194,7 @@ const EXPERIMENT_COMPONENTS = {
   'temporal-tapestry': TemporalTapestry,
   'chronicle-rewind': ChronicleRewind,
   'time-scribe': TimeScribe,
+  'causal-cone': CausalCone,
   'sort-ritual': SortRitual,
   'turing-tape': TuringTape,
   'sandpile-ritual': SandpileRitual,

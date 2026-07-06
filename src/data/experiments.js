@@ -95,6 +95,7 @@ export const CATEGORIES = {
       { slug: 'temporal-tapestry', name: 'temporal.tapestry()', color: '#ff88aa', desc: 'record + rewind luminous ink' },
       { slug: 'chronicle-rewind', name: 'chronicle.rewind()', color: '#99ffdd', desc: 'time-scrubbing ink transport' },
       { slug: 'time-scribe', name: 'time.scribe()', color: '#8ef5d8', desc: 'hand-scribed timeline recorder with palimpsest playback' },
+      { slug: 'causal-cone', name: 'causal.cone()', color: '#88ddff', desc: 'Minkowski event chamber // stamp spacetime cones and read their consequence knots' },
       { slug: 'recursive-observer', name: 'recursive.observer()', color: '#ff9933', desc: 'self-observation loops' },
       { slug: 'domino-signal', name: 'domino.signal()', color: '#ffcc66', desc: 'timelines as toppled domino chains' },
       { slug: 'network-resonance', name: 'network.resonance()', color: '#66ccff', desc: 'signal propagation' },
