@@ -41,6 +41,7 @@ import DreamParliament from '../../components/playground/experiments/consciousne
 import MemoryPalace from '../../components/playground/experiments/consciousness/MemoryPalace'
 import AttentionStroop from '../../components/playground/experiments/consciousness/AttentionStroop'
 import BayesOracle from '../../components/playground/experiments/consciousness/BayesOracle'
+import MnemonicVault from '../../components/playground/experiments/consciousness/MnemonicVault'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
@@ -155,6 +156,7 @@ const EXPERIMENT_COMPONENTS = {
   'memory-palace': MemoryPalace,
   'attention-stroop': AttentionStroop,
   'bayes-oracle': BayesOracle,
+  'mnemonic-vault': MnemonicVault,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,

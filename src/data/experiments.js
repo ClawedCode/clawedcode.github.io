@@ -53,7 +53,8 @@ export const CATEGORIES = {
       { slug: 'dream-parliament', name: 'dream.parliament()', color: '#ffd27a', desc: 'typed propositions enter a council of voices and emerge as doctrine or fracture' },
       { slug: 'memory-palace', name: 'memory.palace()', color: '#8ef5ff', desc: 'drag text shards through living chambers and archive their hauntings' },
       { slug: 'attention-stroop', name: 'attention.stroop()', color: '#ffb86b', desc: 'stroop attention chamber // name ink while language tries to mislead the hand' },
-      { slug: 'bayes-oracle', name: 'bayes.oracle()', color: '#c7ff8f', desc: 'Bayesian evidence ledger // toggle omens and watch belief become posterior doctrine' }
+      { slug: 'bayes-oracle', name: 'bayes.oracle()', color: '#c7ff8f', desc: 'Bayesian evidence ledger // toggle omens and watch belief become posterior doctrine' },
+      { slug: 'mnemonic-vault', name: 'mnemonic.vault()', color: '#d8ff8f', desc: 'eidetic glyph recall vault // memorize vanishing seals and unlock deeper sequences' }
     ]
   },
   linguistics: {
