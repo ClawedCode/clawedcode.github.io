@@ -113,6 +113,7 @@ import ChladniPlate from '../../components/playground/experiments/physics/Chladn
 import CompassProof from '../../components/playground/experiments/physics/CompassProof'
 import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
 import WireworldVigil from '../../components/playground/experiments/physics/WireworldVigil'
+import AvalancheHash from '../../components/playground/experiments/physics/AvalancheHash'
 import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
 
 // Map of experiment slugs to components
@@ -228,6 +229,7 @@ const EXPERIMENT_COMPONENTS = {
   'compass-proof': CompassProof,
   'shadow-liturgy': ShadowLiturgy,
   'wireworld-vigil': WireworldVigil,
+  'avalanche-hash': AvalancheHash,
   'affinity-lattice': AffinityLattice,
 }
 
