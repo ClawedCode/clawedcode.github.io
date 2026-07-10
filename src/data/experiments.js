@@ -82,7 +82,8 @@ export const CATEGORIES = {
       { slug: 'axiom-garden', name: 'axiom.garden()', color: '#88ffcc', desc: 'L-system grammar arbor' },
       { slug: 'huffman-loom', name: 'huffman.loom()', color: '#a2f5ff', desc: 'interactive compression tree' },
       { slug: 'combinator-calculus', name: 'combinator.calculus()', color: '#ffd27a', desc: 'SKI reduction theater // syntax collapses one redex at a time' },
-      { slug: 'prosody-cartography', name: 'prosody.cartography()', color: '#7fffd4', desc: 'scansion topography // type lines click stress map breath and meter' }
+      { slug: 'prosody-cartography', name: 'prosody.cartography()', color: '#7fffd4', desc: 'scansion topography // type lines click stress map breath and meter' },
+      { slug: 'signal-lantern', name: 'signal.lantern()', color: '#ffe28a', desc: 'timed telegraph receiver // press duration becomes dots dashes words and ciphered light' }
     ]
   },
   physics: {
