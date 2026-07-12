@@ -6,6 +6,36 @@ let audioNodes = null;
 let isPlaying = false;
 let vocalAudioElement = null;
 
+// Tone.js 15 can ask an internal source to start twice at the same timestamp
+// (notably inside MetalSynth). Match the offline renderer's idempotent guard so
+// live playback does not fail only after the Transport begins.
+function patchToneSourceStarts() {
+  if (typeof Tone === 'undefined') return;
+
+  // MetalSynth owns FMOscillator instances directly, so patching only the
+  // base Oscillator prototype does not cover its attack path in Tone 15.
+  ['Oscillator', 'FMOscillator', 'Noise', 'LFO'].forEach(className => {
+    const cls = Tone[className];
+    if (!cls || !cls.prototype.start || cls.prototype.__patchedStart) return;
+
+    const originalStart = cls.prototype.start;
+    cls.prototype.__patchedStart = true;
+    cls.prototype.start = function(time) {
+      const seconds = typeof time !== 'undefined' ? this.toSeconds(time) : this.now();
+      if (this._state && this._state.getValueAtTime(seconds) === 'started') {
+        const previous = this._state.get(seconds);
+        if (previous && !(seconds > previous.time)) {
+          this.stop(seconds);
+          return originalStart.call(this, seconds + 0.001);
+        }
+      }
+      return originalStart.call(this, time);
+    };
+  });
+}
+
+window.__patchToneSourceStarts = window.__patchToneSourceStarts || patchToneSourceStarts;
+
 // Helper to detect audio type (check at runtime, not load time)
 function isToneJsMode() {
   return typeof window.initToneJsEngine === 'function';
@@ -141,6 +171,9 @@ document.getElementById('audio-toggle').addEventListener('click', async () => {
   if (isToneJsMode()) {
     // Tone.js control (loops indefinitely)
     if (!isPlaying) {
+      // Patch before constructing instruments or scheduling the Transport.
+      window.__patchToneSourceStarts();
+
       // Initialize Tone.js engine if not already done
       if (window.initToneJsEngine) {
         await window.initToneJsEngine();
