@@ -55,7 +55,8 @@ export const CATEGORIES = {
       { slug: 'attention-stroop', name: 'attention.stroop()', color: '#ffb86b', desc: 'stroop attention chamber // name ink while language tries to mislead the hand' },
       { slug: 'bayes-oracle', name: 'bayes.oracle()', color: '#c7ff8f', desc: 'Bayesian evidence ledger // toggle omens and watch belief become posterior doctrine' },
       { slug: 'mnemonic-vault', name: 'mnemonic.vault()', color: '#d8ff8f', desc: 'eidetic glyph recall vault // memorize vanishing seals and unlock deeper sequences' },
-      { slug: 'inference-court', name: 'inference.court()', color: '#ffdf8a', desc: 'sequent proof chamber // assert claims let rules argue contradiction into visible law' }
+      { slug: 'inference-court', name: 'inference.court()', color: '#ffdf8a', desc: 'sequent proof chamber // assert claims let rules argue contradiction into visible law' },
+      { slug: 'gestalt-mirror', name: 'gestalt.mirror()', color: '#f0ffc2', desc: 'perceptual ambiguity chamber // closure figure-ground and binding illusions' }
     ]
   },
   linguistics: {

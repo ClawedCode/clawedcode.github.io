@@ -45,6 +45,7 @@ import AttentionStroop from '../../components/playground/experiments/consciousne
 import BayesOracle from '../../components/playground/experiments/consciousness/BayesOracle'
 import MnemonicVault from '../../components/playground/experiments/consciousness/MnemonicVault'
 import InferenceCourt from '../../components/playground/experiments/consciousness/InferenceCourt'
+import GestaltMirror from '../../components/playground/experiments/consciousness/GestaltMirror'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
@@ -164,6 +165,7 @@ const EXPERIMENT_COMPONENTS = {
   'bayes-oracle': BayesOracle,
   'mnemonic-vault': MnemonicVault,
   'inference-court': InferenceCourt,
+  'gestalt-mirror': GestaltMirror,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,
