@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 45
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+// Consensus as vibration. 800 agents; every position is a closed-form
+// function of cycle time t — all temporal frequencies are integer multiples
+// of 2*PI/45 — so the 45s loop seam is exact, capture is deterministic, and
+// each frame costs O(N).
+// Timeline: murmuration → converge on "∴" (three dots of consensus) →
+// held vibration → fracture → reform under a new seating → slow drift →
+// dissolve. 30 red dissenters orbit the symbol but never join it.
+
+const CYCLE = 45;
+const W = (Math.PI * 2) / CYCLE;   // base angular frequency, 1 cycle / 45s
+const COUNT = 800;
+const DISSENTERS = 30;
+const FORMERS = COUNT - DISSENTERS;
+const DT = 1 / 60;                 // finite-difference step for velocity
+
+// --- Scene -----------------------------------------------------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050508);
+scene.fog = new THREE.FogExp2(0x050508, 0.015);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.55, 0.35, 0.2));
+
+// --- Seeded PRNG (mulberry32) — all randomness resolved at init -------------
+let _s = 1337;
+function rand() {
+  _s = (_s + 0x6D2B79F5) | 0;
+  let t = Math.imul(_s ^ (_s >>> 15), 1 | _s);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+function shuffled(n) {
+  const a = [...Array(n).keys()];
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+const smooth = (a, b, t) => {
+  const x = Math.min(1, Math.max(0, (t - a) / (b - a)));
+  return x * x * (3 - 2 * x);
+};
+
+// --- Symbol: rasterize "∴" (three dots) and sample 770 points ---------------
+const symbolPoints = (() => {
+  const S = 240, R = 72, DOT = 40, cx = 120, cy = 120 + R / 4; // ink-centered
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = S;
+  const g = cv.getContext('2d', { willReadFrequently: true });
+  g.fillStyle = '#fff';
+  const centers = [
+    [cx, cy - R],                                          // top dot
+    [cx - R * Math.cos(Math.PI / 6), cy + R / 2],          // bottom-left
+    [cx + R * Math.cos(Math.PI / 6), cy + R / 2]           // bottom-right
+  ];
+  for (const [dx, dy] of centers) {
+    g.beginPath();
+    g.arc(dx, dy, DOT, 0, Math.PI * 2);
+    g.fill();
+  }
+  const img = g.getImageData(0, 0, S, S).data;
+  const filled = [];
+  for (let y = 0; y < S; y++)
+    for (let x = 0; x < S; x++)
+      if (img[(y * S + x) * 4 + 3] > 128) filled.push(x, y);
+  const total = filled.length / 2;
+  const pts = [];
+  for (let i = 0; i < FORMERS; i++) {
+    const j = Math.floor((i * total) / FORMERS);
+    const px = filled[j * 2] + rand() - 0.5;
+    const py = filled[j * 2 + 1] + rand() - 0.5;
+    pts.push(new THREE.Vector3(
+      ((px - 120) / S) * 11,        // symbol spans ~9.4 world units
+      (-(py - 120) / S) * 11,
+      (rand() - 0.5) * 0.6
+    ));
+  }
+  return pts;
+})();
+
+// Two seatings of the same symbol: reform uses a different permutation.
+const perm1 = shuffled(FORMERS);
+const perm2 = shuffled(FORMERS);
+
+// --- Agents ------------------------------------------------------------------
+const WHITE = new THREE.Color(0xf2e9d8);
+const RED = new THREE.Color(0xc8412f);
+
+const agents = [];
+for (let i = 0; i < COUNT; i++) {
+  const dissenter = i < DISSENTERS;
+  const j = i - DISSENTERS; // former index
+  agents.push({
+    dissenter,
+    // murmuration: coherent swirl + per-agent harmonics (all integer k)
+    th0: rand() * Math.PI * 2,
+    r0: 1.2 + rand() * 2.8,
+    r1: 0.3 + rand() * 0.9,
+    kr: 2 + Math.floor(rand() * 4),
+    phr: rand() * Math.PI * 2,
+    y0: (rand() - 0.5) * 4.4,
+    y1: 0.3 + rand() * 0.8,
+    ky: 1 + Math.floor(rand() * 4),
+    phy: rand() * Math.PI * 2,
+    // envelope staggers (±1.5s) so convergence is organic
+    s1: (rand() * 2 - 1) * 1.5,
+    s2: (rand() * 2 - 1) * 1.5,
+    s3: (rand() * 2 - 1) * 1.5,
+    s4: (rand() * 2 - 1) * 1.5,
+    // formation targets (formers) / orbit params (dissenters)
+    t1: dissenter ? null : symbolPoints[perm1[j]],
+    t2: dissenter ? null : symbolPoints[perm2[j]],
+    orbR: 5.4 + rand() * 1.4,
+    orbDir: rand() < 0.5 ? -1 : 1,
+    // fracture burst
+    burstAmp: 2.5 + rand() * 3.5,
+    burstZ: (rand() - 0.5) * 1.5,
+    // held-consensus vibration: 2–3 Hz (k = 90..135 over 45s)
+    kv: 90 + Math.floor(rand() * 46),
+    pv: rand() * Math.PI * 2,
+    vx: rand() * 2 - 1, vy: rand() * 2 - 1, vz: rand() * 2 - 1,
+    baseCol: (dissenter ? RED : WHITE).clone()
+      .multiplyScalar(dissenter ? 0.9 + rand() * 0.2 : 0.78 + rand() * 0.22)
+  });
+}
+for (const a of agents) {
+  const l = Math.hypot(a.vx, a.vy, a.vz) || 1;
+  a.vx /= l; a.vy /= l; a.vz /= l;
+  if (!a.dissenter) {
+    const bl = Math.hypot(a.t1.x, a.t1.y, a.burstZ) || 1;
+    a.bx = a.t1.x / bl; a.by = a.t1.y / bl; a.bz = a.burstZ / bl;
+  } else {
+    a.bx = Math.cos(a.th0); a.by = Math.sin(a.th0); a.bz = a.burstZ / 1.5;
+  }
+}
+
+const geometry = new THREE.ConeGeometry(0.055, 0.24, 5);
+geometry.rotateX(Math.PI / 2);
+const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const mesh = new THREE.InstancedMesh(geometry, material, COUNT);
+mesh.frustumCulled = false;
+scene.add(mesh);
+
+// --- Closed-form position ----------------------------------------------------
+// pos_i(t) = lerp(murmuration_i(t), target_i(t), w_i(t)) + burst + vibration
+function agentPos(a, t, out) {
+  // murmuration: shared rotation (2 revs / cycle) around a wandering center
+  const ang = a.th0 + 2 * W * t;
+  const rad = a.r0 + a.r1 * Math.sin(a.kr * W * t + a.phr);
+  const mx = 1.1 * Math.sin(2 * W * t + 0.7) + Math.cos(ang) * rad;
+  const my = 0.8 * Math.sin(3 * W * t + 2.1) + a.y0 + a.y1 * Math.sin(a.ky * W * t + a.phy);
+  const mz = 0.9 * Math.sin(W * t + 4.2) + Math.sin(ang) * rad;
+
+  // formation envelopes: converge 8-14, fracture ~20-25, reform 25-31, dissolve 38-45
+  const w1 = smooth(8 + a.s1, 13 + a.s1, t) * (1 - smooth(20 + a.s2, 23.5 + a.s2, t));
+  const w2 = smooth(24.5 + a.s3, 30 + a.s3, t) * (1 - smooth(38 + a.s4, 43 + a.s4, t));
+
+  // symbol frame: slow drift + gentle yaw, periodic over the cycle
+  const yaw = 0.35 * Math.sin(2 * W * t + 5.0);
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  const scx = 0.5 * Math.sin(2 * W * t + 1.3);
+  const scy = 0.4 * Math.sin(3 * W * t + 0.4);
+
+  let x, y, z;
+  if (a.dissenter) {
+    // dissenters: capped weight — they circle the consensus, never join it
+    const w = Math.min(0.35, w1 + w2);
+    const oa = a.th0 + a.orbDir * 3 * W * t;
+    const ox = scx + Math.cos(oa) * a.orbR;
+    const oy = scy + Math.sin(oa) * a.orbR * 0.72;
+    const oz = 1.2 * Math.sin(2 * W * t + a.phr);
+    x = mx + (ox - mx) * w;
+    y = my + (oy - my) * w;
+    z = mz + (oz - mz) * w;
+  } else {
+    const m = 1 - w1 - w2;
+    const t1 = a.t1, t2 = a.t2;
+    // rotate targets about Y, then offset by drifting symbol center
+    const t1x = t1.x * cy + t1.z * sy + scx, t1z = -t1.x * sy + t1.z * cy;
+    const t2x = t2.x * cy + t2.z * sy + scx, t2z = -t2.x * sy + t2.z * cy;
+    x = mx * m + t1x * w1 + t2x * w2;
+    y = my * m + (t1.y + scy) * w1 + (t2.y + scy) * w2;
+    z = mz * m + t1z * w1 + t2z * w2;
+    // consensus is a vibration: 2–3 Hz shimmer while the symbol holds
+    const gate = (w1 + w2) * (w1 + w2);
+    const vib = 0.15 * Math.sin(a.kv * W * t + a.pv) * gate;
+    x += a.vx * vib; y += a.vy * vib; z += a.vz * vib;
+  }
+
+  // fracture: radial burst peaking at t≈22.5 while the blend lets go
+  const pulse = smooth(20, 22.3, t) * (1 - smooth(22.7, 25.5, t));
+  const b = a.burstAmp * pulse * (a.dissenter ? 0.5 : 1);
+  out.set(x + a.bx * b, y + a.by * b, z + a.bz * b);
+  return out;
+}
+
+// --- Render ------------------------------------------------------------------
+const _p = new THREE.Vector3();
+const _q = new THREE.Vector3();
+const _dummy = new THREE.Object3D();
+const _col = new THREE.Color();
+
+function renderAt(t) {
+  for (let i = 0; i < COUNT; i++) {
+    const a = agents[i];
+    agentPos(a, t, _p);
+    agentPos(a, t + DT, _q).sub(_p);
+    if (_q.lengthSq() < 1e-10) _q.set(0, 0, 1);
+    _dummy.position.copy(_p);
+    _dummy.lookAt(_p.x + _q.x, _p.y + _q.y, _p.z + _q.z);
+    _dummy.updateMatrix();
+    mesh.setMatrixAt(i, _dummy.matrix);
+
+    const w1 = smooth(8 + a.s1, 13 + a.s1, t) * (1 - smooth(20 + a.s2, 23.5 + a.s2, t));
+    const w2 = smooth(24.5 + a.s3, 30 + a.s3, t) * (1 - smooth(38 + a.s4, 43 + a.s4, t));
+    const glow = a.dissenter ? 0.15 * Math.min(1, (w1 + w2) / 0.35) : 0.3 * (w1 + w2);
+    _col.copy(a.baseCol).multiplyScalar(1 + glow);
+    mesh.setColorAt(i, _col);
+  }
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.instanceColor.needsUpdate = true;
+
+  // calm camera: one slow 45s breath, nothing else
+  camera.position.set(
+    0.5 * Math.sin(W * t + 2.0),
+    1.5 + 0.45 * Math.sin(2 * W * t + 0.9),
+    18 + 0.7 * Math.sin(W * t)
+  );
+  camera.lookAt(0.3 * Math.sin(W * t + 1.0), 0.25 * Math.sin(2 * W * t + 3.7), 0);
+}
+
+// draw frame 0 synchronously so validation never sees a black canvas
+renderAt(0);
+composer.render();
+
+let rafT0 = null;
+function animate(now) {
+  requestAnimationFrame(animate);
+  const ms = typeof now === 'number' ? now : performance.now();
+  if (rafT0 === null) rafT0 = ms;
+  renderAt(((ms - rafT0) / 1000) % CYCLE);
+  composer.render();
+}
+requestAnimationFrame(animate);
+
+// deterministic seek for capture/testing: pure projection of any t
+window.renderFrame = (t) => {
+  renderAt(((t % CYCLE) + CYCLE) % CYCLE);
+  composer.render();
+  return null;
+};
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 45;
+  const targetBpm = 150; 
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 101390423) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secPerBar = 240 / bpm;
+
+  // === FX BUSES ===
+  const masterComp = new Tone.Compressor({ threshold: -12, ratio: 6, attack: 0.002, release: 0.1 }).toDestination();
+  const wetBus = new Tone.Gain(0.25).connect(masterComp);
+  const dryBus = new Tone.Gain(0.8).connect(masterComp);
+  const tightReverb = new Tone.Reverb({ decay: 0.6, wet: 0.3 }).connect(wetBus);
+  await tightReverb.generate();
+
+  // === INST: KICK (Membrane) ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.02,
+    octaves: 6,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 }
+  }).connect(dryBus);
+
+  // === INST: SUB (Mono) ===
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.2, sustain: 0.3, release: 0.1 },
+    filter: { type: "lowpass", frequency: 150 },
+    volume: -4
+  }).connect(dryBus);
+
+  // === INST: METALLIC STAB (Poly) ===
+  const stab = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "square" },
+    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.03 },
+    volume: -8
+  }).connect(tightReverb);
+
+  // === INST: GLITCH RIM (Noise) ===
+  const rim = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.01 },
+    volume: -10
+  }).connect(new Tone.Filter({ type: "bandpass", frequency: 4000, Q: 5 }).connect(dryBus));
+
+  // === INST: WARM PAD (Poly) - For organic contrast to the rhythm ===
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.8, decay: 0.5, sustain: 0.6, release: 2.0 },
+    detune: -5,
+    volume: -18
+  }).connect(wetBus);
+
+  // === ARRANGEMENT ===
+  // 0-12% Intro: Sparse Kick + Sub pulse
+  // 12-40% Build: Syncopated kicks, rim hits, stab accents
+  // 40-75% Peak: Full polyrhythmic density, pad enters
+  // 75-85% Breakdown: Sub-bass drone + sparse rim
+  // 85-100% Wind Down: Fade to intro state
+
+  // PAD CHORDS (Minimal, shifting)
+  const padChords = [
+    ["C3", "Eb3", "G3"],
+    ["Ab2", "Bb2", "F3"],
+    ["Bb2", "Db3", "F3"],
+    ["Eb3", "G3", "Bb3"]
+  ];
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Pad enters late (12%) and sustains through peak
+    if (bar >= totalBars * 0.12 && bar < totalBars * 0.75) {
+      pad.triggerAttackRelease(padChords[padIndex % padChords.length], "4n", time);
+      padIndex++;
+    }
+  }, "4n").start(0);
+
+  // SUB BASS (Accent hits)
+  const subNotes = ["C2", "C2", "Ab1", "Ab1"];
+  let subIndex = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Sub only in intro, peak, and breakdown
+    if (bar < totalBars * 0.12 || (bar >= totalBars * 0.40 && bar < totalBars * 0.75) || (bar >= totalBars * 0.85)) {
+      sub.triggerAttackRelease(subNotes[subIndex % subNotes.length], "8n", time + H(4), 0.9);
+      subIndex++;
+    }
+  }, "4n").start(0);
+
+  // KICK PATTERN (Complex Syncopation)
+  // Using 32nd note grid for footwork precision
+  const kickGrid = [1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0];
+  let kickIdx = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (kickGrid[kickIdx % kickGrid.length]) {
+      // Dynamic velocity based on section
+      let vel = 0.9;
+      if (bar < totalBars * 0.12) vel = 0.8; // Intro slightly softer
+      if (bar >= totalBars * 0.85) vel = 0.7; // Wind down
+      kick.triggerAttackRelease("C1", "32n", time + H(3), vel);
+    }
+    kickIdx++;
+  }, "16n").start(0);
+
+  // RIM CLICKS (Ghost notes)
+  const rimPattern = [0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0];
+  let rimIdx = 0;
+  const rimLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Rim enters after intro
+    if (bar >= totalBars * 0.12 && bar < totalBars * 0.82) {
+      if (rimPattern[rimIdx % rimPattern.length]) {
+        const vel = 0.3 + R() * 0.4;
+        rim.triggerAttackRelease("16n", time + H(2), vel);
+      }
+    }
+    rimIdx++;
+  }, "16n").start(0);
+
+  // METALLIC STABS (Punctuation)
+  const stabChords = [["C4", "Eb4", "G4"], ["Ab3", "Bb3", "F4"], ["Bb3", "Db4", "F4"]];
+  const stabLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Stabs only in peak section
+    if (bar >= totalBars * 0.40 && bar < totalBars * 0.75) {
+      if (R() > 0.6) { // Random chance to play
+        const chord = stabChords[Math.floor(R() * stabChords.length)];
+        stab.triggerAttackRelease(chord, "32n", time, 0.6);
+      }
+    }
+  }, "8n").start(0);
+
+  // === WIND DOWN AUTOMATION ===
+  // Fade out pad and rim in final 15%
+  Tone.Transport.schedule((time) => {
+    pad.volume.linearRampToValueAtTime(-30, time + 2);
+    rim.volume.linearRampToValueAtTime(-30, time + 2);
+  }, totalBars * 0.85 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    pad.volume.value = -18; // Reset for next loop
+    rim.volume.value = -10;
+  }, duration - 0.1);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { kick, sub, stab, rim, pad, masterComp, wetBus, dryBus, tightReverb };
+  window.toneJsParts = { padLoop, subLoop, kickLoop, rimLoop, stabLoop };
+};
+
+
+
+
+
+window.audioDuration = 45;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
