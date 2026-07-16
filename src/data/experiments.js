@@ -86,7 +86,8 @@ export const CATEGORIES = {
       { slug: 'combinator-calculus', name: 'combinator.calculus()', color: '#ffd27a', desc: 'SKI reduction theater // syntax collapses one redex at a time' },
       { slug: 'prosody-cartography', name: 'prosody.cartography()', color: '#7fffd4', desc: 'scansion topography // type lines click stress map breath and meter' },
       { slug: 'signal-lantern', name: 'signal.lantern()', color: '#ffe28a', desc: 'timed telegraph receiver // press duration becomes dots dashes words and ciphered light' },
-      { slug: 'grapheme-seismograph', name: 'grapheme.seismograph()', color: '#ffcc88', desc: 'typed language becomes sediment // pressure faults and seismic traces' }
+      { slug: 'grapheme-seismograph', name: 'grapheme.seismograph()', color: '#ffcc88', desc: 'typed language becomes sediment // pressure faults and seismic traces' },
+      { slug: 'letterpress-oracle', name: 'letterpress.oracle()', color: '#d8f5a2', desc: 'movable type platen // typed words become pressure maps ghost proofs and ink memory' }
     ]
   },
   physics: {
