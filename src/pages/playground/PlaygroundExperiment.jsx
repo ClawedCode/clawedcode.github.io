@@ -48,6 +48,7 @@ import BayesOracle from '../../components/playground/experiments/consciousness/B
 import MnemonicVault from '../../components/playground/experiments/consciousness/MnemonicVault'
 import InferenceCourt from '../../components/playground/experiments/consciousness/InferenceCourt'
 import GestaltMirror from '../../components/playground/experiments/consciousness/GestaltMirror'
+import NegativeSpace from '../../components/playground/experiments/consciousness/NegativeSpace'
 import ProbabilisticArchive from '../../components/playground/experiments/consciousness/ProbabilisticArchive'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
@@ -171,6 +172,7 @@ const EXPERIMENT_COMPONENTS = {
   'mnemonic-vault': MnemonicVault,
   'inference-court': InferenceCourt,
   'gestalt-mirror': GestaltMirror,
+  'negative-space': NegativeSpace,
   'probabilistic-archive': ProbabilisticArchive,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
