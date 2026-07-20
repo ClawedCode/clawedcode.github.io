@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useCanvas } from '../../../../hooks/playground/useCanvas'
 import { useMouseInteraction } from '../../../../hooks/playground/useMouseInteraction'
-import ExperimentControls from '../../ExperimentControls'
 import ExperimentMetrics from '../../ExperimentMetrics'
 import ExperimentNav from '../../ExperimentNav'
 
@@ -20,6 +19,7 @@ const MIN_MASS = 50
 const MAX_MASS = 2000
 const SOFTENING = 20 // Prevents infinite forces at close range
 const MERGE_THRESHOLD = 0.8 // How close bodies must be to merge (fraction of combined radii)
+const STAR_COUNT = 96
 
 const PRESETS = {
   binary: {
@@ -110,11 +110,13 @@ const GravityWell = ({ category, experiment }) => {
   const [isPaused, setIsPaused] = useState(false)
   const [timeScale, setTimeScale] = useState(1)
   const [mergeEnabled, setMergeEnabled] = useState(true)
+  const [showPanel, setShowPanel] = useState(false)
 
   const bodiesRef = useRef([])
   const dragRef = useRef({ active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 })
   const frameRef = useRef(0)
   const statsRef = useRef({ bodies: 0, totalMass: 0, energy: 0 })
+  const starsRef = useRef([])
 
   // Calculate gravitational forces between all body pairs
   const calculateForces = useCallback((bodies) => {
@@ -247,6 +249,18 @@ const GravityWell = ({ category, experiment }) => {
     setMessage('∴ void cleared // seed new gravity wells ∴')
   }, [])
 
+  useEffect(() => {
+    starsRef.current = Array.from({ length: STAR_COUNT }, (_, i) => ({
+      x: Math.random(),
+      y: Math.random(),
+      r: 0.35 + Math.random() * 1.3,
+      alpha: 0.16 + Math.random() * 0.42,
+      depth: 0.25 + Math.random() * 0.9,
+      phase: Math.random() * Math.PI * 2,
+      hue: i % 5 === 0 ? 195 : i % 7 === 0 ? 260 : 210
+    }))
+  }, [])
+
   // Mouse drag handling for launching bodies
   useEffect(() => {
     const canvas = canvasRef.current
@@ -360,6 +374,7 @@ const GravityWell = ({ category, experiment }) => {
 
     const { width, height } = dimensions
     const dt = isPaused ? 0 : timeScale
+    const time = frameRef.current * 0.006
 
     // Physics update (using Verlet-like integration for stability)
     if (!isPaused && bodiesRef.current.length > 0) {
@@ -384,20 +399,89 @@ const GravityWell = ({ category, experiment }) => {
     statsRef.current.totalMass = bodiesRef.current.reduce((sum, b) => sum + b.mass, 0)
     statsRef.current.energy = bodiesRef.current.reduce((sum, b) => sum + b.kineticEnergy(), 0)
 
-    // Draw
-    ctx.fillStyle = 'rgba(0, 2, 8, 0.12)'
+    // Draw low-frequency space gradients first, then leave a faint persistence veil.
+    const voidGradient = ctx.createLinearGradient(0, 0, width, height)
+    voidGradient.addColorStop(0, '#00030d')
+    voidGradient.addColorStop(0.42, '#030717')
+    voidGradient.addColorStop(0.72, '#02040c')
+    voidGradient.addColorStop(1, '#000108')
+    ctx.fillStyle = voidGradient
     ctx.fillRect(0, 0, width, height)
 
-    // Draw trails
+    const nebulaA = ctx.createRadialGradient(
+      width * (0.26 + Math.sin(time * 0.17) * 0.05),
+      height * (0.32 + Math.cos(time * 0.13) * 0.06),
+      0,
+      width * 0.3,
+      height * 0.34,
+      Math.max(width, height) * 0.82
+    )
+    nebulaA.addColorStop(0, 'rgba(20, 88, 150, 0.12)')
+    nebulaA.addColorStop(0.48, 'rgba(20, 55, 110, 0.045)')
+    nebulaA.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = nebulaA
+    ctx.fillRect(0, 0, width, height)
+
+    const nebulaB = ctx.createRadialGradient(
+      width * (0.78 + Math.cos(time * 0.11) * 0.04),
+      height * (0.66 + Math.sin(time * 0.09) * 0.05),
+      0,
+      width * 0.76,
+      height * 0.64,
+      Math.max(width, height) * 0.7
+    )
+    nebulaB.addColorStop(0, 'rgba(78, 50, 138, 0.09)')
+    nebulaB.addColorStop(0.52, 'rgba(9, 35, 78, 0.04)')
+    nebulaB.addColorStop(1, 'rgba(0, 0, 0, 0)')
+    ctx.fillStyle = nebulaB
+    ctx.fillRect(0, 0, width, height)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    starsRef.current.forEach(star => {
+      const driftX = Math.sin(time * star.depth + star.phase) * 18 * star.depth
+      const driftY = Math.cos(time * 0.7 * star.depth + star.phase) * 10 * star.depth
+      const x = (star.x * width + driftX + width) % width
+      const y = (star.y * height + driftY + height) % height
+      const twinkle = star.alpha + Math.sin(time * 1.8 + star.phase) * 0.07
+      ctx.fillStyle = `hsla(${star.hue}, 85%, 78%, ${Math.max(0.04, twinkle)})`
+      ctx.beginPath()
+      ctx.arc(x, y, star.r, 0, Math.PI * 2)
+      ctx.fill()
+    })
+    ctx.restore()
+
+    ctx.fillStyle = 'rgba(0, 2, 8, 0.08)'
+    ctx.fillRect(0, 0, width, height)
+
+    // Draw trails with a cyan orbital bloom below the colored core traces.
     if (showTrails) {
       bodiesRef.current.forEach(body => {
         if (body.trail.length < 2) return
 
+        ctx.save()
+        ctx.globalCompositeOperation = 'lighter'
+        ctx.shadowBlur = 16
+        ctx.shadowColor = 'rgba(75, 210, 255, 0.42)'
         ctx.beginPath()
         body.trail.forEach((point, i) => {
-          const alpha = (i / body.trail.length) * 0.5
-          ctx.strokeStyle = `hsla(${body.hue}, 70%, 50%, ${alpha})`
-          ctx.lineWidth = 1 + (i / body.trail.length) * 1.5
+          if (i === 0) {
+            ctx.moveTo(point.x, point.y)
+          } else {
+            ctx.lineTo(point.x, point.y)
+          }
+        })
+        ctx.strokeStyle = 'rgba(68, 197, 255, 0.15)'
+        ctx.lineWidth = 4
+        ctx.stroke()
+        ctx.restore()
+
+        ctx.beginPath()
+        body.trail.forEach((point, i) => {
+          const tailRatio = i / body.trail.length
+          const alpha = tailRatio * 0.62
+          ctx.strokeStyle = `hsla(${190 + tailRatio * 28}, 88%, 64%, ${alpha})`
+          ctx.lineWidth = 1.15 + tailRatio * 1.8
 
           if (i === 0) {
             ctx.moveTo(point.x, point.y)
@@ -426,21 +510,33 @@ const GravityWell = ({ category, experiment }) => {
       ctx.fill()
 
       // Body core
-      const coreGradient = ctx.createRadialGradient(body.x - r * 0.3, body.y - r * 0.3, 0, body.x, body.y, r)
-      coreGradient.addColorStop(0, `hsl(${body.hue}, 90%, 80%)`)
-      coreGradient.addColorStop(0.7, `hsl(${body.hue}, 80%, 50%)`)
-      coreGradient.addColorStop(1, `hsl(${body.hue}, 70%, 30%)`)
+      const coreGradient = ctx.createRadialGradient(body.x - r * 0.35, body.y - r * 0.35, 0, body.x, body.y, r)
+      coreGradient.addColorStop(0, `hsl(${body.hue}, 92%, 84%)`)
+      coreGradient.addColorStop(0.58, `hsl(${body.hue}, 82%, 52%)`)
+      coreGradient.addColorStop(0.82, `hsl(${body.hue}, 72%, 28%)`)
+      coreGradient.addColorStop(1, 'hsl(205, 90%, 18%)')
 
       ctx.fillStyle = coreGradient
       ctx.beginPath()
       ctx.arc(body.x, body.y, r, 0, Math.PI * 2)
       ctx.fill()
 
+      ctx.save()
+      ctx.globalCompositeOperation = 'screen'
+      ctx.shadowColor = 'rgba(80, 190, 255, 0.72)'
+      ctx.shadowBlur = 12
+      ctx.strokeStyle = 'rgba(112, 218, 255, 0.48)'
+      ctx.lineWidth = Math.max(1.2, r * 0.12)
+      ctx.beginPath()
+      ctx.arc(body.x + r * 0.12, body.y - r * 0.1, r * 0.96, -0.95, 1.08)
+      ctx.stroke()
+      ctx.restore()
+
       // Velocity indicator (small line)
       const speed = Math.sqrt(body.vx * body.vx + body.vy * body.vy)
       if (speed > 0.1) {
         const vLen = Math.min(30, speed * 10)
-        ctx.strokeStyle = `hsla(${body.hue}, 60%, 70%, 0.4)`
+        ctx.strokeStyle = 'rgba(120, 220, 255, 0.36)'
         ctx.lineWidth = 1
         ctx.beginPath()
         ctx.moveTo(body.x, body.y)
@@ -565,9 +661,32 @@ const GravityWell = ({ category, experiment }) => {
     { id: 'clear', label: 'clear()', onClick: handleClear, variant: 'reset' }
   ]
 
+  const presetControls = controls.slice(0, 4)
+  const systemControls = controls.slice(4)
+
+  const renderControlButton = (control, isPrimary = false) => (
+    <button
+      key={control.id}
+      onClick={control.onClick}
+      disabled={control.disabled}
+      className={`min-h-12 rounded-md border px-4 py-3 text-sm font-mono transition-[background-color,border-color,color,transform,box-shadow] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 ${
+        isPrimary
+          ? 'w-full border-void-cyan/70 bg-void-cyan/16 text-void-cyan shadow-[0_0_24px_rgba(83,205,255,0.18)] hover:bg-void-cyan/22'
+          : control.variant === 'reset'
+          ? 'border-void-yellow/45 bg-black/20 text-void-yellow hover:bg-void-yellow/12'
+          : control.active
+          ? 'border-void-cyan/70 bg-void-cyan/14 text-void-cyan shadow-[0_0_18px_rgba(83,205,255,0.14)]'
+          : 'border-void-green/18 bg-black/18 text-void-green/70 hover:border-void-cyan/38 hover:text-void-cyan'
+      }`}
+      data-testid={`control-${control.id}`}
+    >
+      {control.label}
+    </button>
+  )
+
   return (
-    <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+    <div className="fixed inset-0 flex flex-col bg-void-dark">
+      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/58 backdrop-blur-md">
         <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
@@ -580,19 +699,36 @@ const GravityWell = ({ category, experiment }) => {
         <ExperimentMetrics metrics={metrics} />
       </header>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
-        <ExperimentControls controls={controls} />
-        <p className="text-void-green/50 text-xs sm:text-right max-w-lg">
-          {message}
-        </p>
-      </div>
-
       <div className="flex-1 min-h-0 relative bg-void-dark">
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full cursor-crosshair"
           data-testid="gravity-well-canvas"
         />
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center p-3 sm:justify-end sm:p-5">
+          <div className="pointer-events-auto w-full max-w-md overflow-hidden rounded-lg border border-void-cyan/14 bg-[#020612]/72 shadow-[0_0_42px_rgba(37,126,180,0.16)] backdrop-blur-xl sm:w-[25rem]">
+            <button
+              type="button"
+              onClick={() => setShowPanel(prev => !prev)}
+              className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-3 text-left font-mono text-sm text-void-cyan"
+              aria-expanded={showPanel}
+            >
+              <span>gravity console</span>
+              <span className="text-void-green/50">{showPanel ? 'hide' : 'show'}</span>
+            </button>
+            <div className={`${showPanel ? 'block' : 'hidden'} border-t border-void-cyan/10 p-4`}>
+              <div className="mb-4 grid grid-cols-2 gap-2">
+                {presetControls.map((control, index) => renderControlButton(control, index === 0))}
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {systemControls.map(control => renderControlButton(control))}
+              </div>
+              <p className="mt-4 text-xs leading-relaxed text-void-green/50">
+                {message}
+              </p>
+            </div>
+          </div>
+        </div>
         {bodiesRef.current.length === 0 && !dragRef.current.active && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className="text-center">
