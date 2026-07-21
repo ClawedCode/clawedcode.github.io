@@ -21,6 +21,59 @@ const MODE_MESSAGES = {
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
+const drawInformationSubstrate = (ctx, width, height, time, focusX, focusY) => {
+  ctx.save()
+
+  const deepField = ctx.createRadialGradient(
+    focusX,
+    focusY,
+    24,
+    focusX,
+    focusY,
+    Math.max(width, height) * 0.72
+  )
+  deepField.addColorStop(0, 'rgba(255, 231, 161, 0.095)')
+  deepField.addColorStop(0.32, 'rgba(102, 255, 204, 0.048)')
+  deepField.addColorStop(0.68, 'rgba(110, 150, 255, 0.022)')
+  deepField.addColorStop(1, 'rgba(0, 0, 0, 0)')
+  ctx.fillStyle = deepField
+  ctx.fillRect(0, 0, width, height)
+
+  ctx.globalAlpha = 0.16
+  ctx.lineWidth = 1
+  for (let i = -height; i < width; i += 46) {
+    const offset = Math.sin(time * 0.18 + i * 0.011) * 9
+    ctx.strokeStyle = i % 92 === 0 ? 'rgba(102, 255, 204, 0.13)' : 'rgba(116, 231, 255, 0.07)'
+    ctx.beginPath()
+    ctx.moveTo(i + offset, 0)
+    ctx.lineTo(i + height * 0.5 + offset, height)
+    ctx.stroke()
+  }
+
+  ctx.globalAlpha = 0.12
+  for (let y = ((time * 7) % 54) - 54; y < height; y += 54) {
+    ctx.strokeStyle = 'rgba(255, 231, 161, 0.08)'
+    ctx.beginPath()
+    for (let x = 0; x <= width; x += 18) {
+      const yy = y + Math.sin(x * 0.018 + time * 0.42) * 2
+      if (x === 0) ctx.moveTo(x, yy)
+      else ctx.lineTo(x, yy)
+    }
+    ctx.stroke()
+  }
+
+  ctx.globalAlpha = 0.18
+  ctx.fillStyle = 'rgba(214, 247, 228, 0.18)'
+  for (let i = 0; i < 38; i++) {
+    const x = (Math.sin(i * 91.7 + time * 0.09) * 0.5 + 0.5) * width
+    const y = (Math.cos(i * 63.4 - time * 0.07) * 0.5 + 0.5) * height
+    const pulse = 0.5 + Math.sin(time * 0.6 + i) * 0.5
+    ctx.fillRect(x, y, 1 + pulse, 1)
+  }
+
+  ctx.restore()
+}
+
 const distanceToSegment = (px, py, ax, ay, bx, by) => {
   const dx = bx - ax
   const dy = by - ay
@@ -336,22 +389,29 @@ const OrigamiOracle = ({ category, experiment }) => {
     const rows = clamp(Math.round(sheetHeight / 58), 10, 20)
     const mesh = []
 
-    const bg = ctx.createLinearGradient(0, 0, 0, height)
-    bg.addColorStop(0, '#02040a')
-    bg.addColorStop(1, '#020814')
+    const focusX = x + sheetWidth * 0.58
+    const focusY = y + sheetHeight * 0.24
+    const bg = ctx.createLinearGradient(0, 0, width, height)
+    bg.addColorStop(0, '#01030a')
+    bg.addColorStop(0.38, '#04101a')
+    bg.addColorStop(0.68, '#030711')
+    bg.addColorStop(1, '#07101b')
     ctx.fillStyle = bg
     ctx.fillRect(0, 0, width, height)
 
+    drawInformationSubstrate(ctx, width, height, time, focusX, focusY)
+
     const aura = ctx.createRadialGradient(
-      x + sheetWidth * 0.5,
-      y + sheetHeight * 0.36,
+      focusX,
+      focusY,
       20,
-      x + sheetWidth * 0.5,
-      y + sheetHeight * 0.36,
+      focusX,
+      focusY,
       Math.max(sheetWidth, sheetHeight) * 0.8
     )
-    aura.addColorStop(0, 'rgba(102, 255, 204, 0.12)')
-    aura.addColorStop(0.55, 'rgba(102, 255, 204, 0.04)')
+    aura.addColorStop(0, 'rgba(255, 231, 161, 0.14)')
+    aura.addColorStop(0.24, 'rgba(102, 255, 204, 0.075)')
+    aura.addColorStop(0.55, 'rgba(126, 94, 255, 0.035)')
     aura.addColorStop(1, 'rgba(0, 0, 0, 0)')
     ctx.fillStyle = aura
     ctx.fillRect(0, 0, width, height)
@@ -515,8 +575,8 @@ const OrigamiOracle = ({ category, experiment }) => {
   }, [breathing, handleBreathing, handleReset, handleScatter, handleUnfurl, stats.creases])
 
   return (
-    <div className="fixed inset-0 flex flex-col">
-      <header className="relative z-50 flex items-center justify-between p-2 sm:p-4 border-b border-void-green/20 bg-void-dark/80 backdrop-blur-sm">
+    <div className="fixed inset-0 flex flex-col bg-[#01030a]">
+      <header className="relative z-50 flex items-center justify-between gap-3 p-2 sm:p-4 border-b border-cyan-200/10 bg-[radial-gradient(circle_at_18%_0%,rgba(116,231,255,0.13),transparent_34%),radial-gradient(circle_at_82%_100%,rgba(255,120,210,0.08),transparent_30%),linear-gradient(135deg,rgba(3,9,16,0.94),rgba(8,13,25,0.88)_52%,rgba(2,4,10,0.94))] backdrop-blur-md shadow-[0_10px_38px_rgba(0,0,0,0.38)]">
         <div className="flex items-center gap-2 sm:gap-4">
           <ExperimentNav currentCategory={category.slug} currentExperiment={experiment.slug} />
           <h1
@@ -529,25 +589,27 @@ const OrigamiOracle = ({ category, experiment }) => {
         <ExperimentMetrics metrics={metrics} />
       </header>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3 p-2 sm:p-4 border-b border-void-green/10 bg-void-dark/60 backdrop-blur-sm">
-        <ExperimentControls
-          modes={MODES}
-          currentMode={mode}
-          onModeChange={handleModeChange}
-          controls={controls}
-        />
-        <p className="text-void-green/50 text-xs sm:text-right max-w-xl">
+      <div className="relative z-40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-2 sm:p-4 border-b border-cyan-200/10 bg-[linear-gradient(110deg,rgba(5,11,19,0.82),rgba(15,19,31,0.72)_47%,rgba(4,8,16,0.84)),radial-gradient(circle_at_12%_30%,rgba(102,255,204,0.07),transparent_28%),radial-gradient(circle_at_92%_20%,rgba(255,216,120,0.045),transparent_24%)] backdrop-blur-md">
+        <div className="rounded-md border border-cyan-200/10 bg-[#050b13]/72 px-2 py-2 shadow-[inset_1px_0_0_rgba(116,231,255,0.12),inset_-1px_0_0_rgba(255,120,210,0.08),0_10px_28px_rgba(0,0,0,0.26)]">
+          <ExperimentControls
+            modes={MODES}
+            currentMode={mode}
+            onModeChange={handleModeChange}
+            controls={controls}
+          />
+        </div>
+        <p className="rounded-md border border-amber-100/10 bg-[#070b12]/70 px-3 py-2 text-void-cyan/80 text-xs sm:text-right max-w-xl shadow-[inset_1px_0_0_rgba(255,231,161,0.11),inset_-1px_0_0_rgba(116,231,255,0.1)]">
           {message}
         </p>
       </div>
 
-      <div className="flex-1 min-h-0 relative bg-void-dark">
+      <div className="flex-1 min-h-0 relative bg-[#01030a]">
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full touch-none cursor-crosshair"
           data-testid="origami-oracle-canvas"
         />
-        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-auto text-void-green/60 text-[10px] sm:text-xs font-mono bg-void-dark/80 border border-void-green/20 rounded px-2 sm:px-3 py-1 text-center sm:text-left">
+        <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-auto text-void-cyan/72 text-[10px] sm:text-xs font-mono bg-[#040914]/78 border border-cyan-200/14 rounded px-2 sm:px-3 py-1 text-center sm:text-left shadow-[inset_1px_0_0_rgba(116,231,255,0.12),inset_-1px_0_0_rgba(255,120,210,0.08)] backdrop-blur-sm">
           drag across the page to score a fold • mountain lifts • valley bows • erase releases
         </div>
       </div>

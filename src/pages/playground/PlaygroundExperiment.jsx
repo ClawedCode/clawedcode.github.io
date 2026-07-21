@@ -123,6 +123,7 @@ import CompassProof from '../../components/playground/experiments/physics/Compas
 import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
 import WireworldVigil from '../../components/playground/experiments/physics/WireworldVigil'
 import AvalancheHash from '../../components/playground/experiments/physics/AvalancheHash'
+import EuclidOracle from '../../components/playground/experiments/physics/EuclidOracle'
 import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
 
 // Map of experiment slugs to components
@@ -248,6 +249,7 @@ const EXPERIMENT_COMPONENTS = {
   'shadow-liturgy': ShadowLiturgy,
   'wireworld-vigil': WireworldVigil,
   'avalanche-hash': AvalancheHash,
+  'euclid-oracle': EuclidOracle,
   'affinity-lattice': AffinityLattice,
 }
 
