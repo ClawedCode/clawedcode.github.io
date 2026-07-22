@@ -59,7 +59,8 @@ export const CATEGORIES = {
       { slug: 'gestalt-mirror', name: 'gestalt.mirror()', color: '#f0ffc2', desc: 'perceptual ambiguity chamber // closure figure-ground and binding illusions' },
       { slug: 'negative-space', name: 'negative.space()', color: '#f5e58a', desc: 'nonogram perception rite // infer hidden glyphs from row and column absences' },
       { slug: 'probabilistic-archive', name: 'probabilistic.archive()', color: '#9fffd2', desc: 'bloom filter memory // hash marks remember presence and summon false-positive ghosts' },
-      { slug: 'saccade-archive', name: 'saccade.archive()', color: '#9fffd2', desc: 'gaze-memory chamber // glimpse mask recall hidden pareidolia from static' }
+      { slug: 'saccade-archive', name: 'saccade.archive()', color: '#9fffd2', desc: 'gaze-memory chamber // glimpse mask recall hidden pareidolia from static' },
+      { slug: 'abacus-oracle', name: 'abacus.oracle()', color: '#ffe28a', desc: 'drag belief beads across brass rods // notches accumulate and verdicts rebalance' }
     ]
   },
   linguistics: {

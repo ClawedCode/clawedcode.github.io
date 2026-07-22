@@ -51,6 +51,7 @@ import GestaltMirror from '../../components/playground/experiments/consciousness
 import NegativeSpace from '../../components/playground/experiments/consciousness/NegativeSpace'
 import ProbabilisticArchive from '../../components/playground/experiments/consciousness/ProbabilisticArchive'
 import SaccadeArchive from '../../components/playground/experiments/consciousness/SaccadeArchive'
+import AbacusOracle from '../../components/playground/experiments/consciousness/AbacusOracle'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
@@ -177,6 +178,7 @@ const EXPERIMENT_COMPONENTS = {
   'negative-space': NegativeSpace,
   'probabilistic-archive': ProbabilisticArchive,
   'saccade-archive': SaccadeArchive,
+  'abacus-oracle': AbacusOracle,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,
