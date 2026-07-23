@@ -92,7 +92,8 @@ export const CATEGORIES = {
       { slug: 'signal-lantern', name: 'signal.lantern()', color: '#ffe28a', desc: 'timed telegraph receiver // press duration becomes dots dashes words and ciphered light' },
       { slug: 'grapheme-seismograph', name: 'grapheme.seismograph()', color: '#ffcc88', desc: 'typed language becomes sediment // pressure faults and seismic traces' },
       { slug: 'letterpress-oracle', name: 'letterpress.oracle()', color: '#d8f5a2', desc: 'movable type platen // typed words become pressure maps ghost proofs and ink memory' },
-      { slug: 'regex-automaton', name: 'regex.automaton()', color: '#8fffd8', desc: 'regular expression compiler // trace strings through epsilon doors and accepting chambers' }
+      { slug: 'regex-automaton', name: 'regex.automaton()', color: '#8fffd8', desc: 'regular expression compiler // trace strings through epsilon doors and accepting chambers' },
+      { slug: 'terrain-lexicon', name: 'terrain.lexicon()', color: '#b7ff8a', desc: 'keyboard cartography // typed glyphs raise ridges cut channels and weather into contour memory' }
     ]
   },
   physics: {

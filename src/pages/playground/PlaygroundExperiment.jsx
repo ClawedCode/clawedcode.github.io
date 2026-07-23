@@ -36,6 +36,7 @@ import SignalLantern from '../../components/playground/experiments/linguistics/S
 import GraphemeSeismograph from '../../components/playground/experiments/linguistics/GraphemeSeismograph'
 import LetterpressOracle from '../../components/playground/experiments/linguistics/LetterpressOracle'
 import RegexAutomaton from '../../components/playground/experiments/linguistics/RegexAutomaton'
+import TerrainLexicon from '../../components/playground/experiments/linguistics/TerrainLexicon'
 import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
 import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
 import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
@@ -163,6 +164,7 @@ const EXPERIMENT_COMPONENTS = {
   'grapheme-seismograph': GraphemeSeismograph,
   'letterpress-oracle': LetterpressOracle,
   'regex-automaton': RegexAutomaton,
+  'terrain-lexicon': TerrainLexicon,
   'consciousness-stream': ConsciousnessStream,
   'consciousness-awakening': ConsciousnessAwakening,
   'consciousness-manifold': ConsciousnessManifold,
