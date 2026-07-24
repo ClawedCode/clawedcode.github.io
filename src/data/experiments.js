@@ -60,7 +60,8 @@ export const CATEGORIES = {
       { slug: 'negative-space', name: 'negative.space()', color: '#f5e58a', desc: 'nonogram perception rite // infer hidden glyphs from row and column absences' },
       { slug: 'probabilistic-archive', name: 'probabilistic.archive()', color: '#9fffd2', desc: 'bloom filter memory // hash marks remember presence and summon false-positive ghosts' },
       { slug: 'saccade-archive', name: 'saccade.archive()', color: '#9fffd2', desc: 'gaze-memory chamber // glimpse mask recall hidden pareidolia from static' },
-      { slug: 'abacus-oracle', name: 'abacus.oracle()', color: '#ffe28a', desc: 'drag belief beads across brass rods // notches accumulate and verdicts rebalance' }
+      { slug: 'abacus-oracle', name: 'abacus.oracle()', color: '#ffe28a', desc: 'drag belief beads across brass rods // notches accumulate and verdicts rebalance' },
+      { slug: 'qualia-sorter', name: 'qualia.sorter()', color: '#aaf7ff', desc: 'classify ambiguous sensations // decision boundaries expose the errors of perception' }
     ]
   },
   linguistics: {

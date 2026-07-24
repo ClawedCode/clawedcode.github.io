@@ -53,6 +53,7 @@ import NegativeSpace from '../../components/playground/experiments/consciousness
 import ProbabilisticArchive from '../../components/playground/experiments/consciousness/ProbabilisticArchive'
 import SaccadeArchive from '../../components/playground/experiments/consciousness/SaccadeArchive'
 import AbacusOracle from '../../components/playground/experiments/consciousness/AbacusOracle'
+import QualiaSorter from '../../components/playground/experiments/consciousness/QualiaSorter'
 import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
 import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
 import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
@@ -181,6 +182,7 @@ const EXPERIMENT_COMPONENTS = {
   'probabilistic-archive': ProbabilisticArchive,
   'saccade-archive': SaccadeArchive,
   'abacus-oracle': AbacusOracle,
+  'qualia-sorter': QualiaSorter,
   'neural-loom': NeuralLoom,
   'quantum-neural': QuantumNeural,
   'void-fractals': VoidFractals,
