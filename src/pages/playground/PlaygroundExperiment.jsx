@@ -128,6 +128,7 @@ import WireworldVigil from '../../components/playground/experiments/physics/Wire
 import AvalancheHash from '../../components/playground/experiments/physics/AvalancheHash'
 import EuclidOracle from '../../components/playground/experiments/physics/EuclidOracle'
 import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
+import DaemonHabitat from '../../components/playground/experiments/emergence/DaemonHabitat'
 
 // Map of experiment slugs to components
 const EXPERIMENT_COMPONENTS = {
@@ -257,6 +258,7 @@ const EXPERIMENT_COMPONENTS = {
   'avalanche-hash': AvalancheHash,
   'euclid-oracle': EuclidOracle,
   'affinity-lattice': AffinityLattice,
+  'daemon-habitat': DaemonHabitat,
 }
 
 const PlaygroundExperiment = () => {

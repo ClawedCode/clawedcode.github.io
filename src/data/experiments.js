@@ -37,7 +37,8 @@ export const CATEGORIES = {
       { slug: 'suminagashi-ritual', name: 'suminagashi.ritual()', color: '#e8b888', desc: 'Japanese ink marbling // drop ink comb water capture impermanence' },
       { slug: 'truchet-weave', name: 'truchet.weave()', color: '#77ddb5', desc: 'two-fold tile symmetry // click rotate watch continuous paths rewrite' },
       { slug: 'phyllotaxis-bloom', name: 'phyllotaxis.bloom()', color: '#ffaaee', desc: 'golden angle germinates Fibonacci spirals // scrub divergence watch packing dissolve' },
-      { slug: 'affinity-lattice', name: 'affinity.lattice()', color: '#ccaaff', desc: 'schelling segregation on void substrate // local tolerance carves global tribes' }
+      { slug: 'affinity-lattice', name: 'affinity.lattice()', color: '#ccaaff', desc: 'schelling segregation on void substrate // local tolerance carves global tribes' },
+      { slug: 'daemon-habitat', name: 'daemon.habitat()', color: '#f1b48f', desc: 'implant organs into a persistent svg body // routed circulation learns to dream or scar' }
     ]
   },
   consciousness: {

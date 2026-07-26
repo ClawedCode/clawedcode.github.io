@@ -1,0 +1,1323 @@
+.dh-shell {
+  --paper: #ead9b7;
+  --paper-dim: #a99678;
+  --ink: #130f0d;
+  --blood: #ff6b55;
+  --glass: rgba(19, 15, 13, 0.88);
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  color: var(--paper);
+  background:
+    radial-gradient(circle at 36% 44%, rgba(91, 37, 30, 0.5), transparent 35%),
+    linear-gradient(122deg, #0c0c0a, #1a1110 54%, #080b09);
+  font-family: "Courier New", Courier, monospace;
+}
+
+.dh-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(255, 239, 206, 0.09) 4px),
+    radial-gradient(circle at 20% 10%, rgba(255, 217, 160, 0.24) 0 1px, transparent 2px);
+  background-size: auto, 19px 23px;
+  mix-blend-mode: soft-light;
+}
+
+.dh-shell.phase-lucid {
+  background:
+    radial-gradient(circle at 40% 42%, rgba(165, 112, 51, 0.44), transparent 38%),
+    linear-gradient(122deg, #14110b, #2a1911 54%, #0e1210);
+}
+
+.dh-shell.phase-scarred {
+  background:
+    radial-gradient(circle at 40% 45%, rgba(122, 24, 28, 0.5), transparent 40%),
+    linear-gradient(122deg, #120909, #241011 54%, #090708);
+}
+
+.dh-crownbar {
+  position: relative;
+  z-index: 30;
+  height: 64px;
+  display: grid;
+  grid-template-columns: minmax(210px, 1fr) auto minmax(210px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(234, 217, 183, 0.2);
+  background: rgba(10, 10, 8, 0.82);
+  backdrop-filter: blur(18px);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
+}
+
+.dh-nav {
+  justify-self: start;
+  padding: 4px 10px;
+  border-left: 2px solid rgba(255, 107, 85, 0.55);
+}
+
+.dh-title {
+  text-align: center;
+  line-height: 1;
+}
+
+.dh-title span,
+.dh-drawer-heading span,
+.dh-inspector-copy > span {
+  color: rgba(234, 217, 183, 0.44);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.dh-title h1 {
+  margin-top: 5px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 28px currentColor;
+}
+
+.dh-persistence {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: rgba(234, 217, 183, 0.48);
+  font-size: 10px;
+}
+
+.dh-save-light {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #d8b774;
+  border-radius: 50%;
+  background: rgba(216, 183, 116, 0.72);
+  box-shadow: 0 0 12px rgba(216, 183, 116, 0.7);
+}
+
+.dh-surface {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  height: calc(100% - 64px);
+  min-height: 0;
+  outline: none;
+}
+
+.dh-surface:focus-visible {
+  box-shadow: inset 0 0 0 2px rgba(231, 191, 114, 0.6);
+}
+
+.dh-atlas {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-right: 1px solid rgba(234, 217, 183, 0.16);
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    radial-gradient(circle at 50% 48%, rgba(78, 37, 30, 0.38), transparent 60%);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+.dh-atlas::before,
+.dh-atlas::after {
+  content: "";
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.dh-atlas::before {
+  inset: 18px;
+  border: 1px solid rgba(234, 217, 183, 0.1);
+  clip-path: polygon(0 0, 44% 0, 46% 2px, 54% 2px, 56% 0, 100% 0, 100% 100%, 62% 100%, 60% calc(100% - 2px), 40% calc(100% - 2px), 38% 100%, 0 100%);
+}
+
+.dh-atlas::after {
+  inset: 0;
+  background: radial-gradient(circle, transparent 47%, rgba(2, 2, 2, 0.38) 100%);
+}
+
+.dh-message {
+  position: absolute;
+  z-index: 18;
+  top: 18px;
+  left: 50%;
+  width: min(520px, calc(100% - 220px));
+  padding: 9px 16px;
+  transform: translateX(-50%);
+  border-top: 1px solid rgba(234, 217, 183, 0.16);
+  border-bottom: 1px solid rgba(234, 217, 183, 0.16);
+  color: rgba(234, 217, 183, 0.7);
+  background: rgba(9, 9, 8, 0.64);
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(10px);
+}
+
+.dh-message span {
+  margin-right: 10px;
+  color: #ff806c;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.dh-body-map {
+  position: absolute;
+  inset: 5.5% 5% 8%;
+  z-index: 2;
+  width: 90%;
+  height: 86.5%;
+  overflow: visible;
+  user-select: none;
+}
+
+.dh-registration line {
+  stroke: rgba(234, 217, 183, 0.06);
+  stroke-width: 1;
+}
+
+.dh-body-outline {
+  fill: rgba(50, 23, 20, 0.32);
+  stroke: rgba(234, 217, 183, 0.24);
+  stroke-width: 2;
+  stroke-dasharray: 2 7;
+  transition: fill 1.2s ease, stroke 1.2s ease, transform 1.2s cubic-bezier(.2, .8, .2, 1);
+  transform-origin: 450px 348px;
+}
+
+.phase-lucid .dh-body-outline {
+  fill: rgba(117, 69, 36, 0.24);
+  stroke: rgba(248, 215, 163, 0.78);
+  transform: scale(1.035);
+}
+
+.phase-scarred .dh-body-outline {
+  fill: rgba(102, 19, 25, 0.28);
+  stroke: rgba(255, 95, 88, 0.6);
+  transform: scale(.98, 1.02);
+}
+
+.dh-spine {
+  fill: none;
+  stroke: rgba(255, 107, 85, 0.22);
+  stroke-width: 4;
+  stroke-dasharray: 1 16;
+  stroke-linecap: round;
+}
+
+.dh-nerve-bed {
+  fill: none;
+  stroke: rgba(234, 217, 183, 0.08);
+  stroke-width: 13;
+  stroke-linecap: round;
+}
+
+.dh-nerve {
+  fill: none;
+  stroke: rgba(234, 217, 183, 0.16);
+  stroke-width: 2;
+  stroke-dasharray: 4 11;
+  stroke-linecap: round;
+  transition: stroke 0.45s ease, stroke-width 0.45s ease, opacity 0.45s ease;
+}
+
+.dh-nerve.is-active {
+  stroke: #ff806c;
+  stroke-width: 4;
+  stroke-dasharray: 14 9;
+  animation: dh-circulation 1.8s linear infinite;
+}
+
+.dh-flow-dot {
+  opacity: 0.86;
+  filter: drop-shadow(0 0 7px #ff6b55);
+}
+
+.dh-chamber {
+  cursor: pointer;
+  outline: none;
+}
+
+.dh-chamber-shell {
+  fill: rgba(12, 11, 9, 0.84);
+  stroke: rgba(234, 217, 183, 0.3);
+  stroke-width: 2;
+  transition: fill 0.35s ease, stroke 0.35s ease, transform 0.35s ease;
+}
+
+.dh-chamber-inner {
+  fill: rgba(56, 36, 30, 0.22);
+  stroke: rgba(234, 217, 183, 0.11);
+  stroke-width: 1;
+  stroke-dasharray: 2 6;
+}
+
+.dh-chamber:hover .dh-chamber-shell,
+.dh-chamber:focus-visible .dh-chamber-shell,
+.dh-chamber.is-selected .dh-chamber-shell {
+  stroke: rgba(248, 215, 163, 0.78);
+  fill: rgba(66, 39, 31, 0.48);
+}
+
+.dh-chamber.is-drop-target .dh-chamber-shell {
+  stroke: #f8d7a3;
+  stroke-width: 5;
+  fill: rgba(231, 191, 114, 0.22);
+  transform: scale(1.08);
+}
+
+.dh-chamber.is-connected .dh-chamber-shell {
+  stroke: rgba(255, 128, 108, 0.76);
+}
+
+.dh-chamber-aura {
+  fill: rgba(255, 107, 85, 0);
+  stroke: none;
+  transition: fill 0.5s ease;
+}
+
+.dh-chamber.is-connected .dh-chamber-aura {
+  fill: rgba(255, 107, 85, 0.07);
+  animation: dh-organ-breath 2.8s ease-in-out infinite;
+}
+
+.dh-port-guide {
+  stroke: rgba(234, 217, 183, 0.22);
+  stroke-width: 2;
+}
+
+.dh-empty-mark {
+  color: rgba(234, 217, 183, 0.26);
+}
+
+.dh-empty-mark circle,
+.dh-empty-mark path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.dh-empty-mark text {
+  fill: currentColor;
+  font-size: 13px;
+  text-anchor: middle;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
+
+.dh-chamber-label {
+  fill: rgba(234, 217, 183, 0.52);
+  font-size: 14px;
+  text-anchor: middle;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dh-implanted-organ {
+  cursor: grab;
+}
+
+.dh-implanted-organ:active {
+  cursor: grabbing;
+}
+
+.dh-rotating-glyph {
+  transform-origin: 0 0;
+  transition: transform 0.48s cubic-bezier(.22, 1.45, .35, 1);
+}
+
+.dh-glyph {
+  filter: drop-shadow(0 0 9px currentColor);
+  vector-effect: non-scaling-stroke;
+}
+
+.dh-organ-port {
+  stroke: #120f0d;
+  stroke-width: 2.5;
+  transition: fill 0.35s ease;
+}
+
+.dh-organ-name,
+.dh-affinity-mark {
+  text-anchor: middle;
+  text-transform: uppercase;
+}
+
+.dh-organ-name {
+  font-size: 15px;
+  letter-spacing: 0.13em;
+}
+
+.dh-affinity-mark {
+  fill: rgba(234, 217, 183, 0.32);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.dh-affinity-mark.is-matching {
+  fill: rgba(174, 191, 130, 0.82);
+}
+
+.dh-chamber.is-revealed {
+  animation: dh-dreamwell-rise 1.1s cubic-bezier(.15, .85, .2, 1) both;
+}
+
+.dh-pulse-ring {
+  fill: none;
+  stroke: #ff806c;
+  stroke-width: 6;
+  opacity: 0;
+  animation: dh-pulse-impact 1.15s cubic-bezier(.1, .7, .15, 1) both;
+  pointer-events: none;
+}
+
+.dh-scars path {
+  fill: none;
+  stroke: rgba(255, 77, 70, 0.84);
+  stroke-width: 7;
+  stroke-linecap: square;
+  stroke-linejoin: bevel;
+  stroke-dasharray: 5 8;
+  filter: drop-shadow(0 0 12px rgba(255, 38, 50, 0.7));
+  animation: dh-scar-write 1.2s ease-out both;
+}
+
+.dh-lucid-crown {
+  fill: none;
+  stroke: rgba(248, 215, 163, 0.58);
+  stroke-width: 2;
+  filter: drop-shadow(0 0 11px rgba(231, 191, 114, 0.45));
+  animation: dh-crown-arrive 1.5s cubic-bezier(.15, .85, .2, 1) both;
+}
+
+.dh-lucid-crown circle:first-child {
+  stroke-dasharray: 3 12;
+}
+
+.dh-lucid-crown circle:nth-child(2) {
+  stroke-dasharray: 60 14;
+  animation: dh-circulation 8s linear infinite reverse;
+}
+
+.dh-resources {
+  position: absolute;
+  z-index: 12;
+  left: 22px;
+  bottom: 22px;
+  display: flex;
+  gap: 12px;
+  padding: 11px 12px 9px;
+  border: 1px solid rgba(234, 217, 183, 0.14);
+  background: rgba(10, 9, 8, 0.68);
+  backdrop-filter: blur(12px);
+}
+
+.dh-resource {
+  display: grid;
+  grid-template-columns: 7px 22px;
+  grid-template-rows: 18px 11px;
+  column-gap: 7px;
+  min-width: 53px;
+}
+
+.dh-resource-track {
+  grid-row: 1 / 3;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(234, 217, 183, 0.18);
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.dh-resource-track span {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transition: height 0.8s cubic-bezier(.2, .8, .2, 1);
+}
+
+.dh-resource strong {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.dh-resource small {
+  color: rgba(234, 217, 183, 0.38);
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dh-resource.is-balanced small::after {
+  content: " •";
+  color: #aebf82;
+}
+
+.dh-chronicle {
+  position: absolute;
+  z-index: 12;
+  top: 70px;
+  right: 20px;
+  width: min(260px, 28%);
+  padding: 0;
+  list-style: none;
+  color: rgba(234, 217, 183, 0.46);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.dh-chronicle li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 7px;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(234, 217, 183, 0.08);
+}
+
+.dh-chronicle span {
+  color: rgba(255, 107, 85, 0.68);
+}
+
+.dh-pulse-console {
+  position: absolute;
+  z-index: 16;
+  left: 50%;
+  bottom: 18px;
+  display: grid;
+  grid-template-columns: 110px 86px 110px;
+  align-items: center;
+  transform: translateX(-50%);
+}
+
+.dh-pulse-button {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 128, 108, 0.76);
+  border-radius: 50%;
+  color: #ff9a87;
+  background:
+    radial-gradient(circle, rgba(255, 107, 85, 0.2), rgba(13, 10, 9, 0.94) 64%);
+  box-shadow:
+    inset 0 0 0 7px rgba(255, 107, 85, 0.04),
+    0 0 28px rgba(255, 107, 85, 0.16);
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.dh-pulse-button:hover:not(:disabled),
+.dh-pulse-button:focus-visible:not(:disabled) {
+  color: #fff1d5;
+  outline: none;
+  transform: scale(1.055);
+  box-shadow:
+    inset 0 0 0 7px rgba(255, 107, 85, 0.08),
+    0 0 44px rgba(255, 107, 85, 0.34);
+}
+
+.dh-pulse-button:active:not(:disabled) {
+  transform: scale(.96);
+}
+
+.dh-pulse-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.dh-pulse-button span {
+  position: absolute;
+  inset: 7px;
+  border: 1px dashed rgba(255, 128, 108, 0.28);
+  border-radius: inherit;
+  animation: dh-console-rotate 12s linear infinite;
+}
+
+.dh-pulse-button small {
+  margin-top: 5px;
+  color: rgba(234, 217, 183, 0.34);
+  font-size: 7px;
+}
+
+.dh-beat-readout,
+.dh-balance-readout {
+  padding: 9px;
+  border-top: 1px solid rgba(234, 217, 183, 0.14);
+  border-bottom: 1px solid rgba(234, 217, 183, 0.14);
+  color: rgba(234, 217, 183, 0.58);
+  background: rgba(8, 8, 7, 0.7);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.dh-beat-readout {
+  text-align: right;
+}
+
+.dh-beat-readout span {
+  display: block;
+  margin-top: 3px;
+  color: rgba(234, 217, 183, 0.28);
+  font-size: 7px;
+}
+
+.dh-balance-readout {
+  text-align: left;
+}
+
+.dh-balance-readout.is-ready {
+  color: #cbdc9d;
+}
+
+.dh-seal {
+  position: absolute;
+  z-index: 22;
+  top: 50%;
+  left: 50%;
+  width: min(480px, calc(100% - 44px));
+  padding: 40px 28px 32px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(234, 217, 183, 0.3);
+  background:
+    linear-gradient(135deg, rgba(49, 24, 20, 0.94), rgba(9, 9, 8, 0.96)),
+    rgba(9, 9, 8, 0.92);
+  box-shadow:
+    0 32px 90px rgba(0, 0, 0, 0.72),
+    inset 0 0 0 8px rgba(234, 217, 183, 0.025);
+  text-align: center;
+  backdrop-filter: blur(14px);
+  clip-path: polygon(8% 0, 92% 0, 100% 14%, 100% 86%, 92% 100%, 8% 100%, 0 86%, 0 14%);
+}
+
+.dh-seal-mark {
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 18px;
+}
+
+.dh-seal-mark svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.dh-seal p {
+  color: rgba(234, 217, 183, 0.42);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+}
+
+.dh-seal h2 {
+  margin: 14px 0 24px;
+  color: #ead9b7;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(24px, 3vw, 38px);
+  font-weight: 400;
+  line-height: 1.16;
+}
+
+.dh-seal button {
+  min-height: 48px;
+  padding: 0 20px;
+  border: 1px solid #ff806c;
+  color: #ffd5c0;
+  background: rgba(255, 107, 85, 0.1);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.dh-seal button:hover,
+.dh-seal button:focus-visible {
+  outline: none;
+  background: rgba(255, 107, 85, 0.2);
+  box-shadow: 0 0 28px rgba(255, 107, 85, 0.28);
+  transform: translateY(-2px);
+}
+
+.dh-seal > small {
+  display: block;
+  margin-top: 14px;
+  color: rgba(234, 217, 183, 0.28);
+  font-size: 8px;
+}
+
+.dh-outcome {
+  position: absolute;
+  z-index: 20;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100% - 48px));
+  padding: 26px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  animation: dh-outcome-arrive 1s ease both;
+}
+
+.dh-outcome span {
+  font-size: 9px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.dh-outcome h2 {
+  margin: 10px 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(24px, 3.2vw, 44px);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+
+.dh-outcome p {
+  margin: auto;
+  max-width: 420px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.dh-outcome-lucid {
+  border-top: 1px solid rgba(248, 215, 163, 0.55);
+  border-bottom: 1px solid rgba(248, 215, 163, 0.55);
+  color: #f8d7a3;
+  background: rgba(24, 17, 10, 0.78);
+  text-shadow: 0 0 24px rgba(248, 215, 163, 0.42);
+}
+
+.dh-outcome-scarred {
+  border-top: 1px solid rgba(255, 95, 88, 0.7);
+  border-bottom: 1px solid rgba(255, 95, 88, 0.7);
+  color: #ff8c82;
+  background: rgba(34, 8, 10, 0.84);
+  text-shadow: 0 0 24px rgba(255, 59, 65, 0.45);
+}
+
+.dh-organ-drawer {
+  position: relative;
+  z-index: 10;
+  width: 310px;
+  flex: 0 0 310px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 18px 16px 14px;
+  background:
+    linear-gradient(165deg, rgba(38, 27, 23, 0.9), rgba(9, 10, 8, 0.96)),
+    var(--ink);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.28);
+}
+
+.dh-organ-drawer::before {
+  content: "";
+  position: absolute;
+  inset: 9px;
+  pointer-events: none;
+  border: 1px solid rgba(234, 217, 183, 0.07);
+}
+
+.dh-drawer-heading {
+  position: relative;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 3px 13px;
+  border-bottom: 1px solid rgba(234, 217, 183, 0.15);
+}
+
+.dh-drawer-heading h2 {
+  margin-top: 3px;
+  color: #ead9b7;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 24px;
+  font-weight: 400;
+}
+
+.dh-drawer-heading b {
+  color: rgba(231, 191, 114, 0.72);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.dh-instructions {
+  position: relative;
+  display: grid;
+  gap: 5px;
+  padding: 12px 4px;
+  color: rgba(234, 217, 183, 0.4);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.dh-instructions strong {
+  color: rgba(234, 217, 183, 0.76);
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+.dh-organ-list {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 1px 4px 10px;
+}
+
+.dh-organ-card {
+  --organ-color: #ead9b7;
+  position: relative;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 9px 6px 6px;
+  border: 1px solid rgba(234, 217, 183, 0.13);
+  color: rgba(234, 217, 183, 0.58);
+  background: rgba(5, 6, 5, 0.42);
+  font: inherit;
+  text-align: left;
+  cursor: grab;
+  touch-action: none;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.dh-organ-card:hover,
+.dh-organ-card:focus-visible,
+.dh-organ-card.is-selected {
+  outline: none;
+  border-color: var(--organ-color);
+  background: color-mix(in srgb, var(--organ-color) 9%, rgba(5, 6, 5, 0.78));
+  transform: translateX(-3px);
+}
+
+.dh-organ-card.is-placed {
+  background: rgba(5, 6, 5, 0.7);
+}
+
+.dh-organ-card.is-connected {
+  box-shadow: inset 3px 0 0 var(--organ-color), 0 0 18px color-mix(in srgb, var(--organ-color) 12%, transparent);
+}
+
+.dh-organ-card svg {
+  width: 44px;
+  height: 44px;
+  overflow: visible;
+}
+
+.dh-organ-card > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dh-organ-card strong {
+  color: var(--organ-color);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dh-organ-card small {
+  overflow: hidden;
+  color: rgba(234, 217, 183, 0.34);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dh-organ-card i {
+  color: rgba(234, 217, 183, 0.32);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 11px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.dh-organ-card.is-connected i {
+  color: #aebf82;
+}
+
+.dh-inspector {
+  position: relative;
+  margin-top: 2px;
+  padding: 12px;
+  border-top: 1px solid rgba(234, 217, 183, 0.15);
+  border-bottom: 1px solid rgba(234, 217, 183, 0.15);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.dh-inspector-copy {
+  min-height: 62px;
+}
+
+.dh-inspector-copy strong {
+  display: block;
+  margin: 4px 0;
+  font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.dh-inspector-copy p {
+  color: rgba(234, 217, 183, 0.38);
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.dh-rotate-controls {
+  display: grid;
+  grid-template-columns: 46px 1fr 46px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dh-rotate-controls button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid rgba(231, 191, 114, 0.38);
+  color: #e7bf72;
+  background: rgba(231, 191, 114, 0.05);
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.dh-rotate-controls button:hover:not(:disabled),
+.dh-rotate-controls button:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: #e7bf72;
+  background: rgba(231, 191, 114, 0.13);
+}
+
+.dh-rotate-controls button:disabled {
+  opacity: 0.22;
+  cursor: not-allowed;
+}
+
+.dh-rotate-controls div {
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+
+.dh-rotate-controls span {
+  overflow: hidden;
+  color: rgba(234, 217, 183, 0.58);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dh-rotate-controls small {
+  color: rgba(234, 217, 183, 0.3);
+  font-size: 7px;
+}
+
+.dh-drawer-actions {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  padding-top: 11px;
+}
+
+.dh-drawer-actions button {
+  min-height: 44px;
+  border: 1px solid rgba(234, 217, 183, 0.18);
+  color: rgba(234, 217, 183, 0.56);
+  background: rgba(0, 0, 0, 0.24);
+  font: inherit;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.dh-drawer-actions button:hover:not(:disabled),
+.dh-drawer-actions button:focus-visible:not(:disabled) {
+  outline: none;
+  border-color: rgba(234, 217, 183, 0.56);
+  color: #ead9b7;
+}
+
+.dh-drawer-actions button:disabled {
+  opacity: 0.24;
+  cursor: not-allowed;
+}
+
+.dh-drawer-actions .is-danger {
+  border-color: rgba(255, 107, 85, 0.26);
+  color: rgba(255, 128, 108, 0.64);
+}
+
+.dh-drag-ghost {
+  position: fixed;
+  z-index: 100;
+  width: 84px;
+  height: 104px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%) rotate(-3deg);
+  border: 1px solid var(--organ-color);
+  color: var(--organ-color);
+  background: rgba(13, 11, 9, 0.9);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.5), 0 0 26px color-mix(in srgb, var(--organ-color) 24%, transparent);
+  pointer-events: none;
+}
+
+.dh-drag-ghost svg {
+  width: 58px;
+  height: 58px;
+  overflow: visible;
+}
+
+.dh-drag-ghost span {
+  margin-top: -15px;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@keyframes dh-circulation {
+  to { stroke-dashoffset: -46; }
+}
+
+@keyframes dh-organ-breath {
+  0%, 100% { opacity: 0.46; transform: scale(.96); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+@keyframes dh-dreamwell-rise {
+  from { opacity: 0; transform: translate(450px, 720px) scale(.7); }
+  to { opacity: 1; transform: translate(450px, 638px) scale(1); }
+}
+
+@keyframes dh-pulse-impact {
+  0% { opacity: .95; r: 74px; stroke-width: 9; }
+  100% { opacity: 0; r: 330px; stroke-width: 1; }
+}
+
+@keyframes dh-console-rotate {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dh-scar-write {
+  from { opacity: 0; stroke-dashoffset: 180; }
+  to { opacity: 1; stroke-dashoffset: 0; }
+}
+
+@keyframes dh-crown-arrive {
+  from { opacity: 0; transform: scale(.7) rotate(-12deg); transform-origin: 450px 348px; }
+  to { opacity: 1; transform: scale(1) rotate(0); transform-origin: 450px 348px; }
+}
+
+@keyframes dh-outcome-arrive {
+  from { opacity: 0; transform: translate(-50%, -45%) scale(.94); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 760px) {
+  .dh-crownbar {
+    height: 58px;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    padding: 0 8px;
+  }
+
+  .dh-nav {
+    padding: 0 4px;
+  }
+
+  .dh-title {
+    justify-self: end;
+    text-align: right;
+  }
+
+  .dh-title span,
+  .dh-persistence {
+    display: none;
+  }
+
+  .dh-title h1 {
+    margin: 0;
+    font-size: 15px;
+  }
+
+  .dh-surface {
+    height: calc(100% - 58px);
+    flex-direction: column;
+  }
+
+  .dh-atlas {
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid rgba(234, 217, 183, 0.16);
+  }
+
+  .dh-atlas::before {
+    inset: 8px;
+  }
+
+  .dh-body-map {
+    inset: 5% 0 11%;
+    width: 100%;
+    height: 84%;
+  }
+
+  .dh-message {
+    top: 8px;
+    width: calc(100% - 20px);
+    padding: 7px 8px;
+    font-size: 8px;
+  }
+
+  .dh-message span {
+    margin-right: 6px;
+  }
+
+  .dh-chronicle {
+    display: none;
+  }
+
+  .dh-resources {
+    left: 8px;
+    bottom: 8px;
+    gap: 5px;
+    padding: 7px;
+  }
+
+  .dh-resource {
+    grid-template-columns: 5px 15px;
+    grid-template-rows: 14px 8px;
+    column-gap: 4px;
+    min-width: 35px;
+  }
+
+  .dh-resource strong {
+    font-size: 12px;
+  }
+
+  .dh-resource small {
+    font-size: 5px;
+  }
+
+  .dh-pulse-console {
+    right: 7px;
+    bottom: 7px;
+    left: auto;
+    display: block;
+    transform: none;
+  }
+
+  .dh-pulse-button {
+    width: 68px;
+    height: 68px;
+    font-size: 10px;
+  }
+
+  .dh-beat-readout,
+  .dh-balance-readout {
+    display: none;
+  }
+
+  .dh-seal {
+    padding: 22px 18px 20px;
+  }
+
+  .dh-seal-mark {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 10px;
+  }
+
+  .dh-seal h2 {
+    margin: 9px 0 16px;
+    font-size: 23px;
+  }
+
+  .dh-outcome {
+    padding: 18px 14px;
+  }
+
+  .dh-outcome h2 {
+    font-size: 22px;
+  }
+
+  .dh-organ-drawer {
+    width: 100%;
+    height: 242px;
+    flex: 0 0 242px;
+    padding: 8px 9px 7px;
+    box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.3);
+  }
+
+  .dh-organ-drawer::before {
+    inset: 5px;
+  }
+
+  .dh-drawer-heading {
+    align-items: center;
+    padding: 0 3px 6px;
+  }
+
+  .dh-drawer-heading span {
+    display: none;
+  }
+
+  .dh-drawer-heading h2 {
+    margin: 0;
+    font-size: 16px;
+  }
+
+  .dh-drawer-heading b {
+    font-size: 13px;
+  }
+
+  .dh-instructions {
+    display: none;
+  }
+
+  .dh-organ-list {
+    flex: 0 0 64px;
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 5px 3px;
+  }
+
+  .dh-organ-card {
+    width: 154px;
+    min-width: 154px;
+    min-height: 54px;
+    grid-template-columns: 40px 1fr;
+    gap: 6px;
+    padding: 4px 7px 4px 4px;
+    touch-action: pan-x;
+  }
+
+  .dh-organ-card:hover,
+  .dh-organ-card:focus-visible,
+  .dh-organ-card.is-selected {
+    transform: translateY(-2px);
+  }
+
+  .dh-organ-card svg {
+    width: 38px;
+    height: 38px;
+  }
+
+  .dh-organ-card i {
+    display: none;
+  }
+
+  .dh-inspector {
+    display: grid;
+    grid-template-columns: 1fr 142px;
+    gap: 8px;
+    min-height: 73px;
+    margin: 0;
+    padding: 7px;
+  }
+
+  .dh-inspector-copy {
+    min-height: 0;
+  }
+
+  .dh-inspector-copy p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .dh-rotate-controls {
+    grid-template-columns: 44px 1fr 44px;
+    gap: 3px;
+    margin: 0;
+  }
+
+  .dh-rotate-controls span {
+    display: none;
+  }
+
+  .dh-drawer-actions {
+    padding-top: 6px;
+  }
+}
+
+@media (max-width: 420px) {
+  .dh-title h1 {
+    font-size: 13px;
+  }
+
+  .dh-body-map {
+    inset: 7% -7% 12%;
+    width: 114%;
+  }
+
+  .dh-chamber-label {
+    font-size: 17px;
+  }
+
+  .dh-organ-name {
+    font-size: 17px;
+  }
+
+  .dh-affinity-mark {
+    font-size: 13px;
+  }
+
+  .dh-organ-drawer {
+    height: 250px;
+    flex-basis: 250px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dh-shell *,
+  .dh-shell *::before,
+  .dh-shell *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .dh-flow-dot {
+    display: none;
+  }
+}
