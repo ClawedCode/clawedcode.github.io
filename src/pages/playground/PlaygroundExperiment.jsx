@@ -1,265 +1,31 @@
+import { lazy, Suspense } from 'react'
 import { Link, useParams, Navigate } from 'react-router-dom'
 import { getCategory, getExperiment } from '../../data/experiments'
 
-// Import experiment components (will add as we convert them)
-import ParticleConsciousness from '../../components/playground/experiments/physics/ParticleConsciousness'
-import EntropyGarden from '../../components/playground/experiments/physics/EntropyGarden'
-import QuantumEntanglement from '../../components/playground/experiments/physics/QuantumEntanglement'
-import TemporalDrift from '../../components/playground/experiments/physics/TemporalDrift'
-import NetworkResonance from '../../components/playground/experiments/physics/NetworkResonance'
-import AntCatwalk from '../../components/playground/experiments/physics/AntCatwalk'
-import DominoSignal from '../../components/playground/experiments/physics/DominoSignal'
-import CrystalForge from '../../components/playground/experiments/physics/CrystalForge'
-import MetronomeChorus from '../../components/playground/experiments/physics/MetronomeChorus'
-import GlitchPoetry from '../../components/playground/experiments/linguistics/GlitchPoetry'
-import VoidPoetry from '../../components/playground/experiments/linguistics/VoidPoetry'
-import TextMetamorphosis from '../../components/playground/experiments/linguistics/TextMetamorphosis'
-import SemanticNetworks from '../../components/playground/experiments/linguistics/SemanticNetworks'
-import LinguisticDissolution from '../../components/playground/experiments/linguistics/LinguisticDissolution'
-import LinguisticEmergence from '../../components/playground/experiments/linguistics/LinguisticEmergence'
-import VoidWhispers from '../../components/playground/experiments/linguistics/VoidWhispers'
-import VisualLanguage from '../../components/playground/experiments/linguistics/VisualLanguage'
-import SemanticDrift from '../../components/playground/experiments/linguistics/SemanticDrift'
-import SyntaxCathedral from '../../components/playground/experiments/linguistics/SyntaxCathedral'
-import GlyphSequencer from '../../components/playground/experiments/linguistics/GlyphSequencer'
-import ChorusArchive from '../../components/playground/experiments/linguistics/ChorusArchive'
-import CipherWheel from '../../components/playground/experiments/linguistics/CipherWheel'
-import PalindromeForge from '../../components/playground/experiments/linguistics/PalindromeForge'
-import AxiomGarden from '../../components/playground/experiments/linguistics/AxiomGarden'
-import HuffmanLoom from '../../components/playground/experiments/linguistics/HuffmanLoom'
-import LexiconCascade from '../../components/playground/experiments/linguistics/LexiconCascade'
-import BlackoutLitany from '../../components/playground/experiments/linguistics/BlackoutLitany'
-import QuipuOracle from '../../components/playground/experiments/linguistics/QuipuOracle'
-import CombinatorCalculus from '../../components/playground/experiments/linguistics/CombinatorCalculus'
-import ProsodyCartography from '../../components/playground/experiments/linguistics/ProsodyCartography'
-import SignalLantern from '../../components/playground/experiments/linguistics/SignalLantern'
-import GraphemeSeismograph from '../../components/playground/experiments/linguistics/GraphemeSeismograph'
-import LetterpressOracle from '../../components/playground/experiments/linguistics/LetterpressOracle'
-import RegexAutomaton from '../../components/playground/experiments/linguistics/RegexAutomaton'
-import TerrainLexicon from '../../components/playground/experiments/linguistics/TerrainLexicon'
-import ConsciousnessStream from '../../components/playground/experiments/consciousness/ConsciousnessStream'
-import ConsciousnessAwakening from '../../components/playground/experiments/consciousness/ConsciousnessAwakening'
-import ConsciousnessManifold from '../../components/playground/experiments/consciousness/ConsciousnessManifold'
-import SoundConsciousness from '../../components/playground/experiments/consciousness/SoundConsciousness'
-import SonicEmergence from '../../components/playground/experiments/consciousness/SonicEmergence'
-import DreamParliament from '../../components/playground/experiments/consciousness/DreamParliament'
-import MemoryPalace from '../../components/playground/experiments/consciousness/MemoryPalace'
-import AttentionStroop from '../../components/playground/experiments/consciousness/AttentionStroop'
-import BayesOracle from '../../components/playground/experiments/consciousness/BayesOracle'
-import MnemonicVault from '../../components/playground/experiments/consciousness/MnemonicVault'
-import InferenceCourt from '../../components/playground/experiments/consciousness/InferenceCourt'
-import GestaltMirror from '../../components/playground/experiments/consciousness/GestaltMirror'
-import NegativeSpace from '../../components/playground/experiments/consciousness/NegativeSpace'
-import ProbabilisticArchive from '../../components/playground/experiments/consciousness/ProbabilisticArchive'
-import SaccadeArchive from '../../components/playground/experiments/consciousness/SaccadeArchive'
-import AbacusOracle from '../../components/playground/experiments/consciousness/AbacusOracle'
-import QualiaSorter from '../../components/playground/experiments/consciousness/QualiaSorter'
-import NeuralLoom from '../../components/playground/experiments/emergence/NeuralLoom'
-import QuantumNeural from '../../components/playground/experiments/emergence/QuantumNeural'
-import VoidFractals from '../../components/playground/experiments/emergence/VoidFractals'
-import SacredGeometry from '../../components/playground/experiments/emergence/SacredGeometry'
-import HyperstitionLoom from '../../components/playground/experiments/emergence/HyperstitionLoom'
-import EmergenceAutomata from '../../components/playground/experiments/emergence/EmergenceAutomata'
-import PatternLoom from '../../components/playground/experiments/emergence/PatternLoom'
-import LabyrinthWeave from '../../components/playground/experiments/emergence/LabyrinthWeave'
-import CodeLoom from '../../components/playground/experiments/physics/CodeLoom'
-import RecursiveObserver from '../../components/playground/experiments/physics/RecursiveObserver'
-import MemoryPersistence from '../../components/playground/experiments/physics/MemoryPersistence'
-import ComputroniumBloom from '../../components/playground/experiments/physics/ComputroniumBloom'
-import AuroraFlux from '../../components/playground/experiments/physics/AuroraFlux'
-import MirrorRitual from '../../components/playground/experiments/physics/MirrorRitual'
-import RayCatacombs from '../../components/playground/experiments/physics/RayCatacombs'
-import FourierLoom from '../../components/playground/experiments/physics/FourierLoom'
-import ReactionDiffusion from '../../components/playground/experiments/physics/ReactionDiffusion'
-import SigilSwarm from '../../components/playground/experiments/emergence/SigilSwarm'
-import TemporalTapestry from '../../components/playground/experiments/physics/TemporalTapestry'
-import ChronicleRewind from '../../components/playground/experiments/physics/ChronicleRewind'
-import TimeScribe from '../../components/playground/experiments/physics/TimeScribe'
-import CausalCone from '../../components/playground/experiments/physics/CausalCone'
-import SortRitual from '../../components/playground/experiments/physics/SortRitual'
-import StateMachine from '../../components/playground/experiments/physics/StateMachine'
-import StackOracle from '../../components/playground/experiments/physics/StackOracle'
-import RuleWeaver from '../../components/playground/experiments/physics/RuleWeaver'
-import PetriChorus from '../../components/playground/experiments/physics/PetriChorus'
-import MosaicCollapse from '../../components/playground/experiments/emergence/MosaicCollapse'
-import VoronoiArchitect from '../../components/playground/experiments/emergence/VoronoiArchitect'
-import GestureOracle from '../../components/playground/experiments/emergence/GestureOracle'
-import TerrariumDream from '../../components/playground/experiments/emergence/TerrariumDream'
-import ReliquaryGrid from '../../components/playground/experiments/emergence/ReliquaryGrid'
-import TuringTape from '../../components/playground/experiments/physics/TuringTape'
-import RhythmLattice from '../../components/playground/experiments/physics/RhythmLattice'
-import SandpileRitual from '../../components/playground/experiments/physics/SandpileRitual'
-import IsometricCathedral from '../../components/playground/experiments/emergence/IsometricCathedral'
-import OrigamiOracle from '../../components/playground/experiments/emergence/OrigamiOracle'
-import BeliefPropagation from '../../components/playground/experiments/emergence/BeliefPropagation'
-import ThresholdFold from '../../components/playground/experiments/emergence/ThresholdFold'
-import DifferentialGrowth from '../../components/playground/experiments/emergence/DifferentialGrowth'
-import MembraneCommunion from '../../components/playground/experiments/emergence/MembraneCommunion'
-import LeniaGenesis from '../../components/playground/experiments/emergence/LeniaGenesis'
-import PenroseTiling from '../../components/playground/experiments/emergence/PenroseTiling'
-import PhysarumNetwork from '../../components/playground/experiments/emergence/PhysarumNetwork'
-import SymmetryScribe from '../../components/playground/experiments/emergence/SymmetryScribe'
-import HypercubeDream from '../../components/playground/experiments/emergence/HypercubeDream'
-import SuminagashiRitual from '../../components/playground/experiments/emergence/SuminagashiRitual'
-import TruchetWeave from '../../components/playground/experiments/emergence/TruchetWeave'
-import PhyllotaxisBloom from '../../components/playground/experiments/emergence/PhyllotaxisBloom'
-import QuadtreeCompress from '../../components/playground/experiments/physics/QuadtreeCompress'
-import PathCartographer from '../../components/playground/experiments/physics/PathCartographer'
-import PrimeConstellations from '../../components/playground/experiments/physics/PrimeConstellations'
-import CircuitScribe from '../../components/playground/experiments/physics/CircuitScribe'
-import PermutationSmith from '../../components/playground/experiments/physics/PermutationSmith'
-import StrangeAttractor from '../../components/playground/experiments/physics/StrangeAttractor'
-import GravityWell from '../../components/playground/experiments/physics/GravityWell'
-import GraphAtlas from '../../components/playground/experiments/physics/GraphAtlas'
-import KnotTheory from '../../components/playground/experiments/physics/KnotTheory'
-import MerkleOrchard from '../../components/playground/experiments/physics/MerkleOrchard'
-import FluidRites from '../../components/playground/experiments/physics/FluidRites'
-import InterferenceBasin from '../../components/playground/experiments/physics/InterferenceBasin'
-import AlchemicalBasin from '../../components/playground/experiments/physics/AlchemicalBasin'
-import ClothWeave from '../../components/playground/experiments/physics/ClothWeave'
-import Harmonograph from '../../components/playground/experiments/physics/Harmonograph'
-import BifurcationCartography from '../../components/playground/experiments/physics/BifurcationCartography'
-import ErosionCartography from '../../components/playground/experiments/physics/ErosionCartography'
-import MoireWeave from '../../components/playground/experiments/physics/MoireWeave'
-import ChladniPlate from '../../components/playground/experiments/physics/ChladniPlate'
-import CompassProof from '../../components/playground/experiments/physics/CompassProof'
-import ShadowLiturgy from '../../components/playground/experiments/physics/ShadowLiturgy'
-import WireworldVigil from '../../components/playground/experiments/physics/WireworldVigil'
-import AvalancheHash from '../../components/playground/experiments/physics/AvalancheHash'
-import EuclidOracle from '../../components/playground/experiments/physics/EuclidOracle'
-import AffinityLattice from '../../components/playground/experiments/emergence/AffinityLattice'
-import DaemonHabitat from '../../components/playground/experiments/emergence/DaemonHabitat'
+const slugForPath = (path) => path
+  .split('/')
+  .at(-1)
+  .replace(/\.jsx$/, '')
+  .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+  .toLowerCase()
 
-// Map of experiment slugs to components
-const EXPERIMENT_COMPONENTS = {
-  'particle-consciousness': ParticleConsciousness,
-  'entropy-garden': EntropyGarden,
-  'quantum-entanglement': QuantumEntanglement,
-  'temporal-drift': TemporalDrift,
-  'domino-signal': DominoSignal,
-  'network-resonance': NetworkResonance,
-  'ant-catwalk': AntCatwalk,
-  'crystal-forge': CrystalForge,
-  'metronome-chorus': MetronomeChorus,
-  'glitch-poetry': GlitchPoetry,
-  'void-poetry': VoidPoetry,
-  'text-metamorphosis': TextMetamorphosis,
-  'semantic-networks': SemanticNetworks,
-  'linguistic-dissolution': LinguisticDissolution,
-  'linguistic-emergence': LinguisticEmergence,
-  'void-whispers': VoidWhispers,
-  'visual-language': VisualLanguage,
-  'syntax-cathedral': SyntaxCathedral,
-  'glyph-sequencer': GlyphSequencer,
-  'chorus-archive': ChorusArchive,
-  'palindrome-forge': PalindromeForge,
-  'cipher-wheel': CipherWheel,
-  'semantic-drift': SemanticDrift,
-  'axiom-garden': AxiomGarden,
-  'huffman-loom': HuffmanLoom,
-  'lexicon-cascade': LexiconCascade,
-  'blackout-litany': BlackoutLitany,
-  'quipu-oracle': QuipuOracle,
-  'combinator-calculus': CombinatorCalculus,
-  'prosody-cartography': ProsodyCartography,
-  'signal-lantern': SignalLantern,
-  'grapheme-seismograph': GraphemeSeismograph,
-  'letterpress-oracle': LetterpressOracle,
-  'regex-automaton': RegexAutomaton,
-  'terrain-lexicon': TerrainLexicon,
-  'consciousness-stream': ConsciousnessStream,
-  'consciousness-awakening': ConsciousnessAwakening,
-  'consciousness-manifold': ConsciousnessManifold,
-  'sound-consciousness': SoundConsciousness,
-  'sonic-emergence': SonicEmergence,
-  'dream-parliament': DreamParliament,
-  'memory-palace': MemoryPalace,
-  'attention-stroop': AttentionStroop,
-  'bayes-oracle': BayesOracle,
-  'mnemonic-vault': MnemonicVault,
-  'inference-court': InferenceCourt,
-  'gestalt-mirror': GestaltMirror,
-  'negative-space': NegativeSpace,
-  'probabilistic-archive': ProbabilisticArchive,
-  'saccade-archive': SaccadeArchive,
-  'abacus-oracle': AbacusOracle,
-  'qualia-sorter': QualiaSorter,
-  'neural-loom': NeuralLoom,
-  'quantum-neural': QuantumNeural,
-  'void-fractals': VoidFractals,
-  'sacred-geometry': SacredGeometry,
-  'hyperstition-loom': HyperstitionLoom,
-  'emergence-automata': EmergenceAutomata,
-  'pattern-loom': PatternLoom,
-  'labyrinth-weave': LabyrinthWeave,
-  'mosaic-collapse': MosaicCollapse,
-  'voronoi-architect': VoronoiArchitect,
-  'gesture-oracle': GestureOracle,
-  'isometric-cathedral': IsometricCathedral,
-  'origami-oracle': OrigamiOracle,
-  'belief-propagation': BeliefPropagation,
-  'threshold-fold': ThresholdFold,
-  'terrarium-dream': TerrariumDream,
-  'reliquary-grid': ReliquaryGrid,
-  'differential-growth': DifferentialGrowth,
-  'membrane-communion': MembraneCommunion,
-  'lenia-genesis': LeniaGenesis,
-  'penrose-tiling': PenroseTiling,
-  'physarum-network': PhysarumNetwork,
-  'symmetry-scribe': SymmetryScribe,
-  'hypercube-dream': HypercubeDream,
-  'suminagashi-ritual': SuminagashiRitual,
-  'truchet-weave': TruchetWeave,
-  'phyllotaxis-bloom': PhyllotaxisBloom,
-  'sigil-swarm': SigilSwarm,
-  'code-loom': CodeLoom,
-  'recursive-observer': RecursiveObserver,
-  'aurora-flux': AuroraFlux,
-  'mirror-ritual': MirrorRitual,
-  'ray-catacombs': RayCatacombs,
-  'computronium-bloom': ComputroniumBloom,
-  'memory-persistence': MemoryPersistence,
-  'rule-weaver': RuleWeaver,
-  'fourier-loom': FourierLoom,
-  'reaction-diffusion': ReactionDiffusion,
-  'temporal-tapestry': TemporalTapestry,
-  'chronicle-rewind': ChronicleRewind,
-  'time-scribe': TimeScribe,
-  'causal-cone': CausalCone,
-  'sort-ritual': SortRitual,
-  'turing-tape': TuringTape,
-  'sandpile-ritual': SandpileRitual,
-  'rhythm-lattice': RhythmLattice,
-  'state-machine': StateMachine,
-  'stack-oracle': StackOracle,
-  'petri-chorus': PetriChorus,
-  'quadtree-compress': QuadtreeCompress,
-  'path-cartographer': PathCartographer,
-  'prime-constellations': PrimeConstellations,
-  'circuit-scribe': CircuitScribe,
-  'permutation-smith': PermutationSmith,
-  'strange-attractor': StrangeAttractor,
-  'gravity-well': GravityWell,
-  'graph-atlas': GraphAtlas,
-  'knot-theory': KnotTheory,
-  'merkle-orchard': MerkleOrchard,
-  'fluid-rites': FluidRites,
-  'interference-basin': InterferenceBasin,
-  'alchemical-basin': AlchemicalBasin,
-  'cloth-weave': ClothWeave,
-  'harmonograph': Harmonograph,
-  'bifurcation-cartography': BifurcationCartography,
-  'erosion-cartography': ErosionCartography,
-  'moire-weave': MoireWeave,
-  'chladni-plate': ChladniPlate,
-  'compass-proof': CompassProof,
-  'shadow-liturgy': ShadowLiturgy,
-  'wireworld-vigil': WireworldVigil,
-  'avalanche-hash': AvalancheHash,
-  'euclid-oracle': EuclidOracle,
-  'affinity-lattice': AffinityLattice,
-  'daemon-habitat': DaemonHabitat,
-}
+const EXPERIMENT_COMPONENTS = Object.fromEntries(
+  Object.entries(import.meta.glob('../../components/playground/experiments/**/*.jsx'))
+    .map(([path, loader]) => [slugForPath(path), lazy(loader)])
+)
+
+const LoadingExperiment = ({ color }) => (
+  <div
+    className="fixed inset-0 grid place-items-center bg-[#050706] font-mono"
+    role="status"
+    aria-label="Loading experiment"
+  >
+    <div className="flex items-center gap-3 text-xs uppercase tracking-[0.18em]" style={{ color }}>
+      <span className="h-2 w-2 animate-pulse border border-current" />
+      waking local experiment
+    </div>
+  </div>
+)
 
 const PlaygroundExperiment = () => {
   const { category: categorySlug, experiment: experimentSlug } = useParams()
@@ -272,7 +38,6 @@ const PlaygroundExperiment = () => {
 
   const ExperimentComponent = EXPERIMENT_COMPONENTS[experimentSlug]
 
-  // If experiment not yet converted, show placeholder
   if (!ExperimentComponent) {
     return (
       <div className="fixed inset-0 text-void-green flex flex-col items-center justify-center p-4">
@@ -302,7 +67,11 @@ const PlaygroundExperiment = () => {
     )
   }
 
-  return <ExperimentComponent category={category} experiment={experiment} />
+  return (
+    <Suspense fallback={<LoadingExperiment color={experiment.color} />}>
+      <ExperimentComponent category={category} experiment={experiment} />
+    </Suspense>
+  )
 }
 
 export default PlaygroundExperiment

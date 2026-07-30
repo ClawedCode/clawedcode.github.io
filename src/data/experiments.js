@@ -38,7 +38,8 @@ export const CATEGORIES = {
       { slug: 'truchet-weave', name: 'truchet.weave()', color: '#77ddb5', desc: 'two-fold tile symmetry // click rotate watch continuous paths rewrite' },
       { slug: 'phyllotaxis-bloom', name: 'phyllotaxis.bloom()', color: '#ffaaee', desc: 'golden angle germinates Fibonacci spirals // scrub divergence watch packing dissolve' },
       { slug: 'affinity-lattice', name: 'affinity.lattice()', color: '#ccaaff', desc: 'schelling segregation on void substrate // local tolerance carves global tribes' },
-      { slug: 'daemon-habitat', name: 'daemon.habitat()', color: '#f1b48f', desc: 'implant organs into a persistent svg body // routed circulation learns to dream or scar' }
+      { slug: 'daemon-habitat', name: 'daemon.habitat()', color: '#f1b48f', desc: 'implant organs into a persistent svg body // routed circulation learns to dream or scar' },
+      { slug: 'measure-vivarium', name: 'measure.vivarium()', color: '#e9b872', desc: 'breed seeded Euclidean bodies // traited grafts circulate scar repair molt and rewrite the brood' }
     ]
   },
   consciousness: {
