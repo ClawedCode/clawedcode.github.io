@@ -40,7 +40,7 @@ export const CATEGORIES = {
       { slug: 'affinity-lattice', name: 'affinity.lattice()', color: '#ccaaff', desc: 'schelling segregation on void substrate // local tolerance carves global tribes' },
       { slug: 'daemon-habitat', name: 'daemon.habitat()', color: '#f1b48f', desc: 'implant organs into a persistent svg body // routed circulation learns to dream or scar' },
       { slug: 'measure-vivarium', name: 'measure.vivarium()', color: '#e9b872', desc: 'breed seeded Euclidean bodies // traited grafts circulate scar repair molt and rewrite the brood' },
-      { slug: 'civic-palimpsest', name: 'civic.palimpsest()', color: '#a23c2f', desc: 'drag layered charter windows across a persistent paper city // overlaps become inhabited law' }
+      { slug: 'civic-palimpsest', name: 'civic.palimpsest()', color: '#a23c2f', desc: 'layer civic laws then drag ward accords across a persistent paper city // held promises become local constitution' }
     ]
   },
   consciousness: {
