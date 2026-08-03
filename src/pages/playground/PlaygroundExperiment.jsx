@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react'
 import { Link, useParams, Navigate } from 'react-router-dom'
 import { getCategory, getExperiment } from '../../data/experiments'
 
+const ApertureChoir = lazy(() => import('../../components/playground/experiments/emergence/ApertureChoir'))
+
 const slugForPath = (path) => path
   .split('/')
   .at(-1)
@@ -9,10 +11,16 @@ const slugForPath = (path) => path
   .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
   .toLowerCase()
 
-const EXPERIMENT_COMPONENTS = Object.fromEntries(
-  Object.entries(import.meta.glob('../../components/playground/experiments/**/*.jsx'))
-    .map(([path, loader]) => [slugForPath(path), lazy(loader)])
-)
+const EXPERIMENT_COMPONENTS = {
+  ...Object.fromEntries(
+    Object.entries(import.meta.glob([
+      '../../components/playground/experiments/**/*.jsx',
+      '!../../components/playground/experiments/emergence/ApertureChoir.jsx'
+    ]))
+      .map(([path, loader]) => [slugForPath(path), lazy(loader)])
+  ),
+  'aperture-choir': ApertureChoir
+}
 
 const LoadingExperiment = ({ color }) => (
   <div
