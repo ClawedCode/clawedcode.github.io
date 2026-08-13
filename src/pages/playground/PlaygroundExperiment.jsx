@@ -3,6 +3,7 @@ import { Link, useParams, Navigate } from 'react-router-dom'
 import { getCategory, getExperiment } from '../../data/experiments'
 
 const ApertureChoir = lazy(() => import('../../components/playground/experiments/emergence/ApertureChoir'))
+const RemainderTransit = lazy(() => import('../../components/playground/experiments/emergence/RemainderTransit'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -15,11 +16,13 @@ const EXPERIMENT_COMPONENTS = {
   ...Object.fromEntries(
     Object.entries(import.meta.glob([
       '../../components/playground/experiments/**/*.jsx',
-      '!../../components/playground/experiments/emergence/ApertureChoir.jsx'
+      '!../../components/playground/experiments/emergence/ApertureChoir.jsx',
+      '!../../components/playground/experiments/emergence/RemainderTransit.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
-  'aperture-choir': ApertureChoir
+  'aperture-choir': ApertureChoir,
+  'remainder-transit': RemainderTransit
 }
 
 const LoadingExperiment = ({ color }) => (
