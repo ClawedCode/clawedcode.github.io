@@ -43,7 +43,8 @@ export const CATEGORIES = {
       { slug: 'civic-palimpsest', name: 'civic.palimpsest()', color: '#a23c2f', desc: 'layer civic laws then drag ward accords across a persistent paper city // held promises become local constitution' },
       { slug: 'quotient-commons', name: 'quotient.commons()', color: '#315f9f', desc: 'drag ratio-plates across a civic survey // quotient rooms raise wards and common measures make permanent bridges' },
       { slug: 'aperture-choir', name: 'aperture.choir()', color: '#ed6a5a', desc: 'score touch-built svg rooms into crossings // performed routes grow new doorforms furnishings and future strategy' },
-      { slug: 'remainder-transit', name: 'remainder.transit()', color: '#f0a54a', desc: 're-cut draggable quotient cars into an authored proof rail // crossings remember and arithmetic becomes portable' }
+      { slug: 'remainder-transit', name: 'remainder.transit()', color: '#f0a54a', desc: 're-cut draggable quotient cars into an authored proof rail // crossings remember and arithmetic becomes portable' },
+      { slug: 'interface-familiar', name: 'interface.familiar()', color: '#e85d3f', desc: 'seat loose controls into an svg body // draw nerves, survive awakenings, and choose autonomous temperament' }
     ]
   },
   consciousness: {

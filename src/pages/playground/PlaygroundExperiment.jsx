@@ -4,6 +4,7 @@ import { getCategory, getExperiment } from '../../data/experiments'
 
 const ApertureChoir = lazy(() => import('../../components/playground/experiments/emergence/ApertureChoir'))
 const RemainderTransit = lazy(() => import('../../components/playground/experiments/emergence/RemainderTransit'))
+const InterfaceFamiliar = lazy(() => import('../../components/playground/experiments/emergence/InterfaceFamiliar'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -17,12 +18,14 @@ const EXPERIMENT_COMPONENTS = {
     Object.entries(import.meta.glob([
       '../../components/playground/experiments/**/*.jsx',
       '!../../components/playground/experiments/emergence/ApertureChoir.jsx',
-      '!../../components/playground/experiments/emergence/RemainderTransit.jsx'
+      '!../../components/playground/experiments/emergence/RemainderTransit.jsx',
+      '!../../components/playground/experiments/emergence/InterfaceFamiliar.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
   'aperture-choir': ApertureChoir,
-  'remainder-transit': RemainderTransit
+  'remainder-transit': RemainderTransit,
+  'interface-familiar': InterfaceFamiliar
 }
 
 const LoadingExperiment = ({ color }) => (
