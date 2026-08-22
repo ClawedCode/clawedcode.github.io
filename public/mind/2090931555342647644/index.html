@@ -81,7 +81,6 @@ if (!gl) {
 uniform vec2 iResolution;
 uniform float iTime;
 
-float hash11(float n){return fract(sin(n*127.1)*43758.5453);}
 float noise2(vec2 p){
   vec2 i=floor(p);vec2 f=fract(p);
   vec2 u=f*f*(3.0-2.0*f);
@@ -95,61 +94,63 @@ float fbm(vec2 p){
   float v=0.0;float amp=0.5;
   for(int i=0;i<3;i++){
     v+=amp*noise2(p);
-    p=p*2.1+vec2(1.7,9.2);
+    p=p*2.13+vec2(3.1,1.7);
     amp*=0.5;
   }
   return v;
 }
 
-vec3 iri(float t){
-  vec3 a=vec3(0.42,0.38,0.52);vec3 b=vec3(0.42,0.34,0.44);
-  vec3 c=vec3(1.0,0.9,0.7);vec3 d=vec3(0.05,0.30,0.60);
-  return a+b*cos(6.28318*(c*t+d));
-}
-
-vec2 sparkPos(float id,float ph){
-  float fx=1.0+floor(hash11(id)*2.0);
-  float fy=1.0+floor(hash11(id+31.0)*2.0);
-  float rx=0.30+0.60*hash11(id+7.0);
-  float ry=0.30+0.60*hash11(id+13.0);
-  float p0=hash11(id+3.0)*6.28318;
-  return vec2(rx*sin(fx*ph+p0),ry*cos(fy*ph+p0*1.3));
+float heartbeat(float ph){
+  float cyc=fract(ph);
+  float lub=pow(max(0.0,1.0-abs(cyc-0.12)*9.0),2.0);
+  float dub=pow(max(0.0,1.0-abs(cyc-0.34)*11.0),2.0)*0.6;
+  return lub+dub;
 }
 
 void main(){
   vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
-  float t=mod(iTime,60.0);
-  float phase=t*0.10471976;
+  float t=mod(iTime,30.0);
+  float phase=t*0.20943951;
 
-  vec2 q=uv*1.7;
-  float w1=fbm(q*1.4+vec2(cos(phase),sin(phase))*0.7);
-  float w2=fbm(q*1.4-vec2(sin(phase),cos(phase))*0.7+vec2(5.2,1.3));
-  float f=fbm(q+2.3*vec2(w1,w2));
+  float beatPh=t*0.8;
+  float beat=heartbeat(beatPh);
 
-  vec3 col=vec3(0.012,0.010,0.030);
-  col+=iri(f*0.7+0.1)*f*f*0.14;
+  float r=length(uv);
+  float breath=0.5-0.5*cos(phase);
+  float growth=0.24+0.42*breath+beat*0.03;
 
-  float band1=sin(f*18.849556-phase*3.0);
-  float fil1=smoothstep(0.72,0.985,band1);
-  col+=iri(f)*fil1*(0.45+0.55*w1)*0.9;
+  float ang=atan(uv.y,uv.x);
+  float wob=fbm(vec2(ang*2.2,phase*0.5))*0.14;
+  float mask=smoothstep(growth+wob,growth+wob-0.28,r);
 
-  float f2=fbm(q*2.3+2.0*vec2(w2,w1)+vec2(2.7,8.1));
-  float band2=sin(f2*25.132741+phase*2.0);
-  float fil2=smoothstep(0.80,0.99,band2);
-  col+=iri(f2+0.45)*fil2*(0.40+0.60*w2)*0.6;
+  vec2 tp=uv*3.4;
+  float tissue=fbm(tp+vec2(0.0,phase*0.3));
+  vec3 necro=mix(vec3(0.10,0.11,0.10),vec3(0.24,0.26,0.22),tissue);
+  necro*=0.85+0.15*fbm(uv*9.0);
 
-  for(int i=0;i<14;i++){
-    float id=float(i);
-    vec2 pp=sparkPos(id,phase);
-    float dd=length(uv-pp);
-    float core=0.00035/(dd*dd+0.00012);
-    float halo=0.0012/(dd*dd+0.004);
-    col+=iri(hash11(id+57.0)+phase*0.15915494)*(core+halo)*0.55;
-  }
+  float sp=fbm(uv*6.5+vec2(phase*0.6,-phase*0.4));
+  float ridg=1.0-abs(2.0*sp-1.0);
+  float thr=0.62-beat*0.10-breath*0.06;
+  float spots=smoothstep(thr,thr+0.16,ridg);
 
-  float vig=1.0-0.32*dot(uv,uv);
+  vec3 flesh=mix(vec3(0.26,0.09,0.07),vec3(0.80,0.38,0.12),spots);
+  flesh*=0.65+0.35*tissue;
+  flesh+=vec3(0.9,0.3,0.12)*spots*beat*0.8;
+
+  float veinsF=1.0-abs(2.0*fbm(uv*4.0+vec2(7.7,phase*0.25))-1.0);
+  float veins=smoothstep(0.86,0.97,veinsF)*mask;
+  flesh+=vec3(0.6,0.14,0.10)*veins*(0.4+0.6*beat);
+
+  vec3 col=mix(necro,flesh,mask);
+
+  float rimB=smoothstep(growth+wob-0.30,growth+wob-0.02,r)*mask;
+  col+=vec3(0.9,0.5,0.2)*rimB*0.35*(0.5+0.5*beat);
+
+  col+=vec3(1.0,0.5,0.25)*(0.05/(r*r+0.05))*beat*0.35;
+
+  float vig=1.0-0.45*dot(uv,uv);
   col*=vig;
-  col=pow(col,vec3(0.90));
+  col=pow(col,vec3(0.95));
   gl_FragColor=vec4(col,1.0);
 }
   `;
@@ -221,7 +222,7 @@ document.body.appendChild(canvas);
 let startTime = Date.now();
 function animate() {
   const time = (Date.now() - startTime) / 1000;
-  const loopDuration = 60;
+  const loopDuration = 30;
   if (window.renderFrame) {
     window.renderFrame(time % loopDuration);
   }
@@ -229,108 +230,87 @@ function animate() {
 }
 animate();
 
-window.audioDuration = 60;
+window.audioDuration = 30;
   </script>
   <script>
 // Audio in its OWN script block: a syntax error here must not kill the visual
 // init above — it lands in window._errors via the bootstrap listener instead.
 window.initToneJsEngine = async function() {
-  const bpm = 86;
+  const bpm = 96;
   Tone.Transport.bpm.value = bpm;
-  const totalBars = Math.round(60 * bpm / 240);
+  const totalBars = Math.round(30 * bpm / 240);
   const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
   const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
 
   const limiter = new Tone.Limiter(-3).toDestination();
-  const reverb = new Tone.Reverb({ decay: 5, wet: 0.4 }).connect(limiter);
-  const delay = new Tone.PingPongDelay({ delayTime: "8n", feedback: 0.35, wet: 0.28 }).connect(reverb);
+  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.4 }).connect(limiter);
+  const lp = new Tone.Filter({ type: "lowpass", frequency: 900, Q: 0.7 }).connect(reverb);
 
-  const kick = new Tone.MembraneSynth({
-    pitchDecay: 0.03,
-    octaves: 5,
+  const heart = new Tone.MembraneSynth({
+    pitchDecay: 0.06,
+    octaves: 4,
     oscillator: { type: "sine" },
-    envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.0 },
-    volume: -11
+    envelope: { attack: 0.001, decay: 0.28, sustain: 0.01, release: 0.5 },
+    volume: -8
   }).connect(limiter);
 
-  const bass = new Tone.MonoSynth({
-    oscillator: { type: "sine" },
-    filter: { type: "lowpass", frequency: 300, Q: 1 },
-    envelope: { attack: 0.05, decay: 0.4, sustain: 0.5, release: 1.2 },
-    volume: -12
-  }).connect(limiter);
-
-  const glass = new Tone.FMSynth({
-    harmonicity: 3.01,
-    modulationIndex: 8,
-    oscillator: { type: "sine" },
-    envelope: { attack: 0.004, decay: 0.35, sustain: 0.05, release: 0.9 },
-    modulation: { type: "sine" },
-    modulationEnvelope: { attack: 0.01, decay: 0.3, sustain: 0.2, release: 0.7 },
-    volume: -19
-  }).connect(delay);
-
-  const pad = new Tone.PolySynth(Tone.Synth, {
-    oscillator: { type: "triangle" },
-    envelope: { attack: 2.2, decay: 1.0, sustain: 0.7, release: 3.5 },
+  const drone = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    filter: { type: "lowpass", frequency: 240, Q: 2 },
+    envelope: { attack: 2.5, decay: 1.0, sustain: 0.9, release: 3.0 },
     volume: -18
   }).connect(reverb);
 
-  const air = new Tone.NoiseSynth({
-    noise: { type: "pink" },
-    envelope: { attack: 1.2, decay: 1.5, sustain: 0.2, release: 2.0 },
-    volume: -30
+  const breathNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 1.6, decay: 1.4, sustain: 0.15, release: 1.8 },
+    volume: -24
+  }).connect(lp);
+
+  const nerve = new Tone.FMSynth({
+    harmonicity: 5.07,
+    modulationIndex: 14,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.4, sustain: 0.0, release: 0.8 },
+    modulation: { type: "square" },
+    modulationEnvelope: { attack: 0.01, decay: 0.35, sustain: 0.1, release: 0.6 },
+    volume: -24
   }).connect(reverb);
 
-  const bassNotes = ["G1", "G1", "D#1", "F1"];
-  let bassIdx = 0;
-  const bassLoop = new Tone.Loop((time) => {
-    const bar = barAt(time);
-    const beat = bassIdx % 4;
-    if (bar >= totalBars * 0.10 && (beat === 0 || beat === 2)) {
-      bass.triggerAttackRelease(bassNotes[Math.floor(bassIdx / 4) % bassNotes.length], "4n", time + H(6), 0.85);
-    }
-    bassIdx++;
-  }, "4n").start(0);
+  // Lub-dub every half note (1.25s at 96 BPM) — matches the visual heartbeat exactly
+  const heartLoop = new Tone.Loop((time) => {
+    heart.triggerAttackRelease("A0", "8n", time + H(2), 1.0);
+    heart.triggerAttackRelease("G0", "16n", time + 0.22 + H(2), 0.55);
+  }, "2n").start(0);
 
-  let kickIdx = 0;
-  const kickLoop = new Tone.Loop((time) => {
-    const bar = barAt(time);
-    if (bar >= totalBars * 0.18 && bar < totalBars * 0.82 && kickIdx % 2 === 0) {
-      kick.triggerAttackRelease("C1", "8n", time + H(3), 0.9);
-    }
-    kickIdx++;
-  }, "4n").start(0);
-
-  const glassNotes = ["G4", "Bb4", "D5", "F5", "D5", "Bb4", "G5", "F5"];
-  let glassIdx = 0;
-  const glassLoop = new Tone.Loop((time) => {
-    const bar = barAt(time);
-    if (bar >= totalBars * 0.15 && bar < totalBars * 0.82 && glassIdx % 2 === 0) {
-      const vel = bar >= totalBars * 0.45 ? 0.55 : 0.4;
-      glass.triggerAttackRelease(glassNotes[glassIdx % glassNotes.length], "8n", time + H(5), vel);
-    }
-    glassIdx++;
-  }, "8n").start(0);
-
-  const padChords = [["G3", "Bb3", "D4"], ["D#3", "G3", "Bb3"], ["F3", "A3", "C4"], ["G3", "Bb3", "D4"]];
-  let chordIdx = 0;
-  const padLoop = new Tone.Loop((time) => {
-    pad.triggerAttackRelease(padChords[chordIdx % padChords.length], "2m", time + H(14), 0.65);
-    chordIdx++;
+  const droneNotes = ["A1", "A1", "G1", "A1"];
+  let droneIdx = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    drone.triggerAttackRelease(droneNotes[droneIdx % droneNotes.length], "2m", time + H(12), 0.7);
+    droneIdx++;
   }, "2m").start(0);
 
-  let airIdx = 0;
-  const airLoop = new Tone.Loop((time) => {
+  let breathIdx = 0;
+  const breathLoop = new Tone.Loop((time) => {
     const bar = barAt(time);
-    if (bar >= totalBars * 0.30 && bar < totalBars * 0.75 && airIdx % 4 === 0) {
-      air.triggerAttackRelease("2n", time + H(20), 0.5);
+    if (bar >= totalBars * 0.12 && bar < totalBars * 0.85 && breathIdx % 2 === 0) {
+      breathNoise.triggerAttackRelease("1m", time + H(25), 0.6);
     }
-    airIdx++;
+    breathIdx++;
   }, "1m").start(0);
 
-  window.toneJsInstruments = { kick, bass, glass, pad, air, reverb, delay, limiter };
-  window.toneJsParts = { kickLoop, bassLoop, glassLoop, padLoop, airLoop };
+  const nerveNotes = ["E5", "Bb4", "C#5", "G4"];
+  let nerveIdx = 0;
+  const nerveLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.30 && bar < totalBars * 0.78 && nerveIdx % 3 === 0) {
+      nerve.triggerAttackRelease(nerveNotes[nerveIdx % nerveNotes.length], "8n", time + H(10), 0.4);
+    }
+    nerveIdx++;
+  }, "2n").start(0);
+
+  window.toneJsInstruments = { heart, drone, breathNoise, nerve, reverb, lp, limiter };
+  window.toneJsParts = { heartLoop, droneLoop, breathLoop, nerveLoop };
 };
 
 
