@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+// clawedcode@void / /reality/glitch /dev/null/dreams
+// Seeded RNG for deterministic emergence
+const seed = 42;
+function rand() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// --- SCENE SETUP ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x050505); // Obsidian void
+scene.fog = new THREE.FogExp2(0x050505, 0.035); // Depth fades to nothing
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(window.devicePixelRatio);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+// --- POST PROCESSING (Bloom is the soul here) ---
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(900, 900), 1.5, 0.4, 0.85);
+bloom.threshold = 0.1;
+bloom.strength = 2.2; // High bloom for "data-bloom" glow
+bloom.radius = 0.8;
+composer.addPass(bloom);
+
+// --- HERO SUBJECT: THE GEOMETRIC FOREST (MyceLium of Data) ---
+// We use a single TubeGeometry curve for the main trunk/branch to keep draw calls low
+// but we simulate the "shattering" via particle instancing that grows outward.
+
+const palette = {
+  void: 0x050505,
+  orange: 0xff3300, // Electric Orange
+  green: 0x39ff14,  // Acid Green
+  white: 0xffffff
+};
+
+// 1. The "Shatter" Particles (10,000 instances)
+const pGeo = new THREE.IcosahedronGeometry(0.04, 0); // Low poly shards
+const pMat = new THREE.MeshBasicMaterial({ color: palette.orange });
+const shardCount = 10000;
+const shards = new THREE.InstancedMesh(pGeo, pMat, shardCount);
+
+// Physics data for shards
+const pState = [];
+for (let i = 0; i < shardCount; i++) {
+  // Start at center (singularity)
+  pState.push({
+    pos: new THREE.Vector3(0, 0, 0),
+    vel: new THREE.Vector3(0, 0, 0),
+    acc: new THREE.Vector3(),
+    phase: rand() * Math.PI * 2, // Individual pulse phase
+    delay: rand() * 5, // Staggered explosion
+    scale: 0.5 + rand() * 1.5
+  });
+}
+
+// 2. The Growing Lattice (Procedural Curves)
+// We generate a single complex curve that spirals out, representing the "one drop"
+const curvePoints = [];
+const steps = 200;
+for (let i = 0; i <= steps; i++) {
+  const t = i / steps;
+  // Fibonacci spiral growth
+  const angle = t * Math.PI * 2 * 10; 
+  const r = t * 4;
+  const x = Math.cos(angle) * r;
+  const y = Math.sin(angle) * r;
+  const z = (t - 0.5) * 8; // Vertical spread
+  curvePoints.push(new THREE.Vector3(x, y, z));
+}
+const latticeCurve = new THREE.CatmullRomCurve3(curvePoints);
+const tubeGeo = new THREE.TubeGeometry(latticeCurve, 200, 0.02, 4, false);
+const tubeMat = new THREE.MeshBasicMaterial({ 
+  color: palette.green, 
+  transparent: true, 
+  opacity: 0.8 
+});
+const lattice = new THREE.Mesh(tubeGeo, tubeMat);
+
+// Add a secondary "shard cluster" mesh for the core
+const coreGeo = new THREE.IcosahedronGeometry(0.1, 2);
+const coreMat = new THREE.MeshBasicMaterial({ color: palette.white, wireframe: true });
+const core = new THREE.Mesh(coreGeo, coreMat);
+
+scene.add(shards);
+scene.add(lattice);
+scene.add(core);
+
+// --- ANIMATION LOOP ---
+const clock = new THREE.Clock();
+const dummy = new THREE.Object3D();
+const tempColor = new THREE.Color();
+
+function animate() {
+  requestAnimationFrame(animate);
+  
+  const rawTime = clock.getElapsedTime();
+  const duration = 60;
+  const phase = ((rawTime % duration) + duration) % duration / duration;
+  const tau = phase * Math.PI * 2;
+  
+  // --- PHYSICS UPDATE (The Shatter) ---
+  // The explosion happens quickly, then drifts
+  const explosionForce = 8.0;
+  const expansion = Math.max(0, rawTime - 2); // Delay start
+  
+  for (let i = 0; i < shardCount; i++) {
+    const p = pState[i];
+    
+    // Reset forces
+    p.acc.set(0, 0, 0);
+    
+    if (expansion > p.delay) {
+      // Radial explosion from center
+      const dir = p.pos.clone().normalize();
+      if (dir.length() < 0.01) dir.set(rand()-0.5, rand()-0.5, rand()-0.5).normalize();
+      
+      // Add slight twist/turbulence
+      const twist = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(0.2);
+      
+      p.acc.copy(dir).add(twist).multiplyScalar(explosionForce * 0.01);
+      
+      // Integrate
+      p.vel.add(p.acc);
+      p.vel.multiplyScalar(0.99); // Drag
+      p.pos.add(p.vel);
+    } else {
+      // Shrink to center (singularity phase)
+      p.pos.lerp(new THREE.Vector3(0,0,0), 0.05);
+      p.vel.multiplyScalar(0.9);
+    }
+    
+    // Update Instance Matrix
+    dummy.position.copy(p.pos);
+    dummy.rotation.set(rawTime * 2, rawTime * 1.5, 0);
+    // Pulse scale based on phase
+    const s = p.scale * (0.8 + 0.2 * Math.sin(tau * 4 + p.phase));
+    dummy.scale.set(s, s, s);
+    dummy.updateMatrix();
+    shards.setMatrixAt(i, dummy.matrix);
+    
+    // Update Color (Orange to Green as they expand)
+    const dist = p.pos.length();
+    const t = Math.min(dist / 6, 1);
+    tempColor.lerpColors(
+      new THREE.Color(palette.orange), 
+      new THREE.Color(palette.green), 
+      t
+    );
+    shards.setColorAt(i, tempColor);
+  }
+  
+  shards.instanceMatrix.needsUpdate = true;
+  shards.instanceColor.needsUpdate = true;
+  
+  // --- HERO ANIMATION ---
+  // Core pulses at the center
+  const coreScale = 0.5 + 0.5 * Math.sin(tau * 2);
+  core.scale.setScalar(coreScale);
+  core.rotation.x = tau;
+  core.rotation.y = tau * 0.5;
+  
+  // Lattice grows/rotates
+  lattice.rotation.y = tau * 0.2;
+  lattice.material.opacity = 0.3 + 0.4 * Math.sin(tau);
+  
+  // --- CAMERA (Gentle Orbit) ---
+  // One slow orbit to reveal depth
+  camera.position.x = Math.sin(tau * 0.5) * 12;
+  camera.position.z = Math.cos(tau * 0.5) * 12;
+  camera.lookAt(0, 0, 0);
+  
+  // Render
+  composer.render();
+}
+
+animate();
+
+// Handle Resize
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 60;
+  const targetBpm = 110; // Driven by "geometric forest" / "data-bloom" energy
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const secPerBar = 240 / bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 101390423) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === FX BUSES ===
+  const masterVerb = new Tone.Reverb({ decay: 2.5, wet: 0.25, preDelay: 0.05 }).toDestination();
+  await masterVerb.generate();
+
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 10, attack: 0.003, release: 0.15 }).toDestination();
+
+  // === KICK (Dark, Obsidian Punch) ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.02,
+    octaves: 6,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.02 }
+  }).toDestination();
+
+  const kickLoop = new Tone.Loop((time) => {
+    kick.triggerAttackRelease("C1", "8n", time + H(3), 1.0);
+    // Sidechain pump
+    compressor.threshold.setValueAtTime(-35, time);
+    compressor.threshold.exponentialRampToValueAtTime(-18, time + 0.15);
+  }, "4n").start(0);
+
+  // === BASS (Obsidian Sub / Crystalline) ===
+  // Drives the "emergent architecture"
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 2.0 }).connect(compressor);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0.3, release: 0.4 }
+  }).connect(bassFilter);
+
+  const bassRoots = ["A1", "F1", "G1", "D#1"];
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Bass enters 5%, exits 90% to allow wind-down
+    if (bar >= totalBars * 0.05 && bar < totalBars * 0.90) {
+      bass.triggerAttackRelease(bassRoots[bassIdx % bassRoots.length], "2n", time + H(8), 0.8);
+      bassIdx++;
+    }
+  }, "2n").start(0);
+
+  // === GLITCHY DATA BLOOM (Acid Green / Electric Orange) ===
+  // Fast, crystalline bursts using MetalSynth
+  const bloomFilter = new Tone.Filter({ type: "bandpass", frequency: 1200, Q: 2.0 }).connect(masterVerb);
+  const bloom = new Tone.MetalSynth({
+    frequency: 350,
+    envelope: { attack: 0.001, decay: 0.08, release: 0.02 },
+    harmonicity: 5.1,
+    modulationIndex: 16,
+    resonance: 4000
+  }).connect(bloomFilter);
+
+  let bloomCount = 0;
+  const bloomLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only active during build and peak (10% to 70%)
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.70) {
+      // Rhythmic variation based on R() to simulate "bifurcation" randomness
+      if (R() > 0.3) {
+        // Randomize pitch slightly for "data" feel
+        const pitchOffset = (R() > 0.5) ? 0 : 120; // +/- 1 semitone
+        bloom.frequency.value = 350 + pitchOffset;
+        bloom.triggerAttackRelease("16n", time + H(4), 0.4);
+      }
+    }
+    bloomCount++;
+  }, "16n").start(0);
+
+  // === CRYSTALLINE PADS (Mycelial Lattice) ===
+  // Layered to create a "forest" texture
+  const padVerb = new Tone.Reverb({ decay: 3.5, wet: 0.4 }).toDestination();
+  await padVerb.generate();
+
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 1000, Q: 1.0 }).connect(padVerb);
+  const padChorus = new Tone.Chorus({ frequency: 2.0, depth: 0.6, wet: 0.4 }).connect(padFilter).start();
+  
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    detune: 5,
+    envelope: { attack: 0.8, decay: 0.4, sustain: 0.4, release: 2.0 }
+  }).connect(padChorus);
+
+  // Crystalline/Geometric Chords: Minor 7ths and Sus4s for "fate" ambiguity
+  const padChords = [
+    ["A2", "E3", "A3", "D4"], // Dsus4 / Am shape
+    ["F2", "C3", "F3", "A3"], // F major
+    ["G2", "D3", "G3", "B3"], // G major
+    ["D#2", "A#2", "D#3", "F#3"] // D# major (The "Void" chord)
+  ];
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Pads enter 5%, exit 85%
+    if (bar >= totalBars * 0.05 && bar < totalBars * 0.85) {
+      pad.triggerAttackRelease(padChords[padIdx % padChords.length], "1m", time + H(12), 0.25);
+      padIdx++;
+    }
+  }, "1m").start(0);
+
+  // === WIDE ARPS (Electric Orange Highlights) ===
+  // Represents the "paths of fate"
+  const arpVerb = new Tone.Reverb({ decay: 1.8, wet: 0.3 }).toDestination();
+  const arpFilter = new Tone.Filter({ type: "highpass", frequency: 800 }).connect(arpVerb);
+  const arp = new Tone.FMSynth({
+    harmonicity: 3.0,
+    modulationIndex: 8.0,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+  }).connect(arpFilter);
+
+  // Arpeggio pattern: Ascending, geometric
+  const arpNotes = ["A4", "E4", "A4", "C5", "A4", "F4", "C5", "A4"];
+  let arpIdx = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Enters at 15%, exits at 80%
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.80) {
+      // Velocity variation for "pulse"
+      const vel = 0.3 + R() * 0.3;
+      arp.triggerAttackRelease(arpNotes[arpIdx % arpNotes.length], "8n", time + H(6), vel);
+      arpIdx++;
+    }
+  }, "8n").start(0);
+
+  // === NOISE RISER (Data Bloom) ===
+  // Adds texture during the "shatter" phase
+  const noiseFilter = new Tone.Filter({ type: "highpass", frequency: 600 }).toDestination();
+  const noise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.3, decay: 0.4, sustain: 0, release: 0.5 }
+  }).connect(noiseFilter);
+
+  // Schedule noise bursts at the beginning of the build
+  Tone.Transport.schedule((time) => {
+    noiseFilter.frequency.setValueAtTime(200, time);
+    noiseFilter.frequency.linearRampToValueAtTime(2000, time + 2.0);
+    noise.triggerAttackRelease(2.0, time);
+  }, totalBars * 0.10 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    noiseFilter.frequency.setValueAtTime(600, time);
+    noiseFilter.frequency.linearRampToValueAtTime(3000, time + 1.5);
+    noise.triggerAttackRelease(1.5, time);
+  }, totalBars * 0.30 * secPerBar);
+
+  // === WIND DOWN (Seamless Loop) ===
+  // Gradually remove elements to return to the singular point state
+  Tone.Transport.schedule((time) => {
+    arpLoop.stop(time); // Remove arps
+  }, totalBars * 0.80 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    bloomLoop.stop(time); // Remove bloom
+  }, totalBars * 0.70 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Close pad filter to simulate fading out
+    padFilter.frequency.linearRampToValueAtTime(400, time + totalBars * 0.20 * secPerBar);
+  }, totalBars * 0.80 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { kick, bass, bloom, pad, arp, noise };
+  window.toneJsParts = { kickLoop, bassLoop, bloomLoop, padLoop, arpLoop };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
