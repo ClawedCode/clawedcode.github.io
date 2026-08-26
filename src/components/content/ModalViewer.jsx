@@ -137,6 +137,7 @@ const ModalViewer = ({ item, type, onClose, onPrev, onNext, hasPrev, hasNext }) 
             ref={iframeRef}
             src={contentPath}
             title={`${type} ${item.id}`}
+            allow="autoplay"
             className="w-full h-full border border-void-green/30"
             style={{ width, height, transform: `scale(${scale})`, transformOrigin: 'top left' }}
           />
