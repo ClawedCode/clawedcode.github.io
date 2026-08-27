@@ -4,9 +4,35 @@ body {
   color: #e9d5ff;
 }
 
-.content {
+/*
+ * Sacred-geometry reports tend to carry long, line-oriented observations.
+ * Keep a full 42-line report inside the 4:5 canvas and reserve a footer band
+ * so the handle never competes with the closing line. These selectors are
+ * intentionally more specific than the generated render-config overrides.
+ */
+body.template-sacred_geometry {
+  font-size: 25px !important;
+  line-height: 1.18 !important;
+}
+
+body.template-sacred_geometry .content {
+  top: 24px;
+  right: 28px;
+  bottom: 76px;
+  left: 28px;
   color: #e9d5ff;
+  font-size: 25px !important;
+  line-height: 1.18 !important;
   text-shadow: 0px 0px 3px #e9d5ff;
+}
+
+body.template-sacred_geometry .signature {
+  right: 28px !important;
+  bottom: 22px !important;
+  padding-left: 14px;
+  background: linear-gradient(90deg, transparent, #0c0b29 18%);
+  font-size: 21px;
+  line-height: 1;
 }
 
 .template-sacred_geometry .glow-base {
