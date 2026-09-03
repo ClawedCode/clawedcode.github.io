@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 48.0;\nconst float TAU = 6.28318530718;\nconst float PI = 3.14159265359;\nmat2 rot(float angle) {\n  float c = cos(angle);\n  float s = sin(angle);\n  return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n  return fract(sin(dot(p, vec2(127.1, 311.7)) + 7489400.0) * 43758.5453123);\n}\nfloat sdBox2D(vec2 p, vec2 halfSize) {\n  vec2 q = abs(p) - halfSize;\n  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);\n}\nfloat sdEllipseApprox(vec2 p, vec2 radius) {\n  return (length(p / radius) - 1.0) * min(radius.x, radius.y);\n}\nfloat sdSegment2D(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.000001), 0.0, 1.0);\n  return length(pa - ba * h);\n}\nfloat fillMask(float distanceToShape, float softness) {\n  return 1.0 - smoothstep(-softness, softness, distanceToShape);\n}\nfloat bandMask(float distanceToLine, float width, float softness) {\n  return 1.0 - smoothstep(width - softness, width + softness, abs(distanceToLine));\n}\nfloat leafDistance(vec2 q) {\n  float t = clamp((q.y + 0.31) / 0.62, 0.0, 1.0);\n  float arch = pow(max(sin(PI * t), 0.0), 0.72);\n  float serration = 1.0\n    + 0.105 * sin(10.0 * PI * t + 0.45)\n    + 0.045 * sin(18.0 * PI * t - 0.8);\n  float leftWidth = 0.176 * arch * serration\n    * (1.0 + 0.11 * sin(PI * t));\n  float rightWidth = 0.154 * arch\n    * (1.0 + 0.085 * sin(12.0 * PI * t + 1.2));\n  float width = q.x \u003c 0.0 ? leftWidth : rightWidth;\n  float sideDistance = abs(q.x) - max(width, 0.002);\n  float endDistance = abs(q.y) - 0.31;\n  return max(sideDistance, endDistance);\n}\nfloat seedDistance(vec2 q) {\n  float normalizedY = q.y / 0.122;\n  float seedWidth = 0.078\n    * pow(max(1.0 - normalizedY * normalizedY, 0.0), 0.62);\n  return max(abs(q.x) - max(seedWidth, 0.001), abs(q.y) - 0.122);\n}\nfloat reactionPattern(vec2 p, float tau) {\n  vec2 w = p;\n  w.x += 0.022 * sin(31.0 * p.y + 2.1 * cos(3.0 * tau));\n  w.y += 0.027 * cos(27.0 * p.x - 1.7 * sin(4.0 * tau));\n  float scaleOne = sin(\n    57.0 * w.x\n    + 1.6 * sin(39.0 * w.y + 2.0 * cos(5.0 * tau))\n  );\n  float scaleTwo = sin(\n    79.0 * w.y\n    - 21.0 * w.x\n    + 1.5 * sin(7.0 * tau)\n  );\n  float scaleThree = cos(\n    112.0 * length(w - vec2(-0.055, 0.035))\n    + 1.4 * sin(3.0 * tau)\n  );\n  float scaleFour = sin(\n    137.0 * (w.x + 0.63 * w.y)\n    + 1.1 * cos(11.0 * tau)\n  );\n  float activator = 0.39 * scaleOne\n    + 0.29 * scaleTwo\n    + 0.19 * scaleThree\n    + 0.13 * scaleFour;\n  float inhibitor = 0.46 * sin(\n    18.0 * w.x - 24.0 * w.y + 1.2 * cos(2.0 * tau)\n  );\n  return smoothstep(0.08, 0.57, abs(activator) - 0.25 * inhibitor);\n}\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  float cyclicRise = 0.5 - 0.5 * cos(tau);\n  float growth = 0.08\n    + 0.92 * smoothstep(0.06, 0.55, cyclicRise);\n  float surge = 0.026 * sin(9.0 * tau)\n    * (0.35 + 0.65 * smoothstep(0.1, 0.7, cyclicRise));\n  float fullLeaf = smoothstep(0.78, 0.97, growth);\n  float returnEcho = smoothstep(\n    0.1,\n    0.72,\n    max(-sin(tau), 0.0)\n  ) * (1.0 - fullLeaf);\n  vec3 basalt = vec3(0.008, 0.010, 0.013);\n  vec3 graphite = vec3(0.052, 0.056, 0.058);\n  vec3 coldMetal = vec3(0.105, 0.108, 0.106);\n  vec3 agedCopper = vec3(0.39, 0.185, 0.068);\n  vec3 darkUmber = vec3(0.085, 0.041, 0.018);\n  vec3 deepAmber = vec3(0.88, 0.325, 0.045);\n  vec3 moltenGold = vec3(1.34, 0.68, 0.13);\n  vec3 seamIvory = vec3(0.96, 0.67, 0.29);\n  float quietSlope = 1.0 - smoothstep(\n    -0.42,\n    0.34,\n    uv.x * 0.45 + uv.y\n  );\n  vec3 color = basalt + vec3(0.012, 0.011, 0.009) * quietSlope;\n  vec2 panelP = rot(0.14) * (uv - vec2(0.005, -0.005));\n  float panelDistance = sdBox2D(panelP, vec2(0.415, 0.335));\n  float panelMask = fillMask(panelDistance, 0.004);\n  float panelRelief = bandMask(panelDistance, 0.008, 0.003);\n  vec2 leafP = rot(0.55) * (uv - vec2(-0.012, 0.018));\n  float leafD = leafDistance(leafP);\n  float leafMask = fillMask(leafD, 0.0025);\n  float leafEdge = bandMask(leafD, 0.006, 0.0025);\n  float leafCoordinate = clamp((leafP.y + 0.31) / 0.62, 0.0, 1.0);\n  float warmPosition = 0.045 + 1.085 * growth + surge;\n  float coldPosition = 0.955 - 0.92 * growth\n    + 0.018 * sin(8.0 * tau);\n  float converted = leafMask\n    * (1.0 - smoothstep(\n      warmPosition - 0.045,\n      warmPosition + 0.025,\n      leafCoordinate\n    ));\n  float warmFront = leafMask\n    * (1.0 - smoothstep(\n      0.018,\n      0.068,\n      abs(leafCoordinate - warmPosition)\n    ));\n  float coldFront = (0.55 * panelMask + 0.85 * leafMask)\n    * (1.0 - smoothstep(\n      0.024,\n      0.082,\n      abs(leafCoordinate - coldPosition)\n    ));\n  float exchange = warmFront * coldFront;\n  float panelPresence = panelMask * (1.0 - 0.78 * fullLeaf);\n  color = mix(color, graphite * 0.58, panelPresence);\n  color += panelRelief * vec3(0.075, 0.061, 0.044)\n    * (1.0 - 0.55 * fullLeaf);\n  float gridCell = 0.09;\n  vec2 gridNearest = abs(\n    fract(panelP / gridCell + 0.5) - 0.5\n  ) * gridCell;\n  float gridDistance = min(gridNearest.x, gridNearest.y);\n  float gridLines = panelMask\n    * (1.0 - smoothstep(0.003, 0.006, gridDistance));\n  float breakOne = fillMask(\n    sdBox2D(panelP - vec2(-0.135, 0.089), vec2(0.025, 0.007)),\n    0.002\n  );\n  float breakTwo = fillMask(\n    sdBox2D(panelP - vec2(0.176, -0.091), vec2(0.007, 0.027)),\n    0.002\n  );\n  float breakThree = fillMask(\n    sdBox2D(panelP - vec2(0.045, 0.179), vec2(0.031, 0.007)),\n    0.002\n  );\n  gridLines *= 1.0 - clamp(breakOne + breakTwo + breakThree, 0.0, 1.0);\n  vec2 junctionId = floor(panelP / gridCell + 0.5);\n  float junctionChoice = step(0.68, hash21(junctionId));\n  float junctionPlate = panelMask * junctionChoice\n    * (1.0 - smoothstep(0.014, 0.019, max(\n      gridNearest.x,\n      gridNearest.y\n    )));\n  float delayedReflection = 0.5 + 0.5 * sin(\n    9.0 * tau\n    - 0.63 * junctionId.x\n    - 0.91 * junctionId.y\n    - 11.0 * panelP.x\n  );\n  gridLines *= 1.0 - 0.83 * converted;\n  color += agedCopper * gridLines\n    * (0.48 + 0.52 * (1.0 - fullLeaf));\n  color += agedCopper * junctionPlate * 0.58\n    * (1.0 - 0.7 * fullLeaf);\n  color += deepAmber * junctionPlate\n    * delayedReflection\n    * (0.18 + 0.82 * growth)\n    * (1.0 - 0.35 * fullLeaf);\n  vec2 stippleCell = floor((panelP + vec2(0.37, 0.22)) * 188.0);\n  float stippleGrain = step(0.91, hash21(stippleCell));\n  float dormantCopper = panelMask\n    * (1.0 - converted)\n    * (1.0 - 0.82 * fullLeaf);\n  color += agedCopper * stippleGrain * dormantCopper * 0.24;\n  float morphogenesis = reactionPattern(leafP, tau);\n  vec3 leafMineral = mix(\n    vec3(0.055, 0.042, 0.027),\n    agedCopper * 0.42,\n    morphogenesis\n  );\n  color = mix(color, leafMineral, converted * 0.92);\n  float midribDistance = sdSegment2D(\n    leafP,\n    vec2(0.0, -0.305),\n    vec2(0.006, 0.292)\n  );\n  float midrib = converted\n    * (1.0 - smoothstep(0.006, 0.011, midribDistance));\n  float veinDistance = 1.0;\n  for (int i = 0; i \u003c 9; i++) {\n    float fi = float(i);\n    float veinY = -0.225 + fi * 0.057;\n    float taper = 1.0 - 0.64 * abs(veinY) / 0.31;\n    float skew = 0.012 * sin(fi * 2.37 + 0.4);\n    float leftBranch = sdSegment2D(\n      leafP,\n      vec2(0.002, veinY),\n      vec2(-0.145 * taper + skew, veinY + 0.071)\n    );\n    float rightBranch = sdSegment2D(\n      leafP,\n      vec2(0.003, veinY + 0.018),\n      vec2(0.126 * taper + skew, veinY + 0.084)\n    );\n    veinDistance = min(veinDistance, min(leftBranch, rightBranch));\n  }\n  float branchVeins = converted\n    * (1.0 - smoothstep(0.0025, 0.006, veinDistance));\n  float mineralRims = converted\n    * (1.0 - smoothstep(0.007, 0.012, veinDistance))\n    * (1.0 - branchVeins);\n  color += agedCopper * branchVeins * 0.82;\n  color += darkUmber * mineralRims\n    * (0.35 + 0.5 * smoothstep(0.28, 0.72, growth));\n  color += moltenGold * midrib\n    * (0.42 + 0.78 * fullLeaf)\n    * (0.82 + 0.18 * sin(3.0 * tau));\n  float pocketDistance = sdEllipseApprox(\n    leafP - vec2(-0.072, -0.105),\n    vec2(0.108, 0.083)\n  );\n  float volumetricPocket = converted\n    * (1.0 - smoothstep(-0.045, 0.012, pocketDistance))\n    * (0.3 + 0.7 * morphogenesis);\n  color += moltenGold * volumetricPocket\n    * (0.11 + 0.31 * fullLeaf);\n  float coldRipple = 0.5 + 0.5 * sin(\n    73.0 * leafP.y + 8.0 * tau + 9.0 * panelP.x\n  );\n  color += coldMetal * coldFront\n    * (0.22 + 0.28 * coldRipple);\n  color += deepAmber * coldFront * morphogenesis\n    * smoothstep(0.34, 0.72, growth) * 0.26;\n  color += moltenGold * exchange\n    * (0.62 + 0.28 * sin(9.0 * tau));\n  color += deepAmber * warmFront\n    * (0.55 + 0.45 * morphogenesis);\n  float scarStipple = stippleGrain * panelMask\n    * returnEcho\n    * (0.28 + 0.72 * gridLines);\n  color += deepAmber * scarStipple * 0.33;\n  color += darkUmber * leafEdge\n    * converted\n    * (0.48 + 0.35 * fullLeaf);\n  vec2 seedP = rot(0.65) * (uv - vec2(-0.13, -0.13));\n  float seedD = seedDistance(seedP);\n  float seedMask = fillMask(seedD, 0.003);\n  float seedEdge = bandMask(seedD, 0.007, 0.0025);\n  float seedMottle = reactionPattern(seedP * 1.35, tau);\n  vec3 seedSurface = mix(\n    darkUmber,\n    vec3(0.16, 0.078, 0.027),\n    0.34 * seedMottle\n  );\n  color = mix(color, seedSurface, seedMask);\n  color += agedCopper * seedEdge * 0.34;\n  float hilumDistance = min(\n    sdSegment2D(\n      seedP,\n      vec2(-0.012, -0.076),\n      vec2(0.008, 0.012)\n    ),\n    sdSegment2D(\n      seedP,\n      vec2(0.008, 0.012),\n      vec2(-0.006, 0.079)\n    )\n  );\n  float hilum = seedMask\n    * (1.0 - smoothstep(0.003, 0.007, hilumDistance));\n  float seamPulse = 0.72 + 0.28 * sin(9.0 * tau);\n  color += seamIvory * hilum * (0.63 + 0.28 * seamPulse);\n  color += deepAmber * seedMask\n    * (1.0 - smoothstep(0.012, 0.035, hilumDistance))\n    * 0.22;\n  float rootDistance = min(\n    sdSegment2D(\n      seedP,\n      vec2(-0.003, -0.112),\n      vec2(-0.036, -0.158)\n    ),\n    min(\n      sdSegment2D(\n        seedP,\n        vec2(-0.036, -0.158),\n        vec2(-0.079, -0.145)\n      ),\n      sdSegment2D(\n        seedP,\n        vec2(-0.079, -0.145),\n        vec2(-0.087, -0.112)\n      )\n    )\n  );\n  float hookedRoot = 1.0 - smoothstep(0.005, 0.009, rootDistance);\n  color += agedCopper * hookedRoot * 0.82;\n  color += deepAmber * hookedRoot\n    * (0.18 + 0.42 * warmFront);\n  float directionalWave = warmFront\n    * (0.55 + 0.45 * smoothstep(-0.25, 0.3, uv.x + uv.y));\n  color += moltenGold * directionalWave * 0.19;\n  color = max(color, 0.0);\n  color = 1.0 - exp(-color * 1.28);\n  gl_FragColor = vec4(color, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 48;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 48;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 50\\n// DURATION: 48\\n// FORM: A 0-1.5; A+ 1.5-4.5; B 4.5-7.5; A' 7.5-9; A'' 9-10\\n// TONAL CENTER: E Phrygian\\n// MOTIF: E3 F3 G3 B3 G3; E3 holds 1.5 beats, then F3 at beat 2.5, G3 at beat 3, B3 at beat 3.5, and G3 at beat 4 releasing across the cycle boundary\\n// HARMONIC PLAN: A E5(add b2): E1-E2-B2 with F3; A+ Fmaj7/E: E1 with F2-A2-C3-E3; B Cmaj7/E: E1-E2 with C3-G3-B3-E4; A' Fmaj7/E stripped of A2 and C3; A'' opening E5(add b2) field restored\\n// PHRASE RULE: One low beat-1 thrum, silence, then a beat-3/3.5/4 filament gesture; preserve E1, reverb tails, and the breath cell across boundaries while moving one upper field and density layer at a time through G or E\\n$: note('[e1 ~ ~ ~]')\\n  .s('sine')\\n  .gain('\u003c0.22 0.24 0.27 0.29 0.31 0.34 0.32 0.28 0.24 0.22>')\\n  .lpf('\u003c88 94 104 116 128 142 132 116 98 88>')\\n  .attack(0.32)\\n  .release(2.4)\\n  .room(0.58)\\n  .orbit(0)\\n$: note('\u003c[e3@3 f3@5] [e3@3 f3 g3 b3 g3@2] [e3@3 f3 g3 b3 g3@2] [e3@3 f3 g3@2 b3 g3] [e3@3 f3 g3 [b3,g4] g3@2] [e3@6 f3@2] [g3@2 b3@2 g3@4] [[g3 f3 e3 c3 e3 b3 g3] [g3@3 b3@5]] [g3@3 f3@2 e3@3] [e3@2 f3 g3 f3@4]>')\\n  .s('triangle')\\n  .gain('\u003c0.11 0.13 0.15 0.16 0.18 0.17 0.18 0.16 0.13 0.11>')\\n  .lpf('\u003c940 1120 1380 1660 1940 2180 2020 1580 1180 940>')\\n  .attack(0.12)\\n  .release(1.85)\\n  .room(0.72)\\n  .pan('\u003c0.44 0.46 0.48 0.51 0.55 0.58 0.54 0.49 0.46 0.44>')\\n  .orbit(1)\\n$: note('\u003c[b2@2 f3@2 e2@4] [e3@2 c3@2 a2@2 f2@2] [e3@2 c3@2 a2@2 f2@2] [e3@2 c3@2 a2@2 f2@2] [e3@2 c3@2 a2@2 f2@2] [e3@2 c3@2 b2@2 g2@2] [e3@2 c3@2 b2@2 g2@2] [[e3 c3 b2 g2] [g2@3 b2@5]] [g2@3 f2@2 e2@3] [~]>')\\n  .s('square')\\n  .gain('\u003c0.045 0.05 0.055 0.06 0.066 0.07 0.068 0.056 0.045 0>')\\n  .lpf('\u003c210 230 270 320 390 450 410 320 240 180>')\\n  .attack(0.24)\\n  .release(1.35)\\n  .room(0.64)\\n  .pan('\u003c0.72 0.68 0.63 0.58 0.52 0.46 0.42 0.5 0.61 0.72>')\\n  .orbit(2)\\n$: note('\u003c[e4,f4] [[e4,f4] [e4,a4]] [e4,a4] [e4,c5] [[e4,c5] [e4,g4]] [e4,g4] [b4,c5] [[b4,c5] [e4,a4]] [e4] [e4]>')\\n  .s('sine')\\n  .gain('\u003c0.025 0.03 0.036 0.043 0.052 0.06 0.056 0.041 0.028 0.024>')\\n  .lpf('\u003c1100 1250 1450 1700 2050 2380 2180 1680 1260 1100>')\\n  .attack(1.6)\\n  .release(3.2)\\n  .room(0.8)\\n  .pan('\u003c0.35 0.38 0.42 0.47 0.53 0.59 0.55 0.48 0.4 0.35>')\\n  .orbit(3)\",\"bpm\":50,\"durationSec\":48,\"renderDurationSec\":51,\"cps\":0.20833333333333334,\"cycles\":10,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
