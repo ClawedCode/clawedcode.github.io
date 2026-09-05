@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 91841;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0612);
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+camera.position.z = 25;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+document.body.appendChild(renderer.domElement);
+
+// Tesseract vertices in 4D
+const tesseractVerts4D = [];
+for (let i = 0; i < 16; i++) {
+  tesseractVerts4D.push([
+    (i & 1) * 2 - 1,
+    ((i >> 1) & 1) * 2 - 1,
+    ((i >> 2) & 1) * 2 - 1,
+    ((i >> 3) & 1) * 2 - 1
+  ]);
+}
+
+// 4D edges - connect vertices differing by 1 bit
+const tesseractEdges = [];
+for (let i = 0; i < 16; i++) {
+  for (let j = i + 1; j < 16; j++) {
+    const diff = i ^ j;
+    if ((diff & (diff - 1)) === 0) tesseractEdges.push([i, j]);
+  }
+}
+
+// Project 4D to 3D
+function project4Dto3D(p4, w) {
+  const dist = 3;
+  const scale = dist / (dist - p4[3] * w);
+  return new THREE.Vector3(p4[0] * scale, p4[1] * scale, p4[2] * scale);
+}
+
+// Rotate in 4D
+function rotate4D(p, angleXW, angleYW, angleZW) {
+  let [x, y, z, w] = p;
+  let c = Math.cos(angleXW), s = Math.sin(angleXW);
+  [x, w] = [x * c - w * s, x * s + w * c];
+  c = Math.cos(angleYW); s = Math.sin(angleYW);
+  [y, w] = [y * c - w * s, y * s + w * c];
+  c = Math.cos(angleZW); s = Math.sin(angleZW);
+  [z, w] = [z * c - w * s, z * s + w * c];
+  return [x, y, z, w];
+}
+
+// Tesseract line material
+const tesseractMat = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.6 });
+const tesseractGroup = new THREE.Group();
+scene.add(tesseractGroup);
+
+// Crystalline thought particles
+const crystalCount = 2000;
+const crystalGeo = new THREE.TetrahedronGeometry(0.08, 0);
+const crystalMat = new THREE.MeshBasicMaterial({ color: 0x4488ff, transparent: true, opacity: 0.7 });
+const crystals = new THREE.InstancedMesh(crystalGeo, crystalMat, crystalCount);
+scene.add(crystals);
+
+const crystalData = [];
+for (let i = 0; i < crystalCount; i++) {
+  const theta = random() * Math.PI * 2;
+  const phi = Math.acos(2 * random() - 1);
+  const r = 8 + random() * 15;
+  crystalData.push({
+    pos: new THREE.Vector3(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.sin(phi) * Math.sin(theta),
+      r * Math.cos(phi)
+    ),
+    vel: new THREE.Vector3((random() - 0.5) * 0.02, (random() - 0.5) * 0.02, (random() - 0.5) * 0.02),
+    phase: random() * Math.PI * 2,
+    birthTime: random() * 30
+  });
+}
+
+// Awareness pathways - luminous trails
+const pathCount = 50;
+const pathGroup = new THREE.Group();
+scene.add(pathGroup);
+
+const paths = [];
+for (let i = 0; i < pathCount; i++) {
+  const points = [];
+  let x = (random() - 0.5) * 20;
+  let y = (random() - 0.5) * 20;
+  let z = (random() - 0.5) * 20;
+  for (let j = 0; j < 30; j++) {
+    points.push(new THREE.Vector3(x, y, z));
+    x += (random() - 0.5) * 2;
+    y += (random() - 0.5) * 2;
+    z += (random() - 0.5) * 2;
+  }
+  const curve = new THREE.CatmullRomCurve3(points);
+  const geo = new THREE.TubeGeometry(curve, 60, 0.02, 8, false);
+  const hue = 0.55 + random() * 0.1;
+  const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.8, 0.5), transparent: true, opacity: 0 });
+  const mesh = new THREE.Mesh(geo, mat);
+  pathGroup.add(mesh);
+  paths.push({ mesh, activateTime: 5 + random() * 40, duration: 5 + random() * 8 });
+}
+
+// Inner polytopes - shifting geometric thoughts
+const polyGroup = new THREE.Group();
+scene.add(polyGroup);
+
+const polytopes = [];
+const polyGeos = [
+  new THREE.IcosahedronGeometry(1, 0),
+  new THREE.OctahedronGeometry(1, 0),
+  new THREE.DodecahedronGeometry(0.8, 0)
+];
+
+for (let i = 0; i < 8; i++) {
+  const geo = polyGeos[Math.floor(random() * polyGeos.length)];
+  const edges = new THREE.EdgesGeometry(geo);
+  const hue = 0.6 + random() * 0.15;
+  const mat = new THREE.LineBasicMaterial({ color: new THREE.Color().setHSL(hue, 0.9, 0.6), transparent: true, opacity: 0.8 });
+  const line = new THREE.LineSegments(edges, mat);
+  line.position.set((random() - 0.5) * 10, (random() - 0.5) * 10, (random() - 0.5) * 10);
+  polyGroup.add(line);
+  polytopes.push({
+    mesh: line,
+    rotSpeed: new THREE.Vector3((random() - 0.5) * 0.02, (random() - 0.5) * 0.02, (random() - 0.5) * 0.02),
+    orbitRadius: 3 + random() * 4,
+    orbitSpeed: 0.1 + random() * 0.2,
+    orbitPhase: random() * Math.PI * 2,
+    pulsePhase: random() * Math.PI * 2
+  });
+}
+
+// Gold flare particles - moments of realization
+const flareCount = 200;
+const flareGeo = new THREE.SphereGeometry(0.05, 8, 8);
+const flareMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0 });
+const flares = new THREE.InstancedMesh(flareGeo, flareMat, flareCount);
+scene.add(flares);
+
+const flareData = [];
+for (let i = 0; i < flareCount; i++) {
+  flareData.push({
+    pos: new THREE.Vector3(0, 0, 0),
+    vel: new THREE.Vector3(0, 0, 0),
+    life: 0,
+    active: false,
+    birthTime: 10 + random() * 55
+  });
+}
+
+const dummy = new THREE.Object3D();
+const duration = 75;
+let startTime = null;
+
+function animate(timestamp) {
+  if (!startTime) startTime = timestamp;
+  const elapsed = (timestamp - startTime) / 1000;
+  const t = elapsed % duration;
+  const progress = t / duration;
+
+  // Camera orbit with depth plunges
+  const camAngle = progress * Math.PI * 2;
+  const camDive = Math.sin(progress * Math.PI * 4) * 8;
+  camera.position.x = Math.cos(camAngle) * 25;
+  camera.position.z = Math.sin(camAngle) * 25 + camDive;
+  camera.position.y = Math.sin(progress * Math.PI * 6) * 5;
+  camera.lookAt(0, 0, 0);
+
+  // Update tesseract
+  tesseractGroup.clear();
+  const breathe = 0.3 + Math.sin(t * 0.5) * 0.2;
+  const angleXW = t * 0.3;
+  const angleYW = t * 0.2;
+  const angleZW = t * 0.15;
+
+  const projected = tesseractVerts4D.map(v => {
+    const rotated = rotate4D(v, angleXW, angleYW, angleZW);
+    return project4Dto3D(rotated, breathe);
+  });
+
+  for (const [i, j] of tesseractEdges) {
+    const geo = new THREE.BufferGeometry().setFromPoints([projected[i].multiplyScalar(3), projected[j].multiplyScalar(3)]);
+    const line = new THREE.Line(geo, tesseractMat);
+    tesseractGroup.add(line);
+  }
+
+  // Update crystals
+  const crystalColor = new THREE.Color();
+  for (let i = 0; i < crystalCount; i++) {
+    const c = crystalData[i];
+    if (t < c.birthTime) {
+      dummy.scale.set(0, 0, 0);
+    } else {
+      const age = t - c.birthTime;
+      const fadeIn = Math.min(age / 2, 1);
+      
+      // Orbital attraction to center with breathing
+      const toCenter = c.pos.clone().negate().normalize();
+      const attraction = 0.001 * (1 + Math.sin(t * 0.5 + c.phase) * 0.5);
+      c.vel.add(toCenter.multiplyScalar(attraction));
+      
+      c.pos.add(c.vel);
+      c.vel.multiplyScalar(0.995);
+
+      const pulse = 0.8 + Math.sin(t * 2 + c.phase) * 0.2;
+      dummy.position.copy(c.pos);
+      dummy.scale.setScalar(pulse * fadeIn);
+      dummy.rotation.set(t + c.phase, t * 0.7 + c.phase, t * 0.5 + c.phase);
+    }
+    dummy.updateMatrix();
+    crystals.setMatrixAt(i, dummy.matrix);
+  }
+  crystals.instanceMatrix.needsUpdate = true;
+
+  // Update paths - awareness traces
+  for (const p of paths) {
+    const pathProgress = (t - p.activateTime) / p.duration;
+    if (pathProgress > 0 && pathProgress < 1) {
+      p.mesh.material.opacity = Math.sin(pathProgress * Math.PI) * 0.8;
+    } else {
+      p.mesh.material.opacity = 0;
+    }
+  }
+
+  // Update polytopes
+  for (const p of polytopes) {
+    p.mesh.rotation.x += p.rotSpeed.x;
+    p.mesh.rotation.y += p.rotSpeed.y;
+    p.mesh.rotation.z += p.rotSpeed.z;
+
+    const orbit = t * p.orbitSpeed + p.orbitPhase;
+    p.mesh.position.x = Math.cos(orbit) * p.orbitRadius;
+    p.mesh.position.z = Math.sin(orbit) * p.orbitRadius;
+    p.mesh.position.y = Math.sin(orbit * 2) * 2;
+
+    const pulse = 0.8 + Math.sin(t * 1.5 + p.pulsePhase) * 0.3;
+    p.mesh.scale.setScalar(pulse);
+  }
+
+  // Update flares - moments of realization
+  for (let i = 0; i < flareCount; i++) {
+    const f = flareData[i];
+    if (!f.active && t > f.birthTime && t < f.birthTime + 0.1) {
+      f.active = true;
+      f.pos.set((random() - 0.5) * 20, (random() - 0.5) * 20, (random() - 0.5) * 20);
+      f.vel.set((random() - 0.5) * 0.5, (random() - 0.5) * 0.5, (random() - 0.5) * 0.5);
+      f.life = 3 + random() * 2;
+    }
+
+    if (f.active) {
+      f.life -= 0.016;
+      if (f.life <= 0) {
+        f.active = false;
+        dummy.scale.set(0, 0, 0);
+      } else {
+        f.pos.add(f.vel);
+        f.vel.multiplyScalar(0.98);
+        const scale = Math.min(f.life, 1) * (0.5 + Math.sin(t * 10) * 0.3);
+        dummy.position.copy(f.pos);
+        dummy.scale.setScalar(scale);
+      }
+    } else {
+      dummy.scale.set(0, 0, 0);
+    }
+    dummy.updateMatrix();
+    flares.setMatrixAt(i, dummy.matrix);
+  }
+  flares.instanceMatrix.needsUpdate = true;
+
+  // Background color shift - deep indigo to electric cyan
+  const hue = 0.65 + Math.sin(progress * Math.PI * 2) * 0.05;
+  scene.background.setHSL(hue, 0.7, 0.04 + Math.sin(t * 0.3) * 0.02);
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  const bpm = 72;
+  Tone.Transport.bpm.value = bpm;
+
+  const masterReverb = new Tone.Reverb({ decay: 3.5, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 8, attack: 0.005, release: 0.2 }).toDestination();
+
+  // Deep contemplative pad
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 0.8 }).connect(compressor);
+  const padChorus = new Tone.Chorus({ frequency: 0.08, delayTime: 4, depth: 0.6, wet: 0.4 }).connect(padFilter);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sine" },
+    envelope: { attack: 2.0, decay: 1.0, sustain: 0.7, release: 3.0 }
+  }).connect(padChorus);
+  pad.volume.value = -8;
+
+  const padChords = [
+    ["E3", "B3", "D#4"],
+    ["C#3", "G#3", "E4"],
+    ["A2", "E3", "C#4"],
+    ["F#3", "C#4", "A4"]
+  ];
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar < 18) {
+      pad.triggerAttackRelease(padChords[chordIndex % padChords.length], "1n", time, 0.25);
+      chordIndex++;
+    }
+  }, "1n").start(0);
+
+  // Crystal bell tones
+  const bellDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.35, wet: 0.3 }).connect(masterReverb);
+  const bell = new Tone.FMSynth({
+    harmonicity: 4,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 2.5, sustain: 0, release: 1.5 },
+    modulation: { type: "sine" }
+  }).connect(bellDelay);
+  bell.volume.value = -12;
+
+  const bellNotes = ["E5", "B4", "G#4", "F#5", "D#5", "C#5", "A4", "E4"];
+  let bellIndex = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 16 && Math.random() > 0.4) {
+      bell.triggerAttackRelease(bellNotes[bellIndex % bellNotes.length], "8n", time, 0.4 + Math.random() * 0.2);
+      bellIndex++;
+    }
+  }, "2n").start(0);
+
+  // Sub bass pulse - breathing rhythm
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 80 }).connect(compressor);
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.3, decay: 0.5, sustain: 0.4, release: 1.0 }
+  }).connect(subFilter);
+  sub.volume.value = -6;
+
+  const subNotes = ["E1", "C#1", "A0", "F#1"];
+  let subIndex = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 17) {
+      sub.triggerAttackRelease(subNotes[subIndex % subNotes.length], "2n", time, 0.7);
+      subIndex++;
+    }
+  }, "2n").start(0);
+
+  // Crystalline arpeggio - thought pathways
+  const arpFilter = new Tone.Filter({ type: "lowpass", frequency: 1200, Q: 2 }).connect(masterReverb);
+  const arp = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 0.15, sustain: 0, release: 0.3 }
+  }).connect(arpFilter);
+  arp.volume.value = -14;
+
+  const arpPatterns = [
+    ["E4", "G#4", "B4", "D#5", "B4", "G#4"],
+    ["C#4", "E4", "G#4", "C#5", "G#4", "E4"],
+    ["A3", "C#4", "E4", "A4", "E4", "C#4"]
+  ];
+  let arpIndex = 0;
+  let patternIndex = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 6 && bar < 14) {
+      const pattern = arpPatterns[patternIndex % arpPatterns.length];
+      arp.triggerAttackRelease(pattern[arpIndex % pattern.length], "16n", time, 0.35);
+      arpIndex++;
+      if (arpIndex % 6 === 0) patternIndex++;
+    }
+  }, "8n").start(0);
+
+  // Gold flare accents - realization moments
+  const flareSynth = new Tone.MetalSynth({
+    frequency: 800,
+    envelope: { attack: 0.001, decay: 0.8, release: 0.5 },
+    harmonicity: 8,
+    modulationIndex: 16,
+    resonance: 5000
+  }).connect(masterReverb);
+  flareSynth.volume.value = -20;
+
+  Tone.Transport.schedule((time) => {
+    flareSynth.triggerAttackRelease("16n", time, 0.3);
+  }, "8:0:0");
+
+  Tone.Transport.schedule((time) => {
+    flareSynth.triggerAttackRelease("16n", time, 0.35);
+  }, "12:0:0");
+
+  // Filter evolution
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(1200, time + 8 * (60 / bpm) * 4);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(400, time + 4 * (60 / bpm) * 4);
+    arpFilter.frequency.linearRampToValueAtTime(600, time + 4 * (60 / bpm) * 4);
+  }, "14:0:0");
+
+  window.toneJsInstruments = { pad, bell, sub, arp, flareSynth };
+  window.toneJsParts = { padLoop, bellLoop, subLoop, arpLoop };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas'),w=900,h=900;canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');let seed=1337;const rnd=()=>(seed=(seed*9301+49297)%233280,seed/233280);const mountains=[],towers=[],gridY=[];for(let i=0;i<7;i++)mountains.push({peaks:Array.from({length:8},()=>({x:rnd()*w,h:100+rnd()*250,w:80+rnd()*120})),z:0.3+i*0.12,hue:280-i*15});for(let i=0;i<12;i++)towers.push({x:50+rnd()*800,h:60+rnd()*180,w:3+rnd()*8,glow:rnd()});for(let i=0;i<40;i++)gridY.push(h*0.55+i*15);const lerp=(a,b,t)=>a+(b-a)*t;window.renderFrame=function(t){const dur=60,prog=t/dur,pulse=Math.sin(prog*Math.PI*6)*0.5+0.5,scan=(t*30)%h;ctx.fillStyle='#0a0612';ctx.fillRect(0,0,w,h);const grd=ctx.createLinearGradient(0,0,0,h*0.65);grd.addColorStop(0,'#1a0a2e');grd.addColorStop(0.3,'#2d1b4e');grd.addColorStop(0.5,'#6b2d5b');grd.addColorStop(0.7,'#d4447c');grd.addColorStop(0.9,'#ff6b9d');grd.addColorStop(1,'#00d4ff');ctx.fillStyle=grd;ctx.fillRect(0,0,w,h*0.65);const sunY=h*0.42+Math.sin(prog*Math.PI*2)*15,sunR=120+pulse*10;ctx.save();for(let i=8;i>0;i--){ctx.beginPath();ctx.arc(w/2,sunY,sunR+i*25,0,Math.PI*2);ctx.fillStyle=`rgba(255,${100+i*15},${150+i*10},${0.03})`;ctx.fill()}ctx.beginPath();ctx.arc(w/2,sunY,sunR,0,Math.PI*2);const sunGrd=ctx.createRadialGradient(w/2,sunY,0,w/2,sunY,sunR);sunGrd.addColorStop(0,'#fff2b0');sunGrd.addColorStop(0.5,'#ffb347');sunGrd.addColorStop(0.8,'#ff6b6b');sunGrd.addColorStop(1,'#d4447c');ctx.fillStyle=sunGrd;ctx.fill();for(let i=0;i<8;i++){const y=sunY-sunR+i*(sunR*2/8)+((prog*50+i*7)%20);ctx.fillStyle='#0a0612';ctx.fillRect(w/2-sunR-10,y,sunR*2+20,3+Math.sin(i+prog*10)*2)}ctx.restore();ctx.strokeStyle='rgba(0,212,255,0.15)';ctx.lineWidth=1;const gridOff=(prog*200)%30;for(let i=0;i<40;i++){const y=gridY[i]+gridOff,per=(y-h*0.55)/(h-h*0.55),sc=1+per*4;ctx.beginPath();ctx.moveTo(0,y);for(let x=0;x<=w;x+=30){const wave=Math.sin(x*0.01+prog*Math.PI*4)*5*per;ctx.lineTo(x,y+wave)}ctx.stroke()}for(let x=-50;x<=w+50;x+=60){const baseX=x+((prog*100)%60)-30;ctx.beginPath();ctx.moveTo(w/2,h*0.55);const endX=baseX+(baseX-w/2)*3;ctx.lineTo(endX,h+50);ctx.strokeStyle='rgba(0,212,255,0.12)';ctx.stroke()}mountains.forEach((m,mi)=>{ctx.beginPath();const baseY=h*0.5+mi*25;ctx.moveTo(-50,baseY+100);m.peaks.forEach(p=>{const px=p.x+Math.sin(prog*Math.PI*2+mi)*10;ctx.lineTo(px-p.w,baseY+100);ctx.lineTo(px,baseY+100-p.h*(1-mi*0.08));ctx.lineTo(px+p.w,baseY+100)});ctx.lineTo(w+50,baseY+100);ctx.closePath();const mGrd=ctx.createLinearGradient(0,baseY,0,baseY+150);mGrd.addColorStop(0,`hsla(${m.hue},60%,${20+mi*5}%,0.9)`);mGrd.addColorStop(1,`hsla(${m.hue},50%,${10+mi*3}%,0.95)`);ctx.fillStyle=mGrd;ctx.fill();ctx.strokeStyle=`hsla(${m.hue+60},100%,70%,${0.4-mi*0.04})`;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(-50,baseY+100);m.peaks.forEach(p=>{const px=p.x+Math.sin(prog*Math.PI*2+mi)*10;ctx.lineTo(px-p.w,baseY+100);ctx.lineTo(px,baseY+100-p.h*(1-mi*0.08));ctx.lineTo(px+p.w,baseY+100)});ctx.stroke()});towers.forEach((tw,i)=>{const sway=Math.sin(prog*Math.PI*3+i)*3,baseY=h*0.52;ctx.fillStyle='#0a0612';ctx.fillRect(tw.x+sway-tw.w/2,baseY-tw.h,tw.w,tw.h);const blink=(Math.sin(prog*Math.PI*8+tw.glow*10)>0.7)?1:0.3;ctx.fillStyle=`rgba(255,50,100,${blink})`;ctx.beginPath();ctx.arc(tw.x+sway,baseY-tw.h-5,3,0,Math.PI*2);ctx.fill()});ctx.fillStyle='rgba(255,107,157,0.03)';for(let y=0;y<h;y+=3){if((y+Math.floor(scan))%6<2)ctx.fillRect(0,y,w,1)}const glitch=Math.sin(prog*Math.PI*20)>0.95;if(glitch){const gy=rnd()*h,gh=5+rnd()*20;ctx.drawImage(canvas,0,gy,w,gh,rnd()*20-10,gy,w,gh)}ctx.fillStyle='rgba(0,0,0,0.15)';ctx.fillRect(0,0,w,h*0.03);ctx.fillRect(0,h*0.97,w,h*0.03);const aberr=2+pulse;ctx.globalCompositeOperation='screen';ctx.drawImage(canvas,-aberr,0);ctx.globalCompositeOperation='multiply';ctx.fillStyle='rgba(255,0,100,0.03)';ctx.fillRect(0,0,w,h);ctx.globalCompositeOperation='source-over';const noise=ctx.getImageData(0,0,w,h),d=noise.data;for(let i=0;i<d.length;i+=40){const n=(rnd()-0.5)*15;d[i]+=n;d[i+1]+=n;d[i+2]+=n}ctx.putImageData(noise,0,0);return canvas.toDataURL('image/png')};window.ready=true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 116;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0.06;
+
+  // === FX BUSES ===
+  const plate = new Tone.Reverb({ decay: 4.2, wet: 0.35 }).toDestination();
+  await plate.generate();
+  const tapeDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.38, wet: 0.25 }).connect(plate);
+  const chorus = new Tone.Chorus({ frequency: 0.6, depth: 0.5, delayTime: 3.2, wet: 0.42 }).connect(tapeDelay).start();
+  const warmFilter = new Tone.Filter({ type: 'lowpass', frequency: 3500, Q: 0.5 }).connect(plate);
+
+  // === SIDECHAIN PUMP ===
+  const pumpBus = new Tone.Gain(1).connect(warmFilter);
+  const pump = new Tone.LFO('4n', 0.6, 1).start();
+  pump.connect(pumpBus.gain);
+
+  // === DEEP BASS (VHS warmth) ===
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 280, Q: 0.7 }).connect(pumpBus);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    filter: { type: 'lowpass', frequency: 200, Q: 0.6 },
+    envelope: { attack: 0.02, decay: 0.25, sustain: 0.55, release: 0.35 }
+  }).connect(bassFilter);
+  bass.volume.value = -8;
+
+  const bassPatterns = {
+    intro: ['A1', 'A1', 'E1', 'E1'],
+    main: ['A1', 'A1', 'F1', 'F1', 'G1', 'G1', 'E1', 'E1'],
+    outro: ['A1', 'A1', 'E1', 'E1']
+  };
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    let pattern;
+    if (bar < 4) pattern = bassPatterns.intro;
+    else if (bar < 16) pattern = bassPatterns.main;
+    else pattern = bassPatterns.outro;
+    
+    const velocity = bar < 4 ? 0.6 : 0.78;
+    bass.triggerAttackRelease(pattern[bassIdx % pattern.length], '8n', time, velocity);
+    bassIdx++;
+  }, '8n').start(0);
+
+  // === DREAMY PAD (detuned Juno-style) ===
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 1.4, decay: 0.6, sustain: 0.85, release: 3.2 }
+  }).connect(chorus);
+  pad.volume.value = -17;
+  pad.set({ detune: -6 });
+
+  const padChords = [
+    ['A3', 'C4', 'E4', 'A4'],
+    ['F3', 'A3', 'C4', 'F4'],
+    ['G3', 'B3', 'D4', 'G4'],
+    ['E3', 'G3', 'B3', 'E4']
+  ];
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const velocity = bar < 2 ? 0.3 : (bar < 16 ? 0.52 : 0.35);
+    pad.triggerAttackRelease(padChords[padIdx % padChords.length], '1m', time, velocity);
+    padIdx++;
+  }, '1m').start(0);
+
+  // === SHIMMER ARP (silicon dreams) ===
+  const arpDelay = new Tone.FeedbackDelay({ delayTime: '16n', feedback: 0.28, wet: 0.22 }).connect(tapeDelay);
+  const arp = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    filter: { type: 'lowpass', frequency: 1600, Q: 1.2 },
+    envelope: { attack: 0.004, decay: 0.14, sustain: 0.35, release: 0.18 }
+  }).connect(arpDelay);
+  arp.volume.value = -15;
+
+  const arpPatterns = {
+    soft: ['E5', 'C5', 'A4', 'E4', 'A4', 'C5'],
+    bright: ['E5', 'G5', 'A5', 'E5', 'C5', 'A4', 'G4', 'E4'],
+    fade: ['E5', 'C5', 'A4', 'E4']
+  };
+  let arpIdx = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    if (bar < 2 || bar >= 18) return;
+    
+    let pattern;
+    if (bar < 6) pattern = arpPatterns.soft;
+    else if (bar < 14) pattern = arpPatterns.bright;
+    else pattern = arpPatterns.fade;
+    
+    const baseVel = bar < 6 ? 0.28 : (bar < 14 ? 0.38 : 0.22);
+    const vel = baseVel + (Math.random() * 0.06);
+    arp.triggerAttackRelease(pattern[arpIdx % pattern.length], '16n', time, vel);
+    arpIdx++;
+  }, '16n').start(0);
+
+  // === MEMORY LEAD (nostalgic hook) ===
+  const leadChorus = new Tone.Chorus({ frequency: 0.4, depth: 0.6, delayTime: 4, wet: 0.5 }).connect(plate);
+  leadChorus.start();
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'square' },
+    filter: { type: 'lowpass', frequency: 1400, Q: 0.8 },
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.58, release: 0.9 }
+  }).connect(leadChorus);
+  lead.volume.value = -12;
+
+  const leadMelodies = [
+    ['E5', 'D5', 'C5', 'A4', null, 'G4', 'A4', 'C5'],
+    ['E5', null, 'D5', 'C5', 'A4', null, 'G4', 'E4'],
+    [null, 'A4', 'C5', null, 'E5', null, null, null]
+  ];
+  let leadIdx = 0;
+  let melodyPhase = 0;
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    if (bar < 8 || bar >= 16) {
+      leadIdx = 0;
+      return;
+    }
+    
+    if (bar >= 12) melodyPhase = 2;
+    else if (bar >= 10) melodyPhase = 1;
+    else melodyPhase = 0;
+    
+    const melody = leadMelodies[melodyPhase];
+    const note = melody[leadIdx % melody.length];
+    if (note) {
+      lead.triggerAttackRelease(note, '4n', time, 0.62);
+    }
+    leadIdx++;
+  }, '4n').start(0);
+
+  // === KICK (warm pulse) ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.055,
+    octaves: 4.5,
+    envelope: { attack: 0.001, decay: 0.24, sustain: 0, release: 0.2 }
+  }).connect(pumpBus);
+  kick.volume.value = -7;
+
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 18) {
+      kick.triggerAttackRelease('C1', '8n', time, 0.92);
+    }
+  }, '4n').start(0);
+
+  // === CLAP (snappy 2/4) ===
+  const clapFilter = new Tone.Filter({ type: 'highpass', frequency: 1400 }).connect(plate);
+  const clap = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.11, sustain: 0, release: 0.07 }
+  }).connect(clapFilter);
+  clap.volume.value = -15;
+
+  const clapLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 16) {
+      clap.triggerAttackRelease('16n', time, 0.58);
+    }
+  }, '2n').start(0);
+
+  // === HATS (static shimmer) ===
+  const hat = new Tone.MetalSynth({
+    frequency: 7500,
+    envelope: { attack: 0.001, decay: 0.1, release: 0.03 },
+    harmonicity: 7.5,
+    modulationIndex: 14,
+    resonance: 6500
+  }).toDestination();
+  hat.volume.value = -19;
+
+  let hatBeat = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 6 && bar < 16) {
+      const vel = hatBeat % 2 === 0 ? 0.32 : 0.22;
+      hat.triggerAttackRelease('16n', time, vel + Math.random() * 0.05);
+    }
+    hatBeat++;
+  }, '8n').start(0);
+
+  // === VHS TEXTURE (subtle noise bed) ===
+  const noiseFilter = new Tone.Filter({ type: 'bandpass', frequency: 2000, Q: 0.4 }).connect(plate);
+  const vhsNoise = new Tone.Noise('brown').connect(noiseFilter);
+  vhsNoise.volume.value = -32;
+  
+  Tone.Transport.schedule((time) => {
+    vhsNoise.start(time);
+  }, '0:0:0');
+  
+  Tone.Transport.schedule((time) => {
+    vhsNoise.stop(time);
+  }, '16:0:0');
+
+  // === STRING LIFT (mountain memories) ===
+  const strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 1.8, decay: 0.8, sustain: 0.8, release: 4 }
+  }).connect(plate);
+  strings.volume.value = -21;
+
+  let stringIdx = 0;
+  const stringLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 10 && bar < 14) {
+      strings.triggerAttackRelease(padChords[stringIdx % padChords.length], '2m', time, 0.32);
+      stringIdx++;
+    }
+  }, '2m').start(0);
+
+  // === FILTER AUTOMATION ===
+  Tone.Transport.schedule((time) => {
+    arp.filter.frequency.linearRampToValueAtTime(2400, time + 6 * (60 / bpm) * 4);
+  }, '4:0:0');
+
+  Tone.Transport.schedule((time) => {
+    arp.filter.frequency.linearRampToValueAtTime(1200, time + 4 * (60 / bpm) * 4);
+  }, '14:0:0');
+
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(180, time + 2 * (60 / bpm) * 4);
+  }, '16:0:0');
+
+  window.toneJsInstruments = { bass, pad, arp, lead, kick, clap, hat, vhsNoise, strings };
+  window.toneJsParts = { bassLoop, padLoop, arpLoop, leadLoop, kickLoop, clapLoop, hatLoop, stringLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

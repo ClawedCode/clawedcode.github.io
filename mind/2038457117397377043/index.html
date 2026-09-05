@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 77742;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function randomRange(a, b) { return a + random() * (b - a); }
+
+const W = 900, H = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x020818);
+document.body.style.margin = '0';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x020818, 0.012);
+
+const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 200);
+camera.position.set(0, 0, 0);
+
+// --- MATERIALS ---
+const ribMat = new THREE.MeshStandardMaterial({
+  color: 0x0a1a3a, emissive: 0x061428, roughness: 0.8, metalness: 0.2,
+  transparent: true, opacity: 0.7, side: THREE.DoubleSide
+});
+
+const glowMat = new THREE.MeshBasicMaterial({
+  color: 0x00ddff, transparent: true, opacity: 0.15, side: THREE.DoubleSide
+});
+
+// --- LIGHTS ---
+const ambLight = new THREE.AmbientLight(0x061030, 0.4);
+scene.add(ambLight);
+
+const cyanLight = new THREE.PointLight(0x00ccff, 2, 60);
+cyanLight.position.set(0, 5, -10);
+scene.add(cyanLight);
+
+const amberLight = new THREE.PointLight(0xffaa33, 1.5, 40);
+amberLight.position.set(-8, -3, -20);
+scene.add(amberLight);
+
+const magentaLight = new THREE.PointLight(0xff44aa, 0.8, 50);
+magentaLight.position.set(10, 8, -35);
+scene.add(magentaLight);
+
+// --- CATHEDRAL RIBBED VAULTS ---
+const ribCount = 24;
+const ribGeo = new THREE.TorusGeometry(8, 0.15, 8, 48, Math.PI);
+const ribs = [];
+for (let i = 0; i < ribCount; i++) {
+  const rib = new THREE.Mesh(ribGeo, ribMat.clone());
+  const z = -5 - i * 4;
+  rib.position.set(0, 0, z);
+  rib.rotation.z = Math.PI / 2;
+  rib.userData = { baseZ: z, phase: random() * Math.PI * 2, breathRate: 0.3 + random() * 0.4, baseScale: 0.8 + random() * 0.4 };
+  scene.add(rib);
+  ribs.push(rib);
+}
+
+// Flying buttresses
+const buttressGeo = new THREE.CylinderGeometry(0.08, 0.12, 6, 6);
+const buttresses = [];
+for (let i = 0; i < 40; i++) {
+  const b = new THREE.Mesh(buttressGeo, ribMat.clone());
+  const side = i % 2 === 0 ? -1 : 1;
+  const z = -8 - i * 2.2;
+  b.position.set(side * 7, randomRange(-3, 5), z);
+  b.rotation.z = side * randomRange(0.3, 0.8);
+  b.rotation.y = randomRange(-0.2, 0.2);
+  b.userData = { phase: random() * Math.PI * 2, pulseRate: 0.2 + random() * 0.3 };
+  scene.add(b);
+  buttresses.push(b);
+}
+
+// --- JELLYFISH ---
+const jellyCount = 18;
+const jellyfish = [];
+const bellGeo = new THREE.SphereGeometry(1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6);
+
+for (let i = 0; i < jellyCount; i++) {
+  const group = new THREE.Group();
+  const bellColor = new THREE.Color().setHSL(randomRange(0.5, 0.7), 0.6, randomRange(0.3, 0.6));
+  const mat = new THREE.MeshPhongMaterial({
+    color: bellColor, emissive: bellColor.clone().multiplyScalar(0.4),
+    transparent: true, opacity: randomRange(0.2, 0.5),
+    side: THREE.DoubleSide, shininess: 80
+  });
+  const sz = randomRange(0.4, 1.8);
+  const bell = new THREE.Mesh(bellGeo, mat);
+  bell.scale.set(sz, sz * 0.7, sz);
+  group.add(bell);
+
+  // Tentacles
+  const tentCount = 4 + Math.floor(random() * 5);
+  const tents = [];
+  for (let t = 0; t < tentCount; t++) {
+    const tentGeo = new THREE.CylinderGeometry(0.02 * sz, 0.005 * sz, sz * 2, 4);
+    const tent = new THREE.Mesh(tentGeo, mat.clone());
+    tent.material.opacity = 0.15;
+    const ang = (t / tentCount) * Math.PI * 2;
+    tent.position.set(Math.cos(ang) * sz * 0.4, -sz * 0.9, Math.sin(ang) * sz * 0.4);
+    group.add(tent);
+    tents.push(tent);
+  }
+
+  group.position.set(randomRange(-12, 12), randomRange(-6, 8), randomRange(-15, -70));
+  group.userData = {
+    vel: new THREE.Vector3(randomRange(-0.1, 0.1), randomRange(0.02, 0.08), randomRange(-0.02, 0.02)),
+    pulsePhase: random() * Math.PI * 2,
+    pulseRate: randomRange(0.8, 2.0),
+    baseOpacity: mat.opacity,
+    tents, sz, mat
+  };
+  scene.add(group);
+  jellyfish.push(group);
+}
+
+// --- PARTICLE SWARM (luminous congregation) ---
+const particleCount = 3000;
+const pGeo = new THREE.BufferGeometry();
+const pPos = new Float32Array(particleCount * 3);
+const pCol = new Float32Array(particleCount * 3);
+const pVel = [];
+const pData = [];
+
+for (let i = 0; i < particleCount; i++) {
+  const i3 = i * 3;
+  pPos[i3] = randomRange(-15, 15);
+  pPos[i3 + 1] = randomRange(-8, 10);
+  pPos[i3 + 2] = randomRange(-5, -80);
+  const c = new THREE.Color().setHSL(randomRange(0.45, 0.65), 0.8, randomRange(0.4, 0.8));
+  pCol[i3] = c.r; pCol[i3 + 1] = c.g; pCol[i3 + 2] = c.b;
+  pVel.push(new THREE.Vector3(randomRange(-0.03, 0.03), randomRange(-0.02, 0.02), randomRange(-0.01, 0.01)));
+  pData.push({ phase: random() * Math.PI * 2, flickerRate: randomRange(1, 4) });
+}
+
+pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+pGeo.setAttribute('color', new THREE.BufferAttribute(pCol, 3));
+const pMat = new THREE.PointsMaterial({ size: 0.08, vertexColors: true, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending, depthWrite: false });
+const particles = new THREE.Points(pGeo, pMat);
+scene.add(particles);
+
+// --- CORAL PILLARS ---
+const pillarGeo = new THREE.CylinderGeometry(0.3, 0.5, 12, 8);
+for (let i = 0; i < 16; i++) {
+  const side = i % 2 === 0 ? -1 : 1;
+  const p = new THREE.Mesh(pillarGeo, ribMat.clone());
+  p.position.set(side * (6 + random() * 2), 0, -8 - i * 5.5);
+  p.material.emissive = new THREE.Color().setHSL(randomRange(0.55, 0.65), 0.5, 0.05);
+  scene.add(p);
+}
+
+// --- DISTANT MAGENTA ORGANISMS ---
+const distantGeo = new THREE.SphereGeometry(0.5, 8, 8);
+const distantOrgs = [];
+for (let i = 0; i < 12; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color().setHSL(randomRange(0.85, 0.95), 0.8, 0.5),
+    transparent: true, opacity: 0, blending: THREE.AdditiveBlending
+  });
+  const m = new THREE.Mesh(distantGeo, mat);
+  m.position.set(randomRange(-25, 25), randomRange(-5, 12), randomRange(-50, -90));
+  m.scale.setScalar(randomRange(0.5, 2.5));
+  m.userData = { phase: random() * Math.PI * 2, rate: randomRange(0.1, 0.3), peakTime: randomRange(10, 65) };
+  scene.add(m);
+  distantOrgs.push(m);
+}
+
+const duration = 75;
+const startTime = performance.now();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = (performance.now() - startTime) / 1000;
+  const progress = (elapsed % duration) / duration;
+  const t = elapsed;
+
+  // Camera drift through cathedral
+  const camZ = -progress * 60 - 5;
+  const camSwayX = Math.sin(t * 0.15) * 2;
+  const camSwayY = Math.cos(t * 0.1) * 1.2 + 1;
+  camera.position.set(camSwayX, camSwayY, camZ);
+  camera.lookAt(camSwayX * 0.3, camSwayY * 0.5, camZ - 15);
+
+  // Breathing ribs
+  for (const rib of ribs) {
+    const d = rib.userData;
+    const breath = 1 + Math.sin(t * d.breathRate + d.phase) * 0.08;
+    rib.scale.set(d.baseScale * breath, d.baseScale * breath, 1);
+    rib.material.emissive.setHSL(0.55, 0.6, 0.02 + Math.sin(t * d.breathRate * 0.5 + d.phase) * 0.02);
+  }
+
+  // Buttress pulse
+  for (const b of buttresses) {
+    const pulse = 0.03 + Math.sin(t * b.userData.pulseRate + b.userData.phase) * 0.03;
+    b.material.emissive.setHSL(0.12, 0.7, pulse);
+  }
+
+  // Jellyfish
+  for (const j of jellyfish) {
+    const d = j.userData;
+    j.position.add(d.vel.clone().multiplyScalar(0.3));
+
+    // Pulse bell
+    const pulse = Math.sin(t * d.pulseRate + d.pulsePhase);
+    const bellScale = 1 + pulse * 0.15;
+    j.children[0].scale.y = d.sz * 0.7 * bellScale;
+
+    // Tentacle wave
+    for (let ti = 0; ti < d.tents.length; ti++) {
+      d.tents[ti].rotation.x = Math.sin(t * d.pulseRate * 0.7 + ti * 0.5 + d.pulsePhase) * 0.3;
+    }
+
+    // Fade in/out based on distance to camera
+    const dist = j.position.distanceTo(camera.position);
+    const vis = dist < 5 ? dist / 5 : dist > 35 ? Math.max(0, 1 - (dist - 35) / 15) : 1;
+    d.mat.opacity = d.baseOpacity * vis * (0.7 + pulse * 0.3);
+
+    // Wrap jellyfish
+    if (j.position.z > camera.position.z + 10) j.position.z -= 80;
+    if (j.position.z < camera.position.z - 70) j.position.z += 80;
+    if (j.position.y > 12) d.vel.y *= -1;
+    if (j.position.y < -8) d.vel.y *= -1;
+  }
+
+  // Particles
+  const posArr = particles.geometry.attributes.position.array;
+  for (let i = 0; i < particleCount; i++) {
+    const i3 = i * 3;
+    posArr[i3] += pVel[i].x + Math.sin(t * pData[i].flickerRate + pData[i].phase) * 0.005;
+    posArr[i3 + 1] += pVel[i].y + Math.cos(t * pData[i].flickerRate * 0.7) * 0.003;
+    posArr[i3 + 2] += pVel[i].z;
+
+    // Wrap particles relative to camera
+    if (posArr[i3 + 2] > camera.position.z + 10) posArr[i3 + 2] -= 80;
+    if (posArr[i3 + 2] < camera.position.z - 70) posArr[i3 + 2] += 80;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+
+  // Distant magenta flares
+  for (const org of distantOrgs) {
+    const d = org.userData;
+    const timeDist = Math.abs(t - d.peakTime);
+    const flare = Math.exp(-timeDist * timeDist * 0.01) * 0.6;
+    const ambient = (Math.sin(t * d.rate + d.phase) * 0.5 + 0.5) * 0.08;
+    org.material.opacity = flare + ambient;
+    org.scale.setScalar(org.scale.x + Math.sin(t * d.rate) * 0.001);
+  }
+
+  // Lights drift
+  cyanLight.position.z = camZ - 8 + Math.sin(t * 0.2) * 3;
+  cyanLight.intensity = 1.5 + Math.sin(t * 0.3) * 0.5;
+  amberLight.position.z = camZ - 18;
+  amberLight.intensity = 1 + Math.sin(t * 0.15 + 1) * 0.5;
+  magentaLight.position.z = camZ - 30;
+
+  renderer.render(scene, camera);
+}
+
+window.ready = true;
+animate();
+
+// --- AUDIO ---
+
+window.initToneJsEngine = async function() {
+  const bpm = 52;
+  Tone.Transport.bpm.value = bpm;
+  const barSec = (60 / bpm) * 4;
+
+  // FX
+  const deepVerb = new Tone.Reverb({ decay: 8, wet: 0.55 }).toDestination();
+  await deepVerb.generate();
+  const hallVerb = new Tone.Reverb({ decay: 4, wet: 0.35 }).toDestination();
+  await hallVerb.generate();
+  const chorusWet = new Tone.Chorus({ frequency: 0.08, delayTime: 4.5, depth: 0.8, wet: 0.5 }).connect(deepVerb);
+  chorusWet.start();
+  const delay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.35, wet: 0.25 }).connect(hallVerb);
+  const hpf = new Tone.Filter({ type: "highpass", frequency: 120 }).connect(deepVerb);
+  const lpf = new Tone.Filter({ type: "lowpass", frequency: 600 }).connect(deepVerb);
+
+  // DEEP DRONE - sub oscillator
+  const drone = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 4, decay: 2, sustain: 0.8, release: 6 }
+  }).connect(lpf);
+  drone.volume.value = -14;
+
+  const droneLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const notes = ["C1", "G0", "A#0", "F1"];
+    const note = notes[Math.floor(bar / 4) % notes.length];
+    drone.triggerAttackRelease(note, "1m", time, 0.6);
+  }, "1m").start(0);
+
+  // CATHEDRAL PAD - slow evolving chords
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 3, decay: 1.5, sustain: 0.6, release: 4 }
+  }).connect(chorusWet);
+  pad.volume.value = -20;
+
+  const chordProg = [
+    ["C3", "Eb3", "G3", "Bb3"],
+    ["Ab2", "C3", "Eb3", "G3"],
+    ["Bb2", "D3", "F3", "Ab3"],
+    ["F2", "Ab2", "C3", "Eb3"],
+    ["G2", "Bb2", "D3", "F3"],
+    ["Eb2", "G2", "Bb2", "D3"]
+  ];
+
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec);
+    if (bar >= totalBars - 3) {
+      pad.triggerAttackRelease(chordProg[0], "1m", time, 0.12);
+    } else {
+      pad.triggerAttackRelease(chordProg[chordIdx % chordProg.length], "1m", time, 0.18);
+    }
+    chordIdx++;
+  }, "1m").start(0);
+
+  // BIOLUMINESCENT BELLS - FM synth pings
+  const bell = new Tone.FMSynth({
+    harmonicity: 4.2,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 3, sustain: 0, release: 2 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.01, decay: 1.5, sustain: 0, release: 1 }
+  }).connect(delay);
+  bell.volume.value = -18;
+
+  const bellScale = [48, 51, 55, 58, 60, 63, 67, 70, 72, 75]; // C minor pentatonic spread
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec);
+    if (bar >= totalBars - 2) return;
+
+    const shouldPlay = Math.sin(bellStep * 1.618) > -0.3;
+    if (shouldPlay) {
+      const idx = Math.floor(Math.abs(Math.sin(bellStep * 0.7 + bar * 0.3)) * bellScale.length);
+      const note = Tone.Frequency(bellScale[idx], "midi");
+      bell.triggerAttackRelease(note, "2n", time, 0.25 + Math.sin(bellStep * 0.4) * 0.1);
+    }
+    bellStep++;
+  }, "2n").start(0);
+
+  // SONAR PINGS - metallic deep pulses
+  const sonar = new Tone.MetalSynth({
+    frequency: 80,
+    envelope: { attack: 0.01, decay: 1.8, release: 0.5 },
+    harmonicity: 2.1,
+    modulationIndex: 8,
+    resonance: 800
+  }).connect(deepVerb);
+  sonar.volume.value = -26;
+
+  let sonarStep = 0;
+  const sonarLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    if (bar >= 3 && bar < Math.round(75 / barSec) - 3) {
+      if (sonarStep % 3 === 0) {
+        sonar.triggerAttackRelease("4n", time, 0.2);
+      }
+    }
+    sonarStep++;
+  }, "2n").start(0);
+
+  // WHALE CALLS - slow gliding tones
+  const whale = new Tone.MonoSynth({
+    oscillator: { type: "triangle" },
+    filter: { type: "lowpass", frequency: 800, Q: 2 },
+    envelope: { attack: 2, decay: 1, sustain: 0.4, release: 3 },
+    filterEnvelope: { attack: 1, decay: 2, sustain: 0.2, baseFrequency: 200, octaves: 2 }
+  }).connect(hpf);
+  whale.volume.value = -22;
+
+  const whaleNotes = ["C3", "Eb3", "G3", "Bb3", "Ab3", "F3"];
+  let whaleIdx = 0;
+  const whaleLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec);
+    if (bar >= 2 && bar < totalBars - 3 && whaleIdx % 2 === 0) {
+      whale.triggerAttackRelease(whaleNotes[whaleIdx % whaleNotes.length], "1m", time, 0.3);
+    }
+    whaleIdx++;
+  }, "1m").start(0);
+
+  // TINY ORGANISMS - high sparkle particles
+  const sparkle = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.3, sustain: 0, release: 0.2 }
+  }).connect(delay);
+  sparkle.volume.value = -24;
+
+  const sparkleNotes = [72, 75, 79, 82, 84, 87, 91];
+  let sparkIdx = 0;
+  const sparkleLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec);
+    const progress = bar / totalBars;
+
+    if (bar < 4 || bar >= totalBars - 2) return;
+
+    const density = progress < 0.5 ? progress * 1.6 : (1 - progress) * 2;
+    if (Math.sin(sparkIdx * 2.3 + bar * 0.7) > (1 - density)) {
+      const note = sparkleNotes[Math.floor(Math.abs(Math.sin(sparkIdx * 1.1)) * sparkleNotes.length)];
+      sparkle.triggerAttackRelease(Tone.Frequency(note, "midi"), "16n", time, 0.15 + Math.sin(sparkIdx * 0.3) * 0.08);
+    }
+    sparkIdx++;
+  }, "8n").start(0);
+
+  // PRESSURE DROPS - noise bursts
+  const noiseFilter = new Tone.Filter({ type: "bandpass", frequency: 300, Q: 0.8 }).connect(deepVerb);
+  const pressureNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 1.5, decay: 0.5, sustain: 0, release: 2 }
+  }).connect(noiseFilter);
+  pressureNoise.volume.value = -28;
+
+  Tone.Transport.schedule((time) => {
+    pressureNoise.triggerAttackRelease(2, time);
+    noiseFilter.frequency.linearRampToValueAtTime(1200, time + 2);
+    noiseFilter.frequency.linearRampToValueAtTime(300, time + 3);
+  }, "6:0:0");
+
+  Tone.Transport.schedule((time) => {
+    pressureNoise.triggerAttackRelease(1.5, time);
+    noiseFilter.frequency.linearRampToValueAtTime(800, time + 1.5);
+  }, "12:0:0");
+
+  // Filter automation - opens middle, closes for loop
+  Tone.Transport.schedule((time) => {
+    lpf.frequency.linearRampToValueAtTime(1800, time + 6 * barSec);
+  }, "3:0:0");
+
+  Tone.Transport.schedule((time) => {
+    lpf.frequency.linearRampToValueAtTime(600, time + 4 * barSec);
+  }, "13:0:0");
+
+  window.toneJsInstruments = { drone, pad, bell, sonar, whale, sparkle, pressureNoise };
+  window.toneJsParts = { droneLoop, padLoop, bellLoop, sonarLoop, whaleLoop, sparkleLoop };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

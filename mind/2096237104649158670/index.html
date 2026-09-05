@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 42.0;
+
+float sdSphere(vec3 p, float r) { return length(p) - r; }
+float sdCone(vec3 p, float h, float r) {
+  float q = length(p.xz);
+  return max(dot(p, vec3(r/h, 0.0, r/h)), p.y - h) / sqrt(r/h * r/h + 1.0);
+}
+float sdOcta(vec3 p, float s) {
+  p = abs(p);
+  return (p.x + p.y + p.z - s) * 0.57735027;
+}
+
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float scene(vec3 p, float phase) {
+  float tau = phase * 6.28318530718;
+  
+  // Core crystal
+  float c1 = sdOcta(p, 0.9);
+  
+  // Growing shards
+  float s1 = sdSphere(p - vec3(sin(tau) * 0.5, cos(tau * 0.5) * 0.6, sin(tau * 1.5) * 0.5), 0.15);
+  float s2 = sdSphere(p - vec3(cos(tau * 0.8) * 0.4, sin(tau * 1.2) * 0.5, cos(tau * 0.7) * 0.4), 0.12);
+  float s3 = sdCone(p - vec3(0.0, -0.4, 0.0), 0.8, 0.3);
+  
+  // Morphing blend
+  float morph = 0.5 - 0.5 * cos(tau);
+  float shard1 = mix(s1, s2, sin(tau * 0.3));
+  float shard2 = mix(s2, s3, cos(tau * 0.5));
+  
+  return smin(c1, smin(shard1, shard2, 0.2), 0.15);
+}
+
+vec3 calcNormal(vec3 p, float phase) {
+  vec2 e = vec2(0.001, 0.0);
+  return normalize(vec3(
+    scene(p + e.xyy, phase) - scene(p - e.xyy, phase),
+    scene(p + e.yxy, phase) - scene(p - e.yxy, phase),
+    scene(p + e.yyx, phase) - scene(p - e.yyx, phase)
+  ));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  float phase = mod(iTime, DURATION) / DURATION;
+  float tau = phase * 6.28318530718;
+  
+  vec3 ro = vec3(0.0, 0.0, 4.5);
+  vec3 rd = normalize(vec3(uv, -1.0));
+  
+  // Rotate camera slowly
+  float c = cos(tau * 0.2);
+  float s = sin(tau * 0.2);
+  mat2 rot = mat2(c, -s, s, c);
+  ro.xz *= rot;
+  rd.xz *= rot;
+  
+  // Raymarch
+  float d = 0.0;
+  int hit = 0;
+  for (int i = 0; i < 64; i++) {
+    vec3 p = ro + rd * d;
+    float dist = scene(p, phase);
+    if (dist < 0.001) { hit = 1; break; }
+    if (d > 10.0) break;
+    d += dist;
+  }
+  
+  vec3 col = vec3(0.02, 0.01, 0.04);
+  
+  if (hit == 1) {
+    vec3 p = ro + rd * d;
+    vec3 n = calcNormal(p, phase);
+    
+    // Lighting
+    vec3 l1 = normalize(vec3(1.0, 1.0, 0.5));
+    vec3 l2 = normalize(vec3(-1.0, 0.5, -1.0));
+    
+    float diff = max(dot(n, l1), 0.0) * 0.8 + max(dot(n, l2), 0.0) * 0.4;
+    vec3 base = vec3(0.6, 0.65, 0.75); // Light gray
+    
+    // Holographic iridescence based on view angle
+    float fresnel = pow(1.0 - max(dot(n, -rd), 0.0), 3.0);
+    float hue = fresnel + tau * 0.5;
+    vec3 irid = vec3(
+      sin(hue * 6.28318) * 0.5 + 0.5,
+      sin(hue * 6.28318 + 2.09439) * 0.5 + 0.5,
+      sin(hue * 6.28318 + 4.18879) * 0.5 + 0.5
+    );
+    
+    // Shimmering facets
+    float facet = step(0.5, sin(p.x * 10.0 + tau) * sin(p.y * 10.0 + tau * 0.7));
+    col = mix(base, irid, fresnel);
+    col += diff * base * 0.6;
+    col += facet * 0.1;
+    
+    // Rim light
+    col += vec3(0.8, 0.6, 1.0) * fresnel * 0.7;
+    
+    // Volumetric fog
+    float fog = exp(-d * 0.15);
+    col = mix(vec3(0.05, 0.02, 0.08), col, fog);
+  }
+  
+  // Dithering for texture
+  float dither = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
+  col = floor(col * 32.0 + dither) / 32.0;
+  
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 42;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 42;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 42;
+  const targetBpm = 58;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secPerBar = 240 / bpm;
+
+  // === AESTHETIC: CRACKLED ARCHIVE ===
+  // We visualize "silica" and "deposition". The sound should feel like heavy, ancient pressure
+  // with a granular, crackling texture overlay.
+  // Archetype: Melancholic/Liminal / Cosmic/Vast
+  // Density: Moderate (4 instruments: 2 Synths, 1 Noise, 1 Membrane)
+
+  // === FX BUSES ===
+  // Heavy, muddy reverb to simulate deep time / water pressure
+  const deepReverb = new Tone.Reverb({ decay: 6.5, wet: 0.55 }).toDestination();
+  await deepReverb.generate();
+
+  // Granular texture: High-passed noise to simulate "cracking" of stone/data
+  const noiseHPF = new Tone.Filter({ type: "highpass", frequency: 800, Q: 2 }).connect(deepReverb);
+  const noiseSource = new Tone.Noise("brown").toDestination();
+  const noiseGain = new Tone.Gain(0.15).connect(noiseHPF);
+  noiseSource.start();
+
+  // === 1. THE DEPOSIT (Pad) ===
+  // A low, detuned saw pad that feels heavy and geological.
+  // Uses a "suspended" chord structure to avoid resolution, mimicking "deep time".
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 350, Q: 1.5 }).connect(deepReverb);
+  const padChorus = new Tone.Chorus({ frequency: 0.5, depth: 0.6, wet: 0.4 }).connect(padFilter).start();
+  
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -6,
+    envelope: { attack: 1.2, decay: 0.8, sustain: 0.6, release: 3.0 }
+  }).connect(padChorus);
+
+  // Chords: Cmin7 (root) -> Fmaj7 (subdominant) -> Bb13 (suspended). No V chord.
+  const padChords = [
+    ["C2", "Eb3", "G3", "Bb3"], // Cm7
+    ["F2", "A3", "C4", "Eb4"],  // Fmaj7
+    ["Bb2", "D3", "F3", "Ab3"], // Bb13
+    ["C3", "Eb3", "G3", "Bb3"]  // Back to root
+  ];
+  let padChordIdx = 0;
+  
+  const padLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // The deposit forms slowly. We only play every 2 bars to let the "sediment" settle.
+    if (bar % 2 === 0) {
+      // Fade in velocity slightly over the first 50% to simulate pressure building
+      const progress = Math.min(1, bar / totalBars);
+      const vel = 0.15 + progress * 0.15;
+      pad.triggerAttackRelease(padChords[padChordIdx % padChords.length], "1m", time + H(15), vel);
+      padChordIdx++;
+    }
+  }, "1m").start(0);
+
+  // === 2. THE SHARD (Pulse) ===
+  // A sharp, metallic pluck that cuts through the mud, representing the "faceted shards".
+  // FM Synthesis for a bell-like, crystalline tone.
+  const shardFilter = new Tone.Filter({ type: "highpass", frequency: 400 }).connect(deepReverb);
+  const shardDelay = new Tone.FeedbackDelay({ delayTime: "4n", feedback: 0.3 }).connect(shardFilter);
+  
+  const shard = new Tone.FMSynth({
+    harmonicity: 3.0,
+    modulationIndex: 10,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.5 },
+    modulation: { type: "triangle" },
+    modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 }
+  }).connect(shardDelay);
+
+  // Sparse, random hits. Like light refraction hitting a crystal facet.
+  let shardCount = 0;
+  const shardLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Stop playing in the final 15% (wind down)
+    if (bar >= totalBars * 0.85) return;
+
+    // Random chance to play on every beat, but heavily gated
+    // We want "sparse" density
+    if (R() > 0.6) {
+      // Randomize pitch slightly (octave shift) to simulate varying shard sizes
+      const octaves = [0, 12, 24]; 
+      const octave = octaves[Math.floor(R() * octaves.length)];
+      
+      // C Minor Pentatonic notes for a "mystery" feel
+      const notes = ["C4", "Eb4", "F4", "G4", "Bb4", "C5"];
+      const note = notes[Math.floor(R() * notes.length)];
+      
+      // Add pitch shift for shimmer
+      shard.triggerAttackRelease(note, "8n", time + H(5), 0.4);
+    }
+    shardCount++;
+  }, "4n").start(0);
+
+  // === 3. THE PRESSURE (Sub Bass) ===
+  // Deep, slow sine waves that move the ground.
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    filter: { type: "lowpass", Q: 1 },
+    envelope: { attack: 0.1, decay: 0.8, sustain: 0.5, release: 1.0 },
+    filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 0.2, baseFrequency: 60, octaves: 2 }
+  }).toDestination();
+
+  // Very slow movement. One note every 4 bars.
+  let subIdx = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar % 4 === 0) {
+      // Notes: C1 -> G1 -> F1 -> B0 (descending, heavy)
+      const notes = ["C1", "G1", "F1", "B0"];
+      sub.triggerAttackRelease(notes[subIdx % notes.length], "1m", time + H(10), 0.8);
+      subIdx++;
+    }
+  }, "1m").start(0);
+
+  // === 4. THE DEPOSITION (Rhythmic Texture) ===
+  // A noisy, granular "tap" sound that implies data being laid down.
+  // Using a MetalSynth with very low pitch and short decay to sound like "clicking stone".
+  const tap = new Tone.MetalSynth({
+    frequency: 200,
+    envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
+    harmonicity: 2.0,
+    modulationIndex: 4,
+    resonance: 1000,
+    volume: -10
+  }).connect(deepReverb);
+
+  let tapCount = 0;
+  const tapLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only active in the middle 60% of the track (build phase)
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.75) {
+      // Play only on off-beats (6th notes approximated by 16th with condition)
+      if (tapCount % 2 === 1) {
+        tap.triggerAttackRelease("32n", time + H(2), 0.6);
+      }
+    }
+    tapCount++;
+  }, "8n").start(0);
+
+  // === AUTOMATION: Pressure Build & Release ===
+  // Open the pad filter during the middle section, then close it for the loop.
+  // Open at 15%, Close at 75%
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(900, time + totalBars * 0.35 * secPerBar);
+  }, totalBars * 0.15 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(350, time + totalBars * 0.15 * secPerBar);
+  }, totalBars * 0.75 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { pad, shard, sub, tap, noiseSource };
+  window.toneJsParts = { padLoop, shardLoop, subLoop, tapLoop };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

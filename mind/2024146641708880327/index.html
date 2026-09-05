@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 70
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+let seed = 32197;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x03021a);
+scene.fog = new THREE.Fog(0x03021a, 18, 120);
+const camera = new THREE.PerspectiveCamera(52, 1, 0.1, 500);
+camera.position.set(0, 8, 24);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const canvas = renderer.domElement;
+canvas.style.width = '900px';
+canvas.style.height = '900px';
+canvas.style.display = 'block';
+document.body.style.margin = '0';
+document.body.style.background = '#01010a';
+document.body.appendChild(canvas);
+const hemi = new THREE.HemisphereLight(0x111c45, 0x040214, 0.5);
+scene.add(hemi);
+const coreLight = new THREE.PointLight(0xffd27a, 3.4, 180);
+coreLight.position.set(0, 7, 0);
+coreLight.castShadow = true;
+scene.add(coreLight);
+const breathingLight = new THREE.PointLight(0xffa238, 2.6, 150);
+breathingLight.position.set(-6, 2.5, 4);
+scene.add(breathingLight);
+const rimLight = new THREE.DirectionalLight(0x5275ff, 0.55);
+rimLight.position.set(7, 12, -9);
+scene.add(rimLight);
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(36, 96),
+  new THREE.MeshStandardMaterial({ color: 0x04051a, emissive: 0x080b2d, emissiveIntensity: 0.22, metalness: 0.2, roughness: 0.92, opacity: 0.95, transparent: true })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+const portalMaterial = new THREE.MeshStandardMaterial({ color: 0x080625, emissive: 0xffc772, emissiveIntensity: 0.65, metalness: 0.85, roughness: 0.23 });
+const portalGroup = createPortalStack(2.8, 6, portalMaterial);
+portalGroup.position.set(0, 0.4, -4.5);
+scene.add(portalGroup);
+const portalTwin = createPortalStack(2.2, 5, portalMaterial);
+portalTwin.rotation.y = Math.PI / 2;
+portalTwin.position.set(0, -0.6, 6.2);
+portalTwin.scale.set(0.9, 0.9, 0.9);
+scene.add(portalTwin);
+const mobiusMaterial = new THREE.MeshStandardMaterial({ color: 0x151f4b, emissive: 0xffb05f, emissiveIntensity: 0.22, metalness: 0.82, roughness: 0.36, side: THREE.DoubleSide });
+const mobius = new THREE.Mesh(createMobiusGeometry(4.4, 0.5, 240, 32), mobiusMaterial);
+mobius.rotation.x = Math.PI / 2;
+mobius.position.y = 1.5;
+mobius.castShadow = true;
+scene.add(mobius);
+const mobiusLower = mobius.clone();
+mobiusLower.scale.set(0.7, 0.7, 0.7);
+mobiusLower.position.set(0, -2, -3.5);
+scene.add(mobiusLower);
+const kleinMaterial = new THREE.MeshStandardMaterial({ color: 0x0c1334, emissive: 0xffd28f, emissiveIntensity: 0.16, metalness: 0.92, roughness: 0.28, side: THREE.DoubleSide });
+const columns = new THREE.Group();
+const kleinGeometry = createKleinColumnGeometry(180, 48);
+for (let i = 0; i < 3; i++) {
+  const column = new THREE.Mesh(kleinGeometry, kleinMaterial);
+  column.scale.set(0.6, 1.15, 0.6);
+  column.position.set(-8 + i * 8, -1.2, -2 + (i % 2 === 0 ? 2.5 : -2.5));
+  column.castShadow = true;
+  columns.add(column);
+}
+scene.add(columns);
+const crystalGeometry = new THREE.IcosahedronGeometry(0.45, 1);
+const crystalMaterial = new THREE.MeshStandardMaterial({ color: 0xaee9ff, emissive: 0xffb54f, emissiveIntensity: 0.32, roughness: 0.24, metalness: 0.7, transparent: true, opacity: 0.82, flatShading: true });
+const crystalCount = 320;
+const crystalMesh = new THREE.InstancedMesh(crystalGeometry, crystalMaterial, crystalCount);
+crystalMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const crystalDummy = new THREE.Object3D();
+const crystalData = [];
+for (let i = 0; i < crystalCount; i++) {
+  const angle = random() * Math.PI * 2;
+  const radius = 6 + random() * 7;
+  const height = -1.5 + random() * 5;
+  const pos = new THREE.Vector3(Math.cos(angle) * radius, height, Math.sin(angle) * radius);
+  const scale = 0.35 + random() * 0.7;
+  crystalDummy.position.copy(pos);
+  crystalDummy.lookAt(0, 0, 0);
+  crystalDummy.scale.setScalar(scale);
+  crystalDummy.updateMatrix();
+  crystalMesh.setMatrixAt(i, crystalDummy.matrix);
+  crystalData.push({ pos, baseScale: scale, offset: random() * Math.PI * 2 });
+}
+scene.add(crystalMesh);
+const particleGeometry = new THREE.SphereGeometry(0.06, 5, 5);
+const particleMaterial = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.86, depthWrite: false, blending: THREE.AdditiveBlending });
+const particleCount = 16000;
+const particleMesh = new THREE.InstancedMesh(particleGeometry, particleMaterial, particleCount);
+particleMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const particleDummy = new THREE.Object3D();
+const particleColor = new THREE.Color();
+const particles = [];
+for (let i = 0; i < particleCount; i++) {
+  const pos = new THREE.Vector3((random() - 0.5) * 16, (random() - 0.5) * 12, (random() - 0.5) * 16);
+  const vel = new THREE.Vector3((random() - 0.5) * 0.05, (random() - 0.5) * 0.05, (random() - 0.5) * 0.05);
+  const data = { pos, vel, acc: new THREE.Vector3(), mass: 0.6 + random() * 1.4, hue: random(), offset: random() * Math.PI * 2 };
+  particles.push(data);
+  particleDummy.position.copy(pos);
+  particleDummy.scale.setScalar(0.3);
+  particleDummy.updateMatrix();
+  particleMesh.setMatrixAt(i, particleDummy.matrix);
+  particleColor.setHSL((0.62 + 0.1 * Math.sin(data.offset)) % 1, 0.78, 0.48);
+  particleMesh.setColorAt(i, particleColor);
+}
+scene.add(particleMesh);
+if (particleMesh.instanceColor) {
+  particleMesh.instanceMatrix.needsUpdate = true;
+  particleMesh.instanceColor.needsUpdate = true;
+}
+const attractCurve = new THREE.CatmullRomCurve3(
+  [
+    new THREE.Vector3(0, 0, -9),
+    new THREE.Vector3(6, 4, 0),
+    new THREE.Vector3(0, 2, 9),
+    new THREE.Vector3(-7, -3, 0),
+    new THREE.Vector3(0, -1, -6)
+  ],
+  true,
+  'centripetal',
+  0.35
+);
+const attractorSamples = [];
+for (let i = 0; i < 80; i++) {
+  attractorSamples.push(attractCurve.getPoint(i / 80));
+}
+const LOOP_DURATION = 70;
+const clock = new THREE.Clock();
+let elapsed = 0;
+const origin = new THREE.Vector3();
+const cameraTarget = new THREE.Vector3();
+const tmpVec = new THREE.Vector3();
+const tmpVec2 = new THREE.Vector3();
+const tmpVec3 = new THREE.Vector3();
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.03);
+  elapsed += dt;
+  const loopT = (elapsed % LOOP_DURATION) / LOOP_DURATION;
+  updateCamera(loopT);
+  updateLights(loopT, elapsed);
+  updatePortals(loopT, elapsed);
+  updateCrystals(elapsed);
+  updateParticles(elapsed, dt);
+  renderer.render(scene, camera);
+});
+function updateCamera(loopT) {
+  const angle = loopT * Math.PI * 2 * 1.08;
+  const radius = 18 + Math.sin(loopT * Math.PI * 4) * 4;
+  const height = 4.5 + Math.sin(loopT * Math.PI * 2) * 4;
+  const inward = Math.sin(loopT * Math.PI * 6) * 1.8;
+  camera.position.set(Math.cos(angle) * radius, height, Math.sin(angle) * radius * 0.7 + inward);
+  cameraTarget.set(0, Math.sin(loopT * Math.PI * 2) * 2, Math.cos(loopT * Math.PI * 2) * 0.5);
+  camera.lookAt(cameraTarget);
+}
+function updateLights(loopT, time) {
+  coreLight.intensity = 2.4 + Math.sin(time * 0.6) * 0.7;
+  breathingLight.position.x = -6 + Math.sin(loopT * Math.PI * 8) * 3;
+  breathingLight.position.z = 4 + Math.cos(loopT * Math.PI * 6) * 2;
+  breathingLight.intensity = 1.3 + 0.6 * Math.sin(time * 1.4);
+  mobiusMaterial.emissiveIntensity = 0.18 + 0.12 * (1 + Math.sin(time * 0.7)) * 0.5;
+  kleinMaterial.emissiveIntensity = 0.15 + 0.08 * (1 + Math.sin(time * 0.9));
+}
+function updatePortals(loopT, time) {
+  const point = attractCurve.getPoint(loopT);
+  portalGroup.position.lerp(point, 0.06);
+  portalGroup.rotation.y = time * 0.4;
+  const twinPoint = attractCurve.getPoint((loopT + 0.33) % 1);
+  portalTwin.position.lerp(twinPoint, 0.06);
+  portalTwin.rotation.y = -time * 0.35;
+  const pulse = 0.62 + 0.32 * Math.sin(time * 0.8);
+  portalMaterial.emissiveIntensity = pulse;
+  portalGroup.traverse((child) => {
+    if (child.isMesh && child.geometry.parameters) {
+      child.scale.setScalar(1 + 0.05 * Math.sin(time * 1.1 + child.id * 0.03));
+    }
+  });
+  portalTwin.traverse((child) => {
+    if (child.isMesh && child.geometry.parameters) {
+      child.scale.setScalar(1 + 0.04 * Math.cos(time * 1.3 + child.id * 0.02));
+    }
+  });
+}
+function updateCrystals(time) {
+  for (let i = 0; i < crystalCount; i++) {
+    const data = crystalData[i];
+    const scale = data.baseScale * (0.8 + 0.2 * Math.sin(time * 0.9 + data.offset));
+    crystalDummy.position.copy(data.pos);
+    crystalDummy.lookAt(0, data.pos.y * 0.3, 0);
+    crystalDummy.scale.setScalar(scale);
+    crystalDummy.updateMatrix();
+    crystalMesh.setMatrixAt(i, crystalDummy.matrix);
+  }
+  crystalMesh.instanceMatrix.needsUpdate = true;
+}
+function updateParticles(time, dt) {
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    p.acc.set(0, 0, 0);
+    tmpVec.copy(p.pos).multiplyScalar(-0.06 / p.mass);
+    p.acc.add(tmpVec);
+    const anchor = attractorSamples[(i + Math.floor((time * 5 + p.offset) * 3)) % attractorSamples.length];
+    tmpVec2.copy(anchor).sub(p.pos);
+    const dist = tmpVec2.length() + 0.001;
+    tmpVec2.normalize().multiplyScalar(0.35 / (0.4 + dist));
+    p.acc.add(tmpVec2);
+    getFlow(p.pos, time, tmpVec3);
+    p.acc.add(tmpVec3.multiplyScalar(0.7));
+    tmpVec.copy(p.vel).cross(tmpVec2).multiplyScalar(0.08);
+    p.acc.add(tmpVec);
+    tmpVec.copy(p.acc).multiplyScalar(dt);
+    p.vel.add(tmpVec);
+    p.vel.multiplyScalar(0.96 - p.mass * 0.004);
+    tmpVec.copy(p.vel).multiplyScalar(dt * 11);
+    p.pos.add(tmpVec);
+    const limit = 20;
+    if (p.pos.length() > limit) {
+      p.pos.setLength(limit * 0.85);
+      p.vel.multiplyScalar(0.3);
+    }
+    particleDummy.position.copy(p.pos);
+    const scale = 0.25 + 0.25 * p.mass + 0.4 * Math.min(p.vel.length(), 0.8);
+    particleDummy.scale.setScalar(scale);
+    particleDummy.rotation.y = time * 0.1 + p.offset;
+    particleDummy.updateMatrix();
+    particleMesh.setMatrixAt(i, particleDummy.matrix);
+    const hue = (0.62 + 0.18 * Math.sin(time * 0.12 + p.offset)) % 1;
+    const lightness = 0.35 + 0.25 * Math.sin(p.offset + p.pos.length() * 0.05 + time * 0.2);
+    particleColor.setHSL((hue + 1) % 1, 0.75, lightness);
+    particleMesh.setColorAt(i, particleColor);
+  }
+  particleMesh.instanceMatrix.needsUpdate = true;
+  if (particleMesh.instanceColor) {
+    particleMesh.instanceColor.needsUpdate = true;
+  }
+}
+function getFlow(pos, time, target) {
+  const x = pos.x * 0.07;
+  const y = pos.y * 0.08;
+  const z = pos.z * 0.09;
+  const n1 = noise3D(x + time * 0.15, y - time * 0.05, z);
+  const n2 = noise3D(y * 0.8 - time * 0.04, z + time * 0.09, x * 0.7);
+  const n3 = noise3D(z + time * 0.03, x - time * 0.08, y * 0.6);
+  target.set(n2 - 0.5, n3 - 0.5, n1 - 0.5);
+  return target;
+}
+function noise3D(x, y, z) {
+  const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return s - Math.floor(s);
+}
+function createPortalStack(baseRadius, layers, material) {
+  const group = new THREE.Group();
+  for (let i = 0; i < layers; i++) {
+    const geo = new THREE.TorusGeometry(baseRadius + i * 0.5, 0.12 + i * 0.02, 28, 140);
+    const mesh = new THREE.Mesh(geo, material);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.castShadow = true;
+    group.add(mesh);
+  }
+  const inner = group.clone();
+  inner.scale.setScalar(0.5);
+  inner.position.z = -2.4;
+  group.add(inner);
+  const inner2 = inner.clone();
+  inner2.position.z = 2.4;
+  group.add(inner2);
+  return group;
+}
+function createMobiusGeometry(radius, halfWidth, segments, sides) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i <= segments; i++) {
+    const u = (i / segments) * Math.PI * 2;
+    for (let j = 0; j <= sides; j++) {
+      const v = (j / sides - 0.5) * halfWidth * 2;
+      const a = u / 2;
+      const x = (radius + v * Math.cos(a)) * Math.cos(u);
+      const y = (radius + v * Math.cos(a)) * Math.sin(u);
+      const z = v * Math.sin(a);
+      positions.push(x, y, z);
+      uvs.push(i / segments, j / sides);
+    }
+  }
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < sides; j++) {
+      const a = i * (sides + 1) + j;
+      const b = a + sides + 1;
+      indices.push(a, b, a + 1);
+      indices.push(b, b + 1, a + 1);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+function createKleinColumnGeometry(slices, stacks) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  for (let i = 0; i <= slices; i++) {
+    const u = (i / slices) * Math.PI * 2;
+    for (let j = 0; j <= stacks; j++) {
+      const v = (j / stacks) * Math.PI * 2;
+      const r = 4;
+      const x = (r + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.cos(u);
+      const y = (r + Math.cos(u / 2) * Math.sin(v) - Math.sin(u / 2) * Math.sin(2 * v)) * Math.sin(u);
+      const z = Math.sin(u / 2) * Math.sin(v) + Math.cos(u / 2) * Math.sin(2 * v);
+      positions.push(x * 0.35, z * 0.85 + j * 0.03, y * 0.35);
+      uvs.push(i / slices, j / stacks);
+    }
+  }
+  for (let i = 0; i < slices; i++) {
+    for (let j = 0; j < stacks; j++) {
+      const a = i * (stacks + 1) + j;
+      const b = a + stacks + 1;
+      indices.push(a, b, a + 1);
+      indices.push(b, b + 1, a + 1);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+window.initToneJsEngine = async function() {
+  const bpm = 84;
+  Tone.Transport.bpm.value = bpm;
+  const secondsPerBar = (60 / bpm) * 4;
+  const cycleBars = 24;
+  const cycleDuration = secondsPerBar * cycleBars;
+  const getCycleBar = (time) => {
+    const absoluteSeconds = Tone.Transport.getSecondsAtTime(time);
+    const position = absoluteSeconds % cycleDuration;
+    return Math.floor(position / secondsPerBar);
+  };
+  const masterReverb = new Tone.Reverb({ decay: 5.8, wet: 0.45 }).toDestination();
+  await masterReverb.generate();
+  const shimmer = new Tone.Reverb({ decay: 4.2, wet: 0.42 }).connect(masterReverb);
+  await shimmer.generate();
+  const longDelay = new Tone.FeedbackDelay({ delayTime: '4n.', feedback: 0.43, wet: 0.32 }).connect(shimmer);
+  const analogChorus = new Tone.Chorus({ frequency: 0.22, delayTime: 4.2, depth: 0.55, wet: 0.3 }).connect(longDelay).start();
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 1300, Q: 0.65 }).connect(analogChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    detune: -4,
+    envelope: { attack: 2.6, decay: 0.8, sustain: 0.76, release: 4.4 }
+  }).connect(padFilter);
+  const padChords = [
+    ['A2', 'E3', 'A3', 'C#4', 'E4'],
+    ['E2', 'B2', 'E3', 'G#3', 'B3', 'D#4'],
+    ['F#2', 'C#3', 'F#3', 'A3', 'C#4', 'E4'],
+    ['D3', 'A3', 'D4', 'F#4', 'A4']
+  ];
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    const velocity = bar < 4 ? 0.25 : bar < 10 ? 0.34 : bar < 16 ? 0.5 : 0.32;
+    pad.triggerAttackRelease(padChords[padIndex % padChords.length], '2m', time, velocity);
+    padIndex++;
+  }, '2m').start(0);
+  const filterAutomationLoop = new Tone.Loop((time) => {
+    padFilter.frequency.cancelScheduledValues(time);
+    padFilter.frequency.setValueAtTime(1200, time);
+    padFilter.frequency.linearRampToValueAtTime(2500, time + secondsPerBar * 8);
+    padFilter.frequency.linearRampToValueAtTime(1050, time + secondsPerBar * 16);
+  }, `${cycleBars}m`).start(0);
+  const arpDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.6, wet: 0.47 }).connect(shimmer);
+  const arp = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.03, decay: 0.4, sustain: 0.35, release: 1.2 }
+  }).connect(arpDelay);
+  const arpPatterns = [
+    ['A3', 'C#4', 'E4', 'A4', 'B4', 'C#5', 'E4', 'C#4'],
+    ['F#3', 'A3', 'C#4', 'E4', 'F#4', 'A4', 'C#5', 'E4']
+  ];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    if (bar >= 2 && bar < 20) {
+      const notes = bar < 11 ? arpPatterns[0] : arpPatterns[1];
+      const note = notes[arpStep % notes.length];
+      const gate = arpStep % 8 === 4 ? '4n' : '8n';
+      const velocity = 0.36 + Math.random() * 0.12;
+      arp.triggerAttackRelease(note, gate, time, velocity);
+      arpStep++;
+    }
+  }, '8n').start(0);
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 280, Q: 0.9 }).connect(masterReverb);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.9 },
+    filter: { type: 'lowpass', frequency: 800, rolloff: -24 },
+    filterEnvelope: { attack: 0.02, decay: 0.3, sustain: 0.1, release: 0.4, baseFrequency: 70, octaves: 2.5 }
+  }).connect(bassFilter);
+  const bassSections = [
+    ['A1', 'E2', 'A1', 'E2'],
+    ['A1', 'F#1', 'E1', 'C#2', 'D1', 'E1']
+  ];
+  let bassStep = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    if (bar >= 6 && bar < 18) {
+      const pattern = bar < 12 ? bassSections[0] : bassSections[1];
+      const note = pattern[bassStep % pattern.length];
+      const velocity = 0.38 + Math.random() * 0.08;
+      bass.triggerAttackRelease(note, '2n', time, velocity);
+      bassStep++;
+    }
+  }, '2n').start(0);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.06,
+    octaves: 4,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.002, decay: 0.35, sustain: 0, release: 0.25 }
+  }).connect(masterReverb);
+  let kickStep = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    if (bar >= 8 && bar < 18) {
+      const strength = kickStep % 2 === 0 ? 0.6 : 0.52 + Math.random() * 0.04;
+      kick.triggerAttackRelease('C1', '8n', time, strength);
+    }
+    kickStep++;
+  }, '2n').start(0);
+  const snareFilter = new Tone.Filter({ type: 'lowpass', frequency: 1200, Q: 0.5 }).connect(masterReverb);
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.01, decay: 0.18, sustain: 0, release: 0.05 }
+  }).connect(snareFilter);
+  let snareStep = 0;
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    if (bar >= 8 && bar < 18 && snareStep % 2 === 1) {
+      const velocity = 0.32 + Math.random() * 0.08;
+      snare.triggerAttackRelease('16n', time, velocity);
+    }
+    snareStep++;
+  }, '2n').start(0);
+  const hat = new Tone.MetalSynth({
+    frequency: 420,
+    envelope: { attack: 0.001, decay: 0.18, release: 0.06 },
+    harmonicity: 5,
+    modulationIndex: 30,
+    resonance: 4000
+  }).connect(masterReverb);
+  const hatPattern = [0, 1, 0, 0, 1, 0, 1, 0];
+  let hatStep = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = getCycleBar(time);
+    if (bar >= 10 && bar < 18 && hatPattern[hatStep % hatPattern.length]) {
+      const velocity = 0.2 + Math.random() * 0.05;
+      hat.triggerAttackRelease('32n', time, velocity);
+    }
+    hatStep++;
+  }, '8n').start(0);
+  const texture = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: { attack: 3, decay: 0, sustain: 1, release: 6 }
+  }).connect(shimmer);
+  const texturePart = new Tone.Part((time, event) => {
+    texture.triggerAttackRelease(event.duration, time, event.velocity);
+  }, [
+    { time: '0:0:0', duration: '4m', velocity: 0.07 },
+    { time: '6:0:0', duration: '2m', velocity: 0.05 },
+    { time: '10:2:0', duration: '1m', velocity: 0.06 }
+  ]).start(0);
+  texturePart.loop = true;
+  texturePart.loopEnd = `${cycleBars}:0:0`;
+  const swell = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    detune: 6,
+    envelope: { attack: 2.5, decay: 1.2, sustain: 0.8, release: 5 }
+  }).connect(shimmer);
+  const swellPart = new Tone.Part((time, chord) => {
+    swell.triggerAttackRelease(chord.notes, chord.duration, time, chord.velocity);
+  }, [
+    { time: '8:0:0', notes: ['A3', 'C#4', 'E4', 'A4'], duration: '2m', velocity: 0.42 },
+    { time: '10:0:0', notes: ['F#3', 'A3', 'C#4', 'E4', 'A4'], duration: '2m', velocity: 0.48 },
+    { time: '12:0:0', notes: ['E3', 'G#3', 'B3', 'E4'], duration: '2m', velocity: 0.45 }
+  ]).start(0);
+  swellPart.loop = true;
+  swellPart.loopEnd = `${cycleBars}:0:0`;
+  const leadReverb = new Tone.Reverb({ decay: 4.5, wet: 0.5 }).connect(shimmer);
+  await leadReverb.generate();
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    portamento: 0.08,
+    envelope: { attack: 0.15, decay: 0.3, sustain: 0.5, release: 1.5 }
+  }).connect(leadReverb);
+  const leadPart = new Tone.Part((time, event) => {
+    lead.triggerAttackRelease(event.note, event.duration, time, event.velocity);
+  }, [
+    { time: '12:0:0', note: 'C#5', duration: '2n', velocity: 0.5 },
+    { time: '12:2:0', note: 'B4', duration: '4n', velocity: 0.45 },
+    { time: '13:0:0', note: 'A4', duration: '2n', velocity: 0.48 },
+    { time: '13:2:0', note: 'F#4', duration: '4n', velocity: 0.44 },
+    { time: '14:0:0', note: 'E4', duration: '2n', velocity: 0.46 },
+    { time: '14:2:0', note: 'F#4', duration: '4n', velocity: 0.45 },
+    { time: '15:0:0', note: 'A4', duration: '2n', velocity: 0.5 }
+  ]).start(0);
+  leadPart.loop = true;
+  leadPart.loopEnd = `${cycleBars}:0:0`;
+  window.toneJsInstruments = {
+    pad,
+    arp,
+    bass,
+    kick,
+    snare,
+    hat,
+    texture,
+    swell,
+    lead,
+    masterReverb,
+    shimmer,
+    longDelay,
+    analogChorus,
+    padFilter
+  };
+  window.toneJsParts = {
+    padLoop,
+    filterAutomationLoop,
+    arpLoop,
+    bassLoop,
+    kickLoop,
+    snareLoop,
+    hatLoop,
+    texturePart,
+    swellPart,
+    leadPart
+  };
+};
+
+
+
+
+
+window.audioDuration = 70;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

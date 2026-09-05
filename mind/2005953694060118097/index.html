@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+// Tone.js loaded globally via script tag
+let seed = 43119;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const canvas = document.createElement('canvas');
+canvas.style.display = 'block';
+canvas.width = 900;
+canvas.height = 900;
+document.body.appendChild(canvas);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(900, 900, false);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060c);
+scene.fog = new THREE.FogExp2(0x04060c, 0.06);
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+camera.position.set(0, 0, 14);
+const light = new THREE.DirectionalLight(0xffffff, 1.1);
+light.position.set(2, 3, 4);
+scene.add(light);
+scene.add(new THREE.AmbientLight(0x88aaff, 0.4));
+class Boid {
+  constructor(x, y, z) {
+    this.position = new THREE.Vector3(x, y, z);
+    this.velocity = new THREE.Vector3(random() - 0.5, random() - 0.5, random() - 0.5).multiplyScalar(2.2);
+    this.acceleration = new THREE.Vector3();
+    this.maxSpeed = 2.6;
+    this.maxForce = 0.08;
+  }
+  applyForce(f) {
+    this.acceleration.add(f);
+  }
+  flock(neighbors, p) {
+    const sep = this.separate(neighbors, p.separationDist).multiplyScalar(p.separationWeight);
+    const ali = this.align(neighbors, p.neighborDist).multiplyScalar(p.alignmentWeight);
+    const coh = this.cohere(neighbors, p.neighborDist).multiplyScalar(p.cohesionWeight);
+    this.applyForce(sep);
+    this.applyForce(ali);
+    this.applyForce(coh);
+  }
+  update(dt) {
+    this.velocity.add(this.acceleration);
+    this.velocity.clampLength(0, this.maxSpeed);
+    this.position.addScaledVector(this.velocity, dt);
+    this.acceleration.set(0, 0, 0);
+  }
+  separate(neighbors, desired) {
+    const steer = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < desired) {
+        const diff = this.position.clone().sub(other.position).normalize().divideScalar(d);
+        steer.add(diff);
+        count++;
+      }
+    }
+    if (count > 0) steer.divideScalar(count);
+    if (steer.lengthSq() > 0) {
+      steer.normalize().multiplyScalar(this.maxSpeed).sub(this.velocity).clampLength(0, this.maxForce * 1.5);
+    }
+    return steer;
+  }
+  align(neighbors, neighborDist) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < neighborDist) {
+        sum.add(other.velocity);
+        count++;
+      }
+    }
+    if (count > 0) {
+      sum.divideScalar(count).normalize().multiplyScalar(this.maxSpeed);
+      return sum.sub(this.velocity).clampLength(0, this.maxForce);
+    }
+    return new THREE.Vector3();
+  }
+  cohere(neighbors, neighborDist) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < neighborDist) {
+        sum.add(other.position);
+        count++;
+      }
+    }
+    if (count > 0) {
+      sum.divideScalar(count);
+      return this.seek(sum);
+    }
+    return new THREE.Vector3();
+  }
+  seek(target) {
+    const desired = target.clone().sub(this.position).normalize().multiplyScalar(this.maxSpeed);
+    return desired.sub(this.velocity).clampLength(0, this.maxForce);
+  }
+  avoidObstacle(o, r) {
+    const to = o.clone().sub(this.position);
+    const d = to.length();
+    if (d < r) {
+      const steer = this.position.clone().sub(o).normalize().multiplyScalar(this.maxSpeed).sub(this.velocity);
+      return steer.clampLength(0, this.maxForce * 2.5);
+    }
+    return new THREE.Vector3();
+  }
+  stayInBounds(center, radius) {
+    const d = this.position.distanceTo(center);
+    if (d > radius * 0.82) {
+      const steer = center.clone().sub(this.position).normalize().multiplyScalar(this.maxSpeed).sub(this.velocity);
+      return steer.clampLength(0, this.maxForce * 1.2).multiplyScalar((d - radius * 0.82) / (radius * 0.18));
+    }
+    return new THREE.Vector3();
+  }
+}
+class SpatialHash {
+  constructor(cell) {
+    this.cell = cell;
+    this.cells = new Map();
+  }
+  clear() {
+    this.cells.clear();
+  }
+  key(p) {
+    return `${Math.floor(p.x / this.cell)},${Math.floor(p.y / this.cell)},${Math.floor(p.z / this.cell)}`;
+  }
+  add(boid) {
+    const k = this.key(boid.position);
+    if (!this.cells.has(k)) this.cells.set(k, []);
+    this.cells.get(k).push(boid);
+  }
+  neighbors(pos, r) {
+    const n = [];
+    const cr = Math.ceil(r / this.cell);
+    const [cx, cy, cz] = this.key(pos).split(',').map(Number);
+    for (let x = -cr; x <= cr; x++) {
+      for (let y = -cr; y <= cr; y++) {
+        for (let z = -cr; z <= cr; z++) {
+          const k = `${cx + x},${cy + y},${cz + z}`;
+          const cell = this.cells.get(k);
+          if (cell) n.push(...cell);
+        }
+      }
+    }
+    return n;
+  }
+}
+const boidCount = 820;
+const boids = [];
+const hash = new SpatialHash(1.4);
+function randSphere(radius) {
+  const u = random();
+  const v = random();
+  const theta = 2 * Math.PI * u;
+  const phi = Math.acos(2 * v - 1);
+  const r = radius * Math.cbrt(random());
+  return new THREE.Vector3(
+    r * Math.sin(phi) * Math.cos(theta),
+    r * Math.sin(phi) * Math.sin(theta),
+    r * Math.cos(phi)
+  );
+}
+for (let i = 0; i < boidCount; i++) {
+  const p = randSphere(5.5);
+  boids.push(new Boid(p.x, p.y, p.z));
+}
+const geo = new THREE.ConeGeometry(0.08, 0.34, 5);
+geo.rotateX(Math.PI / 2);
+const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.15, vertexColors: true });
+const flockMesh = new THREE.InstancedMesh(geo, mat, boidCount);
+flockMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+flockMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(boidCount * 3), 3);
+scene.add(flockMesh);
+const dummy = new THREE.Object3D();
+const color = new THREE.Color();
+let lorenz = new THREE.Vector3(0.1, 0, 0);
+const lorenzPoints = 520;
+const lorenzArray = new Float32Array(lorenzPoints * 3);
+const lorenzGeom = new THREE.BufferGeometry();
+lorenzGeom.setAttribute('position', new THREE.BufferAttribute(lorenzArray, 3));
+const lorenzMat = new THREE.LineBasicMaterial({ color: 0x55ccff, transparent: true, opacity: 0.3 });
+const lorenzLine = new THREE.Line(lorenzGeom, lorenzMat);
+scene.add(lorenzLine);
+const coreGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(0.45, 24, 24),
+  new THREE.MeshBasicMaterial({ color: 0x88ccff, transparent: true, opacity: 0.25 })
+);
+scene.add(coreGlow);
+function stepLorenz(dt) {
+  const s = 10;
+  const r = 28;
+  const b = 8 / 3;
+  const dx = s * (lorenz.y - lorenz.x);
+  const dy = lorenz.x * (r - lorenz.z) - lorenz.y;
+  const dz = lorenz.x * lorenz.y - b * lorenz.z;
+  lorenz.x += dx * dt;
+  lorenz.y += dy * dt;
+  lorenz.z += dz * dt;
+}
+function flow(p, t) {
+  return new THREE.Vector3(
+    Math.sin(p.y * 0.8 + t * 0.7) * 0.18,
+    Math.cos(p.z * 0.6 + t * 0.9) * 0.16,
+    Math.sin(p.x * 0.7 - t * 0.5) * 0.14
+  );
+}
+let last = performance.now();
+const origin = new THREE.Vector3();
+const duration = 60 * 1000;
+renderer.setAnimationLoop((time) => {
+  const dt = Math.min(0.05, (time - last) / 1000);
+  last = time;
+  const prog = ((time % duration) / duration);
+  const chaos = 0.5 + 0.5 * Math.sin(prog * Math.PI * 2);
+  const bounds = THREE.MathUtils.lerp(6.5, 10.5, chaos);
+  const hueShift = 0.55 + 0.2 * Math.sin(prog * Math.PI * 2 * 1.7);
+  for (let i = lorenzPoints - 1; i > 0; i--) {
+    lorenzArray[i * 3] = lorenzArray[(i - 1) * 3];
+    lorenzArray[i * 3 + 1] = lorenzArray[(i - 1) * 3 + 1];
+    lorenzArray[i * 3 + 2] = lorenzArray[(i - 1) * 3 + 2];
+  }
+  stepLorenz(0.004 + chaos * 0.002);
+  lorenzArray[0] = lorenz.x * 0.1;
+  lorenzArray[1] = lorenz.y * 0.1;
+  lorenzArray[2] = lorenz.z * 0.1;
+  lorenzGeom.attributes.position.needsUpdate = true;
+  hash.clear();
+  for (const b of boids) hash.add(b);
+  for (let i = 0; i < boids.length; i++) {
+    const b = boids[i];
+    const n = hash.neighbors(b.position, 1.9 + chaos * 0.5);
+    const params = {
+      separationDist: 0.7 + chaos * 0.2,
+      neighborDist: 1.9 + chaos * 0.5,
+      separationWeight: 1.6 + chaos * 0.7,
+      alignmentWeight: 0.9 + 0.4 * (1 - chaos),
+      cohesionWeight: 1.1 + 0.3 * chaos
+    };
+    b.maxSpeed = THREE.MathUtils.lerp(2.2, 3.8, chaos);
+    b.maxForce = THREE.MathUtils.lerp(0.07, 0.11, chaos);
+    b.flock(n, params);
+    b.applyForce(b.stayInBounds(origin, bounds));
+    b.applyForce(flow(b.position, time * 0.001).multiplyScalar(0.8));
+    b.applyForce(b.seek(lorenz.clone().multiplyScalar(0.1)).multiplyScalar(0.36 + chaos * 0.25));
+    if (i % 97 === 0) b.applyForce(b.avoidObstacle(lorenz.clone().multiplyScalar(0.12), 0.9));
+    b.update(dt);
+    dummy.position.copy(b.position);
+    const look = b.position.clone().add(b.velocity);
+    dummy.lookAt(look);
+    dummy.updateMatrix();
+    flockMesh.setMatrixAt(i, dummy.matrix);
+    const speed = b.velocity.length() / b.maxSpeed;
+    color.setHSL(hueShift + speed * 0.12, 0.85, 0.55 - chaos * 0.12);
+    flockMesh.setColorAt(i, color);
+  }
+  flockMesh.instanceMatrix.needsUpdate = true;
+  flockMesh.instanceColor.needsUpdate = true;
+  camera.position.lerp(new THREE.Vector3(Math.sin(time * 0.0003) * 4, Math.cos(time * 0.00025) * 3, 14), 0.02);
+  camera.lookAt(scene.position);
+  const bgHue = 0.62 + 0.05 * Math.sin(time * 0.0002);
+  scene.background = new THREE.Color().setHSL(bgHue, 0.55, 0.08 + 0.04 * chaos);
+  renderer.render(scene, camera);
+});
+
+window.initToneJsEngine = async function() {
+  const bpm = 88;
+  Tone.Transport.bpm.value = bpm;
+  const secondsPerBeat = 60 / bpm;
+  const masterGain = new Tone.Gain(0.85).toDestination();
+  const limiter = new Tone.Limiter(-2).connect(masterGain);
+  const vibrato = new Tone.Vibrato({ frequency: 0.5, depth: 0.15, type: 'sine' }).connect(limiter);
+  const bitcrusher = new Tone.BitCrusher({ bits: 6, wet: 0.22 }).connect(vibrato);
+  const masterReverb = new Tone.Reverb({ decay: 4, preDelay: 0.2, wet: 0.4 }).connect(bitcrusher);
+  await masterReverb.generate();
+  const bassDistortion = new Tone.Distortion(0.4).connect(masterReverb);
+  const bassChorus = new Tone.Chorus({ frequency: 0.6, delayTime: 3.5, depth: 0.7, wet: 0.5 }).connect(bassDistortion);
+  bassChorus.start();
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 120, Q: 0.9 }).connect(bassChorus);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.8, release: 0.6 },
+    filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 0.6, release: 1, baseFrequency: 50, octaves: 3 },
+    volume: -2
+  }).connect(bassFilter);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'fatcustom', partials: [1, 0.5, 0.3], spread: 40, count: 3 },
+    envelope: { attack: 0.6, decay: 1, sustain: 0.6, release: 2.2 },
+    volume: -8
+  }).connect(masterReverb);
+  const leadDelay = new Tone.PingPongDelay('8n', 0.4).connect(masterReverb);
+  const lead = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.04, decay: 0.2, sustain: 0.5, release: 1.2 },
+    portamento: 0.12,
+    volume: -5
+  }).connect(leadDelay);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 4,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.2 },
+    volume: 2
+  }).connect(bitcrusher);
+  const snareFilter = new Tone.Filter({ type: 'bandpass', frequency: 1800, Q: 1 }).connect(masterReverb);
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.05 },
+    volume: -6
+  }).connect(snareFilter);
+  const bassNotes = ['D#1', 'B0', 'F#1', 'C#1'];
+  let bassIndex = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (secondsPerBeat * 4));
+    const velocity = bar < 4 ? 0.7 : bar < 14 ? 0.9 : 0.65;
+    bass.triggerAttackRelease(bassNotes[bassIndex % bassNotes.length], '1m', time, velocity);
+    bassIndex++;
+  }, '1m').start(0);
+  const padChords = [
+    ['D#3', 'A#3', 'D#4'],
+    ['B2', 'F#3', 'B3'],
+    ['F#2', 'C#3', 'A#3'],
+    ['C#3', 'G#3', 'C#4']
+  ];
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (secondsPerBeat * 4));
+    const velocity = bar < 4 ? 0.22 : bar < 14 ? 0.28 : 0.2;
+    pad.triggerAttackRelease(padChords[padIndex % padChords.length], '1m', time, velocity);
+    padIndex++;
+  }, '1m').start(0);
+  let kickStep = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (secondsPerBeat * 4));
+    const beat = kickStep % 4;
+    if (bar >= 2 && bar < 18) {
+      if (beat === 0) {
+        kick.triggerAttackRelease('D#1', '8n', time, 0.95);
+      } else if (beat === 1 && kickStep % 8 >= 4) {
+        kick.triggerAttackRelease('D#1', '8n', time, 0.55);
+      } else if (beat === 2 && kickStep % 8 >= 4) {
+        kick.triggerAttackRelease('D#1', '8n', time, 0.75);
+      }
+    } else if (bar >= 18 && bar < 22) {
+      if (beat === 0) {
+        kick.triggerAttackRelease('D#1', '8n', time, 0.6);
+      }
+    }
+    kickStep++;
+  }, '4n').start(0);
+  let snareStep = 0;
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (secondsPerBeat * 4));
+    const beat = snareStep % 4;
+    if (bar >= 2 && bar < 18 && (beat === 1 || beat === 3)) {
+      snare.triggerAttackRelease('8n', time, 0.65);
+    }
+    snareStep++;
+  }, '4n').start(0);
+  const leadMelody = [
+    { time: '4:2:0', note: 'A#3', duration: '4n', velocity: 0.7 },
+    { time: '4:2:2', note: 'G#3', duration: '4n', velocity: 0.65 },
+    { time: '4:3:0', note: 'F#3', duration: '2n', velocity: 0.7 },
+    { time: '8:2:0', note: 'F#3', duration: '4n', velocity: 0.68 },
+    { time: '8:2:2', note: 'F3', duration: '4n', velocity: 0.62 },
+    { time: '8:3:0', note: 'D#3', duration: '2n', velocity: 0.68 },
+    { time: '12:2:0', note: 'A#3', duration: '4n', velocity: 0.72 },
+    { time: '12:2:2', note: 'G#3', duration: '4n', velocity: 0.66 },
+    { time: '12:3:0', note: 'F#3', duration: '2n', velocity: 0.7 },
+    { time: '14:2:0', note: 'F#3', duration: '4n', velocity: 0.66 },
+    { time: '14:2:2', note: 'F3', duration: '4n', velocity: 0.6 },
+    { time: '14:3:0', note: 'D#3', duration: '2n', velocity: 0.64 }
+  ];
+  const leadScheduleIds = leadMelody.map(({ time, note, duration, velocity }) =>
+    Tone.Transport.schedule((schedTime) => {
+      lead.triggerAttackRelease(note, duration, schedTime, velocity);
+    }, time)
+  );
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(520, time + secondsPerBeat * 4 * 8);
+  }, '2:0:0');
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(180, time + secondsPerBeat * 4 * 4);
+  }, '14:0:0');
+  window.toneJsInstruments = {
+    masterGain,
+    limiter,
+    vibrato,
+    bitcrusher,
+    masterReverb,
+    bass,
+    pad,
+    lead,
+    kick,
+    snare,
+    bassChorus,
+    bassDistortion,
+    bassFilter,
+    leadDelay,
+    snareFilter
+  };
+  window.toneJsParts = {
+    bassLoop,
+    padLoop,
+    kickLoop,
+    snareLoop,
+    leadScheduleIds
+  };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

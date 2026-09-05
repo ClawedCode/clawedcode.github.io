@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const w = 900, h = 900, cx = 450, cy = 450;
+let seed = 9243;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const PI = Math.PI, PI2 = PI * 2;
+const rows = 22, cols = 22, size = 36;
+
+const particles = [];
+for(let i = 0; i < 120; i++) {
+  seed = 9243 + i;
+  particles.push({
+    x: rnd() * w, y: rnd() * h,
+    vx: (rnd() - 0.5) * 2, vy: (rnd() - 0.5) * 2,
+    r: 1 + rnd() * 3, hue: 240 + rnd() * 80, life: rnd()
+  });
+}
+
+window.renderFrame = function(t) {
+  ctx.fillStyle = 'rgba(5,5,8,0.15)';
+  ctx.fillRect(0, 0, w, h);
+
+  const progress = (t % 60) / 60;
+  const loop = progress * PI2;
+
+  const breathe = Math.sin(loop * 3) * 0.3;
+  const pulse = Math.sin(loop * 8) * 0.15;
+  const drift = Math.sin(loop * 0.5) * 40;
+
+  for(let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const angle = Math.atan2(p.y - cy, p.x - cx);
+    const dist = Math.sqrt((p.x-cx)*(p.x-cx) + (p.y-cy)*(p.y-cy));
+    p.x += p.vx + Math.cos(angle + loop * 2) * 1.5;
+    p.y += p.vy + Math.sin(angle + loop * 2) * 1.5;
+    if(p.x < 0) p.x = w; if(p.x > w) p.x = 0;
+    if(p.y < 0) p.y = h; if(p.y > h) p.y = 0;
+    p.life = (p.life + 0.003) % 1;
+    const alpha = Math.sin(p.life * PI) * 0.6;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (1 + pulse), 0, PI2);
+    ctx.fillStyle = `hsla(${p.hue + Math.sin(loop)*40}, 90%, 70%, ${alpha})`;
+    ctx.fill();
+  }
+
+  ctx.lineWidth = 1.5;
+
+  for(let y = 0; y < rows; y++) {
+    for(let x = 0; x < cols; x++) {
+      const ox = (x - cols/2 + 0.5) * 44;
+      const oy = (y - rows/2 + 0.5) * 44;
+      const dist = Math.sqrt(ox*ox + oy*oy);
+      const angle = Math.atan2(oy, ox);
+      const normDist = dist / 400;
+
+      const waveX = Math.sin(loop * 3 - dist * 0.012 + angle) * 15 * normDist;
+      const waveY = Math.cos(loop * 2.5 + dist * 0.015 - angle * 0.5) * 15 * normDist;
+
+      const dx = ox + waveX + Math.cos(angle) * drift * normDist;
+      const dy = oy + waveY + Math.sin(angle) * drift * normDist;
+
+      const phase = normDist * PI + angle * 2.5;
+      const rot = Math.sin(loop * 4 - phase) * PI * 0.9 + loop * 1.5 + Math.cos(loop * 6 + phase * 0.5) * 0.4;
+      const scaleBase = 0.3 + 0.7 * Math.sin(loop * 2 + phase);
+      const scalePulse = 1 + pulse * Math.sin(phase * 3 + loop * 5);
+      const scale = scaleBase * scalePulse + breathe * 0.3;
+
+      const hue = (260 + dist * 0.25 + Math.sin(loop * 2 + angle) * 50 + Math.cos(loop * 3 - phase) * 20) % 360;
+      const sat = 70 + 20 * Math.sin(loop * 4 + phase);
+      const light = 55 + 15 * Math.sin(loop * 3 - phase);
+      const alpha = 0.6 + 0.3 * Math.sin(loop * 2 + phase);
+
+      ctx.save();
+      ctx.translate(cx + dx, cy + dy);
+      ctx.rotate(rot);
+      ctx.scale(scale, scale);
+
+      const morphT = (Math.sin(loop * 5 + phase) + 1) * 0.5;
+      const corners = 3 + Math.round(morphT * 3);
+
+      ctx.beginPath();
+      if(morphT < 0.3) {
+        ctx.rect(-size/2, -size/2, size, size);
+      } else if(morphT > 0.7) {
+        ctx.arc(0, 0, size * 0.45, 0, PI2);
+      } else {
+        for(let i = 0; i < corners; i++) {
+          const a = (PI2 / corners) * i - PI / 2;
+          const r = size * 0.45;
+          if(i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+          else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+        }
+        ctx.closePath();
+      }
+
+      ctx.fillStyle = `hsla(${hue}, ${sat * 0.4}%, 18%, 0.25)`;
+      ctx.fill();
+      ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${light}%, ${alpha})`;
+      ctx.stroke();
+
+      ctx.beginPath();
+      const innerR = size * (0.15 + 0.15 * Math.sin(loop * 6 - phase));
+      ctx.arc(0, 0, innerR, 0, PI2);
+      ctx.fillStyle = `hsla(${(hue+180)%360}, 80%, 65%, ${0.4 + 0.3 * Math.sin(loop * 4 + phase)})`;
+      ctx.fill();
+
+      if(scale > 0.6) {
+        ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${light}%, ${alpha * 0.3})`;
+        ctx.lineWidth = 0.5;
+        for(let i = 0; i < 4; i++) {
+          const la = (PI2 / 4) * i + rot * 0.5;
+          const len = size * 0.6 * scale;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(la) * len, Math.sin(la) * len);
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+  }
+
+  const waveLayers = 3;
+  for(let l = 0; l < waveLayers; l++) {
+    ctx.beginPath();
+    ctx.strokeStyle = `hsla(${270 + l * 30}, 60%, 50%, ${0.08 - l * 0.02})`;
+    ctx.lineWidth = 2 - l * 0.5;
+    for(let x = 0; x < w; x += 4) {
+      const waveY = cy + Math.sin(x * 0.008 + loop * (3 + l) + l * PI * 0.6) * (80 + l * 40) + Math.sin(x * 0.02 + loop * 5) * 20;
+      if(x === 0) ctx.moveTo(x, waveY);
+      else ctx.lineTo(x, waveY);
+    }
+    ctx.stroke();
+  }
+
+  ctx.globalCompositeOperation = 'screen';
+  const glowSize = 200 + Math.sin(loop * 4) * 60;
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowSize);
+  glow.addColorStop(0, `hsla(${270 + Math.sin(loop)*30}, 80%, 60%, ${0.08 + pulse * 0.05})`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+  ctx.globalCompositeOperation = 'source-over';
+
+  const grad = ctx.createRadialGradient(cx, cy, 350, cx, cy, 550);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, '#050508');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  return canvas.toDataURL('image/png');
+};
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 116;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0.18;
+  Tone.Transport.swingSubdivision = '8n';
+  const secondsPerBar = (60 / bpm) * 4;
+  const cycleLengthBars = 28;
+  const masterLimiter = new Tone.Limiter(-0.6).toDestination();
+  const sidechainComp = new Tone.Compressor({
+    threshold: -22,
+    ratio: 7,
+    attack: 0.004,
+    release: 0.24
+  }).connect(masterLimiter);
+  const tapeChorus = new Tone.Chorus({
+    frequency: 0.8,
+    delayTime: 4.2,
+    depth: 0.4,
+    wet: 0.35
+  }).connect(sidechainComp).start();
+  const shimmer = new Tone.Reverb({
+    decay: 2.8,
+    preDelay: 0.03,
+    wet: 0.32
+  });
+  await shimmer.generate();
+  shimmer.connect(masterLimiter);
+  const slapDelay = new Tone.FeedbackDelay({
+    delayTime: '8n.',
+    feedback: 0.28,
+    wet: 0.26
+  }).connect(sidechainComp);
+  const arpFilter = new Tone.Filter({ type: 'lowpass', frequency: 340, Q: 0.85 }).connect(sidechainComp);
+  const arp = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.004, decay: 0.11, sustain: 0, release: 0.08 }
+  }).connect(arpFilter);
+  arp.connect(shimmer);
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 240, Q: 1.05 }).connect(sidechainComp);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.008, decay: 0.15, sustain: 0.18, release: 0.12 },
+    filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0, baseFrequency: 110, octaves: 2.5 }
+  }).connect(bassFilter);
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 1800, Q: 0.6 }).connect(tapeChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    detune: -5,
+    envelope: { attack: 1.2, decay: 0.6, sustain: 0.4, release: 2.4 }
+  }).connect(padFilter);
+  pad.connect(shimmer);
+  const lead = new Tone.Synth({
+    oscillator: { type: 'square' },
+    detune: 3,
+    portamento: 0.02,
+    envelope: { attack: 0.006, decay: 0.22, sustain: 0, release: 0.16 }
+  }).connect(slapDelay);
+  lead.connect(shimmer);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.032,
+    octaves: 6,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.07 }
+  }).connect(masterLimiter);
+  const clapFilter = new Tone.Filter({ type: 'highpass', frequency: 1200, Q: 0.8 }).connect(sidechainComp);
+  const clap = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.002, decay: 0.13, sustain: 0, release: 0.04 }
+  }).connect(clapFilter);
+  clap.connect(shimmer);
+  const hat = new Tone.MetalSynth({
+    frequency: 360,
+    envelope: { attack: 0.001, decay: 0.085, release: 0.02 },
+    harmonicity: 5.1,
+    modulationIndex: 28,
+    resonance: 4200
+  }).connect(sidechainComp);
+  const percHP = new Tone.Filter({ type: 'highpass', frequency: 900, Q: 0.5 }).connect(sidechainComp);
+  const perc = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.05, sustain: 0 }
+  }).connect(percHP);
+  const sweeper = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.3, decay: 0.6, sustain: 0, release: 0.3 }
+  }).connect(shimmer);
+  const getBars = (time) => {
+    const absoluteBar = Math.floor(Tone.Transport.getSecondsAtTime(time) / secondsPerBar);
+    return { absoluteBar, barInCycle: absoluteBar % cycleLengthBars };
+  };
+  const chordPool = [
+    ['A4', 'C5', 'E5', 'A5'],
+    ['F4', 'A4', 'C5', 'F5'],
+    ['D4', 'F4', 'A4', 'D5'],
+    ['E4', 'G#4', 'B4', 'E5']
+  ];
+  const padChords = [
+    ['A3', 'C4', 'E4'],
+    ['F3', 'A3', 'C4'],
+    ['D3', 'F3', 'A3'],
+    ['E3', 'G#3', 'B3']
+  ];
+  const noteOrder = [0, 1, 2, 3, 2, 1, 0, 2, 3, 1, 2, 0, 3, 2, 1, 0];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    const chordIndex = Math.floor(barInCycle / 2) % chordPool.length;
+    const chord = chordPool[chordIndex];
+    const note = chord[noteOrder[arpStep % noteOrder.length]];
+    let velocity = 0.3;
+    if (barInCycle >= 4 && barInCycle < 12) velocity = 0.48;
+    else if (barInCycle >= 12 && barInCycle < 20) velocity = 0.62;
+    else if (barInCycle >= 20 && barInCycle < 24) velocity = 0.42;
+    let freqTarget = 420;
+    if (barInCycle >= 4 && barInCycle < 12) freqTarget = 1200;
+    else if (barInCycle >= 12 && barInCycle < 20) freqTarget = 2600;
+    else if (barInCycle >= 20 && barInCycle < 24) freqTarget = 900;
+    else if (barInCycle >= 24) freqTarget = 360;
+    arpFilter.frequency.cancelScheduledValues(time);
+    arpFilter.frequency.linearRampToValueAtTime(freqTarget, time + 0.2);
+    arp.triggerAttackRelease(note, '16n', time, velocity);
+    arpStep++;
+  }, '16n').start(0);
+  let bassStep = 0;
+  const bassPatterns = {
+    groove: ['A1', null, 'A1', null, 'C2', 'A1', null, 'E2'],
+    peak: ['A1', 'E2', 'G1', 'E2', 'A1', 'C2', 'D2', null],
+    breakdown: ['A1', null, 'E2', null, 'G1', null, 'E2', null]
+  };
+  const bassLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle < 4 || barInCycle >= 24) {
+      if (barInCycle >= 24) {
+        bassFilter.frequency.cancelScheduledValues(time);
+        bassFilter.frequency.linearRampToValueAtTime(170, time + 0.4);
+      }
+      return;
+    }
+    let pattern = bassPatterns.groove;
+    if (barInCycle >= 12 && barInCycle < 18) pattern = bassPatterns.peak;
+    else if (barInCycle >= 18) pattern = bassPatterns.breakdown;
+    const note = pattern[bassStep % pattern.length];
+    if (note) {
+      let velocity = 0.78;
+      if (barInCycle >= 12 && barInCycle < 18) velocity = 0.92;
+      else if (barInCycle >= 18) velocity = 0.6;
+      bass.triggerAttackRelease(note, '8n', time, velocity);
+      const target = barInCycle >= 12 && barInCycle < 18 ? 430 : barInCycle >= 18 ? 250 : 320;
+      bassFilter.frequency.cancelScheduledValues(time);
+      bassFilter.frequency.linearRampToValueAtTime(target, time + 0.25);
+    }
+    bassStep++;
+  }, '8n').start(0);
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    const chord = padChords[padIndex % padChords.length];
+    let velocity = 0.1;
+    if (barInCycle >= 4 && barInCycle < 12) velocity = 0.14;
+    else if (barInCycle >= 12 && barInCycle < 20) velocity = 0.19;
+    else if (barInCycle >= 20 && barInCycle < 24) velocity = 0.13;
+    pad.triggerAttackRelease(chord, '2m', time, velocity);
+    padIndex++;
+  }, '2m').start(0);
+  const leadEvents = [
+    { time: '8:0:0', note: 'C5', velocity: 0.7 },
+    { time: '8:2:0', note: 'E5', velocity: 0.66 },
+    { time: '8:3:2', note: 'G5', velocity: 0.7 },
+    { time: '9:2:0', note: 'A5', velocity: 0.72 },
+    { time: '10:0:0', note: 'E5', velocity: 0.64 },
+    { time: '10:2:2', note: 'C5', velocity: 0.6 },
+    { time: '11:1:0', note: 'D5', velocity: 0.63 },
+    { time: '12:0:0', note: 'F5', velocity: 0.68 },
+    { time: '12:2:0', note: 'E5', velocity: 0.62 },
+    { time: '14:0:0', note: 'A5', velocity: 0.7 },
+    { time: '14:2:2', note: 'G5', velocity: 0.68 },
+    { time: '15:1:0', note: 'E5', velocity: 0.63 },
+    { time: '16:0:0', note: 'C5', velocity: 0.58 },
+    { time: '16:2:0', note: 'D5', velocity: 0.6 },
+    { time: '17:0:0', note: 'B4', velocity: 0.55 },
+    { time: '18:0:0', note: 'A4', velocity: 0.5 }
+  ];
+  const leadPart = new Tone.Part((time, value) => {
+    lead.triggerAttackRelease(value.note, '8n', time, value.velocity);
+  }, leadEvents);
+  leadPart.loop = true;
+  leadPart.loopEnd = `${cycleLengthBars}:0:0`;
+  leadPart.start(0);
+  let clapStep = 0;
+  const clapLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle < 4 || barInCycle >= 24) {
+      clapStep++;
+      return;
+    }
+    if (clapStep % 2 === 1) {
+      const velocity = barInCycle < 18 ? 0.72 : 0.52;
+      clap.triggerAttackRelease('16n', time, velocity);
+    }
+    clapStep++;
+  }, '4n').start(0);
+  const hatPattern = [1, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1];
+  let hatStep = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle < 4 || barInCycle >= 24) {
+      hatStep++;
+      return;
+    }
+    if (hatPattern[hatStep % hatPattern.length]) {
+      let velocity = 0.42;
+      if (barInCycle >= 12 && barInCycle < 18) velocity = 0.55;
+      else if (barInCycle >= 18) velocity = 0.38;
+      hat.triggerAttackRelease('16n', time, velocity);
+    }
+    hatStep++;
+  }, '16n').start(0);
+  const percPattern = [0, 1, 0, 1, 0, 0, 1, 0];
+  let percStep = 0;
+  const percLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle < 6 || barInCycle >= 21) {
+      percStep++;
+      return;
+    }
+    if (percPattern[percStep % percPattern.length]) {
+      const velocity = 0.28 + Math.random() * 0.08;
+      perc.triggerAttackRelease('32n', time, velocity);
+    }
+    percStep++;
+  }, '8n').start(0);
+  const kickLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle < 2 || barInCycle >= 24) return;
+    let velocity = 0.85;
+    if (barInCycle < 6) velocity = 0.75;
+    else if (barInCycle >= 18) velocity = 0.78;
+    kick.triggerAttackRelease('C1', '8n', time, velocity);
+    sidechainComp.threshold.setValueAtTime(-34, time);
+    sidechainComp.threshold.exponentialRampToValueAtTime(-22, time + 0.18);
+  }, '4n').start(0);
+  const sweepLoop = new Tone.Loop((time) => {
+    const { barInCycle } = getBars(time);
+    if (barInCycle === 6 || barInCycle === 14) {
+      sweeper.triggerAttackRelease('1m', time, 0.35);
+    }
+  }, '1m').start(0);
+  window.toneJsInstruments = {
+    arp,
+    bass,
+    pad,
+    lead,
+    kick,
+    clap,
+    hat,
+    perc,
+    sweeper
+  };
+  window.toneJsParts = {
+    arpLoop,
+    bassLoop,
+    padLoop,
+    leadPart,
+    clapLoop,
+    hatLoop,
+    percLoop,
+    kickLoop,
+    sweepLoop
+  };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Chase: Extinction Protocol</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Teko:wght@300;600&family=Share+Tech+Mono&display=swap');
+
+        :root {
+            --alert-red: #ff3333;
+            --radar-green: #33ff33;
+            --hud-bg: #0a0505;
+        }
+
+        body {
+            background-color: var(--hud-bg);
+            color: var(--alert-red);
+            font-family: 'Share Tech Mono', monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* CRT Scanline Overlay */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.5) 50%,
+                rgba(0,0,0,0.5)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        /* Radar Scope Container */
+        .radar-scope {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            border: 2px solid var(--alert-red);
+            background: radial-gradient(circle, rgba(50,0,0,0.5) 0%, rgba(0,0,0,0.9) 100%);
+            box-shadow: 0 0 30px rgba(255, 50, 50, 0.2);
+            overflow: hidden;
+            margin-bottom: 2rem;
+        }
+
+        /* Crosshairs */
+        .radar-scope::before, .radar-scope::after {
+            content: '';
+            position: absolute;
+            background: var(--alert-red);
+            opacity: 0.3;
+        }
+        .radar-scope::before { top: 50%; left: 0; width: 100%; height: 1px; }
+        .radar-scope::after { left: 50%; top: 0; width: 1px; height: 100%; }
+
+        /* Rotating Sweep */
+        .sweep {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 50%; height: 2px;
+            background: linear-gradient(90deg, transparent, var(--alert-red));
+            transform-origin: 0 0;
+            animation: radarSpin 4s infinite linear;
+            z-index: 5;
+            box-shadow: 0 0 10px var(--alert-red);
+        }
+
+        @keyframes radarSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Main Canvas */
+        #radarCanvas {
+            position: absolute;
+            top: 0; left: 0;
+            z-index: 10;
+        }
+
+        /* Controls Panel */
+        .control-panel {
+            width: 90%;
+            max-width: 500px;
+            border: 1px solid var(--alert-red);
+            padding: 20px;
+            background: rgba(20, 0, 0, 0.8);
+            position: relative;
+            z-index: 30;
+        }
+
+        /* Retro Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            margin: 10px 0;
+        }
+        input[type=range]::-webkit-slider-track {
+            height: 8px;
+            background: #300;
+            border: 1px solid #600;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 10px;
+            background: var(--alert-red);
+            border: 1px solid #fff;
+            margin-top: -7px;
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--alert-red);
+        }
+
+        .btn-engage {
+            width: 100%;
+            padding: 15px;
+            margin-top: 20px;
+            background: transparent;
+            border: 2px solid var(--alert-red);
+            color: var(--alert-red);
+            font-family: 'Teko', sans-serif;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .btn-engage:hover {
+            background: var(--alert-red);
+            color: black;
+            box-shadow: 0 0 20px var(--alert-red);
+        }
+
+        .pulse-text { animation: textPulse 2s infinite; }
+        @keyframes textPulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body>
+
+    <div class="scanlines"></div>
+
+    <!-- Visualizer -->
+    <div class="radar-scope">
+        <div class="sweep"></div>
+        <canvas id="radarCanvas" width="300" height="300"></canvas>
+    </div>
+
+    <!-- Interface -->
+    <div class="control-panel">
+        <div class="flex justify-between items-end mb-4 border-b border-red-900 pb-2">
+            <h1 class="text-3xl font-bold font-['Teko'] tracking-widest uppercase">VECTOR CHASE</h1>
+            <div id="status" class="text-xs pulse-text">TARGET LOCKED // 128 BPM</div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-6">
+            <div>
+                <label class="text-xs tracking-widest block mb-1">VELOCITY (FILTER)</label>
+                <input type="range" id="filterSlider" min="0" max="100" value="40">
+            </div>
+            <div>
+                <label class="text-xs tracking-widest block mb-1">AFTERBURNER (DIST)</label>
+                <input type="range" id="distSlider" min="0" max="100" value="20">
+            </div>
+        </div>
+
+        <button id="startBtn" class="btn-engage">ENGAGE SYSTEMS</button>
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let analyser, canvas, ctx;
+
+        // Audio Nodes
+        let bassSynth, leadSynth, padSynth, kickSynth, snareSynth;
+        let masterFilter, masterDistortion, masterReverb, masterLimiter;
+        let bassPart, leadPart, drumPart;
+
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        function updateStatus(msg) {
+            status.innerText = msg;
+        }
+
+        async function initAudio() {
+            updateStatus("SPOOLLING DRIVES...");
+
+            // 1. Master Chain
+            // Logic: Limiter <- Reverb <- Distortion <- Filter <- Synths
+            
+            masterLimiter = new Tone.Limiter(-1).toDestination();
+
+            masterReverb = new Tone.Reverb({
+                decay: 5,
+                preDelay: 0.1,
+                wet: 0.2
+            });
+            masterReverb.connect(masterLimiter);
+
+            masterDistortion = new Tone.Distortion({
+                distortion: 0.1,
+                wet: 0.1
+            });
+            masterDistortion.connect(masterReverb);
+
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 800, // Starts dark
+                rolloff: -12,
+                Q: 2
+            });
+            masterFilter.connect(masterDistortion);
+
+            // 2. Instruments
+
+            // A. Rolling Bass (The Barrandon Sound)
+            // Punchy, short decay, saw wave
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.001, decay: 0.1, sustain: 0.1, release: 0.1 },
+                filterEnvelope: { attack: 0.001, decay: 0.1, sustain: 0.5, release: 0.1, baseFrequency: 100, octaves: 4, exponent: 2 }
+            }).connect(masterFilter);
+            bassSynth.volume.value = -3;
+
+            // B. Soaring Lead
+            // High Portamento for that "heroic" glide
+            leadSynth = new Tone.MonoSynth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.5, release: 2 },
+                portamento: 0.15 // The glide
+            });
+            const leadDelay = new Tone.PingPongDelay("8n.", 0.4).connect(masterReverb); // Delay goes straight to reverb, bypassing filter/dist for clarity
+            leadSynth.connect(leadDelay);
+            leadSynth.volume.value = -8;
+
+            // C. Atmospheric Pad
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+                envelope: { attack: 1, decay: 1, sustain: 1, release: 3 },
+                volume: -15
+            }).connect(masterReverb);
+
+            // D. Drums
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 8,
+                oscillator: { type: "square" }, // Square kick for aggressive synthwave
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 1 }
+            }).connect(masterLimiter);
+            
+            snareSynth = new Tone.NoiseSynth({
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            });
+            const snareVerb = new Tone.Reverb({ decay: 1, wet: 0.5 }).toDestination();
+            snareSynth.connect(snareVerb);
+            snareSynth.volume.value = -6;
+
+
+            // 3. Composition (C Minor - Fast)
+            Tone.Transport.bpm.value = 128;
+
+            // Rolling Bass Pattern: 16th notes, octave jumps
+            // C2 - C3 - C2 - C3...
+            const bassSeq = [];
+            for (let i = 0; i < 16; i++) {
+                // Alternating octaves is key to this style
+                const note = (i % 2 === 0) ? "C2" : "C3"; 
+                // Add a variation every 4th beat to G
+                const finalNote = (i >= 12) ? note.replace("C", "G") : note;
+                
+                bassSeq.push({ time: `0:0:${i}`, note: finalNote, dur: "16n" });
+            }
+
+            bassPart = new Tone.Part((time, val) => {
+                bassSynth.triggerAttackRelease(val.note, val.dur, time);
+            }, bassSeq);
+            bassPart.loop = true;
+            bassPart.loopEnd = "1m";
+
+            // Lead Melody: Slow, emotive, soaring
+            const leadNotes = [
+                { time: "0:0:0", note: "C5", dur: "2n." },
+                { time: "0:3:0", note: "D5", dur: "4n" },
+                { time: "1:0:0", note: "Eb5", dur: "1n" },
+                { time: "2:0:0", note: "G5", dur: "2n" },
+                { time: "2:2:0", note: "F5", dur: "2n" },
+                { time: "3:0:0", note: "D5", dur: "1n" },
+            ];
+            
+            leadPart = new Tone.Part((time, val) => {
+                leadSynth.triggerAttackRelease(val.note, val.dur, time);
+            }, leadNotes);
+            leadPart.loop = true;
+            leadPart.loopEnd = "4m";
+
+            // Pads
+            const padNotes = [
+                { time: "0:0:0", notes: ["C3", "Eb3", "G3"], dur: "2m" },
+                { time: "2:0:0", notes: ["Bb2", "D3", "F3"], dur: "2m" },
+            ];
+            padSynth.triggerAttackRelease(["C3", "G3"], "2n"); // Warmup note
+
+            const padPart = new Tone.Part((time, val) => {
+                padSynth.triggerAttackRelease(val.notes, val.dur, time);
+            }, padNotes);
+            padPart.loop = true;
+            padPart.loopEnd = "4m";
+            padPart.start(0);
+
+            // Drums
+            const drumSeq = [
+                { time: "0:0:0", type: "kick" },
+                { time: "0:1:0", type: "snare" },
+                { time: "0:2:0", type: "kick" },
+                { time: "0:3:0", type: "snare" },
+                { time: "0:3:2", type: "kick" }, // Double kick at end
+            ];
+            
+            drumPart = new Tone.Part((time, val) => {
+                if(val.type === "kick") kickSynth.triggerAttackRelease("C1", "8n", time);
+                if(val.type === "snare") snareSynth.triggerAttackRelease("8n", time);
+            }, drumSeq);
+            drumPart.loop = true;
+            drumPart.loopEnd = "1m";
+
+            // 4. Analyzer
+            analyser = new Tone.Analyser("waveform", 512);
+            masterLimiter.connect(analyser);
+
+            updateStatus("SYSTEMS ENGAGED // 128 BPM");
+            startViz();
+            
+            // Apply Slider Defaults
+            document.getElementById('filterSlider').dispatchEvent(new Event('input'));
+            document.getElementById('distSlider').dispatchEvent(new Event('input'));
+        }
+
+        // --- Interaction ---
+        startBtn.addEventListener('click', async () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                if(bassPart) bassPart.stop();
+                if(leadPart) leadPart.stop();
+                if(drumPart) drumPart.stop();
+                
+                // Release
+                if(bassSynth) bassSynth.triggerRelease();
+                if(leadSynth) leadSynth.triggerRelease();
+                if(padSynth) padSynth.releaseAll();
+                
+                startBtn.innerText = "ENGAGE SYSTEMS";
+                startBtn.classList.remove("bg-[var(--alert-red)]", "text-black");
+                updateStatus("SYSTEM STANDBY");
+                isPlaying = false;
+            } else {
+                try {
+                    await Tone.start();
+                    if (Tone.context.state !== 'running') await Tone.context.resume();
+                    
+                    if (!bassSynth) await initAudio();
+
+                    Tone.Transport.start();
+                    bassPart.start(0);
+                    leadPart.start(0);
+                    drumPart.start(0);
+
+                    startBtn.innerText = "ABORT SEQUENCE";
+                    startBtn.classList.add("bg-[var(--alert-red)]", "text-black");
+                    isPlaying = true;
+                } catch(e) {
+                    console.error(e);
+                    updateStatus("ERROR: " + e.message);
+                }
+            }
+        });
+
+        // Sliders
+        document.getElementById('filterSlider').addEventListener('input', (e) => {
+            if(!masterFilter) return;
+            const val = parseInt(e.target.value);
+            // 0 -> 200Hz, 100 -> 5000Hz (Aggressive opening)
+            const freq = 200 + (Math.pow(val/100, 2) * 4800);
+            masterFilter.frequency.rampTo(freq, 0.1);
+        });
+
+        document.getElementById('distSlider').addEventListener('input', (e) => {
+            if(!masterDistortion) return;
+            const val = parseInt(e.target.value);
+            // 0 -> 0 distortion, 100 -> 0.8 distortion
+            const dist = (val / 100) * 0.8;
+            masterDistortion.distortion = dist;
+            masterDistortion.wet.value = (val / 100) * 0.5; // Don't go 100% wet
+        });
+
+        // --- Radar Visualizer ---
+        canvas = document.getElementById('radarCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            function draw() {
+                requestAnimationFrame(draw);
+                if (!isPlaying) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    return;
+                }
+                
+                const buffer = analyser.getValue(); // Waveform Data (-1 to 1)
+                const w = canvas.width;
+                const h = canvas.height;
+                const cx = w / 2;
+                const cy = h / 2;
+                const radius = 100;
+
+                ctx.clearRect(0, 0, w, h);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#ff3333";
+                ctx.shadowBlur = 5;
+                ctx.shadowColor = "#ff3333";
+
+                ctx.beginPath();
+
+                // Draw circular waveform
+                for (let i = 0; i < buffer.length; i++) {
+                    const angle = (i / buffer.length) * Math.PI * 2;
+                    const v = buffer[i]; // Amplitude
+                    
+                    // Map amplitude to radius deviation
+                    const r = radius + (v * 40); 
+                    
+                    const x = cx + r * Math.cos(angle);
+                    const y = cy + r * Math.sin(angle);
+
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            }
+            draw();
+        }
+
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 60;
+      window.initToneJsEngine = async function() {
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+        // CRITICAL: Clear all transport events scheduled by initAudio (warmup notes, padPart.start(0), etc)
+        Tone.Transport.cancel(0);
+
+        // Stop all parts that may have been started in initAudio
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try { window[varName].stop(0); } catch (e) {}
+          }
+        }
+
+        // Now start all parts at a consistent offset
+        const startOffset = 0.05;
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try { window[varName].start(startOffset); } catch (e) { console.log('Could not start ' + varName + ':', e.message); }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+        window.ready = true;
+      });
+      // DURATION: 60
+    </script>
+  
+</body>
+</html>
