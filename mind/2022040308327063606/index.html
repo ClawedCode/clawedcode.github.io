@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900; canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const W = 900, H = 900, dur = 60;
+let seed = 7734;
+function rng() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function smoothstep(a, b, t) { let x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); }
+function dist(a, b) { return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2); }
+
+const nodes = [], edges = [], particles = [], branches = [];
+const N = 22;
+for (let i = 0; i < N; i++) {
+  nodes.push({ x: 100 + rng() * 700, y: 100 + rng() * 700, r: 4 + rng() * 6, glow: 0, layer: Math.floor(rng() * 3), neighbors: [] });
+}
+for (let i = 0; i < N; i++) {
+  let sorted = nodes.map((n, j) => ({ j, d: dist(nodes[i], n) })).filter(e => e.j !== i).sort((a, b) => a.d - b.d);
+  let conns = 2 + Math.floor(rng() * 2);
+  for (let k = 0; k < conns && k < sorted.length; k++) {
+    let j = sorted[k].j;
+    if (!edges.find(e => (e.a === i && e.b === j) || (e.a === j && e.b === i))) {
+      let mx = (nodes[i].x + nodes[j].x) / 2, my = (nodes[i].y + nodes[j].y) / 2;
+      let off = (rng() - 0.5) * 120;
+      edges.push({ a: i, b: j, cx: mx + off, cy: my + (rng() - 0.5) * 120, w: 1 + rng() * 2 });
+      nodes[i].neighbors.push(j);
+      nodes[j].neighbors.push(i);
+    }
+  }
+}
+for (let i = 0; i < edges.length; i++) {
+  if (rng() > 0.5) {
+    let e = edges[i], t = 0.3 + rng() * 0.4;
+    let na = nodes[e.a], nb = nodes[e.b];
+    let bx = (1-t)*(1-t)*na.x + 2*(1-t)*t*e.cx + t*t*nb.x + (rng()-0.5)*60;
+    let by = (1-t)*(1-t)*na.y + 2*(1-t)*t*e.cy + t*t*nb.y + (rng()-0.5)*60;
+    let endX = bx + (rng()-0.5)*80, endY = by + (rng()-0.5)*80;
+    branches.push({ sx: bx, sy: by, ex: endX, ey: endY, w: 0.5 + rng() });
+  }
+}
+for (let i = 0; i < 80; i++) {
+  let ei = Math.floor(rng() * edges.length);
+  particles.push({ edge: ei, t: rng(), speed: 0.008 + rng() * 0.015, size: 1.5 + rng() * 2, bright: 0.6 + rng() * 0.4 });
+}
+
+const cascades = [];
+for (let i = 0; i < 6; i++) {
+  cascades.push({ time: i * 10 + 2, origin: Math.floor(rng() * N) });
+}
+
+function bezierPt(e, t) {
+  let na = nodes[e.a], nb = nodes[e.b];
+  let x = (1-t)*(1-t)*na.x + 2*(1-t)*t*e.cx + t*t*nb.x;
+  let y = (1-t)*(1-t)*na.y + 2*(1-t)*t*e.cy + t*t*nb.y;
+  return { x, y };
+}
+
+function morphPt(e, t, morph) {
+  let p = bezierPt(e, t);
+  if (morph < 0.01) return p;
+  let na = nodes[e.a], nb = nodes[e.b];
+  let lx = lerp(na.x, nb.x, t), ly = lerp(na.y, nb.y, t);
+  let gx = na.x + (t < 0.5 ? 0 : (nb.x - na.x)), gy = t < 0.5 ? na.y : nb.y;
+  let geo = { x: lerp(lx, gx, 0.6), y: lerp(ly, gy, 0.6) };
+  return { x: lerp(p.x, geo.x, morph), y: lerp(p.y, geo.y, morph) };
+}
+
+window.renderFrame = function(time) {
+  let loopT = time / dur;
+  let phase = loopT;
+  let morph = 0;
+  if (phase < 0.25) morph = 0;
+  else if (phase < 0.5) morph = smoothstep(0.25, 0.5, phase);
+  else if (phase < 0.75) morph = 1 - smoothstep(0.5, 0.75, phase);
+  else morph = 0;
+
+  let panX = Math.sin(loopT * Math.PI * 2) * 40;
+  let panY = Math.cos(loopT * Math.PI * 2) * 30;
+
+  ctx.save();
+  ctx.fillStyle = '#080604';
+  ctx.fillRect(0, 0, W, H);
+  ctx.translate(panX, panY);
+
+  let amberR = lerp(180, 80, morph), amberG = lerp(140, 190, morph), amberB = lerp(60, 210, morph);
+  let brightR = lerp(212, 100, morph), brightG = lerp(165, 210, morph), brightB = lerp(74, 230, morph);
+
+  for (let cas of cascades) {
+    let elapsed = (time - cas.time + dur) % dur;
+    if (elapsed < 4) {
+      let visited = new Set();
+      let queue = [{ n: cas.origin, d: 0 }];
+      visited.add(cas.origin);
+      while (queue.length) {
+        let { n, d } = queue.shift();
+        let nodeElapsed = elapsed - d * 0.4;
+        if (nodeElapsed > 0 && nodeElapsed < 2) {
+          nodes[n].glow = Math.max(nodes[n].glow, Math.sin(nodeElapsed / 2 * Math.PI));
+        }
+        if (d < 4) {
+          for (let nb of nodes[n].neighbors) {
+            if (!visited.has(nb)) { visited.add(nb); queue.push({ n: nb, d: d + 1 }); }
+          }
+        }
+      }
+    }
+  }
+
+  ctx.globalCompositeOperation = 'lighter';
+  for (let b of branches) {
+    let alpha = 0.08 + morph * 0.04;
+    ctx.strokeStyle = `rgba(${amberR},${amberG},${amberB},${alpha})`;
+    ctx.lineWidth = b.w * (1 - morph * 0.3);
+    ctx.beginPath(); ctx.moveTo(b.sx, b.sy); ctx.lineTo(b.ex, b.ey); ctx.stroke();
+  }
+
+  for (let e of edges) {
+    let alpha = 0.15 + morph * 0.1;
+    let na = nodes[e.a], nb = nodes[e.b];
+    let glowBoost = Math.max(na.glow, nb.glow) * 0.4;
+    ctx.strokeStyle = `rgba(${amberR},${amberG},${amberB},${alpha + glowBoost})`;
+    ctx.lineWidth = e.w * (1 + glowBoost * 2);
+    ctx.beginPath();
+    let steps = 20;
+    for (let s = 0; s <= steps; s++) {
+      let p = morphPt(e, s / steps, morph);
+      s === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+
+  for (let p of particles) {
+    p.t = (p.t + p.speed * (1 + morph * 0.5)) % 1;
+    let e = edges[p.edge];
+    let pt = morphPt(e, p.t, morph);
+    let grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, p.size * 3);
+    grad.addColorStop(0, `rgba(255,240,200,${p.bright * 0.9})`);
+    grad.addColorStop(0.4, `rgba(${brightR},${brightG},${brightB},${p.bright * 0.4})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(pt.x - p.size * 3, pt.y - p.size * 3, p.size * 6, p.size * 6);
+  }
+
+  for (let i = 0; i < N; i++) {
+    let n = nodes[i];
+    let g = n.glow;
+    let baseAlpha = 0.3 + g * 0.7;
+    let sz = n.r * (1 + g * 1.5) * (1 - morph * 0.3 + morph * (g > 0.1 ? 0.5 : 0));
+    let grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, sz * 3);
+    grad.addColorStop(0, `rgba(255,${lerp(220,250,morph)},${lerp(180,240,morph)},${baseAlpha})`);
+    grad.addColorStop(0.3, `rgba(${brightR},${brightG},${brightB},${baseAlpha * 0.5})`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(n.x, n.y, sz * 3, 0, Math.PI * 2); ctx.fill();
+    if (morph > 0.3) {
+      let sqSz = sz * 1.2 * morph;
+      ctx.strokeStyle = `rgba(${brightR},${brightG},${brightB},${morph * 0.4})`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(n.x - sqSz, n.y - sqSz, sqSz * 2, sqSz * 2);
+    }
+    n.glow *= 0.96;
+  }
+
+  if (morph > 0.2) {
+    ctx.strokeStyle = `rgba(${brightR},${brightG},${brightB},${morph * 0.06})`;
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < W; i += 60) {
+      ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke();
+    }
+    for (let j = 0; j < H; j += 60) {
+      ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(W, j); ctx.stroke();
+    }
+  }
+
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+
+  let vignette = ctx.createRadialGradient(W/2, H/2, W*0.25, W/2, H/2, W*0.65);
+  vignette.addColorStop(0, 'rgba(0,0,0,0)');
+  vignette.addColorStop(1, 'rgba(8,6,4,0.85)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+
+  return canvas.toDataURL('image/png');
+};
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 88;
+  Tone.Transport.bpm.value = bpm;
+  const barSeconds = (60 / bpm) * 4;
+  const getBar = (time) => Math.floor(Tone.Time(time).toSeconds() / barSeconds);
+  const barsToSeconds = (bars) => bars * barSeconds;
+  const masterGain = new Tone.Gain(0.9).toDestination();
+  const masterLimiter = new Tone.Limiter(-2).connect(masterGain);
+  const tapeWarble = new Tone.Vibrato({ frequency: 0.5, depth: 0.15, type: 'sine' }).connect(masterLimiter);
+  const masterBitcrusher = new Tone.BitCrusher({ bits: 6, wet: 0.22 }).connect(tapeWarble);
+  const masterFilter = new Tone.Filter({ type: 'lowpass', frequency: 1800, Q: 0.7 }).connect(masterBitcrusher);
+  const masterDelay = new Tone.FeedbackDelay({ delayTime: '4n.', feedback: 0.3, wet: 0.18 }).connect(masterFilter);
+  const masterReverb = new Tone.Reverb({ decay: 4.8, preDelay: 0.22, wet: 0.45 }).connect(masterDelay);
+  await masterReverb.generate();
+  const subDrone = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 2.2, decay: 1.1, sustain: 0.85, release: 3.6 },
+    filterEnvelope: { attack: 0.4, decay: 0.2, sustain: 1, release: 2, baseFrequency: 42, octaves: 1.6 }
+  }).connect(masterReverb);
+  subDrone.volume.value = -5;
+  const bassDistortion = new Tone.Distortion({ distortion: 0.42, wet: 0.58 });
+  const bassChorus = new Tone.Chorus({ frequency: 0.45, delayTime: 2.8, depth: 0.65, wet: 0.5 }).connect(masterReverb);
+  bassChorus.start();
+  bassDistortion.connect(bassChorus);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    filter: { type: 'lowpass', frequency: 90, rolloff: -24 },
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.85, release: 0.55 },
+    filterEnvelope: { attack: 0.02, decay: 0.35, sustain: 0.6, release: 0.7, baseFrequency: 55, octaves: 3 },
+    portamento: 0.02
+  }).connect(bassDistortion);
+  bass.volume.value = -4;
+  const padChorus = new Tone.Chorus({ frequency: 0.32, delayTime: 4, depth: 0.6, wet: 0.42 }).connect(masterReverb);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'fatcustom', partials: [1, 0.6, 0.3], spread: 40, count: 3 },
+    envelope: { attack: 1.6, decay: 1, sustain: 0.6, release: 2.8 }
+  }).connect(padChorus);
+  pad.volume.value = -9;
+  const bellFilter = new Tone.Filter({ type: 'lowpass', frequency: 3200, Q: 0.9 }).connect(masterReverb);
+  const bell = new Tone.FMSynth({
+    harmonicity: 4.2,
+    modulationIndex: 9,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.003, decay: 2.4, sustain: 0, release: 1.1 },
+    modulation: { type: 'sine' },
+    modulationEnvelope: { attack: 0.01, decay: 1.3, sustain: 0, release: 0.6 }
+  }).connect(bellFilter);
+  bell.volume.value = -17;
+  const pulseFilter = new Tone.Filter({ type: 'bandpass', frequency: 640, Q: 2.4 }).connect(masterReverb);
+  const pulse = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.01, decay: 0.18, sustain: 0, release: 0.12 }
+  }).connect(pulseFilter);
+  pulse.volume.value = -18;
+  const leadDelay = new Tone.PingPongDelay({ delayTime: '8n', feedback: 0.45, wet: 0.5 }).connect(masterReverb);
+  const lead = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.04, decay: 0.2, sustain: 0.5, release: 1.2 },
+    portamento: 0.08
+  }).connect(leadDelay);
+  lead.volume.value = -6;
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 4.5,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.45, sustain: 0.01, release: 1.1 }
+  }).connect(masterBitcrusher);
+  kick.volume.value = 2;
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.22, sustain: 0 }
+  }).connect(masterReverb);
+  snare.volume.value = -8;
+  const textureNoise = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: { attack: 2.5, decay: 2, sustain: 0.25, release: 4 }
+  }).connect(masterReverb);
+  textureNoise.volume.value = -24;
+  const droneSections = [
+    ['D#2'],
+    ['A#1', 'D#2'],
+    ['F#1', 'C#2'],
+    ['D#2', 'A#1']
+  ];
+  let droneIdx = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    let pattern;
+    if (bar < 4) pattern = droneSections[0];
+    else if (bar < 8) pattern = droneSections[1];
+    else if (bar < 14) pattern = droneSections[2];
+    else pattern = droneSections[3];
+    const duration = bar >= 16 ? '1m' : '2m';
+    subDrone.triggerAttackRelease(pattern[droneIdx % pattern.length], duration, time, 0.72);
+    droneIdx++;
+  }, '1m').start(0);
+  const padChords = [
+    ['D#3', 'A#3', 'D#4'],
+    ['B2', 'F#3', 'B3'],
+    ['F#2', 'C#3', 'A#3'],
+    ['C#3', 'G#3', 'C#4'],
+    ['G#2', 'D#3', 'G#3'],
+    ['B2', 'F#3', 'B3'],
+    ['F#2', 'C#3', 'A#3'],
+    ['D#3', 'A#3', 'D#4']
+  ];
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar >= 1 && bar < 16) {
+      pad.triggerAttackRelease(padChords[padIdx % padChords.length], '1m', time, 0.27);
+    } else if (bar >= 16 && bar < 20) {
+      pad.triggerAttackRelease(['D#3', 'A#3', 'D#4'], '1m', time, 0.2);
+    }
+    padIdx++;
+  }, '1m').start(0);
+  const bassPatterns = [
+    ['D#1', 'D#1', 'B0', 'B0', 'F#1', 'F#1', 'C#1', 'C#1'],
+    ['D#1', 'A#0', 'F#1', 'C#1', 'G#1', 'F#1', 'C#1', 'B0'],
+    ['D#1', 'D#1', 'B0', 'F#1', 'C#1', 'B0', 'A#0', 'D#1']
+  ];
+  let bassStep = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    let pattern;
+    if (bar < 6) pattern = bassPatterns[0];
+    else if (bar < 14) pattern = bassPatterns[1];
+    else pattern = bassPatterns[2];
+    const note = pattern[bassStep % pattern.length];
+    const velocity = bar >= 16 ? 0.55 : 0.85;
+    bass.triggerAttackRelease(note, '8n', time, velocity);
+    bassStep++;
+  }, '8n').start(0);
+  const bellNotes = ['A#4', 'F#4', 'D#5', 'C#5', 'G#4', 'F4', 'D#5', 'C5', 'B4', 'G#4', 'F#4'];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar >= 3 && bar < 13) {
+      if (((bellStep * 3 + 2) % 5) > 0) {
+        const velocity = bar >= 9 ? 0.34 : 0.28;
+        bell.triggerAttackRelease(bellNotes[bellStep % bellNotes.length], '4n', time, velocity);
+      }
+    }
+    bellStep++;
+  }, '4n').start(0);
+  const pulsePattern = [1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0];
+  const pulseNotes = ['G#3', 'D#4', 'C#4', 'F#3', 'A#3', 'C4'];
+  let pulseStep = 0;
+  const pulseLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar >= 4 && bar < 12) {
+      if (pulsePattern[pulseStep % pulsePattern.length]) {
+        const note = pulseNotes[pulseStep % pulseNotes.length];
+        const velocity = 0.32 + 0.04 * (pulseStep % 4);
+        pulse.triggerAttackRelease(note, '16n', time, velocity);
+      }
+    }
+    pulseStep++;
+  }, '16n').start(0);
+  let kickStep = 0;
+  const kickPattern = [1, 0, 0, 0, 0.45, 0, 0.7, 0];
+  const windDownPattern = [1, 0, 0, 0, 0, 0, 0, 0];
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar < 20) {
+      const pattern = bar >= 16 ? windDownPattern : kickPattern;
+      const velocity = pattern[kickStep % pattern.length];
+      if (velocity) {
+        kick.triggerAttackRelease('D#1', '8n', time, velocity);
+      }
+    }
+    kickStep++;
+  }, '8n').start(0);
+  let snareStep = 0;
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    const beat = snareStep % 4;
+    if (bar >= 2 && bar < 16) {
+      if (beat === 1 || beat === 3) {
+        snare.triggerAttackRelease('8n', time, 0.7);
+      }
+    } else if (bar >= 16 && bar < 18 && beat === 3) {
+      snare.triggerAttackRelease('8n', time, 0.4);
+    }
+    snareStep++;
+  }, '4n').start(0);
+  const texturePart = new Tone.Part((time, duration) => {
+    textureNoise.triggerAttackRelease(duration, time);
+  }, [
+    [0, 6],
+    ['8:0:0', 3]
+  ]).start(0);
+  texturePart.loop = false;
+  const leadEvents = [
+    { time: '4:2:0', note: 'A#3', duration: '4n', vel: 0.7 },
+    { time: '4:2:2', note: 'G#3', duration: '4n', vel: 0.65 },
+    { time: '4:3:0', note: 'F#3', duration: '2n', vel: 0.62 },
+    { time: '8:2:0', note: 'F#3', duration: '4n', vel: 0.66 },
+    { time: '8:2:2', note: 'F3', duration: '4n', vel: 0.63 },
+    { time: '8:3:0', note: 'D#3', duration: '2n', vel: 0.6 },
+    { time: '12:2:0', note: 'A#3', duration: '4n', vel: 0.68 },
+    { time: '12:2:2', note: 'G#3', duration: '4n', vel: 0.64 },
+    { time: '12:3:0', note: 'F#3', duration: '2n', vel: 0.6 }
+  ];
+  const leadPart = new Tone.Part((time, event) => {
+    lead.triggerAttackRelease(event.note, event.duration, time, event.vel);
+  }, leadEvents.map((event) => [event.time, event])).start(0);
+  leadPart.loop = false;
+  Tone.Transport.schedule((time) => {
+    masterFilter.frequency.cancelScheduledValues(time);
+    masterFilter.frequency.setValueAtTime(1500, time);
+    masterFilter.frequency.linearRampToValueAtTime(3200, time + barsToSeconds(4));
+  }, '4:0:0');
+  Tone.Transport.schedule((time) => {
+    masterFilter.frequency.cancelScheduledValues(time);
+    masterFilter.frequency.setValueAtTime(3200, time);
+    masterFilter.frequency.linearRampToValueAtTime(1500, time + barsToSeconds(4));
+  }, '12:0:0');
+  Tone.Transport.schedule((time) => {
+    masterFilter.frequency.cancelScheduledValues(time);
+    masterFilter.frequency.setValueAtTime(1500, time);
+    masterFilter.frequency.linearRampToValueAtTime(900, time + barsToSeconds(3));
+  }, '16:0:0');
+  window.toneJsInstruments = {
+    subDrone,
+    pad,
+    bass,
+    bell,
+    pulse,
+    lead,
+    kick,
+    snare,
+    textureNoise,
+    masterReverb,
+    masterDelay,
+    masterFilter,
+    masterBitcrusher,
+    tapeWarble
+  };
+  window.toneJsParts = {
+    droneLoop,
+    padLoop,
+    bassLoop,
+    bellLoop,
+    pulseLoop,
+    kickLoop,
+    snareLoop,
+    leadPart,
+    texturePart
+  };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

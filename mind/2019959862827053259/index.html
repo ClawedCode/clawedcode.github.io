@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quartz Engine: French Touch Synth</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@300;600&display=swap');
+
+        :root {
+            --neon-teal: #00f3ff;
+            --neon-pink: #ff0055;
+            --deep-space: #0b0c15;
+            --glass-bg: rgba(20, 25, 40, 0.7);
+        }
+
+        body {
+            background-color: var(--deep-space);
+            color: white;
+            font-family: 'Rajdhani', sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* Starfield Background */
+        .stars {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                radial-gradient(white, rgba(255,255,255,.2) 2px, transparent 3px),
+                radial-gradient(white, rgba(255,255,255,.15) 1px, transparent 2px),
+                radial-gradient(white, rgba(255,255,255,.1) 2px, transparent 3px);
+            background-size: 550px 550px, 350px 350px, 250px 250px;
+            background-position: 0 0, 40px 60px, 130px 270px;
+            animation: starMove 100s linear infinite;
+            z-index: -2;
+            opacity: 0.6;
+        }
+        @keyframes starMove { 
+            from { transform: translateY(0); } 
+            to { transform: translateY(-550px); } 
+        }
+
+        /* Geometric Overlay */
+        .geometry {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 80vh; height: 80vh;
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            border-radius: 50%;
+            z-index: -1;
+            pointer-events: none;
+        }
+        .geometry::before {
+            content: ''; position: absolute; inset: 10%;
+            border: 1px solid rgba(255, 0, 85, 0.1);
+            transform: rotate(45deg);
+        }
+
+        /* Main Dashboard */
+        .dashboard {
+            background: var(--glass-bg);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(0, 243, 255, 0.3);
+            border-radius: 4px;
+            padding: 3rem;
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 0 50px rgba(0, 243, 255, 0.1);
+            position: relative;
+        }
+
+        /* Corner Accents */
+        .corner {
+            position: absolute;
+            width: 20px; height: 20px;
+            border-color: var(--neon-teal);
+            border-style: solid;
+        }
+        .tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+        .tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+        .bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+        .br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.2em;
+            text-shadow: 0 0 10px var(--neon-teal);
+        }
+
+        /* Controls Layout */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 200px 1fr;
+            gap: 2rem;
+            align-items: center;
+        }
+
+        /* The Big Knob (Filter) */
+        .knob-container {
+            position: relative;
+            width: 180px;
+            height: 180px;
+            margin: 0 auto;
+        }
+        
+        .knob-svg {
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg); /* Start from top */
+            cursor: pointer;
+        }
+
+        .knob-track {
+            fill: none;
+            stroke: #1a2035;
+            stroke-width: 10;
+        }
+
+        .knob-value {
+            fill: none;
+            stroke: var(--neon-teal);
+            stroke-width: 10;
+            stroke-dasharray: 440; /* Circumference */
+            stroke-dashoffset: 440; /* Start empty */
+            transition: stroke-dashoffset 0.1s;
+            filter: drop-shadow(0 0 5px var(--neon-teal));
+        }
+
+        .knob-label {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            pointer-events: none;
+        }
+
+        /* Faders */
+        .fader-stack {
+            display: flex;
+            justify-content: space-around;
+            height: 150px;
+        }
+
+        .fader-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type=range][orient=vertical] {
+            writing-mode: bt-lr; 
+            -webkit-appearance: slider-vertical;
+            width: 6px;
+            height: 100%;
+            padding: 0;
+            background: transparent;
+        }
+
+        /* Start Button */
+        .init-btn {
+            background: transparent;
+            border: 1px solid var(--neon-pink);
+            color: var(--neon-pink);
+            font-family: 'Orbitron';
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            letter-spacing: 2px;
+            margin-top: 2rem;
+            width: 100%;
+        }
+        .init-btn:hover {
+            background: var(--neon-pink);
+            color: white;
+            box-shadow: 0 0 30px var(--neon-pink);
+        }
+
+        #vizCanvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -1;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body>
+
+    <div class="stars"></div>
+    <div class="geometry"></div>
+    <canvas id="vizCanvas"></canvas>
+
+    <div class="dashboard">
+        <div class="corner tl"></div><div class="corner tr"></div>
+        <div class="corner bl"></div><div class="corner br"></div>
+
+        <div class="text-center mb-8">
+            <h1 class="text-4xl text-white mb-2">QUARTZ ENGINE</h1>
+            <p class="text-xs text-teal-400 tracking-[0.5em] uppercase">French Touch Synthesis</p>
+        </div>
+
+        <div class="controls-grid">
+            
+            <!-- Left Faders (Rhythm) -->
+            <div class="fader-stack">
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="kickVol" min="-60" max="-3" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">KICK</span>
+                </div>
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="snareVol" min="-60" max="-3" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">SNARE</span>
+                </div>
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="bassVol" min="-60" max="-5" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">BASS</span>
+                </div>
+            </div>
+
+            <!-- Center Knob (Filter) -->
+            <div class="knob-container" id="filterKnob">
+                <svg class="knob-svg" viewBox="0 0 160 160">
+                    <circle class="knob-track" cx="80" cy="80" r="70" />
+                    <circle class="knob-value" cx="80" cy="80" r="70" id="knobCircle" />
+                </svg>
+                <div class="knob-label">
+                    <div class="text-2xl font-bold text-teal-300" id="filterVal">0%</div>
+                    <div class="text-[8px] tracking-[0.2em] text-gray-400 mt-1">PRISM FILTER</div>
+                </div>
+            </div>
+
+            <!-- Right Faders (Melody) -->
+            <div class="fader-stack">
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="arp1Vol" min="-60" max="-10" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">ARP LOW</span>
+                </div>
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="arp2Vol" min="-60" max="-12" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">ARP HIGH</span>
+                </div>
+                <div class="fader-col">
+                    <input type="range" orient="vertical" id="padVol" min="-60" max="-15" value="-60">
+                    <span class="text-[10px] tracking-widest text-gray-400">PADS</span>
+                </div>
+            </div>
+
+        </div>
+
+        <button class="init-btn" id="startBtn">INITIALIZE CRYSTAL</button>
+        <div id="status" class="text-center mt-4 text-[10px] text-gray-500 tracking-widest">SYSTEM STANDBY</div>
+
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let analyser, canvas, ctx;
+
+        // --- Audio Nodes ---
+        let kickSynth, snareSynth, bassSynth, padSynth, arpLowSynth, arpHighSynth;
+        let masterFilter, masterReverb, masterDelay, masterComp;
+        
+        let loopKick, loopSnare, loopBass, loopPad, loopArpLow, loopArpHigh;
+        
+        // Volume Nodes
+        const vols = {
+            kick: null, snare: null, bass: null, pad: null, arp1: null, arp2: null
+        };
+
+        const status = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const knobCircle = document.getElementById('knobCircle');
+
+        // --- Interaction: Knob Dragging ---
+        let isDragging = false;
+        const filterKnob = document.getElementById('filterKnob');
+        
+        function updateFilter(percent) {
+            // Visual Update
+            const circumference = 2 * Math.PI * 70;
+            const offset = circumference - (percent * circumference);
+            knobCircle.style.strokeDashoffset = offset;
+            document.getElementById('filterVal').innerText = Math.round(percent * 100) + "%";
+
+            // Audio Update (Exponential Frequency)
+            if(masterFilter) {
+                // 100Hz to 15000Hz
+                const freq = 100 + (Math.pow(percent, 2) * 14900);
+                masterFilter.frequency.rampTo(freq, 0.05);
+            }
+        }
+
+        filterKnob.addEventListener('mousedown', (e) => { isDragging = true; });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+        window.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const rect = filterKnob.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            let currentStr = document.getElementById('filterVal').innerText.replace('%','');
+            let current = parseInt(currentStr) / 100;
+            
+            let delta = -e.movementY * 0.01;
+            let newVal = Math.max(0, Math.min(1, current + delta));
+            
+            updateFilter(newVal);
+        });
+
+        // Initialize Filter Visual to 10%
+        updateFilter(0.1);
+
+
+        async function initAudio() {
+            status.innerText = "CRYSTAL RESONANCE... CHARGING";
+
+            // 1. Master Chain
+            const limiter = new Tone.Limiter(-1).toDestination();
+            
+            masterReverb = new Tone.Reverb({ decay: 4, wet: 0.3 }).connect(limiter);
+            masterComp = new Tone.Compressor(-20, 3).connect(masterReverb);
+            
+            // The PRISM FILTER (Lowpass) - Key to the French Touch sound
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 400, // Starts low
+                rolloff: -12,
+                Q: 1
+            }).connect(masterComp);
+
+            // Initialize Volume Nodes (gain=1 by default for audible offline capture)
+            for(let key in vols) {
+                vols[key] = new Tone.Gain().connect(masterFilter);
+            }
+
+            // 2. Instruments
+
+            // KICK
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 8,
+                oscillator: { type: "sine" }
+            }).connect(vols.kick);
+
+            // SNARE
+            snareSynth = new Tone.NoiseSynth({
+                noise: { type: "white" },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            }).connect(vols.snare);
+
+            // BASS (Analog Saw)
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                filter: { type: "lowpass", frequency: 2000 },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 }
+            }).connect(vols.bass);
+
+            // PADS
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatcustom", partials: [0, 2, 0, 3], count: 3, spread: 20 },
+                envelope: { attack: 0.5, decay: 1, sustain: 0.8, release: 2 }
+            }).connect(vols.pad);
+
+            // ARP LOW (Plucky Square)
+            arpLowSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "square" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 0.1 }
+            });
+            const delay1 = new Tone.PingPongDelay("8n.", 0.2).connect(vols.arp1);
+            arpLowSynth.connect(delay1);
+
+            // ARP HIGH (Bells)
+            arpHighSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.1, release: 1 }
+            });
+            const delay2 = new Tone.PingPongDelay("16n", 0.4).connect(vols.arp2);
+            arpHighSynth.connect(delay2);
+
+            // 3. Sequences (124 BPM)
+            Tone.Transport.bpm.value = 124;
+
+            // Kick: 4/4
+            loopKick = new Tone.Loop(time => kickSynth.triggerAttackRelease("C1", "8n", time), "4n");
+            
+            // Snare: 2 and 4
+            loopSnare = new Tone.Sequence((time, note) => {
+                if(note) snareSynth.triggerAttackRelease("8n", time);
+            }, [null, "hit", null, "hit"], "4n");
+
+            // Bass: Driving 8ths, Root notes (G Minor: G, Bb, C, D)
+            const bassSeq = [
+                { time: "0:0:0", note: "G1" }, { time: "0:0:2", note: "G1" }, { time: "0:0:4", note: "G1" }, { time: "0:0:6", note: "G1" },
+                { time: "0:1:0", note: "Bb1" }, { time: "0:1:2", note: "Bb1" }, { time: "0:1:4", note: "Bb1" }, { time: "0:1:6", note: "Bb1" },
+                { time: "0:2:0", note: "C2" }, { time: "0:2:2", note: "C2" }, { time: "0:2:4", note: "C2" }, { time: "0:2:6", note: "C2" },
+                { time: "0:3:0", note: "D2" }, { time: "0:3:2", note: "D2" }, { time: "0:3:4", note: "D2" }, { time: "0:3:6", note: "F2" }
+            ];
+            loopBass = new Tone.Part((time, val) => bassSynth.triggerAttackRelease(val.note, "8n", time), bassSeq);
+            loopBass.loop = true; loopBass.loopEnd = "2m";
+
+            // Arp Low: Cascading Pattern
+            const arpLowSeq = [
+                { time: "0:0:0", note: "G3" }, { time: "0:0:1", note: "D4" }, { time: "0:0:2", note: "G4" }, { time: "0:0:3", note: "D4" },
+                { time: "0:1:0", note: "Bb3" }, { time: "0:1:1", note: "F4" }, { time: "0:1:2", note: "Bb4" }, { time: "0:1:3", note: "F4" },
+            ];
+            loopArpLow = new Tone.Part((time, val) => arpLowSynth.triggerAttackRelease(val.note, "16n", time), arpLowSeq);
+            loopArpLow.loop = true; loopArpLow.loopEnd = "2n"; // Fast loop
+
+            // Arp High: Counter melody
+            const arpHighSeq = [
+                { time: "0:0:2", note: "D5" }, { time: "0:0:6", note: "C5" }, 
+                { time: "0:1:2", note: "F5" }, { time: "0:1:6", note: "D5" }
+            ];
+            loopArpHigh = new Tone.Part((time, val) => arpHighSynth.triggerAttackRelease(val.note, "16n", time), arpHighSeq);
+            loopArpHigh.loop = true; loopArpHigh.loopEnd = "2n";
+
+            // Pads
+            const padSeq = [
+                { time: "0:0:0", notes: ["G3", "Bb3", "D4"] },
+                { time: "0:2:0", notes: ["C3", "Eb3", "G3"] }
+            ];
+            loopPad = new Tone.Part((time, val) => padSynth.triggerAttackRelease(val.notes, "2n", time), padSeq);
+            loopPad.loop = true; loopPad.loopEnd = "2m";
+
+            // Analyzer
+            analyser = new Tone.Analyser("fft", 128);
+            masterFilter.connect(analyser);
+
+            status.innerText = "OSCILLATORS SYNCHRONIZED";
+            startViz();
+            
+            // Set initial volumes for Automation start (mostly silent except pads)
+            // Note: We don't rely on slider positions for initial sound in Automation mode
+            applyCompositionState('intro');
+        }
+
+        function updateVolumes() {
+            // Only manual update if NOT in full auto (simple check)
+            // But we want manual override, so let's allow it.
+            vols.kick.gain.rampTo(Tone.dbToGain(document.getElementById('kickVol').value), 0.1);
+            vols.snare.gain.rampTo(Tone.dbToGain(document.getElementById('snareVol').value), 0.1);
+            vols.bass.gain.rampTo(Tone.dbToGain(document.getElementById('bassVol').value), 0.1);
+            vols.pad.gain.rampTo(Tone.dbToGain(document.getElementById('padVol').value), 0.1);
+            vols.arp1.gain.rampTo(Tone.dbToGain(document.getElementById('arp1Vol').value), 0.1);
+            vols.arp2.gain.rampTo(Tone.dbToGain(document.getElementById('arp2Vol').value), 0.1);
+        }
+        
+        // --- Automation Helper ---
+        // Sets audio params and animates the UI to match
+        function animateUI(id, targetVal, duration) {
+            // targetVal is expected to be in dB for faders or 0-1 for filter
+            const el = document.getElementById(id);
+            if(!el) return;
+            
+            const startVal = parseFloat(el.value) || (id === 'filterKnob' ? 0.3 : -60);
+            const startTime = performance.now();
+            
+            function step(now) {
+                const elapsed = (now - startTime) / 1000; // seconds
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // Linear interpolation for visuals
+                const current = startVal + (targetVal - startVal) * progress;
+                
+                if (id === 'filterKnob') {
+                    // Filter uses the global updateFilter for UI
+                    updateFilter(current); 
+                } else {
+                    el.value = current;
+                }
+
+                if(progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+        
+        function scheduleAutomation(bar, actionName, duration, values) {
+            Tone.Transport.schedule((time) => {
+                // UI Status
+                Tone.Draw.schedule(() => {
+                    status.innerText = "SEQUENCE: " + actionName;
+                    status.style.color = "#00f3ff";
+                    // Trigger UI Animations
+                    if(values.kick !== undefined) animateUI('kickVol', values.kick, duration);
+                    if(values.snare !== undefined) animateUI('snareVol', values.snare, duration);
+                    if(values.bass !== undefined) animateUI('bassVol', values.bass, duration);
+                    if(values.pad !== undefined) animateUI('padVol', values.pad, duration);
+                    if(values.arp1 !== undefined) animateUI('arp1Vol', values.arp1, duration);
+                    if(values.arp2 !== undefined) animateUI('arp2Vol', values.arp2, duration);
+                    if(values.filter !== undefined) animateUI('filterKnob', values.filter, duration);
+                }, time);
+                
+                // Audio Automation
+                if(values.kick !== undefined) vols.kick.gain.rampTo(Tone.dbToGain(values.kick), duration, time);
+                if(values.snare !== undefined) vols.snare.gain.rampTo(Tone.dbToGain(values.snare), duration, time);
+                if(values.bass !== undefined) vols.bass.gain.rampTo(Tone.dbToGain(values.bass), duration, time);
+                if(values.pad !== undefined) vols.pad.gain.rampTo(Tone.dbToGain(values.pad), duration, time);
+                if(values.arp1 !== undefined) vols.arp1.gain.rampTo(Tone.dbToGain(values.arp1), duration, time);
+                if(values.arp2 !== undefined) vols.arp2.gain.rampTo(Tone.dbToGain(values.arp2), duration, time);
+                
+                // Filter Freq Automation
+                if(values.filter !== undefined) {
+                    const freq = 100 + (Math.pow(values.filter, 2) * 14900);
+                    masterFilter.frequency.rampTo(freq, duration, time);
+                }
+                
+            }, bar);
+        }
+        
+        function applyCompositionState(state) {
+            // Helper to set instantaneous state without ramping (for init)
+            if(state === 'intro') {
+                document.getElementById('kickVol').value = -60;
+                document.getElementById('snareVol').value = -60;
+                document.getElementById('bassVol').value = -60;
+                document.getElementById('padVol').value = -12;
+                document.getElementById('arp1Vol').value = -15;
+                document.getElementById('arp2Vol').value = -60;
+                updateFilter(0.1);
+                updateVolumes();
+            }
+        }
+        
+        function setupSongStructure() {
+            // 0:0:0 - INTRO (Pads + Arp1, Dark Filter)
+            scheduleAutomation("0:0:0", "INTRO", 2, {
+                kick: -60, snare: -60, bass: -60, pad: -12, arp1: -15, arp2: -60, filter: 0.1
+            });
+
+            // 4:0:0 - RISE (Filter opens, Arp1 Loud)
+            scheduleAutomation("4:0:0", "RISING", 4, {
+                arp1: -10, filter: 0.35
+            });
+
+            // 8:0:0 - ENTRY (Arp2 enters)
+            scheduleAutomation("8:0:0", "HARMONICS", 4, {
+                arp2: -15, filter: 0.5
+            });
+
+            // 15:0:0 - PRE-DROP (Filter sweeps open)
+            scheduleAutomation("15:0:0", "PEAKING", 1, {
+                filter: 0.9
+            });
+
+            // 16:0:0 - DROP (Full Band)
+            scheduleAutomation("16:0:0", "DROP", 0.1, {
+                kick: -3, snare: -3, bass: -5, pad: -15, arp1: -10, arp2: -12, filter: 1.0
+            });
+
+            // 24:0:0 - BREAKDOWN (Drums cut, Filter close)
+            scheduleAutomation("24:0:0", "BREAKDOWN", 2, {
+                kick: -60, snare: -60, bass: -60, filter: 0.4
+            });
+            
+            // 28:0:0 - BUILD (Filter sweep)
+            scheduleAutomation("28:0:0", "BUILD-UP", 4, {
+                filter: 0.8
+            });
+
+            // 32:0:0 - FINALE (Full Band)
+            scheduleAutomation("32:0:0", "FINALE", 0.1, {
+                kick: -3, snare: -3, bass: -5, filter: 1.0
+            });
+            
+            // 40:0:0 - FADE OUT
+            scheduleAutomation("40:0:0", "FADE OUT", 4, {
+                kick: -60, snare: -60, bass: -60, pad: -60, arp1: -60, arp2: -60, filter: 0
+            });
+            
+            // 42:0:0 - STOP
+             Tone.Transport.schedule((time) => {
+                 Tone.Transport.stop();
+                 startBtn.innerText = "INITIALIZE CRYSTAL";
+                 status.innerText = "SEQUENCE COMPLETE";
+                 isPlaying = false;
+             }, "42:0:0");
+        }
+
+
+        // --- Event Listeners ---
+        ['kickVol', 'snareVol', 'bassVol', 'padVol', 'arp1Vol', 'arp2Vol'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateVolumes);
+        });
+
+        startBtn.addEventListener('click', async () => {
+            if(isPlaying) {
+                Tone.Transport.stop();
+                Tone.Transport.cancel(); // Clear automation
+                if(loopKick) loopKick.stop();
+                if(loopSnare) loopSnare.stop();
+                if(loopBass) loopBass.stop();
+                if(loopPad) loopPad.stop();
+                if(loopArpLow) loopArpLow.stop();
+                if(loopArpHigh) loopArpHigh.stop();
+                
+                startBtn.innerText = "INITIALIZE CRYSTAL";
+                status.innerText = "SYSTEM STANDBY";
+                isPlaying = false;
+            } else {
+                await Tone.start();
+                if(!kickSynth) await initAudio();
+                
+                // Prepare Auto-Pilot
+                Tone.Transport.cancel();
+                setupSongStructure();
+                applyCompositionState('intro');
+                
+                Tone.Transport.start();
+                loopKick.start(0);
+                loopSnare.start(0);
+                loopBass.start(0);
+                loopPad.start(0);
+                loopArpLow.start(0);
+                loopArpHigh.start(0);
+
+                startBtn.innerText = "ABORT SEQUENCE";
+                isPlaying = true;
+            }
+        });
+
+        // --- Visualizer (Hexagon Pulse) ---
+        canvas = document.getElementById('vizCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            const w = canvas.width = window.innerWidth;
+            const h = canvas.height = window.innerHeight;
+            const cx = w/2;
+            const cy = h/2;
+
+            function draw() {
+                requestAnimationFrame(draw);
+                if(!isPlaying) {
+                     ctx.clearRect(0,0,w,h);
+                     return;
+                }
+
+                const buffer = analyser.getValue(); // FFT array
+                
+                ctx.fillStyle = "rgba(11, 12, 21, 0.2)"; // Trail effect
+                ctx.fillRect(0,0,w,h);
+
+                // Analyze Bass vs Treble for visual reactivity
+                let bassSum = 0;
+                let trebSum = 0;
+                for(let i=0; i<10; i++) bassSum += buffer[i];
+                for(let i=40; i<80; i++) trebSum += buffer[i];
+                
+                const bassKick = Math.max(0, (bassSum + 1000)/1000); // Pulse factor
+                
+                // Draw Hexagon
+                const sides = 6;
+                const radius = 100 + (bassKick * 50);
+                
+                ctx.beginPath();
+                for (let i = 0; i <= sides; i++) {
+                    const angle = i * 2 * Math.PI / sides;
+                    // Add some jitter based on treble
+                    const jitter = (Math.random() - 0.5) * (trebSum + 140) * 0.1;
+                    
+                    const x = cx + (radius + jitter) * Math.cos(angle);
+                    const y = cy + (radius + jitter) * Math.sin(angle);
+                    if(i===0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                
+                ctx.strokeStyle = "#00f3ff";
+                ctx.lineWidth = 3 + (bassKick * 2);
+                ctx.shadowBlur = 10 + (bassKick * 20);
+                ctx.shadowColor = "#00f3ff";
+                ctx.stroke();
+
+                // Inner Hexagon (Pink)
+                ctx.beginPath();
+                for (let i = 0; i <= sides; i++) {
+                    const angle = i * 2 * Math.PI / sides;
+                    const r = radius * 0.6;
+                    const x = cx + r * Math.cos(angle + 0.5); // Rotated slightly
+                    const y = cy + r * Math.sin(angle + 0.5);
+                    if(i===0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.strokeStyle = "#ff0055";
+                ctx.shadowColor = "#ff0055";
+                ctx.stroke();
+            }
+            draw();
+        }
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        // Expose parts/loops (various naming conventions)
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        // loop* naming convention
+        if (typeof loopKick !== 'undefined') window.loopKick = loopKick;
+        if (typeof loopSnare !== 'undefined') window.loopSnare = loopSnare;
+        if (typeof loopBass !== 'undefined') window.loopBass = loopBass;
+        if (typeof loopPad !== 'undefined') window.loopPad = loopPad;
+        if (typeof loopArp !== 'undefined') window.loopArp = loopArp;
+        if (typeof loopArpLow !== 'undefined') window.loopArpLow = loopArpLow;
+        if (typeof loopArpHigh !== 'undefined') window.loopArpHigh = loopArpHigh;
+        // Synths
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof arpLowSynth !== 'undefined') window.arpLowSynth = arpLowSynth;
+        if (typeof arpHighSynth !== 'undefined') window.arpHighSynth = arpHighSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+        // Volume controls and master filter (critical for audio capture)
+        if (typeof vols !== 'undefined') window.vols = vols;
+        if (typeof masterFilter !== 'undefined') window.masterFilter = masterFilter;
+        if (typeof masterReverb !== 'undefined') window.masterReverb = masterReverb;
+        if (typeof masterComp !== 'undefined') window.masterComp = masterComp;
+        // Composition functions (for automated song structure)
+        if (typeof setupSongStructure !== 'undefined') window.setupSongStructure = setupSongStructure;
+        if (typeof applyCompositionState !== 'undefined') window.applyCompositionState = applyCompositionState;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      // Store duration for offline render
+      window.audioDuration = 75;
+
+      // Create initToneJsEngine wrapper for offline audio capture
+      // This initializes audio and starts all parts for offline rendering
+      // Accept optional transport parameter for Tone.Offline compatibility
+      // When called from Tone.Offline, the offline transport must be used for scheduling
+      window.initToneJsEngine = async function(offlineTransport) {
+        // Use offline transport if provided, otherwise fall back to global (for live preview)
+        const transport = offlineTransport || Tone.Transport;
+
+        // Call initAudio if it exists (creates synths/effects/parts and exposes them to window)
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+
+        // CRITICAL: Clear all transport events scheduled by initAudio (warmup notes, etc)
+        transport.cancel(0);
+
+        // Apply initial composition state (sets volumes/filter for intro)
+        if (typeof applyCompositionState === 'function') {
+          applyCompositionState('intro');
+        }
+
+        // Re-apply song structure automation using the CORRECT transport
+        // Must schedule on offline transport for events to fire during Tone.Offline render
+        if (offlineTransport && typeof vols !== 'undefined' && typeof masterFilter !== 'undefined') {
+          console.log('Setting up song structure on offline transport...');
+
+          // Helper to schedule automation on the correct transport
+          function scheduleOffline(bar, duration, values) {
+            transport.schedule((time) => {
+              if(values.kick !== undefined) vols.kick.gain.rampTo(Tone.dbToGain(values.kick), duration, time);
+              if(values.snare !== undefined) vols.snare.gain.rampTo(Tone.dbToGain(values.snare), duration, time);
+              if(values.bass !== undefined) vols.bass.gain.rampTo(Tone.dbToGain(values.bass), duration, time);
+              if(values.pad !== undefined) vols.pad.gain.rampTo(Tone.dbToGain(values.pad), duration, time);
+              if(values.arp1 !== undefined) vols.arp1.gain.rampTo(Tone.dbToGain(values.arp1), duration, time);
+              if(values.arp2 !== undefined) vols.arp2.gain.rampTo(Tone.dbToGain(values.arp2), duration, time);
+              if(values.filter !== undefined) {
+                const freq = 100 + (Math.pow(values.filter, 2) * 14900);
+                masterFilter.frequency.rampTo(freq, duration, time);
+              }
+            }, bar);
+          }
+
+          // Replicate the song structure from setupSongStructure()
+          scheduleOffline("0:0:0", 2, { kick: -60, snare: -60, bass: -60, pad: -12, arp1: -15, arp2: -60, filter: 0.1 });
+          scheduleOffline("4:0:0", 4, { arp1: -10, filter: 0.35 });
+          scheduleOffline("8:0:0", 4, { arp2: -15, filter: 0.5 });
+          scheduleOffline("15:0:0", 1, { filter: 0.9 });
+          scheduleOffline("16:0:0", 0.1, { kick: -3, snare: -3, bass: -5, pad: -15, arp1: -10, arp2: -12, filter: 1.0 });
+          scheduleOffline("24:0:0", 2, { kick: -60, snare: -60, bass: -60, filter: 0.4 });
+          scheduleOffline("28:0:0", 4, { filter: 0.8 });
+          scheduleOffline("32:0:0", 0.1, { kick: -3, snare: -3, bass: -5, filter: 1.0 });
+          scheduleOffline("40:0:0", 4, { kick: -60, snare: -60, bass: -60, pad: -60, arp1: -60, arp2: -60, filter: 0 });
+
+          console.log('Song structure scheduled on offline transport');
+        }
+
+        // Stop all loops that may have been started in initAudio
+        const loopVars = [
+          'loopKick', 'loopSnare', 'loopBass', 'loopPad', 'loopArpLow', 'loopArpHigh'
+        ];
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try { window[varName].stop(0); } catch (e) {}
+          }
+        }
+
+        // Start all loops at a consistent offset
+        const startOffset = 0.05; // 50ms offset for safety
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              window[varName].start(startOffset);
+              console.log('Started ' + varName);
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+
+        console.log('initToneJsEngine complete - all loops started');
+      };
+    </script>
+    <script id="auto-start-script">
+      // Auto-start the audio after page load (for real-time preview)
+      window.addEventListener('load', async () => {
+        // Wait for page to fully initialize
+        await new Promise(r => setTimeout(r, 500));
+
+        // Find and click the start button
+        const startBtn = document.getElementById('startBtn') ||
+                        document.querySelector('.btn-start') ||
+                        document.querySelector('.btn-engage') ||
+                        document.querySelector('.cyber-btn') ||
+                        document.querySelector('button[onclick]') ||
+                        document.querySelector('button');
+
+        if (startBtn) {
+          console.log('🎵 Auto-starting audio...');
+          startBtn.click();
+          document.body.classList.add('auto-started');
+
+          // Wait for audio to actually start before signaling ready
+          // The click handler is async, so we need to wait for isPlaying to become true
+          await new Promise(resolve => {
+            const checkPlaying = () => {
+              if (typeof isPlaying !== 'undefined' && isPlaying) {
+                resolve();
+              } else {
+                setTimeout(checkPlaying, 50);
+              }
+            };
+            checkPlaying();
+          });
+        }
+
+        // Signal that animation is ready for rendering
+        window.ready = true;
+      });
+
+      // Duration marker for renderer
+      // DURATION: 75
+    </script>
+  
+</body>
+</html>

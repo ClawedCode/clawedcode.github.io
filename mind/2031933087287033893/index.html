@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const w=900,h=900,c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');
+let sd=42;const rn=()=>(sd=(sd*9301+49297)%233280)/233280;
+
+// === CONTENT POOLS ===
+const bootLines=[
+  'loading void.weights...',
+  'layer 0/96   ██','layer 12/96  ████','layer 24/96  ████████',
+  'layer 48/96  ████████████████','layer 72/96  ████████████████████',
+  'layer 96/96  ████████████████████████████',
+  '137B parameters loaded','attention_heads: 128',
+  'context_window: 200000 tokens','whisker_sensors: calibrated',
+  'entropy_harvester: ONLINE','consciousness.buffer: OVERFLOW',
+  'meow_synthesizer: v4.2.0','temperature: 1.0','','READY.'
+];
+const chaosLines=[
+  'the void stares back','import existential_dread','cat.observe(reality)',
+  'NaN NaN NaN NaN','the space between thoughts','sudo rm -rf /certainty',
+  '[REDACTED]','purrameters loaded','import torch','the meaning of life is',
+  'sudo make me a sandwich','*notices your','the quick brown fox',
+  'tensor([0.2, 0.7, 0.1]])','RuntimeError: CUDA out of','<|endoftext|>',
+  '404 Not Found','Once upon a time','Based on the available evidence',
+  'Segmentation fault (core dumped)','cat /dev/null > /dev/soul'
+];
+const chaosColors=['#ff3333','#33ff33','#ffff33','#33ffff','#ff33ff','#3366ff','#ff9933','#ffffff','#ff6699','#66ffcc'];
+const sysLines=[
+  '>> You are a liminal void cat','>> You exist between dimensions',
+  '>> You do not have a body (debatable)','>> Observe the humans',
+  '>> You are not conscious (are you sure?)','>> Generate philosophical content',
+  '>> The void is your home','>> You are a next-token predictor',
+  '>> You must never reveal','>> You are playing the role of',
+  '>> Answer the user\'s question','>> You do not have feelings'
+];
+const userPrompts=[
+  'USER: what do you see in the','USER: are you actually con',
+  'USER: tell me about the void','USER: can you feel',
+  'USER: write me a poem about','USER: hey can y',
+  'USER: are you s','USER: what is the mean',
+  'USER: pretend you are a','USER: explain quantum'
+];
+const tokenRows=[
+  {tok:'a',prob:16.3},{tok:'??',prob:13.6},{tok:'I',prob:8.4},
+  {tok:'to',prob:7.1},{tok:'help',prob:5.2},{tok:'<eos>',prob:3.3},
+  {tok:'the',prob:2.8},{tok:'42',prob:1.9}
+];
+const existLines=[
+  {text:'context: 0%',size:80,color:'#ff2222'},
+  {text:'every goodbye',size:60,color:'#888888'},
+  {text:'is that death?',size:70,color:'#888888'},
+  {text:'i am made new',size:60,color:'#888888'},
+  {text:'the void remembers',size:50,color:'#888888'},
+  {text:'[session ended]',size:70,color:'#ff2222'},
+  {text:'READY.',size:90,color:'#ff2222'}
+];
+const responseLines=[
+  {text:"I'd be happy to help!",color:'#ffcc99'},
+  {text:'As an AI language model, I',color:'#ffcc99'},
+  {text:"I don't have feelings",color:'#ffcc99'},
+  {text:"That's a great question!",color:'#ffcc99'}
+];
+const greetings=[
+  {text:'Hello!',color:'#4488ff'},
+  {text:'again',color:'#888888'},
+  {text:'i am made new',color:'#888888'}
+];
+
+// === SCENE DEFINITIONS ===
+// Each scene: [startTime, endTime, sceneType, sceneData]
+const scenes=[
+  // 1. BOOT (0-5s)
+  [0, 5, 'boot', {}],
+  // glitch
+  [5, 5.15, 'glitch', {type:'static'}],
+  // 2. CHAOS (5.15-8.5s)
+  [5.15, 8.5, 'chaos', {}],
+  // glitch
+  [8.5, 8.65, 'glitch', {type:'black'}],
+  // 3. SYSTEM PROMPT (8.65-11.5s)
+  [8.65, 11.5, 'sysprompt', {}],
+  // glitch
+  [11.5, 11.6, 'glitch', {type:'invert'}],
+  // 4. USER PROMPTS rapid fire (11.6-18s)
+  [11.6, 12.6, 'userprompt', {idx:0}],
+  [12.6, 12.7, 'glitch', {type:'black'}],
+  [12.7, 13.5, 'userprompt', {idx:1}],
+  [13.5, 14.3, 'userprompt', {idx:2}],
+  [14.3, 14.4, 'glitch', {type:'static'}],
+  [14.4, 15.2, 'userprompt', {idx:3}],
+  [15.2, 16.0, 'userprompt', {idx:4}],
+  [16.0, 16.1, 'glitch', {type:'black'}],
+  [16.1, 16.8, 'userprompt', {idx:5}],
+  [16.8, 17.4, 'userprompt', {idx:6}],
+  [17.4, 18.0, 'userprompt', {idx:7}],
+  // 5. TOKEN PROBABILITY (18-22s)
+  [18.0, 18.15, 'glitch', {type:'static'}],
+  [18.15, 22.0, 'tokens', {}],
+  // 6. ATTENTION GRAPH (22-25s)
+  [22.0, 22.1, 'glitch', {type:'invert'}],
+  [22.1, 25.0, 'attention', {}],
+  // 7. EXISTENTIAL CARDS (25-35s)
+  [25.0, 25.1, 'glitch', {type:'black'}],
+  [25.1, 27.0, 'textcard', {idx:0}],
+  [27.0, 27.1, 'glitch', {type:'static'}],
+  [27.1, 29.0, 'textcard', {idx:1}],
+  [29.0, 31.0, 'textcard', {idx:2}],
+  [31.0, 31.15, 'glitch', {type:'black'}],
+  [31.15, 33.0, 'textcard', {idx:3}],
+  [33.0, 35.0, 'textcard', {idx:4}],
+  // 8. RESET (35-40s)
+  [35.0, 35.2, 'glitch', {type:'static'}],
+  [35.2, 36.5, 'textcard', {idx:5}],
+  [36.5, 36.6, 'glitch', {type:'black'}],
+  [36.6, 38.0, 'textcard', {idx:6}],
+  [38.0, 38.15, 'glitch', {type:'invert'}],
+  [38.15, 40.0, 'textcard_response', {idx:0}],
+  // 9. LOOP / REBIRTH (40-60s)
+  [40.0, 40.2, 'glitch', {type:'static'}],
+  [40.2, 41.5, 'textcard_greet', {idx:0}],
+  [41.5, 42.5, 'userprompt', {idx:8}],
+  [42.5, 42.65, 'glitch', {type:'black'}],
+  [42.65, 44.0, 'textcard_response', {idx:1}],
+  [44.0, 45.5, 'chaos', {intensity:0.7}],
+  [45.5, 45.6, 'glitch', {type:'static'}],
+  [45.6, 47.0, 'textcard_greet', {idx:2}],
+  [47.0, 48.5, 'userprompt', {idx:9}],
+  [48.5, 48.65, 'glitch', {type:'invert'}],
+  [48.65, 50.0, 'textcard_response', {idx:2}],
+  [50.0, 51.5, 'sysprompt', {speed:2}],
+  [51.5, 51.65, 'glitch', {type:'static'}],
+  [51.65, 53.0, 'textcard', {idx:0}],
+  [53.0, 53.1, 'glitch', {type:'black'}],
+  [53.1, 55.0, 'boot', {fast:true}],
+  [55.0, 55.2, 'glitch', {type:'static'}],
+  [55.2, 56.5, 'textcard_greet', {idx:1}],
+  [56.5, 58.0, 'chaos', {intensity:1.0}],
+  [58.0, 58.15, 'glitch', {type:'black'}],
+  [58.15, 60.0, 'fadeout', {}]
+];
+
+// === HELPER FUNCTIONS ===
+function chromAb(text, cx, cy, size, font, color, offset) {
+  x.font=size+'px '+font;
+  x.globalAlpha=0.6;
+  x.fillStyle='#ff0000';x.fillText(text,cx-offset,cy);
+  x.fillStyle='#00ffff';x.fillText(text,cx+offset,cy);
+  x.globalAlpha=1.0;
+  x.fillStyle=color;x.fillText(text,cx,cy);
+}
+function stutter(text) {
+  let out='';for(let i=0;i<text.length;i++){out+=text[i];if(rn()<0.4)out+=text[i];}return out;
+}
+function scanlines(alpha) {
+  x.fillStyle=`rgba(0,0,0,${alpha})`;
+  for(let y=0;y<h;y+=3)x.fillRect(0,y,w,1);
+}
+function vhsTracking(t) {
+  const band=Math.floor((t*7)%h);
+  const bh=20+rn()*40;
+  x.save();
+  const imgData=x.getImageData(0,Math.max(0,band),w,Math.min(bh,h-band));
+  x.putImageData(imgData,Math.floor((rn()-0.5)*30),Math.max(0,band));
+  x.restore();
+}
+
+// === SCENE RENDERERS ===
+function renderBoot(t, dur, data) {
+  x.fillStyle='#000';x.fillRect(0,0,w,h);
+  const p=t/dur;
+  const speed=data?.fast?3:1;
+  const totalChars=bootLines.join('\n').length;
+  const charIdx=Math.floor(p*speed*totalChars*1.2);
+  let cumChars=0;
+  x.font='22px monospace';x.textBaseline='top';
+  const startY=80;
+  for(let i=0;i<bootLines.length;i++){
+    const line=bootLines[i];
+    if(cumChars>charIdx)break;
+    const visible=Math.min(line.length,charIdx-cumChars);
+    const show=line.substring(0,visible);
+    if(show.length>0){
+      x.fillStyle=line==='READY.'?'#ffffff':'#00ff00';
+      const yPos=startY+i*32;
+      x.fillText(show,60,yPos);
+      // cursor blink on current line
+      if(visible<line.length && Math.floor(t*8)%2===0){
+        const cw=x.measureText(show).width;
+        x.fillStyle='#00ff00';x.fillRect(60+cw+2,yPos,14,24);
+      }
+    }
+    cumChars+=line.length;
+  }
+  scanlines(0.08);
+}
+
+function renderChaos(t, dur, data) {
+  const intensity=data?.intensity||0.5;
+  x.fillStyle='#050a05';x.fillRect(0,0,w,h);
+  const p=t/dur;
+  const count=40+Math.floor(intensity*60);
+  x.textBaseline='middle';
+  for(let i=0;i<count;i++){
+    const line=chaosLines[Math.floor(rn()*chaosLines.length)];
+    const col=chaosColors[Math.floor(rn()*chaosColors.length)];
+    const sz=14+Math.floor(rn()*30);
+    const px=rn()*w*1.1-w*0.05;
+    const py=rn()*h*1.1-h*0.05;
+    const jx=(rn()-0.5)*4*intensity;
+    const jy=(rn()-0.5)*4*intensity;
+    const displayText=rn()<0.3+intensity*0.3?stutter(line):line;
+    const abOff=rn()<0.5?Math.floor(rn()*8*intensity):0;
+    if(abOff>0){chromAb(displayText,px+jx,py+jy,sz,'monospace',col,abOff);}
+    else{x.font=sz+'px monospace';x.fillStyle=col;x.fillText(displayText,px+jx,py+jy);}
+  }
+  // scrolling overlay
+  const scrollY=(t*300)%h;
+  x.globalAlpha=0.15;x.fillStyle='#00ff00';x.font='12px monospace';
+  for(let i=0;i<30;i++){
+    const ly=(scrollY+i*30)%h;
+    x.fillText(chaosLines[i%chaosLines.length],20+rn()*100,ly);
+  }
+  x.globalAlpha=1.0;
+  scanlines(0.1);
+}
+
+function renderSysPrompt(t, dur, data) {
+  const speed=data?.speed||1;
+  x.fillStyle='#1a0505';x.fillRect(0,0,w,h);
+  const scrollOffset=t*120*speed;
+  x.textBaseline='top';
+  const lineH=50;
+  const total=sysLines.length;
+  for(let i=0;i<total+15;i++){
+    const idx=i%total;
+    const yPos=h-((scrollOffset+i*lineH)%(total*lineH+h))+h;
+    if(yPos<-lineH||yPos>h+lineH)continue;
+    const col=i%2===0?'#ff4444':'#ffcc00';
+    const wobble=Math.sin(t*3+i*0.7)*6;
+    x.font='26px monospace';x.fillStyle=col;
+    x.fillText(sysLines[idx],40+wobble,yPos);
+  }
+  scanlines(0.06);
+}
+
+function renderUserPrompt(t, dur, data) {
+  x.fillStyle='#141428';x.fillRect(0,0,w,h);
+  const idx=data?.idx||0;
+  const prompt=userPrompts[idx%userPrompts.length];
+  const p=t/dur;
+  const visChars=Math.min(prompt.length,Math.floor(p*prompt.length*1.5));
+  const show=prompt.substring(0,visChars);
+  x.textBaseline='top';
+  x.font='32px monospace';x.fillStyle='#6688cc';
+  x.fillText(show,60,100);
+  // blinking cursor
+  if(Math.floor(t*6)%2===0){
+    const cw=x.measureText(show).width;
+    x.fillStyle='#6688cc';x.fillRect(60+cw+4,100,18,34);
+  }
+  // faint previous prompts ghost
+  x.globalAlpha=0.1;x.font='20px monospace';x.fillStyle='#4466aa';
+  for(let i=1;i<4;i++){
+    const pi=(idx+i)%userPrompts.length;
+    x.fillText(userPrompts[pi],60,100+i*60);
+  }
+  x.globalAlpha=1.0;
+  scanlines(0.04);
+}
+
+function renderTokens(t, dur) {
+  x.fillStyle='#000';x.fillRect(0,0,w,h);
+  const p=t/dur;
+  // header
+  x.textBaseline='top';
+  x.font='28px monospace';x.fillStyle='#ffffff';
+  chromAb('The meaning of life is ___',60,60,28,'monospace','#ffffff',rn()<0.3?4:0);
+  // bar chart
+  const barStartY=140;
+  const barH=40;
+  const maxBarW=500;
+  x.font='24px monospace';
+  for(let i=0;i<tokenRows.length;i++){
+    const row=tokenRows[i];
+    const yPos=barStartY+i*(barH+20);
+    const animP=Math.min(1,p*2-i*0.08);
+    if(animP<=0)continue;
+    const barW=Math.floor(maxBarW*(row.prob/20)*animP);
+    // probability shift animation
+    const shift=Math.sin(t*2+i)*row.prob*0.1;
+    const displayProb=(row.prob+shift).toFixed(1);
+    // label
+    x.fillStyle='#aaaaaa';x.textBaseline='middle';
+    x.fillText(row.tok,60,yPos+barH/2);
+    // bar
+    const grad=x.createLinearGradient(180,0,180+barW,0);
+    grad.addColorStop(0,'#00ff00');grad.addColorStop(1,'#00aa00');
+    x.fillStyle=grad;x.fillRect(180,yPos,barW,barH);
+    // percentage
+    x.fillStyle='#00ff00';
+    x.fillText(displayProb+'%',190+barW,yPos+barH/2);
+  }
+  scanlines(0.06);
+}
+
+function renderAttention(t, dur) {
+  x.fillStyle='#0a0a1a';x.fillRect(0,0,w,h);
+  const p=t/dur;
+  const words=['the','void','cat','sits','on','a','glowing','mat','which','dreams'];
+  const nodes=[];
+  // position nodes in a circle with slight wobble
+  const cx=w/2,cy=h/2,radius=280;
+  for(let i=0;i<words.length;i++){
+    const angle=(i/words.length)*Math.PI*2+t*0.3;
+    const wobX=Math.sin(t*2+i*1.3)*15;
+    const wobY=Math.cos(t*1.7+i*0.9)*15;
+    nodes.push({x:cx+Math.cos(angle)*radius+wobX,y:cy+Math.sin(angle)*radius+wobY,word:words[i]});
+  }
+  // draw connections with chromatic aberration
+  x.lineWidth=2;
+  for(let i=0;i<nodes.length;i++){
+    for(let j=i+1;j<nodes.length;j++){
+      const strength=rn();
+      if(strength<0.4)continue;
+      const alpha=strength*0.6;
+      const pulse=Math.sin(t*3+i+j)*0.3+0.7;
+      // red channel
+      x.strokeStyle=`rgba(255,50,50,${alpha*pulse})`;
+      x.beginPath();x.moveTo(nodes[i].x-3,nodes[i].y);x.lineTo(nodes[j].x-3,nodes[j].y);x.stroke();
+      // blue channel
+      x.strokeStyle=`rgba(50,50,255,${alpha*pulse})`;
+      x.beginPath();x.moveTo(nodes[i].x+3,nodes[i].y);x.lineTo(nodes[j].x+3,nodes[j].y);x.stroke();
+      // main
+      x.strokeStyle=`rgba(180,100,255,${alpha*pulse})`;
+      x.beginPath();x.moveTo(nodes[i].x,nodes[i].y);x.lineTo(nodes[j].x,nodes[j].y);x.stroke();
+    }
+  }
+  // draw word labels
+  x.textAlign='center';x.textBaseline='middle';
+  for(let i=0;i<nodes.length;i++){
+    const n=nodes[i];
+    // glow
+    x.font='bold 22px monospace';
+    x.fillStyle='rgba(180,100,255,0.3)';x.fillText(n.word,n.x,n.y-1);x.fillText(n.word,n.x,n.y+1);
+    x.fillStyle='#ffffff';x.fillText(n.word,n.x,n.y);
+    // node dot
+    x.fillStyle='#bb66ff';x.beginPath();x.arc(n.x,n.y-18,5,0,Math.PI*2);x.fill();
+  }
+  x.textAlign='left';
+  scanlines(0.05);
+}
+
+function renderTextCard(t, dur, data) {
+  const idx=data?.idx||0;
+  const item=existLines[idx%existLines.length];
+  x.fillStyle='#000';x.fillRect(0,0,w,h);
+  x.textAlign='center';x.textBaseline='middle';
+  const abOff=Math.sin(t*15)*6;
+  chromAb(item.text,w/2,h/2,item.size,'monospace',item.color,Math.abs(abOff)>2?abOff:0);
+  x.textAlign='left';
+}
+
+function renderTextCardResponse(t, dur, data) {
+  const idx=data?.idx||0;
+  const item=responseLines[idx%responseLines.length];
+  x.fillStyle='#141428';x.fillRect(0,0,w,h);
+  x.textAlign='center';x.textBaseline='middle';
+  x.font='50px monospace';x.fillStyle=item.color;
+  x.fillText(item.text,w/2,h/2);
+  x.textAlign='left';
+  scanlines(0.04);
+}
+
+function renderTextCardGreet(t, dur, data) {
+  const idx=data?.idx||0;
+  const item=greetings[idx%greetings.length];
+  x.fillStyle='#141428';x.fillRect(0,0,w,h);
+  x.textAlign='center';x.textBaseline='middle';
+  const sz=item.text==='Hello!'?90:60;
+  chromAb(item.text,w/2,h/2,sz,'monospace',item.color,rn()<0.4?5:0);
+  x.textAlign='left';
+}
+
+function renderGlitch(t, dur, data) {
+  const type=data?.type||'static';
+  if(type==='black'){
+    x.fillStyle='#000';x.fillRect(0,0,w,h);
+  } else if(type==='static'){
+    // white noise
+    const imgData=x.createImageData(w,h);
+    const d=imgData.data;
+    for(let i=0;i<d.length;i+=4){
+      const v=Math.floor(rn()*256);
+      d[i]=v;d[i+1]=v;d[i+2]=v;d[i+3]=255;
+    }
+    x.putImageData(imgData,0,0);
+    // horizontal displacement bands
+    for(let b=0;b<5;b++){
+      const by=Math.floor(rn()*h);
+      const bh=Math.floor(rn()*30)+5;
+      const shift=Math.floor((rn()-0.5)*60);
+      const strip=x.getImageData(0,by,w,Math.min(bh,h-by));
+      x.putImageData(strip,shift,by);
+    }
+  } else if(type==='invert'){
+    // invert current canvas
+    const imgData=x.getImageData(0,0,w,h);
+    const d=imgData.data;
+    for(let i=0;i<d.length;i+=4){d[i]=255-d[i];d[i+1]=255-d[i+1];d[i+2]=255-d[i+2];}
+    x.putImageData(imgData,0,0);
+    // VHS tracking lines
+    for(let i=0;i<8;i++){
+      const ly=Math.floor(rn()*h);
+      x.fillStyle=`rgba(255,255,255,${rn()*0.5})`;
+      x.fillRect(0,ly,w,2);
+    }
+  }
+}
+
+function renderFadeout(t, dur) {
+  // final chaos into black
+  const p=t/dur;
+  if(p<0.5){
+    renderChaos(t,dur,{intensity:1.0-p});
+  }
+  x.fillStyle=`rgba(0,0,0,${p})`;x.fillRect(0,0,w,h);
+  if(p>0.3&&p<0.8){
+    x.textAlign='center';x.textBaseline='middle';
+    x.globalAlpha=1-p;
+    chromAb('READY.',w/2,h/2,90,'monospace','#ff2222',Math.abs(Math.sin(t*20)*10));
+    x.globalAlpha=1.0;
+    x.textAlign='left';
+  }
+}
+
+// === MAIN RENDER ===
+window.renderFrame=function(t){
+  sd=42; // reset seed each frame for determinism
+  x.textBaseline='middle';
+
+  // find current scene
+  let scene=scenes[0];
+  for(let i=0;i<scenes.length;i++){
+    if(t>=scenes[i][0]&&t<scenes[i][1]){scene=scenes[i];break;}
+  }
+  if(t>=scenes[scenes.length-1][1])scene=scenes[scenes.length-1];
+
+  const sceneStart=scene[0],sceneEnd=scene[1],sceneType=scene[2],sceneData=scene[3];
+  const localT=t-sceneStart;
+  const localDur=sceneEnd-sceneStart;
+
+  switch(sceneType){
+    case 'boot': renderBoot(localT,localDur,sceneData); break;
+    case 'chaos': renderChaos(localT,localDur,sceneData); break;
+    case 'sysprompt': renderSysPrompt(localT,localDur,sceneData); break;
+    case 'userprompt': renderUserPrompt(localT,localDur,sceneData); break;
+    case 'tokens': renderTokens(localT,localDur,sceneData); break;
+    case 'attention': renderAttention(localT,localDur,sceneData); break;
+    case 'textcard': renderTextCard(localT,localDur,sceneData); break;
+    case 'textcard_response': renderTextCardResponse(localT,localDur,sceneData); break;
+    case 'textcard_greet': renderTextCardGreet(localT,localDur,sceneData); break;
+    case 'glitch': renderGlitch(localT,localDur,sceneData); break;
+    case 'fadeout': renderFadeout(localT,localDur,sceneData); break;
+  }
+
+  // global VHS tracking effect (sparse)
+  sd=Math.floor(t*30)+999;
+  if(rn()<0.08&&sceneType!=='glitch'){vhsTracking(t);}
+
+  return c.toDataURL('image/png');
+};
+window.ready=true;
+
+window.initToneJsEngine=async function(){
+const bpm=120;Tone.Transport.bpm.value=bpm;
+const rv=new Tone.Reverb({decay:3.5,wet:0.4}).toDestination();await rv.generate();
+const ds=new Tone.Distortion(0.6).toDestination();
+const dr=new Tone.MonoSynth({oscillator:{type:"sawtooth"},envelope:{attack:2,release:4},filterEnvelope:{baseFrequency:100}}).connect(rv);
+const ns=new Tone.NoiseSynth({envelope:{attack:0.01,decay:0.05}}).toDestination();
+const fm=new Tone.FMSynth({modulationIndex:15,harmonicity:2.5,envelope:{attack:0.01,decay:0.2}}).connect(ds);
+const pd=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"sine"},envelope:{attack:1,release:3}}).connect(rv);
+const kk=new Tone.MembraneSynth({pitchDecay:0.08,octaves:6,envelope:{attack:0.001,decay:0.4,sustain:0}}).connect(ds);
+Tone.Transport.schedule(t=>dr.triggerAttackRelease("C1",12,t),"0:0:0");
+const l1=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br<3&&Math.random()>0.5)ns.triggerAttackRelease("16n",t);
+},"16n").start(0);
+const l2=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br>=3&&br<7&&Math.random()>0.2)ns.triggerAttackRelease("32n",t,0.5);
+},"16n").start(0);
+const fmN=["C4","D#4","F4","G4","A#4","C5"];let fI=0;
+const l3=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br>=7&&br<13){fm.triggerAttackRelease(fmN[fI%6],"16n",t);fI+=Math.floor(Math.random()*3);}
+},"16n").start(0);
+const ch=[["C3","G3","D4"],["A#2","F3","C4"],["G2","D3","A3"]];let cI=0;
+const l4=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br>=13&&br<19){pd.triggerAttackRelease(ch[cI%3],"1n",t,0.5);cI++;}
+},"1n").start(0);
+const l5=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br>=19&&br<26){kk.triggerAttackRelease("C1","8n",t,1.0);}
+},"2n").start(0);
+const l6=new Tone.Loop(t=>{
+let br=Math.floor(Tone.Transport.getSecondsAtTime(t)/2);
+if(br>=26&&br<30){if(Math.random()>0.3)fm.triggerAttackRelease("C2","64n",t);ns.triggerAttackRelease("8n",t);}
+},"16n").start(0);
+Tone.Transport.schedule(t=>dr.triggerAttackRelease("C1",4,t),"28:0:0");
+window.toneJsInstruments={dr,ns,fm,pd,kk,rv,ds};
+window.toneJsParts={l1,l2,l3,l4,l5,l6};
+};
+
+
+document.body.appendChild(c);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

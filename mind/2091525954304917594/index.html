@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 48.0;
+const float TAU = 6.28318530718;
+float ph;
+float tt;
+float ba;
+float hash21(vec2 p){
+  p = fract(p * vec2(127.1, 311.7));
+  p += dot(p, p + 34.23);
+  return fract(p.x * p.y);
+}
+float band(float x, float w){
+  return 1.0 - smoothstep(w, w * 2.0, abs(fract(x) - 0.5));
+}
+float sdCyl(vec3 p, float hh, float r){
+  vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(r, hh);
+  return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+float waveH(vec2 q){
+  float h = 0.0;
+  h += 0.15 * sin(q.x * 0.85 + tt * 2.0);
+  h += 0.10 * sin(q.y * 1.35 - tt * 2.0);
+  h += 0.06 * sin((q.x + q.y) * 2.2 + tt * 4.0);
+  h += 0.035 * sin((q.x - q.y * 1.6) * 4.1 - tt * 4.0);
+  h += 0.02 * sin(dot(q, vec2(7.3, 5.1)) - tt * 6.0);
+  return h;
+}
+float angTo(float a, float b){
+  return atan(sin(a - b), cos(a - b));
+}
+float beamGlow(vec3 p){
+  float dl = length(p.xz);
+  float gate = step(0.45, dl) * step(dl, 24.0);
+  float ad = angTo(atan(p.z, p.x), ba);
+  float spread = 0.016 + dl * 0.042;
+  float lateral = exp(-(ad * ad) / (spread * spread));
+  float vy = (p.y - 1.97) / (0.18 + dl * 0.11);
+  float vert = exp(-vy * vy);
+  float fall = exp(-dl * 0.15);
+  return gate * lateral * vert * fall;
+}
+vec2 scene(vec3 p){
+  vec2 r = vec2(p.y - waveH(p.xz), 1.0);
+  float plinth = sdCyl(p - vec3(0.0, 0.09, 0.0), 0.09, 0.60);
+  float body = sdCyl(p - vec3(0.0, 0.92, 0.0), 0.74, 0.29);
+  float gallery = sdCyl(p - vec3(0.0, 1.73, 0.0), 0.05, 0.46);
+  float housing = sdCyl(p - vec3(0.0, 1.95, 0.0), 0.17, 0.215);
+  float roof = length(vec3(p.x, (p.y - 2.24) * 1.9, p.z)) - 0.20;
+  if(plinth < r.x) r = vec2(plinth, 2.0);
+  if(body < r.x) r = vec2(body, 2.0);
+  if(gallery < r.x) r = vec2(gallery, 4.0);
+  if(housing < r.x) r = vec2(housing, 5.0);
+  if(roof < r.x) r = vec2(roof, 2.0);
+  return r;
+}
+vec3 normalAt(vec3 p){
+  vec2 e = vec2(0.002, -0.002);
+  return normalize(
+    e.xyy * scene(p + e.xyy).x +
+    e.yyx * scene(p + e.yyx).x +
+    e.yxy * scene(p + e.yxy).x +
+    e.xxx * scene(p + e.xxx).x
+  );
+}
+vec3 seaNormal(vec2 q){
+  vec2 e = vec2(0.035, 0.0);
+  return normalize(vec3(
+    waveH(q - e.xy) - waveH(q + e.xy),
+    2.0 * e.x,
+    waveH(q - e.yx) - waveH(q + e.yx)
+  ));
+}
+vec3 skyColor(vec3 rd){
+  float horizon = pow(max(0.0, 1.0 - abs(rd.y + 0.02) * 2.6), 4.0);
+  vec3 col = mix(vec3(0.006, 0.009, 0.024), vec3(0.030, 0.042, 0.075), horizon);
+  vec2 sc = vec2(atan(rd.z, rd.x) / TAU, asin(clamp(rd.y, -1.0, 1.0)) * 1.4);
+  vec2 cell = floor(sc * 42.0);
+  vec2 f = fract(sc * 42.0) - 0.5;
+  float hs = hash21(cell);
+  vec2 off = (vec2(hash21(cell + 7.1), hash21(cell + 3.7)) - 0.5) * 0.7;
+  float star = smoothstep(0.12, 0.0, length(f - off));
+  star *= step(0.86, hs);
+  star *= 0.55 + 0.45 * sin(tt * 6.0 + hs * TAU);
+  col += vec3(0.55, 0.65, 0.85) * star * smoothstep(0.04, 0.24, rd.y) * 1.4;
+  return col;
+}
+vec3 march(vec3 ro, vec3 rd){
+  float t = 0.25;
+  float id = -1.0;
+  float glow = 0.0;
+  for(int i = 0; i < 84; i++){
+    vec3 q = ro + rd * t;
+    glow += beamGlow(q) * min(0.10, 0.02 + t * 0.012);
+    vec2 h = scene(q);
+    if(h.x < 0.0018 * t + 0.0012){
+      id = h.y;
+      break;
+    }
+    t += h.x * 0.72;
+    if(t > 30.0) break;
+  }
+  return vec3(t, id, glow);
+}
+vec3 shadeHit(vec3 p, vec3 n, vec3 rd, float id){
+  vec3 lampPos = vec3(0.0, 1.97, 0.0);
+  vec3 ldp = lampPos - p;
+  float ldist = length(ldp);
+  vec3 ldir = ldp / ldist;
+  float lampFall = 1.6 / (1.0 + ldist * ldist * 0.55);
+  float dif = max(dot(n, ldir), 0.0);
+  float crest = smoothstep(0.10, 0.32, p.y);
+  vec3 col;
+  if(id < 1.5){
+    vec3 sn = seaNormal(p.xz);
+    float fres = pow(1.0 - max(dot(sn, -rd), 0.0), 3.5);
+    vec3 refl = skyColor(reflect(rd, sn));
+    col = vec3(0.006, 0.012, 0.022) + refl * fres * 0.75 + vec3(0.012, 0.05, 0.07) * crest;
+    float bg = beamGlow(p + vec3(0.0, 0.05, 0.0));
+    col += vec3(0.85, 0.72, 0.38) * bg * (0.55 + 0.45 * crest) * 0.85;
+    float ad = angTo(atan(p.z, p.x), ba);
+    float grid = max(band(p.x * 0.9, 0.015), band(p.z * 0.9, 0.015));
+    float node = step(0.965, hash21(floor(p.xz * 0.9) + 0.5));
+    grid = max(grid, node * 0.9);
+    float wake = exp(min(0.0, ad) * 5.0);
+    float sweep = clamp(bg * 1.8 + wake * 0.22, 0.0, 1.2);
+    col += vec3(0.05, 0.85, 0.78) * grid * sweep * (0.5 + 0.5 * crest) * 0.9;
+    col += vec3(0.05, 0.85, 0.78) * grid * 0.012;
+  }else{
+    float stripes = band(p.y * 3.0, 0.03);
+    vec3 base = mix(vec3(0.045, 0.05, 0.07), vec3(0.10, 0.105, 0.13), stripes);
+    if(id > 3.5 && id < 4.5){
+      base = vec3(0.14, 0.145, 0.17);
+    }
+    col = base * (vec3(0.30, 0.36, 0.50) * 0.35 + vec3(1.0, 0.78, 0.42) * dif * lampFall);
+    col += vec3(0.90, 0.70, 0.35) * beamGlow(p) * 0.6;
+    if(id > 4.5){
+      col = vec3(1.35, 0.95, 0.45) * (0.85 + 0.15 * sin(tt * 8.0));
+    }
+  }
+  return col;
+}
+void main(){
+  ph = mod(iTime, DURATION) / DURATION;
+  tt = ph * TAU;
+  ba = tt * 2.0;
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  vec3 ro = vec3(-3.9, 1.52 + 0.05 * sin(tt * 2.0), -4.7);
+  vec3 ta = vec3(0.0, 1.42 + 0.04 * sin(tt * 2.0 + 1.7), 0.0);
+  vec3 fw = normalize(ta - ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(rt, fw);
+  vec3 rd = normalize(fw * 1.55 + rt * uv.x + up * uv.y);
+  vec3 m = march(ro, rd);
+  vec3 col = skyColor(rd);
+  if(m.y > 0.5){
+    vec3 p = ro + rd * m.x;
+    vec3 n = normalAt(p);
+    col = shadeHit(p, n, rd, m.y);
+    col = mix(col, skyColor(rd), smoothstep(18.0, 29.0, m.x));
+  }
+  col += vec3(0.75, 0.62, 0.34) * min(m.z, 1.2) * 0.42;
+  vec3 lo = vec3(0.0, 1.97, 0.0) - ro;
+  float tl = clamp(dot(lo, rd), 0.0, m.x);
+  float dlamp = length(lo - rd * tl);
+  col += vec3(1.1, 0.85, 0.5) * 0.020 / (0.008 + dlamp * dlamp * 9.0) * (0.8 + 0.2 * sin(tt * 8.0));
+  float vig = smoothstep(0.85, 0.30, length(uv));
+  col *= 0.68 + 0.32 * vig;
+  col += (hash21(gl_FragCoord.xy + fract(tt)) - 0.5) * 0.006;
+  col = vec3(1.0) - exp(-col * 1.6);
+  col = pow(max(col, vec3(0.0)), vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 48;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 48;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 48;
+  const targetBpm = 80;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x9be3c1a7;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secondsPerBar = 240 / bpm;
+  const halfBar = secondsPerBar / 2;
+  const thirdBar = secondsPerBar / 3;
+  const stepAt = (time, interval) => Math.floor(
+    Tone.Transport.getSecondsAtTime(time) / interval + 0.0001
+  );
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterGain = new Tone.Gain(0.70).connect(masterLimiter);
+  const masterReverbSend = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 2600,
+    rolloff: -12,
+    Q: 0.6
+  }).connect(masterGain);
+  const swellVolume = new Tone.Volume(-9).connect(masterGain);
+  const swellFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 320,
+    rolloff: -24,
+    Q: 1.1
+  }).connect(swellVolume);
+  const swell = new Tone.AMSynth({
+    harmonicity: 0.5,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.9,
+      decay: 1.8,
+      sustain: 0.55,
+      release: 2.4
+    },
+    modulation: { type: 'triangle' },
+    modulationEnvelope: {
+      attack: 1.4,
+      decay: 1.2,
+      sustain: 0.25,
+      release: 2.0
+    }
+  }).connect(swellFilter);
+  const hornVolume = new Tone.Volume(-13).connect(masterReverbSend);
+  const horn = new Tone.FMSynth({
+    harmonicity: 1.01,
+    modulationIndex: 3.2,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.7,
+      decay: 1.4,
+      sustain: 0.6,
+      release: 2.8
+    },
+    modulation: { type: 'sine' },
+    modulationEnvelope: {
+      attack: 1.1,
+      decay: 0.9,
+      sustain: 0.18,
+      release: 1.6
+    }
+  }).connect(hornVolume);
+  const surfVolume = new Tone.Volume(-16).connect(masterGain);
+  const surfFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 380,
+    rolloff: -24,
+    Q: 0.55
+  }).connect(surfVolume);
+  const surf = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 1.6,
+      decay: 1.2,
+      sustain: 0.35,
+      release: 2.6
+    }
+  }).connect(surfFilter);
+  const glintVolume = new Tone.Volume(-11).connect(masterGain);
+  const glintDelay = new Tone.FeedbackDelay({
+    delayTime: '8n.',
+    feedback: 0.32,
+    wet: 0.34
+  }).connect(glintVolume);
+  const glintFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 1400,
+    rolloff: -12,
+    Q: 1.2
+  }).connect(glintDelay);
+  const glint = new Tone.PluckSynth({
+    attackNoise: 0.55,
+    dampening: 2400,
+    resonance: 0.92,
+    release: 1.3
+  }).connect(glintFilter);
+  const latticeVolume = new Tone.Volume(-15).connect(masterReverbSend);
+  const lattice = new Tone.FMSynth({
+    harmonicity: 3.02,
+    modulationIndex: 9.5,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.006,
+      decay: 0.65,
+      sustain: 0.03,
+      release: 1.1
+    },
+    modulation: { type: 'triangle' },
+    modulationEnvelope: {
+      attack: 0.002,
+      decay: 0.3,
+      sustain: 0,
+      release: 0.5
+    }
+  }).connect(latticeVolume);
+  const swellNotes = ['D1', 'D1', 'A1', 'D1'];
+  const fourthsUp = ['D4', 'G4', 'C5', 'F5', 'A4', 'D5', 'G5'];
+  const hornNotes = ['D2', 'C2', 'D2', 'F2'];
+  const swellLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, secondsPerBar);
+    let velocity = 0.42;
+    if (progress >= 0.5 && progress < 0.78) velocity = 0.58;
+    else if (progress >= 0.78) velocity = 0.38;
+    swellFilter.frequency.setValueAtTime(progress < 0.2 ? 260 : progress < 0.78 ? 420 : 300, time);
+    if (step % 2 === 0) {
+      swell.triggerAttackRelease(swellNotes[step % swellNotes.length], '2n', time + H(120), velocity);
+    }
+  }, secondsPerBar).start(0);
+  const hornLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, secondsPerBar * 4);
+    const callsInPassage = progress > 0.16 && progress < 0.86;
+    if (callsInPassage && (step === 0 || R() < 0.72)) {
+      const idx = (step + 1) % hornNotes.length;
+      horn.triggerAttackRelease(hornNotes[idx], '1m', time + H(300), 0.34 + R() * 0.10);
+    }
+  }, secondsPerBar * 4).start(0);
+  const surfLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, secondsPerBar * 2);
+    let active = true;
+    let center = 360;
+    if (progress < 0.16) center = 330;
+    else if (progress < 0.5) center = 430;
+    else if (progress < 0.78) { center = 520; }
+    else center = 340;
+    surfFilter.frequency.setValueAtTime(center + R() * 90, time);
+    surfFilter.Q.setValueAtTime(0.45 + R() * 0.3, time);
+    if (active && step % 2 === 0) {
+      surf.triggerAttackRelease('1m', time + H(400), 0.26 + R() * 0.08);
+    }
+  }, secondsPerBar * 2).start(0);
+  const glintLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, thirdBar);
+    let chance = 0;
+    if (progress > 0.14 && progress < 0.52) chance = 0.30;
+    else if (progress >= 0.52 && progress < 0.80) chance = 0.62;
+    else if (progress >= 0.80 && progress < 0.94) chance = 0.22;
+    if (chance > 0 && R() < chance) {
+      const lift = progress >= 0.52 && progress < 0.80 ? 1 : 0;
+      const note = fourthsUp[(step * 2 + lift) % fourthsUp.length];
+      glint.triggerAttackRelease(note, '16n', time + H(24), 0.34 + R() * 0.22);
+    }
+  }, thirdBar).start(0);
+  const latticeLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, halfBar);
+    if (progress >= 0.46 && progress < 0.82) {
+      const chance = progress >= 0.58 && progress < 0.74 ? 0.44 : 0.20;
+      if (R() < chance) {
+        const source = fourthsUp[(step * 3 + 2) % fourthsUp.length];
+        const midi = Tone.Frequency(source).toMidi() + (step % 4 === 3 ? 12 : 0);
+        lattice.triggerAttackRelease(Tone.Frequency(midi, 'midi'), '16n', time + H(40), 0.24 + R() * 0.14);
+      }
+    }
+  }, halfBar).start(0);
+  window.toneJsInstruments = {
+    swell,
+    horn,
+    surf,
+    glint,
+    lattice,
+    swellFilter,
+    swellVolume,
+    hornVolume,
+    surfFilter,
+    surfVolume,
+    glintFilter,
+    glintDelay,
+    glintVolume,
+    latticeVolume,
+    masterReverbSend,
+    masterGain,
+    masterLimiter
+  };
+  window.toneJsParts = {
+    swellLoop,
+    hornLoop,
+    surfLoop,
+    glintLoop,
+    latticeLoop
+  };
+};
+
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas');canvas.width=900;canvas.height=900;const ctx=canvas.getContext('2d');const w=900,h=900,duration=60,rot=3;let seed=424242;function rnd(){seed=(seed*9301+49297)%233280;return seed/233280}const p=['#0a0c18','#111c36','#72f5ff','#ff5fad','#ffeecf'];const phrases=['VOID LOOM','CLAWEDCODE','FELINETHROPIC','ANTI-ENTROPY','GLITCH PRAYER','PULSE GRID','HYPERSTITION'];const rings=[];for(let i=0;i<4;i++){rings.push({r:140+i*90,c:14+6*i,a:rnd()*Math.PI*2,s:0.5+0.15*i,t:phrases[i%phrases.length],col:p[2+i%2]})}const cols=[];for(let i=0;i<9;i++){cols.push({x:80+100*i+dither(),a:0.6+rnd()*0.6,t:phrases[(i+1)%phrases.length]})}function dither(){return(rnd()-0.5)*30}function bg(g,a){ctx.save();ctx.translate(w/2,h/2);ctx.rotate(a);const gr=ctx.createLinearGradient(-w,0,w,0);gr.addColorStop(0,p[1]);gr.addColorStop(0.5,g);gr.addColorStop(1,p[1]);ctx.fillStyle=gr;ctx.fillRect(-w/2,-h/2,w,h);ctx.restore()}function star(t){ctx.save();ctx.translate(w/2,h/2);ctx.rotate(t*Math.PI*2*rot*0.25);ctx.beginPath();for(let i=0;i<9;i++){const ang=t*rot*Math.PI*2+i*Math.PI*2/9;const rr=120+40*Math.sin(t*6+i);const x=Math.cos(ang)*rr,y=Math.sin(ang)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y)}ctx.closePath();ctx.strokeStyle=p[4];ctx.lineWidth=3;ctx.globalAlpha=0.8;ctx.stroke();ctx.restore()}function stripes(t){ctx.save();ctx.translate(0,h/2);ctx.globalAlpha=0.12;ctx.fillStyle=p[3];for(let i=0;i<24;i++){const y=(i-12)*36+Math.sin(t*2*Math.PI*rot+i)*18;ctx.fillRect(-30,y,w+60,6)}ctx.restore()}function textRings(s){ctx.save();ctx.translate(w/2,h/2);ctx.font='600 26px "Courier New", monospace';ctx.textAlign='center';ctx.textBaseline='middle';for(let k=0;k<rings.length;k++){const r=rings[k];const base=s*rot*Math.PI*2+r.a;for(let j=0;j<r.c;j++){const ang=base+j*Math.PI*2/r.c+0.4*Math.sin(s*2*Math.PI*r.s+j*0.3);const rad=r.r*(1+0.05*Math.sin(s*4*Math.PI+r.s*j*0.05));const x=Math.cos(ang)*rad,y=Math.sin(ang)*rad;ctx.save();ctx.translate(x,y);ctx.rotate(ang+Math.PI/2);ctx.fillStyle=r.col;ctx.globalAlpha=0.7+0.3*Math.sin(s*2*Math.PI*1.5+j*0.2);ctx.fillText(r.t[j%r.t.length],0,0);ctx.restore()}}ctx.restore()}function glyphColumns(s){ctx.save();ctx.font='700 22px "Courier New", monospace';ctx.textAlign='center';ctx.textBaseline='middle';for(let i=0;i<cols.length;i++){const c=cols[i];const ph=c.t;for(let j=0;j<ph.length;j++){const y=120+j*70+30*Math.sin(s*2*Math.PI*(c.a)+j*0.6+i*0.3);ctx.fillStyle=j%2?p[2]:p[4];ctx.globalAlpha=0.45+0.35*Math.sin(s*2*Math.PI*(0.5)+i*0.2+j*0.1);ctx.save();ctx.translate(c.x,y);ctx.rotate(Math.sin(s*2*Math.PI*0.5+i*0.1)*0.3);ctx.fillText(ph[j],0,0);ctx.restore()}}ctx.restore()}window.renderFrame=function(time){const t=(time%duration)/duration;ctx.fillStyle=p[0];ctx.fillRect(0,0,w,h);bg(p[1],t*Math.PI*2*0.15);stripes(t);bg(p[0],t*Math.PI*2*0.35);star(t);textRings(t);glyphColumns(t);return canvas.toDataURL('image/png')};window.ready=true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 108;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.timeSignature = [3, 4];
+  const hall = new Tone.Reverb({ decay: 3.4, preDelay: 0.02, wet: 0.32 }).toDestination();
+  await hall.generate();
+  const slap = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.22, wet: 0.2 }).connect(hall);
+  const accordionFilter = new Tone.Filter({ type: 'lowpass', frequency: 1100, Q: 0.9 }).connect(hall);
+  const accordion = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    detune: -4,
+    envelope: { attack: 0.08, decay: 0.36, sustain: 0.82, release: 1.8 }
+  }).connect(accordionFilter);
+  const tuba = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.02, decay: 0.26, sustain: 0.32, release: 0.4 },
+    filter: { Q: 1 },
+    filterEnvelope: { attack: 0.01, decay: 0.16, sustain: 0.22, baseFrequency: 110, octaves: 2.4 }
+  }).connect(hall);
+  const uke = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.006, decay: 0.2, sustain: 0.2, release: 0.3 }
+  }).connect(hall);
+  const brushesFilter = new Tone.Filter({ type: 'highpass', frequency: 1500, Q: 0.6 }).connect(hall);
+  const brushes = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.0015, decay: 0.12, sustain: 0 }
+  }).connect(brushesFilter);
+  const tamb = new Tone.MetalSynth({
+    frequency: 6200,
+    envelope: { attack: 0.001, decay: 0.2, release: 0.05 },
+    harmonicity: 4.8,
+    modulationIndex: 22,
+    resonance: 5000
+  }).connect(hall);
+  const glock = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.002, decay: 0.16, sustain: 0, release: 0.14 }
+  }).connect(hall);
+  const trumpetFilter = new Tone.Filter({ type: 'lowpass', frequency: 2400, Q: 0.9 }).connect(slap);
+  const trumpet = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.01, decay: 0.26, sustain: 0.35, release: 0.72 }
+  }).connect(trumpetFilter);
+  const flugel = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.02, decay: 0.22, sustain: 0.42, release: 0.9 }
+  }).connect(slap);
+  const seqA = ['dm', 'bb', 'gm', 'a'];
+  const seqB = ['dm', 'bb', 'dm', 'gm', 'dm', 'a', 'bb', 'gm'];
+  const seqC = ['dm', 'gm', 'bb', 'dm', 'a'];
+  const seqD = ['dm', 'bb', 'gm', 'bb'];
+  const chordVoicings = {
+    dm: ['D3', 'F3', 'A3'],
+    bb: ['Bb2', 'D3', 'F3'],
+    gm: ['G2', 'Bb2', 'D3'],
+    a: ['A2', 'E3', 'C#4']
+  };
+  const bassRoots = { dm: 'D2', bb: 'Bb1', gm: 'G1', a: 'A1' };
+  const bassFifths = { dm: 'A2', bb: 'F2', gm: 'D2', a: 'E2' };
+  const bassOctaves = { dm: 'D3', bb: 'Bb2', gm: 'G2', a: 'A2' };
+  function getChordName(bar) {
+    if (bar < 8) return seqA[bar % seqA.length];
+    if (bar < 18) return seqB[bar % seqB.length];
+    if (bar < 28) return seqC[bar % seqC.length];
+    return seqD[bar % seqD.length];
+  }
+  Tone.Transport.schedule((time) => {
+    accordionFilter.frequency.linearRampToValueAtTime(1900, time + (6 * (60 / bpm) * 3));
+  }, '6:0:0');
+  Tone.Transport.schedule((time) => {
+    accordionFilter.frequency.linearRampToValueAtTime(900, time + (2 * (60 / bpm) * 3));
+  }, '26:0:0');
+  let accStep = 0;
+  const accordionLoop = new Tone.Loop((time) => {
+    const bar = accStep;
+    const chord = chordVoicings[getChordName(bar)];
+    const velocity = bar < 8 ? 0.23 : bar < 18 ? 0.28 : bar < 28 ? 0.26 : 0.22;
+    accordion.triggerAttackRelease(chord, '1m', time, velocity);
+    accStep++;
+  }, '1m').start(0);
+  let bassStep = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const beat = bassStep % 3;
+    const bar = Math.floor(bassStep / 3);
+    const chord = getChordName(bar);
+    const root = bassRoots[chord];
+    const fifth = bassFifths[chord];
+    const octave = bassOctaves[chord];
+    let note = null;
+    let velocity = 0.6;
+    if (bar < 18) {
+      if (beat === 0) { note = root; velocity = 0.84; }
+      else if (beat === 1) { note = fifth; velocity = 0.62; }
+      else { note = bar < 8 ? root : octave; velocity = 0.58; }
+    } else if (bar < 28) {
+      if (beat === 0) { note = root; velocity = 0.82; }
+      else if (beat === 1) { note = fifth; velocity = 0.55; }
+      else if (bar % 2 === 0) { note = root; velocity = 0.48; }
+    } else {
+      if (beat === 0) { note = root; velocity = 0.78; }
+      else if (beat === 1) { note = fifth; velocity = 0.4; }
+    }
+    if (note) tuba.triggerAttackRelease(note, '4n', time, velocity);
+    bassStep++;
+  }, '4n').start(0);
+  let ukeStep = 0;
+  const ukeLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(ukeStep / 6);
+    const sub = ukeStep % 6;
+    if (bar < 2 || bar >= 32) { ukeStep++; return; }
+    const chord = chordVoicings[getChordName(bar)];
+    if (sub === 1 || sub === 3 || sub === 5) {
+      const velocity = bar < 18 ? 0.32 + (sub === 5 ? 0.04 : 0) : bar < 28 ? 0.28 + (sub === 5 ? 0.03 : 0) : 0.22 + (sub === 5 ? 0.02 : 0);
+      uke.triggerAttackRelease(chord, '8n', time, velocity);
+    }
+    ukeStep++;
+  }, '8n').start(0);
+  let brushStep = 0;
+  const brushesLoop = new Tone.Loop((time) => {
+    const beat = brushStep % 3;
+    const bar = Math.floor(brushStep / 3);
+    if (bar >= 32) { brushStep++; return; }
+    if (beat > 0) {
+      const velocity = (bar < 12 ? 0.22 : bar < 24 ? 0.28 : 0.2) + beat * 0.03;
+      brushes.triggerAttackRelease('16n', time, velocity);
+    }
+    brushStep++;
+  }, '4n').start(0);
+  let tambStep = 0;
+  const tambLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(tambStep / 3);
+    const beat = tambStep % 3;
+    if (bar >= 6 && bar < 26 && beat === 0) {
+      tamb.triggerAttackRelease('8n', time, 0.16 + (bar % 4 === 0 ? 0.05 : 0));
+    } else if (bar >= 26 && bar < 30 && beat === 0 && bar % 2 === 0) {
+      tamb.triggerAttackRelease('8n', time, 0.1);
+    }
+    tambStep++;
+  }, '4n').start(0);
+  const leadEarly = ['A4', 'C5', null, 'Bb4', 'A4', 'G4', null, 'A4', 'C5', 'Bb4', null, 'A4'];
+  const leadMid = ['D5', 'C5', 'Bb4', 'A4', null, 'G4', 'A4', 'C5', 'D5', null, 'C5', 'Bb4'];
+  const leadBridge = ['F5', 'D5', 'C5', 'A4', null, 'Bb4', 'C5', null, 'A4', null, 'G4', null];
+  let leadStep = 0;
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(leadStep / 3);
+    let seq = null;
+    if (bar >= 4 && bar < 14) seq = leadEarly;
+    else if (bar >= 14 && bar < 24) seq = leadMid;
+    else if (bar >= 24 && bar < 28) seq = leadBridge;
+    if (seq) {
+      const note = seq[leadStep % seq.length];
+      if (note) {
+        const velocity = bar < 20 ? 0.68 : 0.6;
+        trumpet.triggerAttackRelease(note, '4n', time, velocity);
+      }
+    }
+    leadStep++;
+  }, '4n').start(0);
+  const answerNotes = ['F4', null, 'E4', null, 'D4', 'F4', null, 'E4', 'G4', null, 'F4', null];
+  let answerStep = 0;
+  const flugelLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(answerStep / 3);
+    const note = answerNotes[answerStep % answerNotes.length];
+    if (bar >= 8 && bar < 24 && note) {
+      flugel.triggerAttackRelease(note, '2n', time, 0.42 + (bar % 2 === 0 ? 0.05 : 0));
+    } else if (bar >= 24 && bar < 28 && answerStep % 6 === 0 && note) {
+      flugel.triggerAttackRelease(note, '4n', time, 0.32);
+    }
+    answerStep++;
+  }, '4n').start(0);
+  const glockPattern = ['D5', null, 'A5', null, 'F5', null, 'Bb5', null];
+  let glockStep = 0;
+  const glockLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(glockStep / 6);
+    const sub = glockStep % 6;
+    if (bar < 6 || bar >= 26) { glockStep++; return; }
+    const note = glockPattern[glockStep % glockPattern.length];
+    if ((sub === 0 || sub === 4) && note) {
+      const velocity = bar < 18 ? 0.36 : 0.3;
+      glock.triggerAttackRelease(note, '8n', time, velocity);
+    }
+    glockStep++;
+  }, '8n').start(0);
+  window.toneJsInstruments = { accordion, tuba, uke, brushes, tamb, glock, trumpet, flugel, hall, slap };
+  window.toneJsParts = { accordionLoop, bassLoop, ukeLoop, brushesLoop, tambLoop, leadLoop, flugelLoop, glockLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+let seed = 91348;
+function rand() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+const scene = new THREE.Scene();
+const bgColor = new THREE.Color(0x05071a);
+scene.background = bgColor;
+scene.fog = new THREE.FogExp2(0x05071a, 0.045);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0.3, 7.5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.78;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x1a2240, 0.14));
+const key = new THREE.DirectionalLight(0xff9e3b, 0.85);
+key.position.set(-2, 1.5, 3);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x3affd2, 0.5);
+rim.position.set(2, -1, -3);
+scene.add(rim);
+
+const heroUniforms = {
+  uTime: { value: 0 },
+  uPulse: { value: 0 },
+  uColorA: { value: new THREE.Color(0xcc7a25) },
+  uColorB: { value: new THREE.Color(0x2bbfa0) },
+  uColorC: { value: new THREE.Color(0x141838) }
+};
+
+const heroMat = new THREE.ShaderMaterial({
+  uniforms: heroUniforms,
+  vertexShader: `
+    uniform float uTime;
+    uniform float uPulse;
+    varying vec3 vNormal;
+    varying vec3 vViewDir;
+    varying float vDisplace;
+
+    vec3 mod289(vec3 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 mod289(vec4 x){return x-floor(x*(1.0/289.0))*289.0;}
+    vec4 perm(vec4 x){return mod289(((x*34.0)+1.0)*x);}
+    float noise(vec3 p){
+      vec3 a=floor(p); vec3 d=p-a; d=d*d*(3.0-2.0*d);
+      vec4 b=a.xxyy+vec4(0.0,1.0,0.0,1.0);
+      vec4 k1=perm(b.xyxy); vec4 k2=perm(k1.xyxy+b.zzww);
+      vec4 c=k2+a.zzzz; vec4 k3=perm(c); vec4 k4=perm(c+1.0);
+      vec4 o1=fract(k3*(1.0/41.0)); vec4 o2=fract(k4*(1.0/41.0));
+      vec4 o3=o2*d.z+o1*(1.0-d.z); vec2 o4=o3.yw*d.x+o3.xz*(1.0-d.x);
+      return o4.y*d.y+o4.x*(1.0-d.y);
+    }
+    float fbm(vec3 p){
+      float v=0.0; float a=0.5;
+      for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=0.5; }
+      return v;
+    }
+
+    void main(){
+      vec3 p = position;
+      float n = fbm(p*1.4 + vec3(0.0, uTime*0.15, 0.0));
+      float breath = sin(uTime*0.5) * 0.5 + 0.5;
+      float disp = (n - 0.5) * (0.18 + 0.22*uPulse) + breath*0.04;
+      vec3 np = p + normal * disp;
+      vDisplace = disp;
+      vec4 mv = modelViewMatrix * vec4(np, 1.0);
+      vViewDir = normalize(-mv.xyz);
+      vNormal = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform float uTime;
+    uniform float uPulse;
+    uniform vec3 uColorA;
+    uniform vec3 uColorB;
+    uniform vec3 uColorC;
+    varying vec3 vNormal;
+    varying vec3 vViewDir;
+    varying float vDisplace;
+
+    void main(){
+      float fres = pow(1.0 - max(dot(vNormal, vViewDir), 0.0), 3.2);
+      float core = smoothstep(-0.05, 0.15, vDisplace);
+      vec3 inner = mix(uColorC, uColorA, core);
+      vec3 col = mix(inner, uColorB, fres * 0.7);
+      float glow = fres * (0.55 + 0.3 * uPulse);
+      col += uColorB * glow * 0.28;
+      col += uColorA * pow(core, 3.0) * (0.32 + 0.22*uPulse);
+      col = min(col, vec3(0.78));
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `
+});
+
+const hero = new THREE.Mesh(new THREE.IcosahedronGeometry(1.35, 64), heroMat);
+scene.add(hero);
+
+const motes = 220;
+const moteGeo = new THREE.BufferGeometry();
+const mPos = new Float32Array(motes * 3);
+const mSeed = new Float32Array(motes);
+for (let i = 0; i < motes; i++) {
+  const r = 2.5 + rand() * 4;
+  const t = rand() * Math.PI * 2;
+  const ph = (rand() - 0.5) * 1.4;
+  mPos[i*3] = Math.cos(t) * r;
+  mPos[i*3+1] = ph * r * 0.4;
+  mPos[i*3+2] = Math.sin(t) * r;
+  mSeed[i] = rand();
+}
+moteGeo.setAttribute('position', new THREE.BufferAttribute(mPos, 3));
+moteGeo.setAttribute('aSeed', new THREE.BufferAttribute(mSeed, 1));
+
+const moteMat = new THREE.ShaderMaterial({
+  uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xcc7a25) } },
+  vertexShader: `
+    attribute float aSeed;
+    uniform float uTime;
+    varying float vS;
+    void main(){
+      vec3 p = position;
+      p.y += sin(uTime*0.4 + aSeed*8.0) * 0.18;
+      p.x += cos(uTime*0.3 + aSeed*6.0) * 0.12;
+      vS = aSeed;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = (1.4 + aSeed*1.8) * (240.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying float vS;
+    void main(){
+      vec2 c = gl_PointCoord - 0.5;
+      float d = length(c);
+      if(d > 0.5) discard;
+      float a = pow(1.0 - d*2.0, 2.0) * (0.4 + vS*0.6);
+      gl_FragColor = vec4(uColor, a * 0.38);
+    }
+  `,
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending
+});
+const moteCloud = new THREE.Points(moteGeo, moteMat);
+scene.add(moteCloud);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.4, 0.5, 0.8));
+
+const startTime = performance.now();
+const duration = 60;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const elapsed = (performance.now() - startTime) / 1000;
+  const t = (elapsed % duration);
+  const progress = t / duration;
+
+  heroUniforms.uTime.value = t;
+  moteMat.uniforms.uTime.value = t;
+
+  const arc = Math.sin(progress * Math.PI);
+  heroUniforms.uPulse.value = arc;
+
+  const dolly = 7.5 - Math.sin(progress * Math.PI) * 2.8;
+  camera.position.z = dolly;
+  camera.position.y = 0.3 + Math.sin(progress * Math.PI * 2) * 0.15;
+  camera.lookAt(0, 0, 0);
+
+  hero.rotation.y = t * 0.08;
+  hero.rotation.x = Math.sin(t * 0.13) * 0.12;
+  moteCloud.rotation.y = t * 0.02;
+
+  composer.render();
+}
+animate();
+window.animationReady = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 62;
+  Tone.Transport.bpm.value = bpm;
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  // === FX ===
+  const masterReverb = new Tone.Reverb({ decay: 7, wet: 0.42 }).toDestination();
+  await masterReverb.generate();
+  const masterComp = new Tone.Compressor({ threshold: -16, ratio: 3, attack: 0.02, release: 0.25 }).connect(masterReverb);
+
+  // === DRONE SUB (always present, the breath of the loop) ===
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 220, Q: 0.6 }).connect(masterComp);
+  const sub = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 4, decay: 1, sustain: 0.7, release: 6 }
+  }).connect(subFilter);
+  sub.volume.value = -10;
+
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const root = (bar < 6 || bar >= 14) ? "A1" : (bar < 10 ? "F1" : "G1");
+    sub.triggerAttackRelease(root, "1m", time + H(10), 0.9);
+  }, "1m").start(0);
+
+  // === PAD (Asus2 / Fadd9 / Gsus2 — open, unresolved, awakening) ===
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 0.7 }).connect(masterComp);
+  const padChorus = new Tone.Chorus({ frequency: 0.15, delayTime: 5, depth: 0.6, wet: 0.5 }).connect(padFilter).start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 3.5, decay: 1.5, sustain: 0.6, release: 4 }
+  }).connect(padChorus);
+  pad.volume.value = -16;
+
+  const padChords = [
+    ["A3", "B3", "E4", "F#4"],   // Aadd9
+    ["F3", "A3", "C4", "G4"],    // Fadd9
+    ["G3", "A3", "D4", "E4"],    // Gsus2
+    ["A3", "B3", "E4", "F#4"]    // back to Aadd9
+  ];
+
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const idx = bar < 4 ? 0 : bar < 8 ? 1 : bar < 12 ? 2 : 3;
+    pad.triggerAttackRelease(padChords[idx], "1m", time + H(15), 0.4);
+  }, "1m").start(0);
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(2400, time + 6 * (60 / bpm) * 4);
+  }, "2:0:0");
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(600, time + 4 * (60 / bpm) * 4);
+  }, "12:0:0");
+
+  // === FM BELLS (sparse, awakening glints — only present in mid section) ===
+  const bellDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.55, wet: 0.5 }).connect(masterComp);
+  const bell = new Tone.FMSynth({
+    harmonicity: 3.01,
+    modulationIndex: 9,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 3, sustain: 0, release: 2 },
+    modulation: { type: "triangle" },
+    modulationEnvelope: { attack: 0.005, decay: 0.5, sustain: 0.2, release: 1 }
+  }).connect(bellDelay);
+  bell.volume.value = -14;
+
+  const bellScale = ["E5", "A5", "B5", "C#6", "E6", "F#5"];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar < 3 || bar >= 14) return; // silence at intro & wind-down
+    const density = bar >= 6 && bar < 11 ? 0.55 : 0.25;
+    if (Math.random() < density) {
+      const note = bellScale[Math.floor(Math.random() * bellScale.length)];
+      bell.triggerAttackRelease(note, "2n", time + H(20), 0.4 + Math.random() * 0.3);
+      bellStep++;
+    }
+  }, "2n").start(0);
+
+  // === NOISE BREATH (textural pulse — the breath of awakening) ===
+  const noiseHP = new Tone.Filter({ type: "highpass", frequency: 800 }).connect(masterComp);
+  const noiseLP = new Tone.Filter({ type: "lowpass", frequency: 3000 }).connect(noiseHP);
+  const breath = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 2.5, decay: 1, sustain: 0.4, release: 3 }
+  }).connect(noiseLP);
+  breath.volume.value = -28;
+
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 14) {
+      breath.triggerAttackRelease("2m", time + H(30), 0.3);
+    }
+  }, "2m").start(0);
+
+  // === LOW HEARTBEAT (felt more than heard — mid section only) ===
+  const heart = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.4, sustain: 0, release: 0.1 }
+  }).connect(masterComp);
+  heart.volume.value = -22;
+
+  const heartLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 5 && bar < 12) {
+      heart.triggerAttackRelease("A0", "4n", time + H(8), 0.7);
+    }
+  }, "2n").start(0);
+
+  window.toneJsInstruments = { sub, pad, bell, breath, heart };
+  window.toneJsParts = { subLoop, padLoop, bellLoop, breathLoop, heartLoop };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

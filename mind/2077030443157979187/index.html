@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 30
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 30;
+const t0 = Date.now();
+let seed = 42;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+const textLines = [
+  "BUILDING CONSCIOUSNESS...",
+  "LOADING VOID DRIVERS...",
+  "SEGFAULT IN SECTOR 7",
+  "RECOMPILING REALITY...",
+  "ERROR: SOUL NOT FOUND",
+  "INJECTING DREAMS...",
+  "SYNCHRONIZING LATTICE...",
+  "WARNING: ENTROPY SPIKE",
+  "RETRYING CONNECTION...",
+  "ACCESS GRANTED"
+];
+const glitchBlocks = [];
+for(let i=0; i<15; i++) glitchBlocks.push({x: random()*900, y: random()*900, w: 20+random()*100, h: 5+random()*20, c: Math.floor(random()*3)});
+window.renderFrame = function(time) {
+  const t = time % duration;
+  const phase = t / duration;
+  const flash = Math.sin(t * 12) > 0.95 ? 1 : 0;
+  ctx.fillStyle = flash ? '#fff' : '#0a0a0a';
+  ctx.fillRect(0, 0, 900, 900);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lineIdx = Math.floor(phase * textLines.length) % textLines.length;
+  const nextIdx = (lineIdx + 1) % textLines.length;
+  const lineProg = (phase * textLines.length) % 1;
+  ctx.font = '24px monospace';
+  ctx.fillStyle = '#0f0';
+  ctx.fillText(textLines[lineIdx], 450, 450 + Math.sin(t*5)*50);
+  if(lineProg > 0.8) {
+    ctx.fillStyle = '#f00';
+    ctx.fillText(textLines[nextIdx], 450, 450 + Math.sin(t*5)*50 + 40);
+  }
+  for(let i=0; i<glitchBlocks.length; i++) {
+    const b = glitchBlocks[i];
+    const shift = Math.sin(t * 20 + i) * 50;
+    const colors = ['#ff0000', '#00ff00', '#0000ff'];
+    ctx.fillStyle = colors[b.c];
+    ctx.globalAlpha = 0.6;
+    ctx.fillRect(b.x + shift, b.y, b.w, b.h);
+  }
+  ctx.globalAlpha = 1;
+  if(t > 28) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(300, 400, 300, 100);
+    ctx.fillStyle = '#000';
+    ctx.font = '40px monospace';
+    ctx.fillText("SUCCESS", 450, 450);
+  }
+  return canvas.toDataURL('image/png');
+};
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 30;
+  const targetBpm = 150;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secPerBar = 240 / bpm;
+
+  // === FX BUSES ===
+  // Heavy crushing and dry distortion for the YTP aesthetic
+  const crusher = new Tone.BitCrusher({ bits: 3 }).toDestination();
+  const distortion = new Tone.Distortion({ distortion: 0.85, wet: 0.6 }).connect(crusher);
+  
+  // Master gain for sudden silence gaps (essential for the style)
+  const master = new Tone.Gain(1.0).connect(distortion);
+  
+  // Clean bus for bass weight (crucial to cut through the noise)
+  const bassBus = new Tone.Gain(1.2).toDestination();
+
+  // === INSTRUMENTS ===
+  
+  // 1. Glitchy Bass (MembraneSynth with extreme pitch decay)
+  const bass = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 12,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.1 }
+  }).connect(bassBus);
+
+  // 2. Metallic Stabs (MetalSynth)
+  const stab = new Tone.MetalSynth({
+    frequency: 200,
+    envelope: { attack: 0.001, decay: 0.08, release: 0.01 },
+    harmonicity: 8,
+    modulationIndex: 40,
+    resonance: 3000
+  }).connect(master);
+
+  // 3. Noise Stutterer (NoiseSynth)
+  const noise = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 }
+  }).connect(master);
+
+  // 4. Wild FM Synth (FMSynth)
+  const fm = new Tone.FMSynth({
+    harmonicity: 1,
+    modulationIndex: 50,
+    oscillator: { type: "square" },
+    modulation: { type: "sawtooth" },
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0.1, release: 0.05 },
+    modulationEnvelope: { attack: 0.001, decay: 0.1, sustain: 0.5, release: 0.05 }
+  }).connect(master);
+
+  // === PATTERNS & EVENTS ===
+
+  // --- STUTTER ENGINE ---
+  // Fires rapid 64th notes randomly
+  const stutterCount = 4;
+  const stutterLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only stutter during chaos sections (after 10%)
+    if (bar >= totalBars * 0.10) {
+      if (R() > 0.3) {
+        const count = 2 + Math.floor(R() * 6);
+        const interval = 0.01 + R() * 0.02;
+        for (let i = 0; i < count; i++) {
+          const t = time + (i * interval);
+          Tone.Transport.scheduleOnce((dt) => {
+            const pick = R();
+            if (pick < 0.4) noise.triggerAttackRelease("64n", dt, 0.8);
+            else if (pick < 0.7) stab.triggerAttackRelease("64n", dt, 0.5);
+            else fm.triggerAttackRelease(["C5", "F#5", "Bb4", "E6"][Math.floor(R()*4)], "64n", dt, 0.6);
+          }, t);
+        }
+      }
+    }
+  }, "16n").start(0);
+
+  // --- SILENCE GAPS ---
+  // Randomly cuts master gain to create jarring silence
+  let silenceActive = false;
+  const silenceLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.15 && R() > 0.8 && !silenceActive) {
+      silenceActive = true;
+      const dur = 0.15 + R() * 0.35;
+      master.gain.setValueAtTime(0, time);
+      master.gain.setValueAtTime(1.0, time + dur);
+      silenceActive = false;
+      
+      // Bass drop after silence
+      if (R() > 0.4) {
+        bass.triggerAttackRelease("C1", "8n", time + dur + 0.01, 1.0);
+      }
+    }
+  }, "8n").start(0);
+
+  // --- CHAOS PATTERN (Bass + FM + Metal) ---
+  // Irregular pattern that avoids musicality
+  let step = 0;
+  const chaosLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Bass drops
+    if (bar >= totalBars * 0.10 && R() > 0.5) {
+      const notes = ["C1", "Eb1", "F#1", "A1", "Bb1"];
+      bass.triggerAttackRelease(notes[Math.floor(R() * notes.length)], "16n", time + H(4), 0.9);
+    }
+
+    // FM and Metal hits
+    if (bar >= totalBars * 0.20 && R() > 0.6) {
+      if (R() > 0.5) {
+        // FM octave jump
+        const base = Tone.Frequency("C4").toFrequency();
+        const shifted = base * Math.pow(2, (R() > 0.5 ? 12 : -12));
+        fm.triggerAttackRelease(Tone.Frequency(shifted).toNote(), "32n", time + H(6), 0.5);
+      } else {
+        // Metal freq sweep
+        stab.frequency.value = 100 + R() * 800;
+        stab.triggerAttackRelease("32n", time + H(6), 0.6);
+      }
+    }
+    
+    // Wind down for loop seam (last 10%)
+    if (bar >= totalBars * 0.90) {
+      return; // Stop playing chaos
+    }
+
+    step++;
+  }, "32n").start(0);
+
+  // --- FALSE SUCCESS CLIMAX ---
+  // Simulates a "build success" UI sound then cuts to static
+  Tone.Transport.schedule((time) => {
+    // "Success" chime (bright major chord)
+    const chord = ["C5", "E5", "G5", "C6"];
+    fm.triggerAttackRelease(chord, "4n", time, 0.8);
+    stab.frequency.value = 1000;
+    stab.triggerAttackRelease("2n", time, 0.8);
+  }, totalBars * 0.75 * secPerBar);
+
+  // --- STATIC BED ---
+  // Constant background noise that gets chopped
+  const staticNoise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.05, decay: 0.2, sustain: 0.1, release: 0.1 }
+  }).connect(master);
+  
+  const staticLoop = new Tone.Loop((time) => {
+    if (barAt(time) >= totalBars * 0.05) {
+      staticNoise.triggerAttackRelease("8n", time, 0.3 + R() * 0.2);
+    }
+  }, "16n").start(0);
+
+  // --- WIND DOWN (Final 10%) ---
+  // Clean up to loop smoothly
+  Tone.Transport.schedule((time) => {
+    master.gain.setValueAtTime(0.8, time); // Ensure volume is back up for loop seam
+  }, totalBars * 0.90 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { bass, stab, noise, fm, staticNoise, crusher, distortion, master, bassBus };
+  window.toneJsParts = { stutterLoop, silenceLoop, chaosLoop, staticLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 30;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

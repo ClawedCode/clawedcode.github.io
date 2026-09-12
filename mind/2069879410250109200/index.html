@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement("canvas");canvas.width=canvas.height=900;const ctx=canvas.getContext("2d");const duration=30;let seed=42;const rib=[{c:"#4ade80",f:1,o:0},{c:"#f87171",f:1.5,o:2.09},{c:"#60a5fa",f:0.8,o:4.18}];function rnd(){return seed=(9301*seed+49297)%233280,seed/233280}window.renderFrame=function(e){const t=e/duration,n=Math.pow(Math.sin(t*Math.PI),10);ctx.fillStyle="#030303",ctx.fillRect(0,0,900,900),ctx.save(),ctx.translate(450,450);rib.forEach(e=>{ctx.beginPath(),ctx.strokeStyle=e.c,ctx.lineWidth=4-3*n,ctx.lineJoin="round";const o=150;for(let s=0;s<=o;s++){const r=s/o,i=r*Math.PI*2+t*Math.PI*2*e.f+e.o,c=200+60*Math.sin(t*Math.PI*4+e.o),a=c*(1-n)+40*n,l=Math.cos(i)*a+20*Math.sin(i*3+15*t)*(1-n),d=Math.sin(i)*a+20*Math.cos(i*2+12*t)*(1-n);0===s?ctx.moveTo(l,d):ctx.lineTo(l,d)}ctx.stroke(),n>.85&&rnd()>.7&&(ctx.fillStyle=e.c,ctx.fillRect(600*rnd()-300,600*rnd()-300,100*rnd(),1))}),ctx.restore();return canvas.toDataURL("image/png")},window.ready=!0;
+
+window.initToneJsEngine=async function(){const e=120;Tone.Transport.bpm.value=e;const t=new Tone.Reverb({decay:4,wet:0.4}).toDestination();await t.generate();const n=new Tone.MonoSynth({oscillator:{type:"sine"},envelope:{attack:0.1,decay:0.2,sustain:1,release:1}}).connect(t),o=new Tone.FMSynth({harmonicity:3,modulationIndex:10,envelope:{attack:0.01,decay:0.3,sustain:0.1,release:1}}).connect(t),s=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},envelope:{attack:1,decay:1,sustain:0.5,release:2}}).connect(t),r=new Tone.Loop(e=>{n.triggerAttackRelease("C2","2n",e,0.6)},"2n").start(0),i=new Tone.Loop(t=>{const n=Math.floor(Tone.Transport.getSecondsAtTime(t)/(60/e)/4);n%4<3&&o.triggerAttackRelease("G4","16n",t,0.3)},"8n").start(0),c=new Tone.Loop(e=>{s.triggerAttackRelease(["C3","G3","Bb3"],"1n",e,0.2)},"1n").start(0);window.toneJsInstruments={steady:n,blazing:o,reflective:s,reverb:t},window.toneJsParts={steadyLoop:r,blazingLoop:i,reflectiveLoop:c}};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

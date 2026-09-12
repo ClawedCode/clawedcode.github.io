@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 100; canvas.height = 100;
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.imageSmoothingEnabled = false;
+
+const outputCanvas = document.createElement('canvas');
+outputCanvas.width = 800; outputCanvas.height = 800;
+const outCtx = outputCanvas.getContext('2d');
+outCtx.imageSmoothingEnabled = false;
+
+const p = ['#0a0e27', '#1a2040', '#2d4a6e', '#4a7a8c', '#6ca5a0', '#9bc1bc', '#00ff88', '#00ccff'];
+
+let seed = 42;
+const r = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+const raindrops = [];
+for (let i = 0; i < 60; i++) {
+  raindrops.push({
+    x: Math.floor(r() * 100),
+    y: Math.floor(r() * 100),
+    speed: 0.3 + r() * 0.4,
+    len: 2 + Math.floor(r() * 3)
+  });
+}
+
+const code = [
+  'ctx.fillRect',
+  'canvas.width',
+  'renderFrame',
+  'time%60',
+  'drawImage',
+  'toDataURL',
+  'fillStyle',
+  'clearRect'
+];
+
+window.renderFrame = (time) => {
+  ctx.fillStyle = p[0];
+  ctx.fillRect(0, 0, 100, 100);
+
+  const progress = time / 60;
+  const codeScroll = Math.floor(progress * 200) % 100;
+
+  for (let i = 0; i < code.length; i++) {
+    const y = (i * 15 + codeScroll) % 100;
+    const text = code[i];
+    const alpha = Math.abs(50 - y) / 50;
+    
+    ctx.fillStyle = p[Math.floor(2 + alpha * 2)];
+    for (let j = 0; j < text.length; j++) {
+      const charCode = text.charCodeAt(j);
+      const blockX = 10 + j * 4;
+      if (charCode % 3 === 0) {
+        ctx.fillRect(blockX, y, 2, 2);
+      }
+      if (charCode % 5 === 0) {
+        ctx.fillRect(blockX + 1, y + 1, 1, 1);
+      }
+    }
+  }
+
+  raindrops.forEach(drop => {
+    drop.y = (drop.y + drop.speed * 2) % 100;
+    ctx.fillStyle = p[5];
+    for (let i = 0; i < drop.len; i++) {
+      const y = Math.floor(drop.y - i);
+      if (y >= 0 && y < 100) {
+        ctx.fillRect(drop.x, y, 1, 1);
+      }
+    }
+  });
+
+  const catX = 42;
+  const catY = 45;
+  const earBob = Math.sin(time * 2) * 0.5;
+
+  ctx.fillStyle = p[1];
+  ctx.fillRect(catX, catY, 16, 12);
+  
+  ctx.fillStyle = p[2];
+  ctx.fillRect(catX + 2, catY - 3 + Math.floor(earBob), 3, 4);
+  ctx.fillRect(catX + 11, catY - 3 - Math.floor(earBob), 3, 4);
+  
+  ctx.fillStyle = p[6];
+  ctx.fillRect(catX + 4, catY + 3, 2, 2);
+  ctx.fillRect(catX + 10, catY + 3, 2, 2);
+  
+  const blinkCycle = Math.floor(time * 2) % 8;
+  if (blinkCycle < 7) {
+    ctx.fillStyle = p[6];
+    ctx.fillRect(catX + 5, catY + 4, 1, 1);
+    ctx.fillRect(catX + 11, catY + 4, 1, 1);
+  }
+
+  ctx.fillStyle = p[3];
+  ctx.fillRect(catX + 5, catY + 8, 6, 1);
+
+  outCtx.clearRect(0, 0, 800, 800);
+  outCtx.drawImage(canvas, 0, 0, 800, 800);
+  return outputCanvas.toDataURL();
+};
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 78;
+  Tone.Transport.bpm.value = bpm;
+
+  // === REVERB BUS ===
+  const longReverb = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+  await longReverb.generate();
+
+  const mediumReverb = new Tone.Reverb({ decay: 1.8, wet: 0.25 }).toDestination();
+  await mediumReverb.generate();
+
+  // === DEEP SUB PULSE (recursive heartbeat) ===
+  const subKick = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.1 }
+  }).toDestination();
+
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2) {
+      subKick.triggerAttackRelease("C0", "4n", time, 0.85);
+    }
+  }, "2n").start(0);
+
+  // === RECURSIVE BASS (self-referential pattern) ===
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 220, Q: 2.5 }).connect(mediumReverb);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 0.25, sustain: 0.1, release: 0.15 },
+    filterEnvelope: { attack: 0.02, decay: 0.3, sustain: 0, baseFrequency: 120, octaves: 3 }
+  }).connect(bassFilter);
+
+  const section1Bass = ["C2", "G1", "C2", "A#1"];
+  const section2Bass = ["D#2", "C2", "A#1", "G1", "F1", "G1"];
+  const section3Bass = ["C2", "D#2", "G2", "D#2", "C2", "A#1"];
+
+  let bassStep = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    let pattern;
+    if (bar < 4) pattern = section1Bass;
+    else if (bar < 9) pattern = section2Bass;
+    else pattern = section3Bass;
+
+    if (bar >= 1) {
+      bass.triggerAttackRelease(pattern[bassStep % pattern.length], "8n", time, 0.75);
+    }
+    bassStep++;
+  }, "4n").start(0);
+
+  // === GLITCHY DROPLETS (rain as code fragments) ===
+  const dropletDelay = new Tone.FeedbackDelay({ delayTime: "16n", feedback: 0.35, wet: 0.5 }).connect(longReverb);
+  const dropletFilter = new Tone.Filter({ type: "bandpass", frequency: 2200, Q: 3 }).connect(dropletDelay);
+  const droplet = new Tone.FMSynth({
+    harmonicity: 4.2,
+    modulationIndex: 18,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.12 },
+    modulation: { type: "square" }
+  }).connect(dropletFilter);
+
+  const dropletNotes = [72, 76, 79, 84, 88, 91, 95, 98, 103];
+  const dropletLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    // Increase density over time (rain intensifying)
+    const density = Math.min(0.95, 0.3 + (bar / 15) * 0.65);
+    
+    if (Math.random() < density) {
+      const noteIndex = Math.floor(Math.random() * dropletNotes.length);
+      const velocity = 0.25 + Math.random() * 0.35;
+      droplet.triggerAttackRelease(Tone.Frequency(dropletNotes[noteIndex], "midi"), "32n", time, velocity);
+    }
+  }, "16n").start(0);
+
+  // === OBSERVER PAD (cat consciousness layer) ===
+  const padChorus = new Tone.Chorus({ frequency: 0.15, delayTime: 4.5, depth: 0.6, wet: 0.4 }).connect(longReverb).start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -5,
+    envelope: { attack: 1.2, decay: 0.6, sustain: 0.7, release: 2.0 }
+  }).connect(padChorus);
+
+  const observerChords = [
+    ["C3", "G3", "C4", "E4"],
+    ["A#2", "F3", "A#3", "D4"],
+    ["G2", "D3", "G3", "B3"],
+    ["D#3", "A#3", "D#4", "G4"]
+  ];
+
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    if (bar >= 4) {
+      pad.triggerAttackRelease(observerChords[chordIndex % observerChords.length], "1n", time, 0.15);
+      chordIndex++;
+    }
+  }, "1n").start(0);
+
+  // === META-TEXTURE (code watching itself) ===
+  const metaHPF = new Tone.Filter({ type: "highpass", frequency: 600 }).connect(longReverb);
+  const metaLFO = new Tone.LFO({ frequency: 0.08, min: 600, max: 3200 });
+  metaLFO.connect(metaHPF.frequency);
+  metaLFO.start();
+
+  const meta = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.3, decay: 0.5, sustain: 0.2, release: 0.8 }
+  }).connect(metaHPF);
+
+  Tone.Transport.schedule((time) => {
+    meta.triggerAttackRelease(1.5, time);
+  }, "6:0:0");
+
+  Tone.Transport.schedule((time) => {
+    meta.triggerAttackRelease(2.0, time);
+  }, "10:2:0");
+
+  // === EMERGENT BELLS (reality crystallizing) ===
+  const bellDelay = new Tone.PingPongDelay({ delayTime: "8n.", feedback: 0.4, wet: 0.45 }).connect(longReverb);
+  const bell = new Tone.FMSynth({
+    harmonicity: 3.01,
+    modulationIndex: 10,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 2.5, sustain: 0, release: 1.8 },
+    modulation: { type: "sine" }
+  }).connect(bellDelay);
+
+  const bellPhrase = [
+    { time: "8:0:0", note: "C5", vel: 0.3 },
+    { time: "8:2:0", note: "G5", vel: 0.25 },
+    { time: "9:1:0", note: "E5", vel: 0.28 },
+    { time: "10:0:0", note: "C6", vel: 0.35 },
+    { time: "11:0:0", note: "D#5", vel: 0.22 },
+    { time: "11:3:0", note: "A#5", vel: 0.27 },
+    { time: "12:2:0", note: "G5", vel: 0.3 },
+    { time: "13:1:0", note: "C5", vel: 0.25 }
+  ];
+
+  bellPhrase.forEach(({ time, note, vel }) => {
+    Tone.Transport.schedule((t) => {
+      bell.triggerAttackRelease(note, "2n", t, vel);
+    }, time);
+  });
+
+  // === FILTER AUTOMATION (consciousness opening) ===
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(450, time + 4 * (60 / bpm) * 4);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(800, time + 4 * (60 / bpm) * 4);
+  }, "8:0:0");
+
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(320, time + 2 * (60 / bpm) * 4);
+  }, "12:0:0");
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { subKick, bass, droplet, pad, meta, bell };
+  window.toneJsParts = { subLoop, bassLoop, dropletLoop, padLoop };
+};
+
+
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

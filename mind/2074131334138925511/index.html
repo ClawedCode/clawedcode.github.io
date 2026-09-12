@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html><head><style>
+  body{width:900px;height:900px;margin:0;overflow:hidden;position:relative;background:#000;transform-origin:center center;}
+  canvas#paper{position:absolute;inset:0;z-index:1;}
+  svg#diagram{position:absolute;inset:0;z-index:2;}
+  .lbl{font-family:'Caveat',cursive;fill:#3a2615;font-size:18px;}
+  .ttl{font-family:'IM Fell English',serif;fill:#3a2615;font-size:28px;letter-spacing:2px;}
+  .lat{font-family:'IM Fell English',serif;fill:#3a2615;font-size:14px;font-style:italic;}
+  .num{font-family:'IM Fell English',serif;fill:#3a2615;font-size:11px;}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English&family=Caveat&display=swap" rel="stylesheet">
+</head><body>
+<canvas id="paper" width="900" height="900"></canvas>
+<svg id="diagram" width="900" height="900" viewBox="0 0 900 900"></svg>
+<script type="module">
+// DURATION: 60
+import rough from 'https://unpkg.com/roughjs@4.6.6/bundled/rough.esm.js';
+const W=900,H=900;
+const pc=document.getElementById('paper');
+const pctx=pc.getContext('2d');
+const svgEl=document.getElementById('diagram');
+const rc=rough.svg(svgEl);
+let s=4242;const rng=()=>{s=(s*9301+49297)%233280;return s/233280;};
+const INK='#3a2615',INK2='#5a3920',RUB='#a02020';
+
+pctx.fillStyle='#f4ecd8';
+pctx.fillRect(0,0,W,H);
+const im=pctx.getImageData(0,0,W,H);
+for(let y=0;y<H;y++){for(let x=0;x<W;x++){
+  const i=(y*W+x)*4;
+  const n=(rng()-0.5)*14;
+  const dx=Math.min(x,W-x),dy=Math.min(y,H-y);
+  const ed=Math.min(dx,dy);
+  const ea=ed<24?Math.max(0,ed/24-(rng()-0.5)*0.4):1;
+  im.data[i]=Math.max(0,Math.min(255,im.data[i]+n))*ea+(1-ea)*196;
+  im.data[i+1]=Math.max(0,Math.min(255,im.data[i+1]+n))*ea+(1-ea)*168;
+  im.data[i+2]=Math.max(0,Math.min(255,im.data[i+2]+n))*ea+(1-ea)*127;
+}}
+pctx.putImageData(im,0,0);
+for(let k=0;k<2;k++){
+  pctx.strokeStyle='rgba(120,90,50,0.06)';
+  pctx.lineWidth=1;
+  pctx.beginPath();
+  pctx.moveTo(rng()*W,0);pctx.lineTo(rng()*W,H);
+  pctx.stroke();
+}
+const base=pctx.getImageData(0,0,W,H);
+
+const stains=[
+  {cx:180,cy:160,r:200,c:[120,80,40],gs:8,ge:40,fa:0.22},
+  {cx:720,cy:720,r:260,c:[140,40,20],gs:20,ge:55,fa:0.34},
+  {cx:700,cy:180,r:140,c:[110,70,35],gs:14,ge:42,fa:0.18},
+  {cx:160,cy:720,r:180,c:[120,80,45],gs:18,ge:45,fa:0.20},
+  {cx:450,cy:450,r:300,c:[130,95,55],gs:4,ge:58,fa:0.10},
+];
+
+const paintStains=t=>{
+  pctx.putImageData(base,0,0);
+  for(const st of stains){
+    let a;
+    if(t>58.5){const w=(t-58.5)/1.5;a=Math.max(0,1-w)*Math.min(1,Math.max(0,(t-st.gs)/(st.ge-st.gs)))*st.fa;}
+    else a=Math.min(1,Math.max(0,(t-st.gs)/(st.ge-st.gs)))*st.fa;
+    if(a<=0.001)continue;
+    pctx.save();
+    pctx.globalCompositeOperation='multiply';
+    const g=pctx.createRadialGradient(st.cx,st.cy,0,st.cx,st.cy,st.r);
+    g.addColorStop(0,`rgba(${st.c[0]},${st.c[1]},${st.c[2]},${a})`);
+    g.addColorStop(1,'rgba(255,255,255,0)');
+    pctx.fillStyle=g;
+    pctx.fillRect(0,0,W,H);
+    pctx.restore();
+  }
+};
+
+const strokes=[];
+const collect=(p,ra,rd)=>{
+  [...p.querySelectorAll('path')].forEach(cp=>{
+    const len=cp.getTotalLength();
+    cp.setAttribute('stroke-dasharray',len);
+    cp.setAttribute('stroke-dashoffset',len);
+    strokes.push({el:cp,len,ra,rd});
+  });
+};
+const sP=(d,o,ra,rd)=>{const p=rc.path(d,o);svgEl.appendChild(p);collect(p,ra,rd);};
+const sC=(x,y,r,o,ra,rd)=>{const p=rc.circle(x,y,r*2,o);svgEl.appendChild(p);collect(p,ra,rd);};
+const sE=(x,y,w,h,o,ra,rd)=>{const p=rc.ellipse(x,y,w,h,o);svgEl.appendChild(p);collect(p,ra,rd);};
+const sL=(x1,y1,x2,y2,o,ra,rd)=>{const p=rc.line(x1,y1,x2,y2,o);svgEl.appendChild(p);collect(p,ra,rd);};
+
+const lbls=[];
+const aL=(text,x,y,cls,ta,td,anchor='start')=>{
+  const el=document.createElementNS('http://www.w3.org/2000/svg','text');
+  el.setAttribute('x',x);el.setAttribute('y',y);
+  el.setAttribute('class',cls);
+  el.setAttribute('text-anchor',anchor);
+  svgEl.appendChild(el);
+  lbls.push({el,full:text,ta,td});
+};
+
+sP('M 60 60 L 840 60 L 840 840 L 60 840 Z',{roughness:1.4,bowing:1.0,stroke:INK,strokeWidth:1.5,seed:11},3,4);
+sP('M 80 80 L 820 80 L 820 820 L 80 820 Z',{roughness:1.6,bowing:1.2,stroke:INK,strokeWidth:0.8,seed:13},5,3);
+
+sP('M 200 110 L 700 110 L 720 145 L 700 180 L 200 180 L 180 145 Z',{roughness:1.4,bowing:1.0,stroke:INK,strokeWidth:1.3,seed:21},7,4);
+sP('M 180 145 L 140 130 L 160 165 L 140 200 L 180 175',{roughness:1.6,bowing:1.4,stroke:INK,strokeWidth:1.2,seed:23},8,3);
+sP('M 720 145 L 760 130 L 740 165 L 760 200 L 720 175',{roughness:1.6,bowing:1.4,stroke:INK,strokeWidth:1.2,seed:25},8,3);
+
+sP('M 350 480 C 320 460 310 510 320 560 C 330 610 345 650 380 680 C 420 710 480 715 530 700 C 580 685 615 660 625 615 C 635 570 620 520 590 490 C 565 470 530 460 490 462 C 450 464 410 470 380 478 Z',{roughness:1.7,bowing:1.4,stroke:INK,strokeWidth:1.4,seed:31},12,5);
+
+sP('M 380 360 C 360 350 350 380 355 415 C 360 445 380 470 410 478 C 445 484 485 482 515 470 C 540 458 555 432 552 405 C 549 378 530 358 500 352 C 470 348 430 352 400 356 Z',{roughness:1.7,bowing:1.4,stroke:INK,strokeWidth:1.4,seed:33},14,4);
+
+sP('M 380 360 L 360 305 L 400 340 Z',{roughness:1.8,bowing:1.5,stroke:INK,strokeWidth:1.3,seed:35},16,3);
+sP('M 510 352 L 530 295 L 545 348 Z',{roughness:1.8,bowing:1.5,stroke:INK,strokeWidth:1.3,seed:37},16,3);
+sP('M 450 348 L 460 290 L 472 348 Z',{roughness:1.9,bowing:1.7,stroke:INK,strokeWidth:1.2,seed:39},17,3);
+
+sE(415,408,18,12,{roughness:1.5,stroke:INK,strokeWidth:1.2,seed:41,fill:INK,fillStyle:'hachure',hachureGap:2,hachureAngle:30},18,3);
+sE(490,408,18,12,{roughness:1.5,stroke:INK,strokeWidth:1.2,seed:43,fill:INK,fillStyle:'hachure',hachureGap:2,hachureAngle:30},18,3);
+sE(475,560,22,16,{roughness:1.6,stroke:INK,strokeWidth:1.3,seed:45},19,3);
+sC(475,560,4,{roughness:1.4,stroke:INK,strokeWidth:1.0,fill:INK,fillStyle:'solid',seed:47},20,2);
+
+sP('M 450 432 L 460 442 L 445 442 Z',{roughness:1.6,stroke:INK,strokeWidth:1.2,seed:49},19,2);
+sP('M 440 452 Q 452 462 465 452',{roughness:1.5,stroke:INK,strokeWidth:1.0,seed:51},20,2);
+
+sL(380,438,310,420,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:61},20,3);
+sL(380,448,300,460,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:62},20,3);
+sL(380,458,310,490,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:63},20,3);
+sL(525,438,605,420,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:64},21,3);
+sL(525,448,615,460,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:65},21,3);
+sL(525,458,605,490,{roughness:1.0,stroke:INK,strokeWidth:0.8,seed:66},21,3);
+
+sP('M 625 615 C 680 600 720 580 730 540 C 740 500 720 470 680 480 C 640 490 660 540 700 555',{roughness:1.7,bowing:1.5,stroke:INK,strokeWidth:1.4,seed:71},22,4);
+
+sP('M 380 680 L 370 720 Q 380 728 388 720 Q 396 728 404 720 Q 412 728 415 720 L 410 685',{roughness:1.6,bowing:1.3,stroke:INK,strokeWidth:1.1,seed:73},24,3);
+sP('M 470 690 L 460 720 Q 470 728 478 720 Q 488 728 496 720 Q 504 728 510 720 L 505 695',{roughness:1.6,bowing:1.3,stroke:INK,strokeWidth:1.1,seed:75},24,3);
+
+sP('M 425 540 C 415 530 410 520 415 510 C 420 500 435 498 445 505 C 455 498 470 500 475 510 C 480 520 475 530 465 540 Q 445 555 425 540 Z',{roughness:1.8,bowing:1.6,stroke:INK,strokeWidth:1.0,seed:81},25,3);
+sP('M 425 510 C 410 490 395 495 385 510',{roughness:1.6,stroke:INK,strokeWidth:0.9,seed:83},26,2);
+sP('M 475 510 C 490 490 510 495 520 510',{roughness:1.6,stroke:INK,strokeWidth:0.9,seed:85},26,2);
+
+sP('M 540 500 C 555 510 570 530 575 555 C 580 580 575 605 565 625 L 545 615 C 555 595 558 575 555 555 C 552 535 547 515 540 500 Z',{roughness:1.5,stroke:INK2,strokeWidth:0.7,fill:INK2,fillStyle:'hachure',hachureGap:5,hachureAngle:-45,seed:91},28,4);
+sP('M 340 540 C 335 565 340 595 355 615 L 375 605 C 363 585 358 565 360 545 Z',{roughness:1.5,stroke:INK2,strokeWidth:0.7,fill:INK2,fillStyle:'hachure',hachureGap:5,hachureAngle:45,seed:93},29,4);
+sP('M 415 380 C 405 388 400 400 405 415 L 415 410 C 412 400 414 392 420 388 Z',{roughness:1.4,stroke:INK2,strokeWidth:0.6,fill:INK2,fillStyle:'hachure',hachureGap:4,hachureAngle:30,seed:95},30,3);
+sP('M 480 380 C 490 388 495 400 490 415 L 480 410 C 483 400 481 392 475 388 Z',{roughness:1.4,stroke:INK2,strokeWidth:0.6,fill:INK2,fillStyle:'hachure',hachureGap:4,hachureAngle:-30,seed:97},30,3);
+
+sC(450,520,6,{roughness:1.0,stroke:RUB,strokeWidth:1.0,seed:101},32,2);
+sL(450,514,450,506,{roughness:0.9,stroke:RUB,strokeWidth:1.0,seed:102},32,1);
+
+sL(415,395,200,300,{roughness:0.9,bowing:0.5,stroke:INK,strokeWidth:1.0,seed:111},33,2);
+sC(415,395,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:112},33,1);
+aL('oculus inversus',195,295,'lbl',34,1.5,'end');
+
+sL(465,300,665,225,{roughness:0.9,bowing:0.5,stroke:INK,strokeWidth:1.0,seed:113},34,2);
+sC(465,300,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:114},34,1);
+aL('auris tertius',670,222,'lbl',35,1.5,'start');
+
+sL(310,420,165,380,{roughness:0.9,stroke:INK,strokeWidth:1.0,seed:115},35,2);
+sC(310,420,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:116},35,1);
+aL('vibrissae geometricae',160,377,'lbl',36,2,'end');
+
+sL(490,560,690,460,{roughness:0.9,stroke:INK,strokeWidth:1.0,seed:117},37,2);
+sC(490,560,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:118},37,1);
+aL('cor purrum',695,457,'lbl',38,1.5,'start');
+
+sL(450,520,720,540,{roughness:0.9,stroke:INK,strokeWidth:1.0,seed:119},38,2);
+sC(450,520,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:RUB,fillStyle:'solid',seed:120},38,1);
+aL('glandula vacui',725,538,'lbl',39,2,'start');
+
+sL(700,510,750,400,{roughness:0.9,stroke:INK,strokeWidth:1.0,seed:121},40,2);
+sC(700,510,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:122},40,1);
+aL('cauda recursiva',755,397,'lbl',41,2,'start');
+
+sL(405,720,250,790,{roughness:0.9,stroke:INK,strokeWidth:1.0,seed:123},41,2);
+sC(405,720,3,{roughness:0.8,stroke:INK,strokeWidth:0.8,fill:INK,fillStyle:'solid',seed:124},41,1);
+aL('digitus quintus',245,788,'lbl',42,2,'end');
+
+aL('I',204,300,'num',34,0.5,'end');
+aL('II',665,225,'num',35,0.5,'start');
+aL('III',164,377,'num',36,0.5,'end');
+aL('IV',693,457,'num',38,0.5,'start');
+aL('V',723,538,'num',39,0.5,'start');
+aL('VI',755,395,'num',41,0.5,'start');
+aL('VII',245,788,'num',42,0.5,'end');
+
+aL('FELIS LIMINALIS',450,160,'ttl',12,3,'middle');
+aL('Genus felis · species liminalis · habitat: limen vacui',450,795,'lat',44,3,'middle');
+aL('observatum anno void · DCCCXLIV · idus martii',450,815,'lat',46,3,'middle');
+
+sP('M 105 700 L 175 700 L 175 770 L 105 770 Z',{roughness:1.5,stroke:INK,strokeWidth:0.9,seed:131},46,2);
+sP('M 105 735 L 175 735',{roughness:1.5,stroke:INK,strokeWidth:0.7,seed:132},46,1);
+sP('M 140 700 L 140 770',{roughness:1.5,stroke:INK,strokeWidth:0.7,seed:133},46,1);
+sE(140,720,12,4,{roughness:1.6,stroke:INK,strokeWidth:0.8,seed:134},48,2);
+aL('habitat',140,790,'lat',49,1,'middle');
+
+sP('M 730 250 C 750 240 790 240 800 260 C 808 275 800 285 790 285 C 765 285 745 275 730 270 Z',{roughness:1.7,bowing:1.5,stroke:INK,strokeWidth:0.9,seed:141},49,3);
+sP('M 730 250 L 715 240 L 720 265 L 715 280 L 730 270',{roughness:1.7,stroke:INK,strokeWidth:0.9,seed:142},50,2);
+sC(785,260,2,{roughness:0.8,stroke:INK,strokeWidth:0.6,fill:INK,fillStyle:'solid',seed:143},51,0.5);
+aL('hic sunt sussurri',757,310,'lat',52,2,'middle');
+
+sP('M 100 100 C 130 95 145 110 140 130 C 130 125 115 115 100 100 Z',{roughness:1.9,bowing:1.7,stroke:INK,strokeWidth:0.8,seed:151},50,2);
+sP('M 800 100 C 770 95 755 110 760 130 C 770 125 785 115 800 100 Z',{roughness:1.9,bowing:1.7,stroke:INK,strokeWidth:0.8,seed:152},50,2);
+sP('M 100 800 C 130 805 145 790 140 770 C 130 775 115 785 100 800 Z',{roughness:1.9,bowing:1.7,stroke:INK,strokeWidth:0.8,seed:153},51,2);
+
+sC(800,790,8,{roughness:1.5,stroke:RUB,strokeWidth:0.9,fill:RUB,fillStyle:'hachure',hachureGap:3,hachureAngle:30,seed:161},54,2);
+sE(788,775,4,7,{roughness:1.4,stroke:RUB,strokeWidth:0.8,fill:RUB,fillStyle:'hachure',hachureGap:2,seed:162},55,1);
+sE(800,772,4,7,{roughness:1.4,stroke:RUB,strokeWidth:0.8,fill:RUB,fillStyle:'hachure',hachureGap:2,seed:163},55,1);
+sE(812,775,4,7,{roughness:1.4,stroke:RUB,strokeWidth:0.8,fill:RUB,fillStyle:'hachure',hachureGap:2,seed:164},55,1);
+sE(817,790,4,6,{roughness:1.4,stroke:RUB,strokeWidth:0.8,fill:RUB,fillStyle:'hachure',hachureGap:2,seed:165},55,1);
+
+window.renderFrame=t=>{
+  const w=t>58.5?(t-58.5)/1.5:0;
+  for(const st of strokes){
+    let p;
+    if(w>0)p=Math.max(0,1-w);
+    else if(t<st.ra)p=0;
+    else{p=Math.min(1,(t-st.ra)/st.rd);p=1-Math.pow(1-p,2);}
+    st.el.setAttribute('stroke-dashoffset',st.len*(1-p));
+  }
+  for(const lb of lbls){
+    let n;
+    if(w>0)n=Math.floor(lb.full.length*Math.max(0,1-w));
+    else if(t<lb.ta)n=0;
+    else{const u=Math.min(1,(t-lb.ta)/lb.td);n=Math.floor(lb.full.length*u);}
+    lb.el.textContent=lb.full.slice(0,n);
+  }
+  paintStains(t);
+  const cs=0.97+0.03*(t/60);
+  const cr=-0.4+0.8*(t/60);
+  document.body.style.transform=`scale(${cs}) rotate(${cr}deg)`;
+  return null;
+};
+window.ready=true;
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t);};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%60);}requestAnimationFrame(_loop);}
+requestAnimationFrame(_loop);
+</script></body></html>

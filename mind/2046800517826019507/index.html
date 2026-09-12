@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+const float TAU = 6.28318;
+
+float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+
+float pw(vec2 n, vec2 s, float p, float f, float v, float a) {
+    float d = length(n - s);
+    return max(sin(d*f - p*TAU*v) * exp(-d*a), sin(d*f - p*TAU*v + 0.9) * exp(-d*a) * 0.35);
+}
+
+void main() {
+    vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+    float t = mod(iTime, 45.0), ph = t / 45.0;
+    vec2 dr = vec2(sin(ph*TAU) * 0.15, cos(ph*TAU) * 0.1);
+    float sc = 6.0;
+    vec2 gp = (uv + dr) * sc, ci = floor(gp), cf = fract(gp);
+
+    vec3 col = vec3(0.01, 0.007, 0.03);
+    vec3 ind = vec3(0.22, 0.12, 0.58), am = vec3(1.0, 0.78, 0.28);
+
+    vec2 s1 = vec2(sin(ph*TAU) * 2.8, cos(ph*TAU) * 2.2);
+    vec2 s2 = vec2(cos(ph*TAU*2.0 + 1.0) * 2.0, sin(ph*TAU*3.0 + 2.0) * 2.8);
+    vec2 s3 = vec2(sin(ph*TAU*2.0 + 3.5) * 1.5, cos(ph*TAU + 0.5) * 2.0);
+
+    float md1 = 10.0, md2 = 10.0, ng = 0.0, ta = 0.0;
+    vec2 mc = vec2(0.0);
+
+    for(float j = -2.0; j <= 2.0; j++)
+    for(float i = -2.0; i <= 2.0; i++) {
+        vec2 nid = ci + vec2(i, j);
+        vec2 off = (vec2(h(nid), h(nid + 99.0)) - 0.5) * 0.22;
+        vec2 np = vec2(i, j) + 0.5 + off;
+        float d = length(np - cf);
+
+        if(d < md1) { md2 = md1; md1 = d; mc = nid; }
+        else if(d < md2) md2 = d;
+
+        vec2 wp = nid + 0.5 + off;
+        float w = max(max(pw(wp, s1, ph, 1.8, 18.0, 0.35), pw(wp, s2, ph, 1.5, 14.0, 0.4)),
+                      pw(wp, s3, ph, 2.0, 16.0, 0.3));
+        float act = smoothstep(-0.05, 0.6, w) * smoothstep(0.1, 0.4, h(nid + floor(vec2(t * 2.0))));
+
+        ng += exp(-d*d * 12.0) * (0.2 + 0.8 * act);
+        ta += act * exp(-d * 2.0);
+        ng += max(sin(d * 25.0 - ph*TAU*32.0) * exp(-d * 7.0) * act, 0.0) * 0.08;
+    }
+
+    float edge = md2 - md1;
+    float th = smoothstep(0.07, 0.0, edge);
+
+    vec2 moff = (vec2(h(mc), h(mc + 99.0)) - 0.5) * 0.22;
+    vec2 mwp = mc + 0.5 + moff;
+    float ma = smoothstep(-0.05, 0.6, max(max(
+        pw(mwp, s1, ph, 1.8, 18.0, 0.35),
+        pw(mwp, s2, ph, 1.5, 14.0, 0.4)),
+        pw(mwp, s3, ph, 2.0, 16.0, 0.3)));
+
+    float cm = smoothstep(0.0, 0.9, ta);
+    col += mix(ind, am, cm) * ng * 1.3;
+    col += mix(ind * 0.3, am * 0.4, ma) * th * (0.2 + 0.5 * ma);
+    col += mix(ind * 0.4, am * 0.25, 0.5 + 0.5 * sin(ph*TAU*2.0)) * exp(-dot(uv, uv) * 3.0) * 0.03;
+    col *= smoothstep(0.85, 0.15, length(uv));
+
+    gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+window.initToneJsEngine = async function() {
+    const bpm = 80;
+    Tone.Transport.bpm.value = bpm;
+    const barLen = 4 * 60 / bpm;
+    const bars = 15;
+
+    const rev = new Tone.Reverb({ decay: 4.0, wet: 0.45 }).toDestination();
+    await rev.generate();
+    const dly = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.3, wet: 0.2 }).connect(rev);
+    const chr = new Tone.Chorus({ frequency: 0.2, delayTime: 6, depth: 0.5, wet: 0.35 }).connect(rev);
+    chr.start();
+    const pFilt = new Tone.Filter({ type: "lowpass", frequency: 700 }).connect(chr);
+
+    const pad = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 1.2, decay: 0.4, sustain: 0.6, release: 2.5 }
+    }).connect(pFilt);
+    pad.volume.value = -16;
+
+    const chords = [
+        ["A3","C4","E4"], ["A3","C4","E4"], ["D3","F3","A3"], ["E3","G3","B3"],
+        ["A3","C4","E4"], ["A3","C4","E4"], ["F3","A3","C4"], ["G3","B3","D4"],
+        ["A3","C4","E4"], ["D3","F3","A3"], ["E3","G3","B3"], ["A3","C4","E4"],
+        ["A3","C4","E4"], ["A3","C4","E4"], ["A3","C4","E4"]
+    ];
+
+    const padLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        pad.triggerAttackRelease(chords[bar], "1n", time, 0.2);
+    }, "1n").start(0);
+
+    const filtLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        const curve = Math.sin(bar / (bars - 1) * Math.PI);
+        const f = 700.0 + curve * 1500.0;
+        pFilt.frequency.linearRampToValueAtTime(f, time + barLen * 0.5);
+    }, "1n").start(0);
+
+    const ping = new Tone.FMSynth({
+        harmonicity: 3.5, modulationIndex: 10,
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.001, decay: 2.0, sustain: 0, release: 0.8 },
+        modulation: { type: "triangle" },
+        modulationEnvelope: { attack: 0.002, decay: 1.0, sustain: 0, release: 0.3 }
+    }).connect(dly);
+    ping.volume.value = -18;
+
+    const bellNotes = ["A4","C5","D5","E5","G5","A5"];
+    const pingLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        let prob = 0.0;
+        if(bar >= 2 && bar < 4) prob = 0.15;
+        else if(bar >= 4 && bar < 10) prob = 0.3;
+        else if(bar >= 10 && bar < 12) prob = 0.1;
+        if(Math.random() < prob) {
+            const note = bellNotes[Math.floor(Math.random() * bellNotes.length)];
+            ping.triggerAttackRelease(note, "8n", time, 0.12 + Math.random() * 0.15);
+        }
+    }, "8n").start(0);
+
+    const sub = new Tone.Synth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.08, decay: 0.5, sustain: 0, release: 0.4 }
+    }).connect(rev);
+    sub.volume.value = -12;
+
+    const subNotes = ["A1","A1","D1","E1"];
+    let subIdx = 0;
+    const subLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        if(bar >= 4 && bar < 11) {
+            sub.triggerAttackRelease(subNotes[subIdx % subNotes.length], "4n", time, 0.5);
+        }
+        subIdx++;
+    }, "2n").start(0);
+
+    const aFilt = new Tone.Filter({ type: "lowpass", frequency: 1000 }).connect(rev);
+    const arp = new Tone.Synth({
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.01, decay: 0.25, sustain: 0, release: 0.15 }
+    }).connect(aFilt);
+    arp.volume.value = -22;
+
+    const arpNotes = ["A3","C4","E4","A4","G4","E4"];
+    let arpIdx = 0;
+    const arpLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        if(bar >= 6 && bar < 10) {
+            arp.triggerAttackRelease(arpNotes[arpIdx % arpNotes.length], "16n", time, 0.1 + Math.random() * 0.08);
+        }
+        arpIdx++;
+    }, "8n").start(0);
+
+    const shimmer = new Tone.MetalSynth({
+        frequency: 800,
+        envelope: { attack: 0.001, decay: 0.08, release: 0.02 },
+        harmonicity: 8, modulationIndex: 20, resonance: 5000
+    }).connect(rev);
+    shimmer.volume.value = -28;
+
+    const shimmerLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen) % bars;
+        if(bar >= 4 && bar < 12 && Math.random() < 0.12) {
+            shimmer.triggerAttackRelease("32n", time, 0.08 + Math.random() * 0.1);
+        }
+    }, "16n").start(0);
+
+    window.toneJsInstruments = { pad, ping, sub, arp, shimmer };
+    window.toneJsParts = { padLoop, filtLoop, pingLoop, subLoop, arpLoop, shimmerLoop };
+};
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 45;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 45;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

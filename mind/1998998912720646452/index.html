@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      font-family: 'Courier New', monospace;
+      color: #00ffff;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-rows: 38px 1fr 95px;
+      grid-template-columns: 110px 1fr 130px;
+      height: 900px;
+      width: 900px;
+      background: linear-gradient(135deg, #020408 0%, #0a0612 50%, #06080c 100%);
+      gap: 3px;
+      padding: 3px;
+      position: relative;
+    }
+    .dashboard::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: 
+        repeating-linear-gradient(90deg, transparent 0px, transparent 29px, rgba(0,255,255,0.02) 30px),
+        repeating-linear-gradient(0deg, transparent 0px, transparent 29px, rgba(0,255,255,0.02) 30px);
+      pointer-events: none;
+    }
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        transparent 0px, transparent 1px,
+        rgba(0,0,0,0.15) 2px, rgba(0,0,0,0.15) 3px
+      );
+      pointer-events: none;
+      z-index: 100;
+    }
+    .panel {
+      border: 1px solid rgba(0,255,255,0.25);
+      background: rgba(6,10,18,0.85);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(0,255,255,0.5), transparent);
+    }
+    .glow { box-shadow: 0 0 6px rgba(0,255,255,0.3), inset 0 0 3px rgba(0,255,255,0.1); }
+    .top-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 9px;
+      letter-spacing: 1px;
+      border-bottom: 1px solid rgba(0,255,255,0.3);
+      background: linear-gradient(180deg, rgba(0,255,255,0.08) 0%, transparent 100%);
+    }
+    .specimen-id { color: #ff66b2; font-weight: bold; font-size: 11px; }
+    .status-group { display: flex; gap: 15px; align-items: center; }
+    .status-item { display: flex; align-items: center; gap: 4px; }
+    .blink { animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .dot-cyan { background: #00ffff; box-shadow: 0 0 6px #00ffff; }
+    .dot-magenta { background: #ff66b2; box-shadow: 0 0 6px #ff66b2; }
+    .dot-amber { background: #ffaa00; box-shadow: 0 0 6px #ffaa00; }
+    .left-strip {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .thumb-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 4px;
+    }
+    .thumb-label {
+      font-size: 6px;
+      color: rgba(0,255,255,0.6);
+      margin-bottom: 3px;
+      letter-spacing: 1px;
+    }
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3px;
+      flex: 1;
+    }
+    .thumb {
+      border: 1px solid rgba(255,102,178,0.4);
+      background: #0a0612;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .thumb canvas { width: 100%; height: 100%; }
+    .thumb-time {
+      position: absolute;
+      bottom: 1px;
+      right: 2px;
+      font-size: 5px;
+      color: rgba(255,102,178,0.7);
+    }
+    .micro-panel {
+      padding: 4px;
+    }
+    .micro-label {
+      font-size: 5px;
+      color: rgba(0,255,255,0.5);
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+    .micro-value {
+      font-size: 10px;
+      color: #00ffff;
+      text-shadow: 0 0 4px rgba(0,255,255,0.5);
+    }
+    .mini-bars {
+      display: flex;
+      gap: 2px;
+      height: 20px;
+      align-items: flex-end;
+      margin-top: 4px;
+    }
+    .mini-bar {
+      flex: 1;
+      background: linear-gradient(180deg, #00ffff 0%, #ff66b2 100%);
+      min-height: 3px;
+      box-shadow: 0 0 4px rgba(0,255,255,0.4);
+    }
+    .center-area {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .hero-container {
+      flex: 1;
+      position: relative;
+    }
+    .hero-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .hero-overlay {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      font-size: 7px;
+      color: rgba(0,255,255,0.6);
+    }
+    .hero-coords {
+      position: absolute;
+      bottom: 5px;
+      right: 5px;
+      font-size: 6px;
+      color: rgba(255,102,178,0.7);
+      text-align: right;
+    }
+    .center-charts {
+      height: 60px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 3px;
+    }
+    .chart-panel {
+      position: relative;
+      padding: 3px;
+    }
+    .chart-label {
+      font-size: 5px;
+      color: rgba(0,255,255,0.5);
+      position: absolute;
+      top: 2px;
+      left: 3px;
+    }
+    .chart-canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .right-panels {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .spec-card {
+      padding: 5px;
+      font-size: 6px;
+      line-height: 1.4;
+    }
+    .spec-title {
+      color: #ff66b2;
+      font-size: 7px;
+      margin-bottom: 4px;
+      letter-spacing: 1px;
+    }
+    .spec-row {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(0,255,255,0.1);
+      padding: 2px 0;
+    }
+    .spec-key { color: rgba(0,255,255,0.5); }
+    .spec-val { color: #00ffff; }
+    .gauge-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 5px;
+    }
+    .gauge-label {
+      font-size: 5px;
+      color: rgba(0,255,255,0.5);
+      margin-bottom: 3px;
+    }
+    .gauge-ring {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,255,255,0.2);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .gauge-value {
+      font-size: 12px;
+      color: #00ffff;
+      text-shadow: 0 0 8px rgba(0,255,255,0.6);
+    }
+    .gauge-arc {
+      position: absolute;
+      inset: -2px;
+      border-radius: 50%;
+      border: 2px solid transparent;
+      border-top-color: #ff66b2;
+      border-right-color: #ff66b2;
+    }
+    .hex-stream {
+      font-size: 5px;
+      color: rgba(0,255,255,0.4);
+      line-height: 1.2;
+      overflow: hidden;
+      height: 100%;
+      padding: 3px;
+    }
+    .waveform-panel {
+      flex: 1;
+      position: relative;
+    }
+    .waveform-canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .bottom-telemetry {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: 1fr 1.2fr 1fr 0.8fr;
+      gap: 3px;
+    }
+    .telem-panel {
+      position: relative;
+      padding: 3px;
+    }
+    .telem-label {
+      font-size: 5px;
+      color: rgba(0,255,255,0.5);
+      letter-spacing: 1px;
+      position: absolute;
+      top: 2px;
+      left: 4px;
+    }
+    .telem-canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .log-panel {
+      font-size: 5px;
+      color: rgba(0,255,255,0.6);
+      padding: 12px 4px 4px;
+      overflow: hidden;
+      line-height: 1.3;
+    }
+    .log-line { white-space: nowrap; }
+    .log-time { color: rgba(255,102,178,0.5); }
+    .progress-bar {
+      height: 4px;
+      background: rgba(0,255,255,0.1);
+      margin-top: 3px;
+      position: relative;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00ffff, #ff66b2);
+      box-shadow: 0 0 6px rgba(0,255,255,0.5);
+      transition: width 0.3s;
+    }
+  </style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <div class="dashboard">
+    <div class="scanlines"></div>
+    
+    <div class="top-bar panel">
+      <div class="status-group">
+        <span class="specimen-id">▹ WAVEFORM-GLSL::0xF7A2</span>
+        <span style="color:rgba(0,255,255,0.5)">│</span>
+        <span>TSUBUYAKI ANALYSIS</span>
+      </div>
+      <div class="status-group">
+        <div class="status-item">
+          <div class="dot dot-cyan blink"></div>
+          <span>SHADER ACTIVE</span>
+        </div>
+        <div class="status-item">
+          <div class="dot dot-magenta"></div>
+          <span>140 CHARS</span>
+        </div>
+        <div class="status-item">
+          <span style="color:#ffaa00" id="clock">00:00:00</span>
+        </div>
+      </div>
+      <div class="status-group">
+        <span style="color:rgba(0,255,255,0.4)">COORD:</span>
+        <span id="coords">X:0.00 Y:0.00</span>
+        <span style="color:rgba(0,255,255,0.4)">│</span>
+        <span id="analysis-pct">0.0%</span>
+      </div>
+    </div>
+    
+    <div class="left-strip">
+      <div class="panel thumb-panel glow">
+        <div class="thumb-label">▹ PHASE CAPTURES</div>
+        <div class="thumb-grid">
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="0"></canvas><span class="thumb-time">T+0.0</span></div>
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="1"></canvas><span class="thumb-time">T+1.5</span></div>
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="2"></canvas><span class="thumb-time">T+3.0</span></div>
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="3"></canvas><span class="thumb-time">T+4.5</span></div>
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="4"></canvas><span class="thumb-time">T+6.0</span></div>
+          <div class="thumb"><canvas class="thumb-canvas" data-phase="5"></canvas><span class="thumb-time">T+7.5</span></div>
+        </div>
+      </div>
+      <div class="panel micro-panel">
+        <div class="micro-label">▹ SINE AMPLITUDE</div>
+        <div class="micro-value" id="amplitude">0.100</div>
+        <div class="mini-bars" id="amp-bars"></div>
+      </div>
+      <div class="panel micro-panel">
+        <div class="micro-label">▹ BAR DENSITY</div>
+        <div class="micro-value" id="density">30</div>
+        <div class="progress-bar"><div class="progress-fill" id="density-bar" style="width:60%"></div></div>
+      </div>
+      <div class="panel micro-panel">
+        <div class="micro-label">▹ FREQ MULT</div>
+        <div class="micro-value" id="freq">5.0x</div>
+      </div>
+      <div class="panel waveform-panel">
+        <canvas class="waveform-canvas" id="left-wave"></canvas>
+      </div>
+    </div>
+    
+    <div class="center-area">
+      <div class="panel hero-container glow">
+        <canvas class="hero-canvas" id="hero"></canvas>
+        <div class="hero-overlay">
+          <div>MODE: つぶやきGLSL</div>
+          <div>RES: vec2(r.x, r.y)</div>
+          <div id="hero-status">RENDERING...</div>
+        </div>
+        <div class="hero-coords">
+          <div id="iter-count">ITER: 30</div>
+          <div id="glow-val">GLOW: 0.003</div>
+          <div id="time-val">T: 0.000</div>
+        </div>
+      </div>
+      <div class="center-charts">
+        <div class="panel chart-panel">
+          <span class="chart-label">▹ CYAN CHANNEL</span>
+          <canvas class="chart-canvas" id="chart1"></canvas>
+        </div>
+        <div class="panel chart-panel">
+          <span class="chart-label">▹ MAGENTA EMISSION</span>
+          <canvas class="chart-canvas" id="chart2"></canvas>
+        </div>
+        <div class="panel chart-panel">
+          <span class="chart-label">▹ OSCILLATION</span>
+          <canvas class="chart-canvas" id="chart3"></canvas>
+        </div>
+      </div>
+    </div>
+    
+    <div class="right-panels">
+      <div class="panel spec-card">
+        <div class="spec-title">▹ SHADER SPEC</div>
+        <div class="spec-row"><span class="spec-key">TYPE</span><span class="spec-val">GLSL ES 3.0</span></div>
+        <div class="spec-row"><span class="spec-key">CHARS</span><span class="spec-val">140</span></div>
+        <div class="spec-row"><span class="spec-key">LOOPS</span><span class="spec-val">i=-15..15</span></div>
+        <div class="spec-row"><span class="spec-key">STEP</span><span class="spec-val">0.12</span></div>
+        <div class="spec-row"><span class="spec-key">SPEED</span><span class="spec-val">t*2</span></div>
+        <div class="spec-row"><span class="spec-key">ORIGIN</span><span class="spec-val">@YoheiN</span></div>
+      </div>
+      <div class="panel gauge-panel">
+        <div class="gauge-label">▹ LUMINOSITY</div>
+        <div class="gauge-ring">
+          <div class="gauge-arc" id="gauge-arc"></div>
+          <span class="gauge-value" id="lum-val">87</span>
+        </div>
+      </div>
+      <div class="panel spec-card">
+        <div class="spec-title">▹ COLOR MATRIX</div>
+        <div class="spec-row"><span class="spec-key">BAR</span><span class="spec-val" style="color:#00ccff">0,.8,1</span></div>
+        <div class="spec-row"><span class="spec-key">DOT</span><span class="spec-val" style="color:#cc00aa">.8,0,.5</span></div>
+        <div class="spec-row"><span class="spec-key">BG</span><span class="spec-val" style="color:#1a1a3a">INDIGO</span></div>
+        <div class="spec-row"><span class="spec-key">MIX</span><span class="spec-val">ADDITIVE</span></div>
+      </div>
+      <div class="panel hex-stream" id="hex-display"></div>
+      <div class="panel micro-panel">
+        <div class="micro-label">▹ GLOW FACTOR</div>
+        <div class="mini-bars" id="glow-bars"></div>
+      </div>
+    </div>
+    
+    <div class="bottom-telemetry">
+      <div class="panel telem-panel">
+        <span class="telem-label">▹ SINE PHASE</span>
+        <canvas class="telem-canvas" id="telem1"></canvas>
+      </div>
+      <div class="panel telem-panel">
+        <span class="telem-label">▹ SPECTRAL DENSITY</span>
+        <canvas class="telem-canvas" id="telem2"></canvas>
+      </div>
+      <div class="panel telem-panel">
+        <span class="telem-label">▹ BAR POSITIONS</span>
+        <canvas class="telem-canvas" id="telem3"></canvas>
+      </div>
+      <div class="panel log-panel" id="log-panel">
+        <div class="log-line"><span class="log-time">[00:00:00]</span> INIT SHADER</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // DURATION: 30
+
+    const hero = document.getElementById('hero');
+    const ctx = hero.getContext('2d');
+    
+    function resize() {
+      const rect = hero.parentElement.getBoundingClientRect();
+      hero.width = rect.width;
+      hero.height = rect.height;
+    }
+    resize();
+
+    // Initialize mini bars
+    const ampBars = document.getElementById('amp-bars');
+    const glowBarsEl = document.getElementById('glow-bars');
+    for (let i = 0; i < 12; i++) {
+      const bar = document.createElement('div');
+      bar.className = 'mini-bar';
+      bar.style.height = Math.random() * 15 + 5 + 'px';
+      ampBars.appendChild(bar);
+      const bar2 = document.createElement('div');
+      bar2.className = 'mini-bar';
+      bar2.style.height = Math.random() * 15 + 5 + 'px';
+      glowBarsEl.appendChild(bar2);
+    }
+
+    // Chart data arrays
+    const chartData1 = Array(60).fill(0).map(() => Math.random() * 0.5 + 0.25);
+    const chartData2 = Array(60).fill(0).map(() => Math.random() * 0.5 + 0.25);
+    const chartData3 = Array(60).fill(0).map(() => Math.random() * 0.5 + 0.25);
+    const telemData1 = Array(80).fill(0).map(() => Math.random());
+    const telemData2 = Array(80).fill(0).map(() => Math.random());
+    const telemData3 = Array(80).fill(0).map(() => Math.random());
+
+    // Hex stream
+    const hexDisplay = document.getElementById('hex-display');
+    let hexContent = '';
+    for (let i = 0; i < 200; i++) {
+      hexContent += Math.random().toString(16).substr(2, 2).toUpperCase() + ' ';
+      if (i % 8 === 7) hexContent += '\n';
+    }
+    hexDisplay.textContent = hexContent;
+
+    // Log panel
+    const logPanel = document.getElementById('log-panel');
+    const logMessages = [
+      'PARSE vec2 p=(FC.xy*2.-r)/r.y',
+      'INIT loop i=-15..15',
+      'CALC x=i*.12',
+      'COMPUTE a=x*5.-t*2.',
+      'SINE y=sin(a)*.1',
+      'DIST h=max(abs..)',
+      'ADD cyan .003/h',
+      'ADD magenta .006/len',
+      'OUTPUT o=vec4(c,1)',
+      'FRAME COMPLETE',
+    ];
+
+    function drawHero(t) {
+      const w = hero.width;
+      const h = hero.height;
+      const time = t / 1000;
+      
+      // Dark indigo gradient background
+      const grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, '#0a0614');
+      grad.addColorStop(0.5, '#0f0a1a');
+      grad.addColorStop(1, '#080410');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      
+      // Simulate the GLSL shader
+      const cx = w / 2;
+      const cy = h / 2;
+      const scale = h / 2;
+      
+      // Draw oscillating bars with glow
+      for (let i = -15; i <= 15; i++) {
+        const x = i * 0.12;
+        const a = x * 5 - time * 2;
+        const y = Math.sin(a) * 0.1;
+        
+        const screenX = cx + x * scale;
+        const barY = cy - y * scale;
+        
+        // Cyan bar glow
+        const barGrad = ctx.createLinearGradient(screenX, 0, screenX, h);
+        barGrad.addColorStop(0, 'rgba(0,204,255,0)');
+        barGrad.addColorStop(0.4, 'rgba(0,204,255,0.1)');
+        barGrad.addColorStop(0.5, 'rgba(0,204,255,0.4)');
+        barGrad.addColorStop(0.6, 'rgba(0,204,255,0.1)');
+        barGrad.addColorStop(1, 'rgba(0,204,255,0)');
+        
+        ctx.fillStyle = barGrad;
+        ctx.fillRect(screenX - 3, 0, 6, h);
+        
+        // Core cyan line
+        ctx.strokeStyle = 'rgba(0,255,255,0.8)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(screenX, cy - Math.abs(y) * scale);
+        ctx.lineTo(screenX, cy + Math.abs(y) * scale);
+        ctx.stroke();
+        
+        // Magenta dot at sine position
+        const dotSize = 8 + Math.sin(time * 3 + i) * 2;
+        const dotGrad = ctx.createRadialGradient(screenX, barY, 0, screenX, barY, dotSize * 2);
+        dotGrad.addColorStop(0, 'rgba(255,102,178,1)');
+        dotGrad.addColorStop(0.3, 'rgba(204,0,170,0.6)');
+        dotGrad.addColorStop(1, 'rgba(204,0,170,0)');
+        
+        ctx.fillStyle = dotGrad;
+        ctx.beginPath();
+        ctx.arc(screenX, barY, dotSize * 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Core magenta dot
+        ctx.fillStyle = '#ff66b2';
+        ctx.beginPath();
+        ctx.arc(screenX, barY, dotSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Subtle horizontal scan line
+      const scanY = (time * 100) % h;
+      ctx.fillStyle = 'rgba(0,255,255,0.05)';
+      ctx.fillRect(0, scanY, w, 2);
+    }
+
+    function drawThumbnails(t) {
+      const thumbs = document.querySelectorAll('.thumb-canvas');
+      thumbs.forEach((canvas, idx) => {
+        const phase = parseFloat(canvas.dataset.phase);
+        const rect = canvas.parentElement.getBoundingClientRect();
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+        const tCtx = canvas.getContext('2d');
+        const time = (t / 1000) + phase * 1.5;
+        
+        tCtx.fillStyle = '#0a0614';
+        tCtx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        const w = canvas.width;
+        const h = canvas.height;
+        const cx = w / 2;
+        const cy = h / 2;
+        const scale = h / 3;
+        
+        for (let i = -10; i <= 10; i += 2) {
+          const x = i * 0.12;
+          const a = x * 5 - time * 2;
+          const y = Math.sin(a) * 0.1;
+          const screenX = cx + x * scale;
+          const barY = cy - y * scale;
+          
+          tCtx.strokeStyle = 'rgba(0,255,255,0.5)';
+          tCtx.lineWidth = 1;
+          tCtx.beginPath();
+          tCtx.moveTo(screenX, cy - 5);
+          tCtx.lineTo(screenX, cy + 5);
+          tCtx.stroke();
+          
+          tCtx.fillStyle = '#ff66b2';
+          tCtx.beginPath();
+          tCtx.arc(screenX, barY, 2, 0, Math.PI * 2);
+          tCtx.fill();
+        }
+      });
+    }
+
+    function drawChart(canvasId, data, color, t) {
+      const canvas = document.getElementById(canvasId);
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height - 12;
+      const cCtx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      
+      cCtx.fillStyle = 'rgba(6,10,18,0.5)';
+      cCtx.fillRect(0, 0, w, h);
+      
+      // Grid
+      cCtx.strokeStyle = 'rgba(0,255,255,0.1)';
+      cCtx.lineWidth = 0.5;
+      for (let i = 0; i < 5; i++) {
+        const y = (h / 5) * i;
+        cCtx.beginPath();
+        cCtx.moveTo(0, y);
+        cCtx.lineTo(w, y);
+        cCtx.stroke();
+      }
+      
+      // Line
+      cCtx.strokeStyle = color;
+      cCtx.lineWidth = 1.5;
+      cCtx.shadowColor = color;
+      cCtx.shadowBlur = 4;
+      cCtx.beginPath();
+      data.forEach((val, i) => {
+        const x = (i / data.length) * w;
+        const y = h - val * h * 0.8 - h * 0.1;
+        if (i === 0) cCtx.moveTo(x, y);
+        else cCtx.lineTo(x, y);
+      });
+      cCtx.stroke();
+      cCtx.shadowBlur = 0;
+    }
+
+    function drawTelem(canvasId, data, color1, color2, t) {
+      const canvas = document.getElementById(canvasId);
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height - 14;
+      const tCtx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      
+      tCtx.fillStyle = 'rgba(6,10,18,0.3)';
+      tCtx.fillRect(0, 0, w, h);
+      
+      // Filled area
+      const grad = tCtx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, color1);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      
+      tCtx.fillStyle = grad;
+      tCtx.beginPath();
+      tCtx.moveTo(0, h);
+      data.forEach((val, i) => {
+        const x = (i / data.length) * w;
+        const y = h - val * h * 0.7 - h * 0.1;
+        tCtx.lineTo(x, y);
+      });
+      tCtx.lineTo(w, h);
+      tCtx.closePath();
+      tCtx.fill();
+      
+      // Line
+      tCtx.strokeStyle = color2;
+      tCtx.lineWidth = 1;
+      tCtx.beginPath();
+      data.forEach((val, i) => {
+        const x = (i / data.length) * w;
+        const y = h - val * h * 0.7 - h * 0.1;
+        if (i === 0) tCtx.moveTo(x, y);
+        else tCtx.lineTo(x, y);
+      });
+      tCtx.stroke();
+    }
+
+    function drawLeftWave(t) {
+      const canvas = document.getElementById('left-wave');
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      const wCtx = canvas.getContext('2d');
+      const w = canvas.width;
+      const h = canvas.height;
+      const time = t / 1000;
+      
+      wCtx.fillStyle = '#060a12';
+      wCtx.fillRect(0, 0, w, h);
+      
+      wCtx.strokeStyle = '#00ffff';
+      wCtx.lineWidth = 1;
+      wCtx.beginPath();
+      for (let y = 0; y < h; y++) {
+        const x = w/2 + Math.sin(y * 0.1 + time * 3) * (w/3);
+        if (y === 0) wCtx.moveTo(x, y);
+        else wCtx.lineTo(x, y);
+      }
+      wCtx.stroke();
+      
+      wCtx.strokeStyle = '#ff66b2';
+      wCtx.beginPath();
+      for (let y = 0; y < h; y++) {
+        const x = w/2 + Math.cos(y * 0.08 + time * 2) * (w/4);
+        if (y === 0) wCtx.moveTo(x, y);
+        else wCtx.lineTo(x, y);
+      }
+      wCtx.stroke();
+    }
+
+    function updateUI(t) {
+      const time = t / 1000;
+      const sec = Math.floor(time) % 60;
+      const min = Math.floor(time / 60) % 60;
+      document.getElementById('clock').textContent = 
+        `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}:${String(Math.floor((time%1)*100)).padStart(2,'0')}`;
+      
+      document.getElementById('coords').textContent = 
+        `X:${(Math.sin(time)*0.5).toFixed(2)} Y:${(Math.cos(time)*0.1).toFixed(2)}`;
+      
+      const pct = ((time % 30) / 30 * 100).toFixed(1);
+      document.getElementById('analysis-pct').textContent = pct + '%';
+      
+      document.getElementById('amplitude').textContent = (0.1 + Math.sin(time) * 0.02).toFixed(3);
+      document.getElementById('freq').textContent = (5 + Math.sin(time * 0.5) * 0.5).toFixed(1) + 'x';
+      document.getElementById('time-val').textContent = 'T: ' + time.toFixed(3);
+      document.getElementById('lum-val').textContent = Math.floor(80 + Math.sin(time * 2) * 15);
+      
+      const gaugeArc = document.getElementById('gauge-arc');
+      gaugeArc.style.transform = `rotate(${time * 30}deg)`;
+      
+      // Update bars
+      const ampBarsChildren = ampBars.children;
+      const glowBarsChildren = glowBarsEl.children;
+      for (let i = 0; i < ampBarsChildren.length; i++) {
+        ampBarsChildren[i].style.height = (5 + Math.abs(Math.sin(time * 2 + i * 0.5)) * 15) + 'px';
+        glowBarsChildren[i].style.height = (5 + Math.abs(Math.cos(time * 1.5 + i * 0.3)) * 15) + 'px';
+      }
+      
+      // Update chart data
+      chartData1.shift();
+      chartData1.push(0.5 + Math.sin(time * 3) * 0.3);
+      chartData2.shift();
+      chartData2.push(0.5 + Math.cos(time * 2.5) * 0.35);
+      chartData3.shift();
+      chartData3.push(0.5 + Math.sin(time * 4) * 0.25);
+      
+      telemData1.shift();
+      telemData1.push(0.5 + Math.sin(time * 5 + 1) * 0.4);
+      telemData2.shift();
+      telemData2.push(0.5 + Math.sin(time * 3 + 2) * 0.35);
+      telemData3.shift();
+      telemData3.push(0.5 + Math.cos(time * 4) * 0.3);
+      
+      // Update log
+      if (Math.floor(time * 2) % 3 === 0 && Math.floor(time * 2) !== window.lastLogTime) {
+        window.lastLogTime = Math.floor(time * 2);
+        const msg = logMessages[Math.floor(Math.random() * logMessages.length)];
+        const timeStr = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        const newLine = document.createElement('div');
+        newLine.className = 'log-line';
+        newLine.innerHTML = `<span class="log-time">[${timeStr}]</span> ${msg}`;
+        logPanel.appendChild(newLine);
+        if (logPanel.children.length > 8) logPanel.removeChild(logPanel.firstChild);
+      }
+    }
+
+    function renderAll(t) {
+      drawHero(t);
+      drawThumbnails(t);
+      drawChart('chart1', chartData1, '#00ffff', t);
+      drawChart('chart2', chartData2, '#ff66b2', t);
+      drawChart('chart3', chartData3, '#ffaa00', t);
+      drawTelem('telem1', telemData1, 'rgba(0,255,255,0.3)', '#00ffff', t);
+      drawTelem('telem2', telemData2, 'rgba(255,102,178,0.3)', '#ff66b2', t);
+      drawTelem('telem3', telemData3, 'rgba(255,170,0,0.3)', '#ffaa00', t);
+      drawLeftWave(t);
+      updateUI(t);
+    }
+
+    window.renderFrame = function(timeSeconds) {
+      const t = timeSeconds * 1000;
+      renderAll(t);
+      return null;
+    };
+
+    let start = performance.now();
+    function loop(ts) {
+      const t = ts - start;
+      renderAll(t);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    window.ready = true;
+  </script>
+<script>
+window.initToneJsEngine = async function() {
+  const bpm = 114;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0.06;
+  const barSeconds = (60 / bpm) * 4;
+  const plate = new Tone.Reverb({ decay: 4.3, wet: 0.32 }).toDestination();
+  await plate.generate();
+  const tapeDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.38, wet: 0.26 }).connect(plate);
+  const chorus = new Tone.Chorus({ frequency: 0.8, delayTime: 3.1, depth: 0.52, wet: 0.44 }).connect(tapeDelay).start();
+  const pumpBus = new Tone.Gain(0.85).connect(plate);
+  const pumpLfo = new Tone.LFO('4n', 0.6, 1).start();
+  pumpLfo.connect(pumpBus.gain);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.06,
+    octaves: 4,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.22 }
+  }).toDestination();
+  kick.volume.value = -7;
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    filter: { type: 'lowpass', frequency: 220, Q: 0.9 },
+    envelope: { attack: 0.018, decay: 0.22, sustain: 0.72, release: 0.34 },
+    filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.5, baseFrequency: 90, octaves: 2 }
+  }).connect(pumpBus);
+  bass.volume.value = -8;
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 1200, Q: 0.7 }).connect(chorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 1.1, decay: 0.45, sustain: 0.9, release: 3.2 }
+  }).connect(padFilter);
+  pad.volume.value = -16;
+  const arpFilter = new Tone.Filter({ type: 'lowpass', frequency: 1500, Q: 1.1 }).connect(tapeDelay);
+  const arp = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.004, decay: 0.16, sustain: 0.35, release: 0.18 }
+  }).connect(arpFilter);
+  arp.volume.value = -14;
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'square' },
+    filter: { type: 'lowpass', frequency: 1400, Q: 0.9 },
+    envelope: { attack: 0.05, decay: 0.25, sustain: 0.62, release: 0.7 }
+  }).connect(chorus);
+  lead.volume.value = -11;
+  const clapFilter = new Tone.Filter({ type: 'highpass', frequency: 1500 }).connect(plate);
+  const clap = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.08 }
+  }).connect(clapFilter);
+  clap.volume.value = -14;
+  const hat = new Tone.MetalSynth({
+    frequency: 7500,
+    envelope: { attack: 0.001, decay: 0.12, release: 0.04 },
+    harmonicity: 7,
+    modulationIndex: 14,
+    resonance: 7200
+  }).connect(plate);
+  hat.volume.value = -18;
+  let kickStep = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    const pos = kickStep % 4;
+    if (phraseBar >= 4 && (pos === 0 || pos === 2)) {
+      kick.triggerAttackRelease('C1', '8n', time, 0.85);
+    } else if (phraseBar < 4 && pos === 0) {
+      kick.triggerAttackRelease('C1', '8n', time, 0.6);
+    }
+    kickStep++;
+  }, '4n').start(0);
+  const strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 1.4, decay: 0.6, sustain: 0.8, release: 3.6 }
+  }).connect(plate);
+  strings.volume.value = -20;
+  const bassSections = [
+    ['F#2', 'F#2', 'D2', 'D2'],
+    ['F#2', 'D2', 'A1', 'E2', 'F#2', 'E2', 'D2', 'E2'],
+    ['F#2', 'F#2', 'D2', 'D2']
+  ];
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    let pattern = bassSections[0];
+    if (phraseBar >= 4 && phraseBar < 12) pattern = bassSections[1];
+    if (phraseBar >= 12) pattern = bassSections[2];
+    const velocity = phraseBar < 4 ? 0.55 : phraseBar < 12 ? 0.82 : 0.5;
+    bass.triggerAttackRelease(pattern[bassIdx % pattern.length], '8n', time, velocity);
+    bassIdx++;
+  }, '8n').start(0);
+  const padChords = [
+    ['F#3', 'A3', 'C#4', 'F#4'],
+    ['D3', 'F#3', 'A3', 'D4'],
+    ['A2', 'E3', 'A3', 'C#4'],
+    ['E3', 'G#3', 'B3', 'E4']
+  ];
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    const vel = phraseBar < 4 ? 0.36 : phraseBar < 12 ? 0.56 : 0.34;
+    pad.triggerAttackRelease(padChords[padIdx % padChords.length], '1m', time, vel);
+    padIdx++;
+  }, '1m').start(0);
+  const arpNotes = ['C#5', 'B4', 'A4', 'F#4', 'A4', 'B4', 'C#5', 'E5'];
+  let arpIdx = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    if (phraseBar >= 2 && phraseBar < 12) {
+      const vel = 0.3 + Math.random() * 0.07;
+      arp.triggerAttackRelease(arpNotes[arpIdx % arpNotes.length], '8n', time, vel);
+      arpIdx++;
+    }
+  }, '8n').start(0);
+  const leadMelody = ['C#5', 'B4', 'A4', 'F#4', null, 'E4', 'A4', 'B4', 'C#5', null, 'B4', 'A4', 'F#4', 'E4', null, 'D4'];
+  let leadIdx = 0;
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    if (phraseBar >= 8 && phraseBar < 12) {
+      const note = leadMelody[leadIdx % leadMelody.length];
+      if (note) lead.triggerAttackRelease(note, '4n', time, 0.65);
+      leadIdx++;
+    }
+  }, '4n').start(0);
+  let clapBeat = 0;
+  const clapLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    const pos = clapBeat % 4;
+    if (phraseBar >= 4 && phraseBar < 12 && (pos === 1 || pos === 3)) {
+      clap.triggerAttackRelease('16n', time, 0.65);
+    }
+    clapBeat++;
+  }, '4n').start(0);
+  let hatStep = 0;
+  const hatPattern = [0, 1, 0, 1, 1, 0, 1, 0];
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    if (phraseBar >= 6 && phraseBar < 12 && hatPattern[hatStep % hatPattern.length]) {
+      hat.triggerAttackRelease('16n', time, 0.36 + Math.random() * 0.08);
+    }
+    hatStep++;
+  }, '8n').start(0);
+  const stringChords = padChords;
+  let stringIdx = 0;
+  const stringLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    if (phraseBar >= 10 && phraseBar < 12) {
+      strings.triggerAttackRelease(stringChords[stringIdx % stringChords.length], '2m', time, 0.32);
+      stringIdx++;
+    }
+  }, '2m').start(0);
+  const evolveLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const phraseBar = bar % 14;
+    if (phraseBar === 2) {
+      padFilter.frequency.setValueAtTime(1200, time);
+      padFilter.frequency.linearRampToValueAtTime(2200, time + barSeconds * 6);
+    }
+    if (phraseBar === 8) {
+      padFilter.frequency.setValueAtTime(2200, time);
+      padFilter.frequency.linearRampToValueAtTime(900, time + barSeconds * 6);
+      arpFilter.frequency.setValueAtTime(1500, time);
+      arpFilter.frequency.linearRampToValueAtTime(900, time + barSeconds * 4);
+    }
+  }, '1m').start(0);
+  window.toneJsInstruments = {
+    kick,
+    bass,
+    pad,
+    arp,
+    lead,
+    clap,
+    hat,
+    strings,
+    plate,
+    tapeDelay,
+    chorus,
+    pumpBus,
+    pumpLfo,
+    padFilter,
+    arpFilter
+  };
+  window.toneJsParts = {
+    kickLoop,
+    bassLoop,
+    padLoop,
+    arpLoop,
+    leadLoop,
+    clapLoop,
+    hatLoop,
+    stringLoop,
+    evolveLoop
+  };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

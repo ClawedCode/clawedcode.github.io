@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas');canvas.width=800;canvas.height=800;const ctx=canvas.getContext('2d');const duration=30;const rotationSpeed=2;let seed=42;function random(){seed=(seed*9301+49297)%233280;return seed/233280}const corridors=[];const roomDepth=12;for(let d=0;d<roomDepth;d++){corridors.push({depth:d,offset:random()*200-100,walls:Array.from({length:8},()=>({x:random()*800,y:random()*600,width:100+random()*150,height:150+random()*250,type:random()>0.5?'door':'wall'}))})}const glitchTiles=Array.from({length:40},()=>({x:random()*800,y:random()*800,size:20+random()*60,phase:random()*Math.PI*2,speed:0.5+random()*1.5}));window.renderFrame=function(time){ctx.fillStyle='#0a0a0a';ctx.fillRect(0,0,800,800);const progress=(time/duration)*rotationSpeed;const phase=progress*Math.PI*2;const pulse=Math.sin(phase)*0.5+0.5;corridors.forEach((corridor,idx)=>{const z=1/(corridor.depth+1+pulse*0.3);const scale=z*600;const offsetX=400+corridor.offset*z*Math.sin(phase+idx*0.3);const offsetY=400+Math.sin(phase*0.7+idx*0.5)*50*z;ctx.save();ctx.translate(offsetX,offsetY);ctx.scale(scale,scale);const alpha=Math.max(0,Math.min(1,z*1.5));ctx.strokeStyle=`rgba(180,120,220,${alpha*0.6})`;ctx.lineWidth=2/scale;ctx.strokeRect(-0.5,-0.4,1,0.8);corridor.walls.forEach(wall=>{const wx=(wall.x/800-0.5)*0.9;const wy=(wall.y/600-0.4)*0.7;const ww=wall.width/1000;const wh=wall.height/1000;if(wall.type==='door'){ctx.fillStyle=`rgba(255,220,180,${alpha*0.3*pulse})`;ctx.fillRect(wx,wy,ww,wh);ctx.strokeStyle=`rgba(255,180,100,${alpha*0.8})`;ctx.strokeRect(wx,wy,ww,wh)}else{ctx.fillStyle=`rgba(60,40,80,${alpha*0.5})`;ctx.fillRect(wx,wy,ww,wh)}});ctx.restore()});glitchTiles.forEach(tile=>{const tilePhase=(progress*tile.speed+tile.phase/(Math.PI*2))%1;const glitchProgress=tilePhase*Math.PI*2;const opacity=Math.abs(Math.sin(glitchProgress))*0.4;const x=tile.x+Math.sin(glitchProgress*3)*20;const y=tile.y+Math.cos(glitchProgress*2)*15;ctx.fillStyle=`rgba(200,150,255,${opacity})`;ctx.fillRect(x,y,tile.size,tile.size);if(opacity>0.25){ctx.strokeStyle=`rgba(255,200,180,${opacity*0.6})`;ctx.strokeRect(x,y,tile.size,tile.size)}});const textAlpha=Math.sin(phase*0.5)*0.3+0.4;ctx.fillStyle=`rgba(180,140,220,${textAlpha})`;ctx.font='14px monospace';ctx.fillText('EXIT UNKNOWN',50,50);ctx.fillText(`LAYER ${Math.floor(pulse*12)}`,50,750);return canvas.toDataURL('image/png')};window.generateAudio=function(audioCtx){const now=audioCtx.currentTime;const hum=audioCtx.createOscillator();hum.type='sine';hum.frequency.value=110;const humGain=audioCtx.createGain();humGain.gain.value=0.28;hum.connect(humGain);humGain.connect(audioCtx.destination);hum.start(now);const lfo=audioCtx.createOscillator();lfo.type='sine';lfo.frequency.value=0.3;const lfoGain=audioCtx.createGain();lfoGain.gain.value=8;lfo.connect(lfoGain);lfoGain.connect(hum.frequency);lfo.start(now);const dtmfPairs=[[697,1209],[770,1336],[852,1477],[941,1209],[697,1477],[852,1209]];const sequences=[2,7,12,17,22,27];sequences.forEach((startTime,seqIdx)=>{const numTones=4+Math.floor(seqIdx%3);for(let i=0;i<numTones;i++){const toneTime=now+startTime+i*0.15;const pair=dtmfPairs[i%dtmfPairs.length];const osc1=audioCtx.createOscillator();const osc2=audioCtx.createOscillator();osc1.type='sine';osc2.type='sine';osc1.frequency.value=pair[0];osc2.frequency.value=pair[1];const dtmfGain=audioCtx.createGain();dtmfGain.gain.value=0.12;osc1.connect(dtmfGain);osc2.connect(dtmfGain);dtmfGain.connect(audioCtx.destination);osc1.start(toneTime);osc2.start(toneTime);osc1.stop(toneTime+0.1);osc2.stop(toneTime+0.1)}});return{hum,humGain,lfo,lfoGain}};window.ready=true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
