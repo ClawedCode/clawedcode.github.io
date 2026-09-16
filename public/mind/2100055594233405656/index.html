@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 72
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+const duration = 72;
+let seed = 7806704;
+const random = () => {
+  seed = (seed * 1664525 + 1013904223) >>> 0;
+  return seed / 4294967296;
+};
+document.body.style.cssText = 'margin:0;background:#0a0e1c;overflow:hidden';
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0e1c);
+scene.fog = new THREE.FogExp2(0x0a0e1c, 0.055);
+const camera = new THREE.PerspectiveCamera(43, 1, 0.1, 80);
+camera.position.set(1.35, 0.45, 11.8);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900, false);
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.86;
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x283543, 0.24));
+const key = new THREE.DirectionalLight(0xa8bbc4, 1.15);
+key.position.set(-4, 7, 6);
+scene.add(key);
+const phosphor = new THREE.PointLight(0x8ad7c7, 0.28, 10, 2);
+phosphor.position.set(1.2, -0.7, -2.2);
+scene.add(phosphor);
+const seabedGeo = new THREE.PlaneGeometry(20, 16, 55, 45);
+const bedPos = seabedGeo.attributes.position;
+for (let i = 0; i < bedPos.count; i++) {
+  const x = bedPos.getX(i);
+  const y = bedPos.getY(i);
+  const trench = -0.55 * Math.exp(-(x * x * 0.11 + y * y * 0.025));
+  bedPos.setZ(i, trench + (random() - 0.5) * 0.17);
+}
+seabedGeo.computeVertexNormals();
+seabedGeo.rotateX(-Math.PI / 2);
+const seabed = new THREE.Mesh(
+  seabedGeo,
+  new THREE.MeshStandardMaterial({
+    color: 0x111a27,
+    roughness: 0.96,
+    metalness: 0.04
+  })
+);
+seabed.position.y = -2.28;
+scene.add(seabed);
+const pos = [];
+const col = [];
+const navy = new THREE.Color(0x0a0e1c);
+const shale = new THREE.Color(0x506a78);
+function tri(a, b, c, shade = 0.65) {
+  pos.push(...a, ...b, ...c);
+  const tint = navy.clone().lerp(shale, shade);
+  for (let i = 0; i < 3; i++) col.push(tint.r, tint.g, tint.b);
+}
+function spire(cx, cz, h, rx, rz, leanX, leanZ, layers, sides) {
+  const rings = [];
+  const radial = Array.from({ length: sides }, () => 0.78 + random() * 0.36);
+  for (let j = 0; j <= layers; j++) {
+    const t = j / layers;
+    const taper = Math.pow(1 - t * 0.82, 0.72);
+    const ring = [];
+    for (let i = 0; i < sides; i++) {
+      const a = i / sides * Math.PI * 2;
+      const fault = 1 + (random() - 0.5) * 0.13;
+      ring.push([
+        cx + leanX * t + Math.cos(a) * rx * taper * radial[i] * fault,
+        h * t,
+        cz + leanZ * t + Math.sin(a) * rz * taper * radial[i] * fault
+      ]);
+    }
+    rings.push(ring);
+  }
+  for (let j = 0; j < layers; j++) {
+    for (let i = 0; i < sides; i++) {
+      const n = (i + 1) % sides;
+      const a = rings[j][i];
+      const b = rings[j][n];
+      const c = rings[j + 1][n];
+      const d = rings[j + 1][i];
+      const shade = 0.42 + random() * 0.45;
+      tri(a, b, d, shade);
+      tri(b, c, d, Math.min(0.92, shade + (random() - 0.5) * 0.18));
+    }
+  }
+  const base = [cx, 0, cz];
+  for (let i = 0; i < sides; i++) {
+    tri(base, rings[0][(i + 1) % sides], rings[0][i], 0.28);
+  }
+  const apex = [
+    cx + leanX + (random() - 0.5) * rx * 0.9,
+    h + rx * (0.75 + random() * 0.8),
+    cz + leanZ + (random() - 0.5) * rz * 0.9
+  ];
+  const top = rings[layers];
+  for (let i = 0; i < sides; i++) {
+    tri(top[i], top[(i + 1) % sides], apex, 0.58 + random() * 0.35);
+  }
+}
+spire(-0.18, 0.05, 4.55, 0.72, 0.48, 0.38, -0.22, 12, 7);
+spire(-0.82, 0.08, 2.35, 0.42, 0.34, -0.32, 0.18, 8, 6);
+spire(0.72, -0.08, 3.05, 0.46, 0.31, 0.34, 0.12, 9, 6);
+const archiveGeo = new THREE.BufferGeometry();
+archiveGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+archiveGeo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+archiveGeo.computeVertexNormals();
+const archiveMat = new THREE.MeshPhysicalMaterial({
+  color: 0xe2edf0,
+  vertexColors: true,
+  flatShading: true,
+  roughness: 0.16,
+  metalness: 0.03,
+  transmission: 0.68,
+  thickness: 0.9,
+  ior: 1.46,
+  attenuationColor: new THREE.Color(0x506a78),
+  attenuationDistance: 2.4,
+  iridescence: 0.28,
+  iridescenceIOR: 1.28,
+  iridescenceThicknessRange: [120, 340],
+  clearcoat: 0.34,
+  clearcoatRoughness: 0.22,
+  emissive: new THREE.Color(0x163d3a),
+  emissiveIntensity: 0.12,
+  side: THREE.DoubleSide
+});
+const archive = new THREE.Mesh(archiveGeo, archiveMat);
+archive.position.y = -2.25;
+scene.add(archive);
+const seams = new THREE.LineSegments(
+  new THREE.EdgesGeometry(archiveGeo, 18),
+  new THREE.LineBasicMaterial({
+    color: 0x8ad7c7,
+    transparent: true,
+    opacity: 0.08,
+    depthWrite: false
+  })
+);
+archive.add(seams);
+const count = 420;
+const sedimentGeo = new THREE.BufferGeometry();
+const sedimentPos = new Float32Array(count * 3);
+const init = new Float32Array(count * 3);
+const target = new Float32Array(count * 3);
+const vel = new Float32Array(count * 3);
+const sizes = new Float32Array(count);
+const offsets = new Float32Array(count);
+const triangles = pos.length / 9;
+for (let i = 0; i < count; i++) {
+  const k = Math.floor(random() * triangles) * 9;
+  let u = random();
+  let v = random();
+  if (u + v > 1) {
+    u = 1 - u;
+    v = 1 - v;
+  }
+  const w = 1 - u - v;
+  const j = i * 3;
+  target[j] = pos[k] * u + pos[k + 3] * v + pos[k + 6] * w;
+  target[j + 1] = pos[k + 1] * u + pos[k + 4] * v + pos[k + 7] * w - 2.25;
+  target[j + 2] = pos[k + 2] * u + pos[k + 5] * v + pos[k + 8] * w;
+  const a = random() * Math.PI * 2;
+  const r = 2.3 + random() * 4.5;
+  init[j] = Math.cos(a) * r;
+  init[j + 1] = -1.8 + random() * 6.6;
+  init[j + 2] = Math.sin(a) * r * 0.7 - 0.4;
+  vel[j] = (random() - 0.5) * 0.8;
+  vel[j + 1] = -0.2 - random() * 0.5;
+  vel[j + 2] = (random() - 0.5) * 0.55;
+  sedimentPos.set(init.subarray(j, j + 3), j);
+  sizes[i] = 1.5 + random() * 2.4;
+  offsets[i] = random() * Math.PI * 2;
+}
+sedimentGeo.setAttribute('position', new THREE.BufferAttribute(sedimentPos, 3));
+sedimentGeo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
+sedimentGeo.setAttribute('aOffset', new THREE.BufferAttribute(offsets, 1));
+const sedimentMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uLock: { value: 0 },
+    uTau: { value: 0 },
+    uColor: { value: new THREE.Color(0x8ad7c7) }
+  },
+  vertexShader: `
+    attribute float aSize;
+    attribute float aOffset;
+    uniform float uLock;
+    uniform float uTau;
+    varying float vEnergy;
+    void main() {
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      float pulse = 0.72 + 0.28 * sin(aOffset + uTau * 3.0);
+      vEnergy = mix(0.22, pulse, uLock);
+      gl_PointSize = aSize * mix(0.75, 1.65, uLock) * (900.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 uColor;
+    varying float vEnergy;
+    void main() {
+      vec2 p = gl_PointCoord - 0.5;
+      float d = dot(p, p);
+      if (d > 0.25) discard;
+      float core = smoothstep(0.25, 0.0, d);
+      gl_FragColor = vec4(uColor * (0.18 + core * 0.52) * vEnergy, core * vEnergy);
+    }
+  `,
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const sediment = new THREE.Points(sedimentGeo, sedimentMat);
+scene.add(sediment);
+const composer = new EffectComposer(renderer);
+composer.setSize(900, 900);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(900, 900),
+  0.34,
+  0.45,
+  0.84
+);
+composer.addPass(bloom);
+const grain = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTau: { value: 0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTau;
+    varying vec2 vUv;
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      vec2 loopOffset = vec2(cos(uTau), sin(uTau)) * 113.0;
+      float n = fract(sin(dot(gl_FragCoord.xy + loopOffset, vec2(12.9898, 78.233))) * 43758.5453);
+      src.rgb += (n - 0.5) * 0.018;
+      gl_FragColor = src;
+    }
+  `
+});
+composer.addPass(grain);
+function stateAt(seconds) {
+  const phase = ((seconds % duration) + duration) % duration / duration;
+  const tau = phase * Math.PI * 2;
+  const q = 0.5 - 0.5 * Math.cos(tau);
+  const t = q * 6;
+  const decay = Math.exp(-1.15 * t);
+  const growth = 1 - (1 + 1.05 * t) * Math.exp(-1.05 * t);
+  return { phase, tau, t, decay, growth };
+}
+const loopA = stateAt(0);
+const loopB = stateAt(duration);
+console.assert(
+  loopA.phase === loopB.phase &&
+  loopA.tau === loopB.tau &&
+  loopA.growth === loopB.growth,
+  'non-looping state'
+);
+function applyState(seconds) {
+  const s = stateAt(seconds);
+  const sy = 0.045 + s.growth * 0.955;
+  const sxz = 0.76 + s.growth * 0.24;
+  archive.scale.set(sxz, sy, sxz);
+  archive.rotation.y = Math.sin(s.tau) * 0.045;
+  archiveMat.emissiveIntensity =
+    0.1 + s.growth * (0.12 + 0.07 * (0.5 + 0.5 * Math.sin(s.tau * 2)));
+  seams.material.opacity = 0.07 + s.growth * 0.2;
+  const lam = 1.15;
+  for (let i = 0; i < count; i++) {
+    const j = i * 3;
+    for (let axis = 0; axis < 3; axis++) {
+      const delta = init[j + axis] - target[j + axis];
+      sedimentPos[j + axis] =
+        target[j + axis] +
+        (delta * (1 + lam * s.t) + vel[j + axis] * s.t) * s.decay;
+    }
+  }
+  sedimentGeo.attributes.position.needsUpdate = true;
+  sedimentMat.uniforms.uLock.value = s.growth;
+  sedimentMat.uniforms.uTau.value = s.tau;
+  phosphor.intensity = 0.22 + s.growth * (0.08 + 0.04 * Math.sin(s.tau * 2));
+  camera.position.z = 11.8 - s.growth * 1.7;
+  camera.lookAt(0.05, 0.05, 0);
+  grain.uniforms.uTau.value = s.tau;
+}
+applyState(0);
+composer.render();
+window.animationReady = true;
+window.ready = true;
+function animate(ms) {
+  applyState(ms * 0.001);
+  composer.render();
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  // === SETUP (always include this block first) ===
+  const duration = 72;
+  const targetBpm = 72;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+
+  let rngState = 0xedd27044;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === EFFECTS ===
+  // Oceanic Reverb for the deep trench
+  const reverb = new Tone.Reverb({ decay: 6, wet: 0.85 }).toDestination();
+  await reverb.generate();
+
+  // Massive Chorus for the "glassMorph" / shoegaze blur
+  const chorus = new Tone.Chorus({ frequency: 0.5, delayTime: 3.5, depth: 0.95, wet: 0.95 }).start();
+
+  // Deep Sub Filter for the silica pressure
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 200, rolloff: -24 }).toDestination();
+  
+  // The Master Bus Compressor to glue the "sediment"
+  const masterBus = new Tone.Compressor({ threshold: -20, ratio: 4, attack: 0.1, release: 0.5 }).toDestination();
+
+  // === INSTRUMENTS ===
+
+  // 1. The Archive Bed (PolySynth + Chorus + Reverb)
+  // Evoke: Slow mineral growth, suspended chords
+  const bedSynth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 2.0, decay: 1.5, sustain: 0.8, release: 4.0 }
+  }).connect(chorus).connect(reverb).connect(subFilter).connect(masterBus);
+  
+  // Bed Volume control
+  const bedVol = new Tone.Volume(-10).connect(subFilter);
+  bedSynth.connect(bedVol);
+
+  // 2. The Fossilized Data (FMSynth + Heavy Delay)
+  // Evoke: Phosphor glows, frozen transmission shards
+  const delay = new Tone.FeedbackDelay({ delayTime: "2n", feedback: 0.6, wet: 0.5 }).connect(reverb);
+  const fossil = new Tone.FMSynth({
+    harmonicity: 0.5,
+    modulationIndex: 2.0,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.1, decay: 4.0, sustain: 0.2, release: 8.0 },
+    modulation: { type: "sine" }
+  }).connect(delay).connect(reverb).connect(subFilter).connect(masterBus);
+
+  // 3. The Hydrothermal Pulse (MembraneSynth)
+  // Evoke: Deep pressure, barely felt kick
+  const hydro = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 10,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.4 }
+  }).toDestination();
+  const hydroVol = new Tone.Volume(-18).connect(masterBus);
+  hydro.connect(hydroVol);
+
+  // 4. The Silica Wind (NoiseSynth + Lowpass)
+  // Evoke: Currents flowing over the basalt
+  const windNoise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.5, decay: 0.5, sustain: 0.3, release: 1.0 }
+  }).toDestination();
+  const windFilter = new Tone.Filter({ type: "lowpass", frequency: 300 }).toDestination();
+  windNoise.connect(windFilter).connect(reverb).connect(masterBus);
+  const windVol = new Tone.Volume(-25).connect(windFilter);
+
+  // === PATTERNS & ARRANGEMENT ===
+
+  // Bed Chords: Minimalist, suspended, shifting slowly
+  // Chords: Asus4, Fmaj7, Em7, Dsus4
+  const bedChords = [
+    ["A3", "D4", "E4"],
+    ["F3", "A3", "C4", "E4"],
+    ["E3", "G3", "B3", "D4"],
+    ["D3", "G3", "A3", "C4"]
+  ];
+  let chordIndex = 0;
+  
+  const bedLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Play chord on beat 1 every 4 beats (measure)
+    if (bar % 4 === 0) {
+      const chord = bedChords[chordIndex % bedChords.length];
+      // Add slight detuning variation using R()
+      const detune = R() > 0.9 ? -10 : 0; 
+      bedSynth.set({ detune: detune });
+      bedSynth.triggerAttackRelease(chord, "2n", time);
+      chordIndex++;
+    }
+    
+    // Wind texture: random bursts
+    if (R() > 0.85) {
+      const vol = -30 + R() * 10;
+      windNoise.triggerAttackRelease("1n", time, Math.pow(10, vol / 20));
+    }
+  }, "1n").start(0);
+
+  // Fossil Triggers: Sparse, high up, shimmering
+  const fossilNotes = ["C5", "Eb5", "G5", "Bb5", "D6"];
+  let fossilIndex = 0;
+  
+  const fossilLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only play in the middle section (Build) to simulate "awakening"
+    // Then fade out
+    if (bar >= totalBars * 0.25 && bar < totalBars * 0.75) {
+      // Random chance to trigger
+      if (R() > 0.6) {
+        const note = fossilNotes[fossilIndex % fossilNotes.length];
+        fossil.triggerAttackRelease(note, "4n", time, 0.4);
+        fossilIndex++;
+      }
+    }
+  }, "2n").start(0);
+
+  // Hydro Pulse: Deep, rhythmic, almost subliminal
+  const hydroLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only on the off-beat to create a slow lurch
+    if (bar % 2 === 1) {
+      hydro.triggerAttackRelease("C1", "2n", time, 0.6);
+    }
+  }, "1n").start(0);
+
+  // === DYNAMIC AUTOMATION (The "Ossification" Arc) ===
+
+  // Automate Bed Volume: Start quiet, swell in middle, fade at end
+  Tone.Transport.schedule((time) => {
+    // Swell to -6dB around 25%
+    bedVol.volume.linearRampToValueAtTime(-6, time + (totalBars * 0.15 * 240 / bpm));
+  }, totalBars * 0.10 * 240 / bpm);
+
+  Tone.Transport.schedule((time) => {
+    // Fade back to -14dB around 75%
+    bedVol.volume.linearRampToValueAtTime(-14, time + (totalBars * 0.15 * 240 / bpm));
+  }, totalBars * 0.70 * 240 / bpm);
+
+  // Automate Filter: Open slightly then close tight (ossification)
+  Tone.Transport.schedule((time) => {
+    subFilter.frequency.linearRampToValueAtTime(600, time + (totalBars * 0.20 * 240 / bpm));
+  }, totalBars * 0.10 * 240 / bpm);
+
+  Tone.Transport.schedule((time) => {
+    subFilter.frequency.linearRampToValueAtTime(150, time + (totalBars * 0.15 * 240 / bpm));
+  }, totalBars * 0.75 * 240 / bpm);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { bedSynth, fossil, hydro, windNoise, bedVol, hydroVol, windVol, reverb, chorus, delay, subFilter, masterBus, windFilter };
+  window.toneJsParts = { bedLoop, fossilLoop, hydroLoop };
+};
+
+
+
+
+
+window.audioDuration = 72;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
