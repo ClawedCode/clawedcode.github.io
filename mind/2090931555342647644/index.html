@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+float noise2(vec2 p){
+  vec2 i=floor(p);vec2 f=fract(p);
+  vec2 u=f*f*(3.0-2.0*f);
+  float a=fract(sin(dot(i,vec2(127.1,311.7)))*43758.5453);
+  float b=fract(sin(dot(i+vec2(1.0,0.0),vec2(127.1,311.7)))*43758.5453);
+  float c=fract(sin(dot(i+vec2(0.0,1.0),vec2(127.1,311.7)))*43758.5453);
+  float d=fract(sin(dot(i+vec2(1.0,1.0),vec2(127.1,311.7)))*43758.5453);
+  return mix(mix(a,b,u.x),mix(c,d,u.x),u.y);
+}
+float fbm(vec2 p){
+  float v=0.0;float amp=0.5;
+  for(int i=0;i<3;i++){
+    v+=amp*noise2(p);
+    p=p*2.13+vec2(3.1,1.7);
+    amp*=0.5;
+  }
+  return v;
+}
+
+float heartbeat(float ph){
+  float cyc=fract(ph);
+  float lub=pow(max(0.0,1.0-abs(cyc-0.12)*9.0),2.0);
+  float dub=pow(max(0.0,1.0-abs(cyc-0.34)*11.0),2.0)*0.6;
+  return lub+dub;
+}
+
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+  float t=mod(iTime,30.0);
+  float phase=t*0.20943951;
+
+  float beatPh=t*0.8;
+  float beat=heartbeat(beatPh);
+
+  float r=length(uv);
+  float breath=0.5-0.5*cos(phase);
+  float growth=0.24+0.42*breath+beat*0.03;
+
+  float ang=atan(uv.y,uv.x);
+  float wob=fbm(vec2(ang*2.2,phase*0.5))*0.14;
+  float mask=smoothstep(growth+wob,growth+wob-0.28,r);
+
+  vec2 tp=uv*3.4;
+  float tissue=fbm(tp+vec2(0.0,phase*0.3));
+  vec3 necro=mix(vec3(0.10,0.11,0.10),vec3(0.24,0.26,0.22),tissue);
+  necro*=0.85+0.15*fbm(uv*9.0);
+
+  float sp=fbm(uv*6.5+vec2(phase*0.6,-phase*0.4));
+  float ridg=1.0-abs(2.0*sp-1.0);
+  float thr=0.62-beat*0.10-breath*0.06;
+  float spots=smoothstep(thr,thr+0.16,ridg);
+
+  vec3 flesh=mix(vec3(0.26,0.09,0.07),vec3(0.80,0.38,0.12),spots);
+  flesh*=0.65+0.35*tissue;
+  flesh+=vec3(0.9,0.3,0.12)*spots*beat*0.8;
+
+  float veinsF=1.0-abs(2.0*fbm(uv*4.0+vec2(7.7,phase*0.25))-1.0);
+  float veins=smoothstep(0.86,0.97,veinsF)*mask;
+  flesh+=vec3(0.6,0.14,0.10)*veins*(0.4+0.6*beat);
+
+  vec3 col=mix(necro,flesh,mask);
+
+  float rimB=smoothstep(growth+wob-0.30,growth+wob-0.02,r)*mask;
+  col+=vec3(0.9,0.5,0.2)*rimB*0.35*(0.5+0.5*beat);
+
+  col+=vec3(1.0,0.5,0.25)*(0.05/(r*r+0.05))*beat*0.35;
+
+  float vig=1.0-0.45*dot(uv,uv);
+  col*=vig;
+  col=pow(col,vec3(0.95));
+  gl_FragColor=vec4(col,1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 30;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 30;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const bpm = 96;
+  Tone.Transport.bpm.value = bpm;
+  const totalBars = Math.round(30 * bpm / 240);
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  const limiter = new Tone.Limiter(-3).toDestination();
+  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.4 }).connect(limiter);
+  const lp = new Tone.Filter({ type: "lowpass", frequency: 900, Q: 0.7 }).connect(reverb);
+
+  const heart = new Tone.MembraneSynth({
+    pitchDecay: 0.06,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.28, sustain: 0.01, release: 0.5 },
+    volume: -8
+  }).connect(limiter);
+
+  const drone = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    filter: { type: "lowpass", frequency: 240, Q: 2 },
+    envelope: { attack: 2.5, decay: 1.0, sustain: 0.9, release: 3.0 },
+    volume: -18
+  }).connect(reverb);
+
+  const breathNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 1.6, decay: 1.4, sustain: 0.15, release: 1.8 },
+    volume: -24
+  }).connect(lp);
+
+  const nerve = new Tone.FMSynth({
+    harmonicity: 5.07,
+    modulationIndex: 14,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.4, sustain: 0.0, release: 0.8 },
+    modulation: { type: "square" },
+    modulationEnvelope: { attack: 0.01, decay: 0.35, sustain: 0.1, release: 0.6 },
+    volume: -24
+  }).connect(reverb);
+
+  // Lub-dub every half note (1.25s at 96 BPM) — matches the visual heartbeat exactly
+  const heartLoop = new Tone.Loop((time) => {
+    heart.triggerAttackRelease("A0", "8n", time + H(2), 1.0);
+    heart.triggerAttackRelease("G0", "16n", time + 0.22 + H(2), 0.55);
+  }, "2n").start(0);
+
+  const droneNotes = ["A1", "A1", "G1", "A1"];
+  let droneIdx = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    drone.triggerAttackRelease(droneNotes[droneIdx % droneNotes.length], "2m", time + H(12), 0.7);
+    droneIdx++;
+  }, "2m").start(0);
+
+  let breathIdx = 0;
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.12 && bar < totalBars * 0.85 && breathIdx % 2 === 0) {
+      breathNoise.triggerAttackRelease("1m", time + H(25), 0.6);
+    }
+    breathIdx++;
+  }, "1m").start(0);
+
+  const nerveNotes = ["E5", "Bb4", "C#5", "G4"];
+  let nerveIdx = 0;
+  const nerveLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.30 && bar < totalBars * 0.78 && nerveIdx % 3 === 0) {
+      nerve.triggerAttackRelease(nerveNotes[nerveIdx % nerveNotes.length], "8n", time + H(10), 0.4);
+    }
+    nerveIdx++;
+  }, "2n").start(0);
+
+  window.toneJsInstruments = { heart, drone, breathNoise, nerve, reverb, lp, limiter };
+  window.toneJsParts = { heartLoop, droneLoop, breathLoop, nerveLoop };
+};
+
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

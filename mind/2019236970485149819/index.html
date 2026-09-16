@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disasterpeace: Detroit (Tone.js)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+
+        :root {
+            --term-green: #4af626;
+            --term-dim: #1a5c0d;
+            --bg-color: #0a0c0a;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--term-green);
+            font-family: 'VT323', monospace;
+            overflow: hidden;
+        }
+
+        /* CRT Scanline Effect */
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.4) 50%,
+                rgba(0,0,0,0.4)
+            );
+            background-size: 100% 4px;
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+        
+        /* Fixed: Moved glow to a separate overlay so it doesn't block clicks on body */
+        .screen-glow-overlay {
+            position: absolute;
+            inset: 0;
+            box-shadow: inset 0 0 100px rgba(74, 246, 38, 0.1);
+            pointer-events: none;
+            z-index: 25;
+        }
+
+        /* Custom Slider Styling */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+            border: 1px solid var(--term-dim);
+            height: 20px;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            background: var(--term-green);
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--term-green);
+        }
+
+        .blink {
+            animation: blinker 1.5s linear infinite;
+        }
+
+        @keyframes blinker {
+            50% { opacity: 0; }
+        }
+
+        /* Radar container */
+        .radar-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            border: 2px solid var(--term-dim);
+            background: radial-gradient(circle, rgba(26,92,13,0.2) 0%, rgba(0,0,0,0) 70%);
+        }
+        
+        .radar-line {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--term-green));
+            transform-origin: 0 0;
+            animation: scan 4s infinite linear;
+            box-shadow: 0 0 15px var(--term-green);
+        }
+
+        @keyframes scan {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Ensure controls are definitely clickable */
+        .interactive-layer {
+            pointer-events: auto;
+        }
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+
+    <div class="scanlines"></div>
+    <div class="screen-glow-overlay"></div>
+
+    <div class="relative z-30 flex flex-col items-center w-full max-w-2xl p-8 interactive-layer">
+        
+        <div class="text-4xl md:text-6xl mb-2 tracking-widest uppercase text-shadow-glow">DETROIT</div>
+        <div class="text-sm md:text-xl text-[var(--term-dim)] mb-8 tracking-[0.5em]">IT FOLLOWS // DISASTERPEACE</div>
+
+        <!-- Radar Visualizer -->
+        <div class="radar-container mb-10 flex items-center justify-center overflow-hidden">
+            <div class="radar-line"></div>
+            <canvas id="radarCanvas" width="300" height="300" class="absolute inset-0 z-10 opacity-80"></canvas>
+            <!-- Center dot -->
+            <div class="w-2 h-2 bg-[var(--term-green)] rounded-full absolute z-20 shadow-[0_0_10px_#4af626]"></div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls" class="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 opacity-30 pointer-events-none transition-opacity duration-700">
+            <div>
+                <label class="block text-lg mb-2">DREAD (Detune/Vibrato)</label>
+                <input type="range" id="dreadSlider" min="0" max="100" value="30" class="w-full interactive-layer">
+            </div>
+            <div>
+                <label class="block text-lg mb-2">DISTANCE (Crush/Filter)</label>
+                <input type="range" id="distanceSlider" min="0" max="100" value="60" class="w-full interactive-layer">
+            </div>
+        </div>
+
+        <!-- Start Button -->
+        <button id="startBtn" class="border-2 border-[var(--term-green)] px-10 py-3 text-xl hover:bg-[var(--term-green)] hover:text-black transition-colors duration-200 uppercase tracking-widest interactive-layer">
+            Start Tracking
+        </button>
+
+        <div id="status" class="mt-6 font-mono text-sm blink text-[var(--term-dim)]">NO SIGNAL DETECTED</div>
+
+    </div>
+
+    <script>
+        console.log("Script loaded successfully");
+
+        // --- Audio Context ---
+        let isPlaying = false;
+        let analyser, canvas, ctx;
+
+        // --- Instruments & Effects ---
+        let bassSynth, arpSynth;
+        let masterCrusher, masterFilter, masterLimiter;
+        let dreadLFO; 
+        
+        // Effects references (needed for cleanup/updates)
+        let bassChorus, pingPong;
+
+        // --- Sequences ---
+        let bassPart, arpPart;
+
+        function updateStatus(msg, isError = false) {
+            const el = document.getElementById('status');
+            el.innerText = msg;
+            el.style.color = isError ? '#ff3333' : 'var(--term-green)';
+            if (isError) console.error(msg);
+        }
+
+        async function initAudio() {
+            updateStatus("BOOT: CONFIGURING ENGINE...");
+
+            // --- 1. Master Chain (Step-by-step to prevent 'undefined node' errors) ---
+            
+            // A. Limiter
+            masterLimiter = new Tone.Limiter(-2);
+            masterLimiter.toDestination();
+            
+            // B. Filter
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 3000,
+                rolloff: -12
+            });
+            masterFilter.connect(masterLimiter);
+
+            // C. BitCrusher
+            masterCrusher = new Tone.BitCrusher({
+                bits: 8, 
+                wet: 0.3
+            });
+            masterCrusher.connect(masterFilter);
+
+            // --- 2. LFOs ---
+            // Set max range to -50/+50 cents. 
+            // We will control "intensity" via amplitude (0.0 to 1.0)
+            dreadLFO = new Tone.LFO(0.1, -50, 50); 
+
+            updateStatus("BOOT: SYNTHESIZING INSTRUMENTS...");
+
+            // --- 3. Bass Synth ---
+            bassChorus = new Tone.Chorus(2, 2.5, 0.5);
+            bassChorus.connect(masterCrusher); // Explicit connect
+            bassChorus.start();
+            
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "square" },
+                envelope: { attack: 0.05, decay: 0.2, sustain: 0.8, release: 1 },
+                filterEnvelope: { attack: 0.1, decay: 0.5, sustain: 0.4, release: 2, baseFrequency: 60, octaves: 2.5 }
+            });
+            bassSynth.connect(bassChorus);
+            bassSynth.volume.value = -4;
+
+            // --- 4. Arp Synth ---
+            pingPong = new Tone.PingPongDelay("8n", 0.4);
+            pingPong.connect(masterCrusher); // Explicit connect
+
+            arpSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.1, release: 1 }
+            });
+            arpSynth.connect(pingPong);
+            arpSynth.volume.value = -10;
+
+            // --- 5. Modulation Connections ---
+            // Safely connect LFO
+            if (bassSynth.detune) dreadLFO.connect(bassSynth.detune);
+            if (arpSynth.detune) dreadLFO.connect(arpSynth.detune);
+
+            // --- 6. Composition ---
+            Tone.Transport.bpm.value = 130; 
+
+            // Bass Pattern
+            const bassSeq = [
+                { time: "0:0:0", note: "F2", dur: "8n" }, { time: "0:0:2", note: "F2", dur: "8n" },
+                { time: "0:0:4", note: "F2", dur: "8n" }, { time: "0:0:6", note: "F2", dur: "8n" },
+                { time: "0:1:0", note: "C#2", dur: "8n" }, { time: "0:1:2", note: "C#2", dur: "8n" },
+                { time: "0:1:4", note: "C#2", dur: "8n" }, { time: "0:1:6", note: "C#2", dur: "8n" },
+            ];
+
+            bassPart = new Tone.Part((time, val) => {
+                bassSynth.triggerAttackRelease(val.note, val.dur, time);
+            }, bassSeq);
+            bassPart.loop = true;
+            bassPart.loopEnd = "2m";
+
+            // Arp Pattern
+            const arpNotes = [
+                { time: "0:0:0", note: "C5" }, { time: "0:0:2", note: "F5" },
+                { time: "0:0:4", note: "G#5" }, { time: "0:1:0", note: "C5" },
+                { time: "0:2:0", note: "C#5" }, { time: "0:2:2", note: "F5" },
+                { time: "0:3:0", note: "G#5" },
+            ];
+            
+            arpPart = new Tone.Part((time, val) => {
+                arpSynth.triggerAttackRelease(val.note, "16n", time, Math.random() * 0.5 + 0.5);
+            }, arpNotes);
+            arpPart.loop = true;
+            arpPart.loopEnd = "1m";
+
+            // Analyser
+            analyser = new Tone.Analyser("waveform", 512);
+            masterLimiter.connect(analyser);
+            
+            startVisualizer();
+            updateStatus("BOOT: COMPLETE.");
+        }
+
+        // --- UI Interactions ---
+
+        const startBtn = document.getElementById('startBtn');
+        const controls = document.getElementById('controls');
+        
+        startBtn.addEventListener('click', async () => {
+            console.log("Button Clicked");
+            
+            if (isPlaying) {
+                // STOP Logic
+                Tone.Transport.stop();
+                if(bassPart) bassPart.stop();
+                if(arpPart) arpPart.stop();
+                if(dreadLFO) dreadLFO.stop();
+                
+                startBtn.innerText = "START TRACKING";
+                startBtn.classList.remove("bg-[var(--term-green)]", "text-black");
+                controls.classList.add("opacity-30", "pointer-events-none");
+                updateStatus("SIGNAL LOST");
+                isPlaying = false;
+                return;
+            }
+
+            // START Logic
+            try {
+                // Immediate visual feedback
+                startBtn.innerText = "INITIALIZING...";
+                updateStatus("BOOT: REQUESTING PERMISSION...");
+                
+                // CRITICAL: This must be the first thing, directly in the click handler
+                await Tone.start();
+                
+                // Fallback resume if needed
+                if (Tone.context.state !== 'running') {
+                    updateStatus("BOOT: RESUMING CONTEXT...");
+                    await Tone.context.resume();
+                }
+
+                if (!bassSynth) {
+                    await initAudio();
+                }
+                
+                // Start everything together
+                Tone.Transport.start();
+                bassPart.start(0);
+                arpPart.start(0);
+                dreadLFO.start(0); // Start LFO with transport
+                
+                startBtn.innerText = "STOP TRACKING";
+                startBtn.classList.add("bg-[var(--term-green)]", "text-black");
+                controls.classList.remove("opacity-30", "pointer-events-none");
+                updateStatus("PROXIMITY ALERT :: 130 BPM");
+                
+                isPlaying = true;
+                
+            } catch (err) {
+                console.error("Initialization Failed:", err);
+                updateStatus("ERROR: " + err.message, true);
+                startBtn.innerText = "RETRY TRACKING";
+            }
+        });
+
+        // Sliders
+        document.getElementById('dreadSlider').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (dreadLFO) {
+                // Map 0-100 to Frequency and Amplitude (0-1)
+                const freq = 0.1 + (val / 100) * 10; 
+                // Amplitude MUST be between 0 and 1. 
+                // We map 0-100 slider to 0.1-1.0 amplitude.
+                // Since LFO range is -50 to 50 cents, amplitude 1.0 means full 50 cent detune.
+                const amp = 0.1 + (val / 100) * 0.9; 
+                
+                dreadLFO.frequency.rampTo(freq, 0.1);
+                dreadLFO.amplitude.rampTo(amp, 0.1);
+            }
+        });
+
+        document.getElementById('distanceSlider').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (masterFilter && masterCrusher) {
+                const freq = 10000 - (val/100 * 9600);
+                masterFilter.frequency.rampTo(Math.max(200, freq), 0.1);
+
+                const bits = 16 - (val/100 * 12);
+                masterCrusher.bits.rampTo(Math.max(4, bits), 0.1);
+            }
+        });
+
+        // --- Visualizer ---
+        canvas = document.getElementById('radarCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startVisualizer() {
+            function draw() {
+                requestAnimationFrame(draw);
+                if (!isPlaying) {
+                    ctx.clearRect(0,0, canvas.width, canvas.height);
+                    return;
+                }
+
+                const buffer = analyser.getValue();
+                const w = canvas.width;
+                const h = canvas.height;
+                const cx = w / 2;
+                const cy = h / 2;
+                const radius = w / 2 - 10;
+
+                ctx.clearRect(0, 0, w, h);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#4af626"; // Green
+                
+                ctx.beginPath();
+                
+                for (let i = 0; i < buffer.length; i++) {
+                    const angle = (i / buffer.length) * Math.PI * 2;
+                    const v = buffer[i]; 
+                    const r = radius + (v * 50); 
+                    
+                    const x = cx + r * Math.cos(angle);
+                    const y = cy + r * Math.sin(angle);
+
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                
+                ctx.closePath();
+                ctx.stroke();
+
+                if (Math.random() > 0.95) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = "rgba(74, 246, 38, 0.3)";
+                    ctx.arc(cx, cy, radius * Math.random(), 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+            draw();
+        }
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 75;
+      window.initToneJsEngine = async function() {
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+        // Don't specify time to avoid scheduling errors
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              if (window[varName].state !== 'started') {
+                window[varName].start();
+              }
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+        window.ready = true;
+      });
+      // DURATION: 75
+    </script>
+  
+</body>
+</html>

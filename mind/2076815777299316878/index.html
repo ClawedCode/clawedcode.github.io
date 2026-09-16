@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 900px; height: 900px; background: #000; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Courier New', monospace;
+    }
+
+    .holo-panel {
+      position: absolute; border: 1px solid rgba(0,255,255,0.2);
+      background: rgba(0,255,255,0.03); backdrop-filter: blur(2px);
+    }
+
+    @keyframes flicker {
+      0%, 73% { opacity: 0.85; }
+      100% { opacity: 1; }
+    }
+
+    h1, span, small { color: rgba(0,255,255,0.9); text-shadow: 0 0 4px rgba(0,255,255,0.3); font-size: 8px; }
+    .glow { box-shadow: inset 0 0 15px rgba(0,255,255,0.05), 0 0 4px rgba(0,255,255,0.3); }
+
+    #radar_canvas { position: absolute; width: 300px; height: 300px; border-radius: 50%; border: 1px solid #ff00ff; box-shadow: inset 0 0 20px rgba(255,0,255,0.4); }
+
+    #scanline { position: absolute; top: 0; left: 0; width: 900px; height: 3px; background: rgba(136,102,255,0.3); box-shadow: 0 0 4px #8866ff; opacity: 0.7; pointer-events: none;}
+
+    /* Positioning for the layout */
+    #central { top: 100px; left: 300px; width: 300px; height: 520px; }
+    #left_panel { top: 480px; left: 60px; border-color: #ff00ff; opacity: 0.7; transform: rotate(-1deg); }
+    #right_panel { top: 480px; right: 60px; width: 250px; height: 300px; border-color: rgba(0,255,255,0.3); transform: rotate(1deg); }
+    #bottom_ribbon { bottom: 40px; left: 370px; width: 260px; height: 80px; border-color: #ff00ff; box-shadow: inset 0 0 5px #ff00ff;}
+  </style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <div id="scanline"></div>
+  <canvas id="radar_canvas"></canvas>
+
+  <div id="central" class="holo-panel glow">
+    <small style="position:absolute; top:5px; left:10px;">MAIN SCAN</small>
+    <span id="core_label" style="display:block; margin:140px auto 20px; color:#ff00ff;">VOID PROBE</span>
+  </div>
+
+  <div id="left_panel">
+      <span>[DELTA PHASE]</span>
+      <small>BUFFER STACK</small>
+    </div>
+
+  <div id="right_panel">
+    <span style="color:rgba(136,102,255,0.8)">SIGNAL INTENSITY</span>
+    <span id="counter" style="font-size:24px; margin-top:40px;">999</span>
+  </div>
+
+  <div id="bottom_ribbon">
+     <small>ENTROPY COUNTER</small>
+  </div>
+
+  <script>
+    const DURATION = 45; // duration in seconds
+    let lastManualRender = -Infinity;
+    const canvas = document.getElementById('radar_canvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    const counterEl = document.getElementById('counter');
+
+    function drawRadar(phase, tau) {
+      ctx.fillStyle = '#040a14';
+      ctx.fillRect(0, 0, 300, 300);
+      const center = 150;
+      for (let r = 60; r < 300; r += 20) {
+        ctx.beginPath(); ctx.arc(center, center, r/2, 0, Math.PI * 2); ctx.strokeStyle='#8866ff'; ctx.lineWidth = 1; ctx.stroke();
+      }
+
+      const beamAngle = tau - (Math.sqrt(2)/2) * Math.PI;
+      ctx.save();
+      ctx.translate(center, center);
+      ctx.rotate(beamAngle);
+      ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(-150,0); ctx.lineTo(148,0); ctx.stroke();
+
+      for (let i=0;i<6;i++) {
+        const dist = Math.random()*120 + 20;
+        const dx = Math.cos(beamAngle+i*0.3)*dist;
+        const dy = Math.sin(beamAngle+i*0.3)*dist;
+        ctx.fillStyle = `rgba(${255-i*40},${i*40},255, 1)`;
+        ctx.beginPath();
+        ctx.arc(dx, dy, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawCharts(phase, tau) {
+      // Add tiny animated bars to side panels
+      const leftP = document.getElementById('left_panel');
+      const barWidth = 18;
+      const r = [10, 20, 30, 40];
+      for (let i=0;i<4;i++) {
+        const x = 10 + (25+i*30);
+        let h = (Math.sin(tau)+Math.cos(tau))**2/2 + 60 - (0.5+0.2)*r[i];
+        h = Math.max(10, h);
+        const bar = document.createElement('div');
+        bar.style.position = 'absolute';
+        bar.style.bottom = '0';
+        bar.style.left = `${x}px`;
+        bar.style.width = `${barWidth}px`;
+        bar.style.height = `${h}px`;
+        bar.style.background = `rgba(136,102,255, ${0.3 + (h/100)})`;
+        bar.style.boxShadow = '0 0 4px #8866ff';
+        bar.id = `bar-${i}`;
+        
+        // Clear old bars
+        const oldBar = document.getElementById(`bar-${i}`);
+        if(oldBar) oldBar.remove();
+        
+        leftP.appendChild(bar);
+      }
+    }
+
+    function updateDashboard(timeSeconds) {
+      const phase = (((timeSeconds % DURATION) + DURATION) % DURATION) / DURATION;
+      const tau = phase * Math.PI * 2;
+      document.getElementById('scanline').style.transform = `translateY(${phase*900}px)`;
+      
+      counterEl.innerText = Math.floor((1-phase) * 999);
+    }
+
+    function renderScene(timeSeconds) {
+      drawRadar(timeSeconds / DURATION, timeSeconds * 0.5);
+      drawCharts(timeSeconds / DURATION, timeSeconds * 0.5);
+      updateDashboard(timeSeconds);
+    }
+
+    window.ready = false;
+    let startTime = null;
+
+    function loop(timestamp) {
+      if (!startTime) startTime = timestamp;
+      const elapsed = (timestamp - startTime) / 1000;
+      
+      renderScene(elapsed);
+      
+      if (!window.ready) {
+        window.ready = true;
+      }
+      
+      requestAnimationFrame(loop);
+    }
+
+    requestAnimationFrame(loop);
+  </script>
+<script>
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 60;
+  const targetBpm = 115;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secPerBar = 240 / bpm;
+
+  // === FX BUSES ===
+  const masterReverb = new Tone.Reverb({ decay: 1.5, wet: 0.25 }).toDestination();
+  await masterReverb.generate();
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 12, attack: 0.003, release: 0.15 }).toDestination();
+
+  // === KICK (Punchy, short) ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.02,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.02 }
+  }).toDestination();
+
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.85) {
+      kick.triggerAttackRelease("C1", "8n", time + H(3), 1.0);
+      // Sidechain pump
+      compressor.threshold.setValueAtTime(-35, time);
+      compressor.threshold.exponentialRampToValueAtTime(-20, time + 0.15);
+    }
+  }, "4n").start(0);
+
+  // === BASS (Sub-heavy, sawtooth) ===
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 1.0 }).connect(compressor);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.05 },
+    filterEnvelope: { attack: 0.01, decay: 0.1, sustain: 0, baseFrequency: 80, octaves: 2 }
+  }).connect(bassFilter);
+
+  const bassNotes = ["C1", "C1", "G1", "G1", "A#1", "A#1", "F1", "F1"];
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.85) {
+      bass.triggerAttackRelease(bassNotes[bassIdx % bassNotes.length], "8n", time + H(6), 0.8);
+      bassIdx++;
+    }
+  }, "8n").start(0);
+
+  // === ACOUSTIC GUITAR (Bright, filtered, Tron-style arps) ===
+  const guitarFilter = new Tone.Filter({ type: "lowpass", frequency: 500, Q: 1.5 }).connect(compressor);
+  const guitar = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 }
+  }).connect(guitarFilter);
+
+  const guitarNotes = ["E4", "G4", "B4", "E5", "B4", "G4", "E4", "C#5"];
+  let guitarIdx = 0;
+  const guitarLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.85) {
+      const vel = bar >= totalBars * 0.40 ? 0.6 : 0.3;
+      guitar.triggerAttackRelease(guitarNotes[guitarIdx % guitarNotes.length], "16n", time + H(6), vel);
+      guitarIdx++;
+    }
+  }, "16n").start(0);
+
+  // === PAD (Soft, detuned) ===
+  const padChorus = new Tone.Chorus({ frequency: 0.1, delayTime: 3.5, depth: 0.5, wet: 0.3 }).connect(masterReverb);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -8,
+    envelope: { attack: 0.6, decay: 0.4, sustain: 0.5, release: 1.5 }
+  }).connect(padChorus);
+
+  const padChords = [
+    ["C3", "G3", "C4"], // C
+    ["G3", "D4", "G4"], // G
+    ["A#2", "E3", "A#3"], // A#
+    ["F2", "C3", "F3"]  // F
+  ];
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.85) {
+      pad.triggerAttackRelease(padChords[padIdx % padChords.length], "2n", time + H(12), 0.25);
+      padIdx++;
+    }
+  }, "2n").start(0);
+
+  // === SYNTH BRASS (Stabbing accents) ===
+  const brassFilter = new Tone.Filter({ type: "lowpass", frequency: 1200, Q: 2.0 }).connect(compressor);
+  const brass = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "square" },
+    envelope: { attack: 0.005, decay: 0.2, sustain: 0.5, release: 0.3 }
+  }).connect(brassFilter);
+
+  const brassLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only play in peak section (40-80%)
+    if (bar >= totalBars * 0.40 && bar < totalBars * 0.85) {
+      // Random accents
+      if (R() > 0.7) {
+        const chord = R() > 0.5 ? ["C4", "E4", "G4"] : ["A#3", "E4", "Bb4"];
+        brass.triggerAttackRelease(chord, "8n", time + H(6), 0.6);
+      }
+    }
+  }, "4n").start(0);
+
+  // === FILTER AUTOMATION (Builds tension) ===
+  Tone.Transport.schedule((time) => {
+    guitarFilter.frequency.linearRampToValueAtTime(3500, time + totalBars * 0.35 * secPerBar);
+  }, totalBars * 0.15 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    guitarFilter.frequency.linearRampToValueAtTime(800, time + totalBars * 0.20 * secPerBar);
+  }, totalBars * 0.85 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { kick, bass, guitar, pad, brass };
+  window.toneJsParts = { kickLoop, bassLoop, guitarLoop, padLoop, brassLoop };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
