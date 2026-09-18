@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+let seed = 7740191;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+document.body.style.margin = '0';
+document.body.style.overflow = 'hidden';
+document.body.style.background = '#060507';
+const bg = 0x060507;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(bg);
+scene.fog = new THREE.FogExp2(bg, 0.075);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+camera.position.set(4.35, 0.28, 0);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(1);
+renderer.setSize(900, 900);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(
+  new THREE.Vector2(900, 900),
+  1.18,
+  0.58,
+  0.16
+));
+const grainPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTau: { value: 0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTau;
+    varying vec2 vUv;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+    void main() {
+      vec3 col = texture2D(tDiffuse, vUv).rgb;
+      vec2 drift = vec2(cos(uTau), sin(uTau)) * 37.0;
+      float grain = hash(floor(vUv * 450.0) + drift) - 0.5;
+      float vignette = 1.0 - 0.2 * dot(vUv - 0.5, vUv - 0.5);
+      gl_FragColor = vec4((col + grain * 0.012) * vignette, 1.0);
+    }
+  `
+});
+composer.addPass(grainPass);
+const srcGeo = new THREE.IcosahedronGeometry(1.32, 12);
+const geo = srcGeo.index ? srcGeo.toNonIndexed() : srcGeo;
+geo.computeVertexNormals();
+const vertexCount = geo.getAttribute('position').count;
+const bary = new Float32Array(vertexCount * 3);
+for (let i = 0; i < vertexCount; i += 3) {
+  bary.set([
+    1, 0, 0,
+    0, 1, 0,
+    0, 0, 1
+  ], i * 3);
+}
+geo.setAttribute('aBary', new THREE.BufferAttribute(bary, 3));
+const lightPos = new THREE.Vector3(-3.2, 2.4, -3.4);
+const uniforms = {
+  uPhase: { value: 0 },
+  uTau: { value: 0 },
+  uBass: { value: 0 },
+  uMid: { value: 0 },
+  uTreble: { value: 0 },
+  uPointer: { value: new THREE.Vector2() },
+  uColorA: { value: new THREE.Color(0x15101c) },
+  uColorB: { value: new THREE.Color(0xffd08a) },
+  uColorC: { value: new THREE.Color(0xff4e1f) },
+  uLightPos: { value: lightPos }
+};
+const vertexShader = `
+  uniform float uTau;
+  uniform float uBass;
+  uniform float uMid;
+  uniform vec2 uPointer;
+  attribute vec3 aBary;
+  varying vec3 vBary;
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+  varying vec3 vViewDir;
+  varying float vDisplace;
+  varying float vStress;
+  vec4 permute(vec4 x) {
+    return mod(((x * 34.0) + 1.0) * x, 289.0);
+  }
+  vec4 taylorInvSqrt(vec4 r) {
+    return 1.79284291400159 - 0.85373472095314 * r;
+  }
+  float snoise(vec3 v) {
+    const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
+    const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+    vec3 i = floor(v + dot(v, C.yyy));
+    vec3 x0 = v - i + dot(i, C.xxx);
+    vec3 g = step(x0.yzx, x0.xyz);
+    vec3 l = 1.0 - g;
+    vec3 i1 = min(g.xyz, l.zxy);
+    vec3 i2 = max(g.xyz, l.zxy);
+    vec3 x1 = x0 - i1 + C.xxx;
+    vec3 x2 = x0 - i2 + C.yyy;
+    vec3 x3 = x0 - D.yyy;
+    i = mod(i, 289.0);
+    vec4 p = permute(permute(permute(
+      i.z + vec4(0.0, i1.z, i2.z, 1.0))
+      + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+      + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+    float n = 1.0 / 7.0;
+    vec3 ns = n * D.wyz - D.xzx;
+    vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+    vec4 x_ = floor(j * ns.z);
+    vec4 y_ = floor(j - 7.0 * x_);
+    vec4 x = x_ * ns.x + ns.yyyy;
+    vec4 y = y_ * ns.x + ns.yyyy;
+    vec4 h = 1.0 - abs(x) - abs(y);
+    vec4 b0 = vec4(x.xy, y.xy);
+    vec4 b1 = vec4(x.zw, y.zw);
+    vec4 s0 = floor(b0) * 2.0 + 1.0;
+    vec4 s1 = floor(b1) * 2.0 + 1.0;
+    vec4 sh = -step(h, vec4(0.0));
+    vec4 a0 = b0.xzyw + s0.xzyw * sh.xxyy;
+    vec4 a1 = b1.xzyw + s1.xzyw * sh.zzww;
+    vec3 p0 = vec3(a0.xy, h.x);
+    vec3 p1 = vec3(a0.zw, h.y);
+    vec3 p2 = vec3(a1.xy, h.z);
+    vec3 p3 = vec3(a1.zw, h.w);
+    vec4 norm = taylorInvSqrt(vec4(
+      dot(p0, p0),
+      dot(p1, p1),
+      dot(p2, p2),
+      dot(p3, p3)
+    ));
+    p0 *= norm.x;
+    p1 *= norm.y;
+    p2 *= norm.z;
+    p3 *= norm.w;
+    vec4 m = max(0.6 - vec4(
+      dot(x0, x0),
+      dot(x1, x1),
+      dot(x2, x2),
+      dot(x3, x3)
+    ), 0.0);
+    m *= m;
+    return 42.0 * dot(m * m, vec4(
+      dot(p0, x0),
+      dot(p1, x1),
+      dot(p2, x2),
+      dot(p3, x3)
+    ));
+  }
+  float field(vec3 p) {
+    vec3 loop = vec3(cos(uTau), sin(uTau), cos(uTau * 2.0)) * 0.3;
+    vec3 intent = vec3(uPointer * 0.32, 0.0);
+    float coarse = snoise(p * 2.45 + loop + intent);
+    float grain = snoise(p * 6.8 - loop * 1.7);
+    float pressure = uBass * (0.055 + max(coarse, 0.0) * 0.12);
+    return coarse * 0.07 + grain * 0.018 + pressure;
+  }
+  void main() {
+    vec3 p = position;
+    vec3 n = normalize(normal);
+    float disp = field(p);
+    vec3 displaced = p + n * disp;
+    vec3 axis = abs(n.y) < 0.9
+      ? vec3(0.0, 1.0, 0.0)
+      : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(n, axis));
+    vec3 bitangent = normalize(cross(n, tangent));
+    float eps = 0.012;
+    vec3 d1 = p + tangent * eps
+      + n * field(p + tangent * eps);
+    vec3 d2 = p + bitangent * eps
+      + n * field(p + bitangent * eps);
+    vec3 newNormal = normalize(cross(d1 - displaced, d2 - displaced));
+    if (dot(newNormal, n) < 0.0) newNormal *= -1.0;
+    vec4 world = modelMatrix * vec4(displaced, 1.0);
+    vBary = aBary;
+    vWorldPos = world.xyz;
+    vNormal = normalize(mat3(modelMatrix) * newNormal);
+    vViewDir = normalize(cameraPosition - world.xyz);
+    vDisplace = disp;
+    vStress = smoothstep(-0.03, 0.13, disp + uMid * 0.04);
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+const fragmentShader = `
+  uniform float uPhase;
+  uniform float uBass;
+  uniform float uMid;
+  uniform float uTreble;
+  uniform vec3 uColorA;
+  uniform vec3 uColorB;
+  uniform vec3 uColorC;
+  uniform vec3 uLightPos;
+  varying vec3 vBary;
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+  varying vec3 vViewDir;
+  varying float vDisplace;
+  varying float vStress;
+  void main() {
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(vViewDir);
+    vec3 L = normalize(uLightPos - vWorldPos);
+    float diffuse = max(dot(N, L), 0.0);
+    float fresnel = pow(
+      1.0 - clamp(dot(N, V), 0.0, 1.0),
+      2.2
+    );
+    vec3 fw = fwidth(vBary);
+    vec3 seamMask = smoothstep(
+      vec3(0.0),
+      fw * (0.9 + uBass * 5.5),
+      vBary
+    );
+    float crack = 1.0 - min(
+      min(seamMask.x, seamMask.y),
+      seamMask.z
+    );
+    float stream = fract(
+      vWorldPos.y * 7.0
+      + vWorldPos.x * 3.0
+      - vWorldPos.z * 5.0
+      - uPhase * 12.0
+    );
+    float bit = step(0.58, stream);
+    float mineral = smoothstep(-0.1, 0.12, vDisplace);
+    vec3 shell = uColorA * (0.48 + diffuse * 0.34);
+    shell += uColorB * (
+      diffuse * 0.16
+      + fresnel * (0.32 + uTreble * 0.35)
+      + mineral * 0.045
+    );
+    float molten = crack
+      * (0.38 + uBass * 2.2)
+      * (0.35 + bit * 0.65)
+      * (0.48 + vStress * 0.52);
+    vec3 color = shell;
+    color += uColorC * molten * 2.7;
+    color += uColorB * molten * molten * 0.72;
+    color += uColorC * fresnel * uMid * 0.18;
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+const heroMat = new THREE.ShaderMaterial({
+  uniforms,
+  vertexShader,
+  fragmentShader,
+  side: THREE.FrontSide,
+  transparent: false,
+  extensions: { derivatives: true }
+});
+const hero = new THREE.Mesh(geo, heroMat);
+hero.rotation.set(0.12, -0.28, 0.18);
+scene.add(hero);
+const key = new THREE.PointLight(0xff7a35, 2.4, 16);
+key.position.copy(lightPos);
+scene.add(key);
+const sparkCount = 160;
+const sparkPos = new Float32Array(sparkCount * 3);
+const sparkCol = new Float32Array(sparkCount * 3);
+const sparks = [];
+for (let i = 0; i < sparkCount; i++) {
+  const z = random() * 2 - 1;
+  const a = random() * Math.PI * 2;
+  const r = Math.sqrt(1 - z * z);
+  const dir = new THREE.Vector3(
+    r * Math.cos(a),
+    z,
+    r * Math.sin(a)
+  );
+  const axis = Math.abs(dir.y) < 0.9
+    ? new THREE.Vector3(0, 1, 0)
+    : new THREE.Vector3(1, 0, 0);
+  const tangent = new THREE.Vector3()
+    .crossVectors(dir, axis)
+    .normalize();
+  const start = dir.clone().multiplyScalar(1.35 + random() * 0.08);
+  const vel = dir.clone()
+    .multiplyScalar(0.18 + random() * 0.42)
+    .addScaledVector(tangent, (random() - 0.5) * 0.38);
+  const acc = new THREE.Vector3(
+    0,
+    -0.18 - random() * 0.2,
+    0
+  ).addScaledVector(dir, -0.06 - random() * 0.08);
+  sparks.push({
+    start,
+    vel,
+    acc,
+    offset: random(),
+    cycles: 2 + Math.floor(random() * 3),
+    life: 0.8 + random() * 1.2
+  });
+}
+const sparkGeo = new THREE.BufferGeometry();
+sparkGeo.setAttribute(
+  'position',
+  new THREE.BufferAttribute(sparkPos, 3)
+);
+sparkGeo.setAttribute(
+  'color',
+  new THREE.BufferAttribute(sparkCol, 3)
+);
+const sparkMat = new THREE.PointsMaterial({
+  size: 0.034,
+  color: 0xffffff,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.9,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  sizeAttenuation: true,
+  fog: true
+});
+const sparkField = new THREE.Points(sparkGeo, sparkMat);
+scene.add(sparkField);
+const tmp = new THREE.Vector3();
+function updateSparks(phase, arc) {
+  for (let i = 0; i < sparkCount; i++) {
+    const s = sparks[i];
+    const u = (phase * s.cycles + s.offset) % 1;
+    const t = u * s.life;
+    const j = i * 3;
+    tmp.copy(s.start)
+      .addScaledVector(s.vel, t)
+      .addScaledVector(s.acc, 0.5 * t * t);
+    sparkPos[j] = tmp.x;
+    sparkPos[j + 1] = tmp.y;
+    sparkPos[j + 2] = tmp.z;
+    const fade = Math.sin(Math.PI * u) ** 2 * (0.12 + arc * 0.88);
+    sparkCol[j] = fade;
+    sparkCol[j + 1] = fade * 0.19;
+    sparkCol[j + 2] = fade * 0.035;
+  }
+  sparkGeo.attributes.position.needsUpdate = true;
+  sparkGeo.attributes.color.needsUpdate = true;
+}
+function updateCamera(tau) {
+  const radius = 4.35;
+  camera.position.set(
+    Math.cos(tau) * radius,
+    0.28,
+    Math.sin(tau) * radius
+  );
+  camera.lookAt(0.34, 0.04, 0);
+}
+let t0 = null;
+const duration = 60;
+function animate(now) {
+  if (t0 === null) t0 = now;
+  const elapsed = (now - t0) / 1000;
+  const phase = ((elapsed % duration) + duration) % duration / duration;
+  const tau = phase * Math.PI * 2;
+  const arc = Math.sin(Math.PI * phase) ** 2;
+  const beat = Math.pow(
+    0.5 + 0.5 * Math.cos(tau * 12),
+    10
+  );
+  const glint = Math.pow(
+    0.5 + 0.5 * Math.cos(tau * 24 + 1.1),
+    14
+  );
+  uniforms.uPhase.value = phase;
+  uniforms.uTau.value = tau;
+  uniforms.uBass.value = beat * (0.22 + arc * 0.78);
+  uniforms.uMid.value = 0.16 + arc * 0.58;
+  uniforms.uTreble.value = 0.12 + glint * (0.18 + arc * 0.55);
+  uniforms.uPointer.value.set(
+    Math.sin(tau * 2) * 0.62 + Math.sin(tau * 5 + 0.8) * 0.24,
+    Math.cos(tau * 3) * 0.55 + Math.sin(tau * 4 + 1.4) * 0.28
+  );
+  sparkMat.size = 0.03 + uniforms.uTreble.value * 0.014;
+  grainPass.uniforms.uTau.value = tau;
+  updateSparks(phase, arc);
+  updateCamera(tau);
+  composer.render();
+  requestAnimationFrame(animate);
+}
+window.ready = true;
+window.animationReady = true;
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  // === SETUP (always include this block first) ===
+  const duration = 60;
+  const targetBpm = 74;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+
+  let rngState = 0x69e8cff4;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === SOUND DESIGN ===
+  // Theme: Transmutation, Information, Heat, Faceted Mineral
+  // Archetype: Glitchy/Digital with Cosmic Scale.
+  // Texture: Granular, metallic, warm (heat), cold (void).
+
+  // 1. THE KERNEL (Main Drone) - FM Synth with heavy modulation for "molten code" texture
+  const kernel = new Tone.FMSynth({
+    harmonicity: 0.5,
+    modulationIndex: 2.5,
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.4, decay: 0.1, sustain: 0.8, release: 0.5 },
+    modulation: { type: "square" }
+  }).toDestination();
+
+  // 2. THE SHELL (Granular Texture) - NoiseSynth through AutoFilter to simulate "cracking" surface
+  const shellNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 }
+  }).toDestination();
+  
+  const shellFilter = new Tone.AutoFilter({
+    frequency: "8n",
+    depth: 0.9,
+    baseFrequency: 200,
+    octaves: 2.6
+  }).toDestination().start();
+  
+  shellNoise.connect(shellFilter);
+
+  // 3. THE LEAK (Molten Code) - PluckSynth for "digital dripping"
+  const leak = new Tone.PluckSynth({
+    pluckType: "metal",
+    resonance: 0.4
+  }).toDestination();
+
+  // 4. THE CRACK (Impact) - MetalSynth for "mineral shell breaking"
+  const crack = new Tone.MetalSynth({
+    frequency: 300,
+    envelope: { attack: 0.001, decay: 0.05, release: 0.01, harmonicity: 5.0, modulationIndex: 10, resonance: 3000 },
+    volume: -10
+  }).toDestination();
+
+  // === FX CHAIN ===
+  // Reverb for "void" space
+  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+  await reverb.generate();
+
+  // Chorus for "digital shimmer" on the kernel
+  const chorus = new Tone.Chorus({ frequency: 1.2, depth: 0.7, delayTime: 4, wet: 0.3 }).toDestination().start();
+
+  // Compressor for "pumping" heat
+  const compressor = new Tone.Compressor({ threshold: -24, ratio: 12, attack: 0.005, release: 0.15 }).toDestination();
+
+  // === PATTERNS ===
+
+  // A. Kernel Drone (The Pulse)
+  // Changes pitch to simulate "refashioning" information
+  const kernelNotes = ["C2", "G2", "Bb2", "F2", "Eb2", "D2"];
+  let kernelIndex = 0;
+  
+  // Route kernel through FX
+  const kernelChain = kernel.chain(chorus, compressor);
+
+  const kernelLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Select note based on bar, creating a slowly evolving root
+    const noteIdx = bar % kernelNotes.length;
+    const note = kernelNotes[noteIdx];
+    
+    // Trigger attack
+    kernel.triggerAttackRelease(note, "4n", time, 0.4);
+
+    // Modulate modulationIndex based on "heat" (progress of track)
+    const heat = bar / totalBars;
+    // Start with low modulation (cold), increase to high (hot)
+    kernel.modulationIndex.setValueAtTime(1.5 + heat * 6, time);
+
+    // Granular "leak" events
+    if (bar % 2 === 0) {
+      leak.triggerAttackRelease("C6", "32n", time + H(10), 0.2);
+    }
+    
+    // Shell crack
+    if (R() > 0.7) {
+      shellNoise.triggerAttackRelease("16n", time + H(5), 0.3);
+    }
+
+  }, "1n").start(0);
+
+  // B. The Crack (Rhythmic Faceting)
+  // Metallic hits that "crack" the surface
+  const crackPattern = [1, 0, 0, 1, 0, 0, 1, 1]; // Syncopated, sparse
+  let crackIdx = 0;
+
+  const crackLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Gate the cracks: Enter at 10%, exit at 80% (wind down before loop)
+    if (bar < totalBars * 0.10 || bar >= totalBars * 0.80) return;
+
+    if (crackPattern[crackIdx % crackPattern.length] === 1) {
+      crack.triggerAttackRelease("32n", time + H(2), 0.6);
+    }
+    
+    // Random additional high frequency cracks
+    if (R() > 0.85) {
+      crack.triggerAttackRelease("64n", time + H(1), 0.2);
+    }
+
+    crackIdx++;
+  }, "8n").start(0);
+
+  // C. The Heat (Filter Sweep Automation)
+  // Simulates the "molten" aspect by sweeping the filter on the compressor chain
+  const secPerBar = 60 / bpm;
+  
+  // Open filter (heat) during build
+  Tone.Transport.schedule((time) => {
+    // Create a dynamic filter on the compressor path to simulate heat rising
+    const heatFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 5 }).toDestination();
+    
+    // Ramp frequency up to simulate melting
+    heatFilter.frequency.linearRampToValueAtTime(4000, time + totalBars * 0.3 * secPerBar);
+    
+    // Connect kernel to this filter temporarily for the peak
+    kernel.disconnect(chorus);
+    kernel.connect(heatFilter);
+    heatFilter.chain(compressor);
+    
+  }, totalBars * 0.15 * secPerBar);
+
+  // Restore chain after peak (wind down)
+  Tone.Transport.schedule((time) => {
+    kernel.disconnect();
+    kernel.chain(chorus, compressor);
+  }, totalBars * 0.85 * secPerBar);
+
+  // D. The Void (Ambient Bed)
+  // Low frequency rumble to represent the "information" base
+  const voidDrone = new Tone.Oscillator({
+    type: "sine",
+    frequency: 40
+  }).toDestination().start();
+  
+  const voidGain = new Tone.Volume({ volume: -20 }).toDestination();
+  voidDrone.connect(voidGain);
+
+  // Modulate void drone to simulate "refashioning"
+  Tone.Transport.schedule((time) => {
+    voidDrone.frequency.linearRampToValueAtTime(45, time + totalBars * 0.4 * secPerBar);
+  }, totalBars * 0.1 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    voidDrone.frequency.linearRampToValueAtTime(38, time + totalBars * 0.4 * secPerBar);
+  }, totalBars * 0.5 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = {
+    kernel,
+    shellNoise,
+    leak,
+    crack,
+    kernelChain,
+    crackLoop,
+    kernelLoop,
+    compressor,
+    reverb,
+    voidDrone,
+    voidGain
+  };
+
+  window.toneJsParts = {
+    kernelLoop,
+    crackLoop
+  };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
