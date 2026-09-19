@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision mediump float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 54.0;\nconst float PI2 = 6.28318530718;\nfloat hash21(vec2 p) {\n  p = fract(p * vec2(123.34, 456.21));\n  p += dot(p, p + 45.32);\n  return fract(p.x * p.y);\n}\nfloat snoise2D(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  return mix(\n    mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),\n    mix(hash21(i + vec2(0.0, 1.0)), hash21(i + vec2(1.0, 1.0)), f.x),\n    f.y\n  ) * 2.0 - 1.0;\n}\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  vec2 p = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float orbit = phase * PI2;\n  float roomWave = 0.5 + 0.5 * sin(orbit);\n  float rain = 0.5 + 0.5 * sin(orbit - 1.65);\n  float resolve = 0.5 + 0.5 * sin(orbit - 3.35);\n  float dawn = 0.5 + 0.5 * sin(orbit - 4.8);\n  float stepP = 0.5 + 0.5 * sin(orbit - 2.65);\n  float knit = 0.5 + 0.5 * cos(2.0 * orbit);\n  vec2 drift = vec2(\n    0.095 * sin(orbit) + 0.032 * sin(3.0 * orbit),\n    0.065 * sin(2.0 * orbit + 0.6)\n  );\n  vec2 k = p - drift;\n  float n = snoise2D(k * 5.2 + vec2(cos(orbit), sin(orbit)));\n  k.x += 0.105 * sin(k.y * 12.0 + 2.0 * orbit) * (0.38 + 0.62 * rain);\n  k.y += 0.052 * sin(k.x * 17.0 - 3.0 * orbit) * (0.38 + 0.62 * knit);\n  vec2 wp = k - vec2(-0.08, -0.3);\n  k += 0.034 * stepP * wp / (0.018 + dot(wp, wp));\n  vec2 A = vec2(-0.22, 0.07) + vec2(\n    0.035 * sin(orbit),\n    0.022 * cos(2.0 * orbit)\n  );\n  vec2 B = vec2(0.02, 0.23) + vec2(\n    0.032 * cos(orbit),\n    0.030 * sin(2.0 * orbit)\n  );\n  vec2 C = vec2(0.18, 0.035) + vec2(\n    0.042 * sin(2.0 * orbit),\n    0.025 * cos(orbit)\n  );\n  float dc = length((k - A) * vec2(1.0, 1.55));\n  float db = length((k - B) * vec2(0.85, 1.7));\n  float di = length((k - C) * vec2(1.35, 1.0));\n  vec2 ba = B - A;\n  vec2 pa = k - A;\n  vec2 cb = C - B;\n  vec2 pb = k - B;\n  float d1 = length(\n    pa - ba * clamp(dot(pa, ba) / max(dot(ba, ba), 1e-6), 0.0, 1.0)\n  );\n  float d2 = length(\n    pb - cb * clamp(dot(pb, cb) / max(dot(cb, cb), 1e-6), 0.0, 1.0)\n  );\n  float hall = min(d1, d2);\n  float field = min(min(dc, di), min(db, 1.35 * hall)) + 0.025 * n;\n  float topo =\n    (1.0 - smoothstep(\n      0.008,\n      0.027,\n      abs(fract((field + 0.11 * sin(orbit)) * 15.0) - 0.5)\n    )) *\n    (1.0 - smoothstep(0.08, 0.45, field));\n  float coffee =\n    (1.0 - smoothstep(\n      0.006,\n      0.023,\n      abs(fract((dc + 0.02 * n) * 18.0 - 0.18 * sin(3.0 * orbit)) - 0.5)\n    )) *\n    (1.0 - smoothstep(0.05, 0.3, dc));\n  float citrus =\n    (1.0 - smoothstep(\n      0.004,\n      0.017,\n      abs(fract((di - 0.012 * n) * 23.0 + 0.18 * sin(5.0 * orbit)) - 0.5)\n    )) *\n    (1.0 - smoothstep(0.035, 0.24, di));\n  float bread =\n    (1.0 - smoothstep(\n      0.009,\n      0.03,\n      abs(fract((db + 0.015 * n) * 13.0 - 0.15 * cos(2.0 * orbit)) - 0.5)\n    )) *\n    (1.0 - smoothstep(0.06, 0.31, db));\n  float corridor =\n    (1.0 - smoothstep(0.008, 0.026, hall)) *\n    (0.35 + 0.65 * resolve);\n  float finalCorr =\n    (0.25 + 0.75 * dawn) *\n    (1.0 - smoothstep(0.004, 0.014, d2));\n  float rainSeam =\n    rain *\n    (1.0 - smoothstep(\n      0.006,\n      0.022,\n      abs(fract((k.x + 0.72 * k.y + 0.13 * sin(orbit)) * 17.0) - 0.5)\n    )) *\n    smoothstep(0.04, 0.34, k.x) *\n    smoothstep(-0.08, 0.38, k.y);\n  vec2 mA = A + vec2(\n    0.10 * sin(3.0 * orbit),\n    0.12 + 0.05 * cos(2.0 * orbit)\n  );\n  vec2 mB = B + vec2(\n    0.08 * cos(2.0 * orbit),\n    0.10 + 0.045 * sin(3.0 * orbit)\n  );\n  vec2 mC = C + vec2(\n    0.07 * sin(5.0 * orbit),\n    0.09 + 0.05 * cos(3.0 * orbit)\n  );\n  float mote = 1.0 - smoothstep(\n    0.008,\n    0.024,\n    min(length(k - mA), min(length(k - mB), length(k - mC)))\n  );\n  vec3 col = mix(\n    vec3(0.035, 0.026, 0.043),\n    vec3(0.18, 0.145, 0.105),\n    0.13 + 0.28 * dawn\n  );\n  vec2 cq = abs(p - vec2(-0.16, 0.285)) - vec2(0.27, 0.085);\n  float cabinet = 1.0 - smoothstep(\n    -0.006,\n    0.018,\n    length(max(cq, 0.0)) + min(max(cq.x, cq.y), 0.0)\n  );\n  vec2 wq = abs(p - vec2(0.3, 0.29)) - vec2(0.115, 0.145);\n  float window = 1.0 - smoothstep(\n    -0.005,\n    0.012,\n    length(max(wq, 0.0)) + min(max(wq.x, wq.y), 0.0)\n  );\n  float counter =\n    (1.0 - smoothstep(0.004, 0.011, abs(p.y - 0.185))) *\n    smoothstep(-0.46, -0.4, p.x) *\n    (1.0 - smoothstep(0.39, 0.44, p.x));\n  col = mix(col, vec3(0.095, 0.059, 0.047), 0.72 * cabinet);\n  col = mix(\n    col,\n    vec3(0.045, 0.13, 0.125),\n    (0.3 + 0.65 * rain) * window\n  );\n  col += vec3(0.16, 0.105, 0.065) * counter;\n  col += vec3(0.10, 0.34, 0.29) * topo * (0.28 + 0.42 * resolve);\n  col += vec3(0.42, 0.19, 0.075) * coffee;\n  col += vec3(0.72, 0.34, 0.16) * coffee * coffee * 0.42;\n  col += vec3(0.53, 0.69, 0.13) * citrus * (0.58 + 0.35 * roomWave);\n  col += vec3(0.5, 0.31, 0.16) * bread;\n  col += vec3(0.73, 0.47, 0.27) * bread * bread * 0.27;\n  col += vec3(0.57, 0.55, 0.44) * corridor * 0.34;\n  col += vec3(0.76, 0.69, 0.5) * finalCorr * 0.44;\n  col += vec3(0.07, 0.36, 0.31) * rainSeam;\n  col += vec3(0.48, 0.13, 0.055) * rainSeam * citrus * 0.5;\n  col += vec3(0.78, 0.58, 0.31) * mote * 0.42;\n  float head = 1.0 - smoothstep(\n    0.0,\n    0.018,\n    length((p - vec2(0.015, -0.47)) * vec2(0.82, 1.0)) - 0.145\n  );\n  float eyes =\n    (1.0 - smoothstep(\n      0.011,\n      0.021,\n      length((p - vec2(-0.037, -0.355)) * vec2(1.0, 3.8))\n    )) +\n    (1.0 - smoothstep(\n      0.011,\n      0.021,\n      length((p - vec2(0.052, -0.35)) * vec2(1.0, 3.8))\n    ));\n  float whisk =\n    (1.0 - smoothstep(\n      0.002,\n      0.007,\n      abs(p.y + 0.365 - 0.1 * (abs(p.x) - 0.08))\n    )) *\n    smoothstep(0.075, 0.11, abs(p.x)) *\n    (1.0 - smoothstep(0.27, 0.35, abs(p.x)));\n  float paw =\n    stepP *\n    (1.0 - smoothstep(\n      0.018,\n      0.034,\n      length(\n        (p - vec2(-0.105 + 0.04 * stepP, -0.425)) *\n        vec2(1.0, 2.2)\n      )\n    ));\n  col = mix(col, vec3(0.018, 0.012, 0.025), 0.88 * head);\n  col += vec3(0.52, 0.67, 0.4) * eyes * (0.28 + 0.28 * roomWave);\n  col += vec3(0.49, 0.46, 0.37) * whisk * 0.15;\n  col += vec3(0.12, 0.32, 0.27) * paw * 0.28;\n  gl_FragColor = vec4(clamp(col, 0.0, 0.92), 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 54;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 54;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 80\\n// DURATION: 54\\n// FORM: A 0-3; A1 3-7; B 7-10.5; C 10.5-14.5; A2 14.5-18\\n// TONAL CENTER: D major\\n// MOTIF: D4 F#4 A4 E5 C#5; D4 eighth, eighth rest, F#4 eighth, A4 eighth, quarter rest, E5 eighth, C#5 eighth\\n// HARMONIC PLAN: A Dadd9; A1 Dadd9 then G6(add9); B Bm7 then Aadd9; C Em7 then Gadd9 then Asus4-A; A2 Dadd9 then bare D5(add9) pedal\\n// PHRASE RULE: paired eighth gestures separated by a quarter rest; at boundaries sustain a common tone or D2 and change harmony plus only density, register, or articulation\\nsetcpm(20)\\n$: note(\\\"\u003cd2 d2 d2 d2 d2 d2 d2 d2 [d2,~ ~ ~ a2 ~ ~ ~ ~] d2 d2 d2 d2 d2 d2 d2 d2 [d2 ~]>\\\")\\n  .s(\\\"sine\\\")\\n  .gain(\\\"\u003c0.09 0.09 0.095 0.095 0.1 0.1 0.1 0.105 0.13 0.105 0.1 0.1 0.095 0.095 0.09 0.09 0.085 0.08>\\\")\\n  .lpf(190)\\n  .attack(0.06)\\n  .release(0.32)\\n  .room(0.12)\\n  .pan(0.48)\\n  .orbit(1)\\n$: note(\\\"\u003c[d3,f#3,a3,e4] [d3,f#3,a3,e4] [d3,f#3,a3,e4] [d3,f#3,a3,e4] [d3,f#3,a3,e4] [g3,b3,d4,e4] [g3,b3,d4,e4] [b2,d3,f#3,a3] [b2,d3,f#3,a3] [a2,b2,c#3,e3] [[a2,b2,c#3,e3] [e3,g3,b3,d4]] [e3,g3,b3,d4] [[e3,g3,b3,d4] [g3,a3,b3,d4]] [[g3,a3,b3,d4] [a2,d3,e3,a3]] [[a2,c#3,e3,a3] [d3,f#3,a3,e4]] [d3,f#3,a3,e4] [[d3,f#3,a3,e4] [a2,e3]] [[a2,e3] ~]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .gain(\\\"\u003c0.035 0.045 0.055 0.07 0.08 0.09 0.095 0.09 0.09 0.085 0.08 0.085 0.09 0.085 0.075 0.06 0.045 0.025>\\\")\\n  .lpf(\\\"\u003c850 950 1100 1250 1400 1550 1700 1650 1550 1450 1350 1500 1750 1600 1300 1050 800 650>\\\")\\n  .attack(0.42)\\n  .release(0.62)\\n  .room(0.34)\\n  .pan(\\\"\u003c0.38 0.62>\\\")\\n  .orbit(2)\\n$: note(\\\"\u003cd4 ~ ~ ~ ~ ~ ~ ~ d4 ~ f#4 ~ ~ ~ ~ ~ d4 ~ f#4 a4 ~ ~ ~ ~ d4 ~ f#4 a4 ~ ~ e5 c#5 d4 ~ f#4 a4 ~ ~ e5 ~ d4 ~ f#4 a4 ~ ~ e5 c#5 d4 ~ f#4 a4 ~ ~ e5 ~ ~ d4 ~ f#4 a4 ~ ~ e5 c#5 ~ ~ ~ ~ ~ ~ ~ d4 f#4 a4 ~ [[e5 c#5] [c#5 ~ e5 a4 ~ ~ f#4 d4]] c#5 ~ e5 a4 ~ ~ f#4 d4 c#5 ~ e5 a4 ~ ~ f#4 d4 [c#5 ~ e5 a4 ~ ~ f#4 d4] [[c#5 ~ e5 a4 ~ ~ f#4 d4] [d4 ~ f#4 a4 ~ ~ ~ ~]] [[d4 ~ f#4 a4 ~ ~ ~ ~] [d4 ~ f#4 a4 ~ ~ e5 c#5]] d4 ~ f#4 a4 ~ ~ e5 c#5 d4 ~ f#4 a4 ~ ~ ~ ~ [d4 ~ ~ ~ ~ ~ ~ ~] ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .gain(\\\"\u003c0.055 0.06 0.065 0.095 0.085 0.1 0.085 0.09 0.045 0.09 0.085 0.09 0.095 0.09 0.08 0.07 0.05 0>\\\")\\n  .lpf(\\\"\u003c2100 2200 2350 2600 2450 2800 2500 2700 1900 2400 2300 2600 3000 2700 2300 2050 1750 1400>\\\")\\n  .attack(0.008)\\n  .release(\\\"\u003c0.32 0.36 0.4 0.46 0.38 0.5 0.4 0.42 0.18 0.55 0.34 0.42 0.48 0.4 0.36 0.3 0.24 0.12>\\\")\\n  .room(0.27)\\n  .pan(\\\"\u003c0.28 0.36 0.44 0.58 0.68 0.62 0.48 0.34 0.42 0.55 0.7 0.62 0.38 0.3 0.46 0.54 0.48 0.5>\\\")\\n  .orbit(3)\",\"bpm\":80,\"durationSec\":54,\"renderDurationSec\":57,\"cps\":0.3333333333333333,\"cycles\":18,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+
+float n(vec2 p){
+    vec2 i=floor(p),f=fract(p);
+    f=f*f*(3.0-2.0*f);
+    return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);
+}
+
+float fb(vec2 p){
+    float v=0.0,a=0.5;
+    for(float i=0.0;i<3.0;i++){v+=a*n(p);p=mat2(.8,.6,-.6,.8)*p*2.0;a*=.5;}
+    return v;
+}
+
+void main(){
+    vec2 uv=(gl_FragCoord.xy-.5*iResolution.xy)/iResolution.y;
+    float t=iTime,d=60.0;
+    float tp=t/d*6.28318;
+    vec2 to=vec2(sin(tp),cos(tp));
+
+    float fi=smoothstep(0.0,8.0,t);
+    float fo=1.0-smoothstep(53.0,60.0,t);
+    float ef=fi*fo;
+
+    float e=0.0;
+    float gt=min(t,15.0);
+    e=max(e,smoothstep(.8,0.0,length(uv)-gt*.1));
+    e=max(e,smoothstep(.7,0.0,length(uv-vec2(.3,-.2))-max(gt-3.0,0.0)*.09));
+    e=max(e,smoothstep(.7,0.0,length(uv+vec2(.2,.35))-max(gt-5.0,0.0)*.085));
+    e=clamp(mix(e,1.0,smoothstep(10.0,18.0,t)),0.0,1.0)*ef;
+
+    vec2 p=uv*5.0;
+    float w1=fb(p*.6+to*.8);
+    float w2=fb(p*.6+vec2(7.3,2.1)+to.yx*.7);
+    vec2 w=p+vec2(w1,w2)*2.5;
+    float w3=fb(w*.4+to*.5+vec2(3.1,8.5));
+    float w4=fb(w*.4+to.yx*.4+vec2(1.7,4.2));
+    w+=vec2(w3,w4)*1.2;
+
+    float v=n(w*1.8)*.55+n(w*3.5)*.3+n(w*.9)*.15;
+    float th=.46+.06*sin(tp*2.0+length(uv)*2.0);
+    float core=smoothstep(th-.02,th+.02,v);
+    float glow=smoothstep(th-.12,th+.12,v);
+    float edge=glow-core;
+
+    core*=e; edge*=e; glow*=e;
+
+    vec3 col=vec3(.01,.01,.03);
+    float bm=smoothstep(.3,.7,fb(w*2.0));
+    vec3 body=mix(vec3(.04,.2,.55),vec3(.75,.45,.08),bm*.4);
+    col=mix(col,body,core);
+    col+=vec3(.08,.85,.65)*edge*.7;
+    col+=vec3(.04,.15,.45)*.15*glow*(1.0-core);
+    col*=.9+.1*sin(tp*3.0+length(uv)*4.0);
+    col*=1.0-.35*dot(uv,uv);
+
+    gl_FragColor=vec4(max(col,0.0),1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+window.initToneJsEngine = async function() {
+    Tone.Transport.bpm.value = 52;
+    var bpm = 52;
+
+    var rev = new Tone.Reverb({decay:8,wet:0.5}).toDestination();
+    await rev.generate();
+    var del = new Tone.FeedbackDelay({delayTime:"4n.",feedback:0.3,wet:0.25}).connect(rev);
+
+    var drone = new Tone.Synth({oscillator:{type:"sine"},envelope:{attack:5,decay:2,sustain:1,release:5}}).connect(rev);
+    drone.volume.value = -14;
+
+    var fm = new Tone.FMSynth({harmonicity:5.5,modulationIndex:8,oscillator:{type:"sine"},envelope:{attack:0.5,decay:3,sustain:0,release:2},modulation:{type:"sine"}}).connect(del);
+    fm.volume.value = -20;
+
+    var padF = new Tone.Filter({type:"lowpass",frequency:300}).connect(rev);
+    var pad = new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},envelope:{attack:3,decay:2,sustain:0.5,release:3}}).connect(padF);
+    pad.volume.value = -18;
+
+    var ns = new Tone.NoiseSynth({noise:{type:"pink"},envelope:{attack:2,decay:1,sustain:0.2,release:3}});
+    var nsBP = new Tone.Filter({type:"bandpass",frequency:600,Q:1.5}).connect(rev);
+    ns.connect(nsBP);
+    ns.volume.value = -26;
+
+    Tone.Transport.schedule(function(time){
+        drone.triggerAttackRelease("C1",48,time,0.7);
+    },"0:0:0");
+
+    var notes=["C5","Eb5","G5","Bb4","C6","G4","F5","Ab5"];
+    var ni=0;
+    var fmLoop = new Tone.Loop(function(time){
+        var bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+        if(bar>=2&&bar<11&&Math.random()>0.35){
+            fm.triggerAttackRelease(notes[ni%notes.length],"2n",time,0.2+Math.random()*0.15);
+            ni++;
+        }
+    },"2n").start(0);
+
+    var ch=[["C3","Eb3","G3"],["Ab2","C3","Eb3"],["Bb2","D3","F3"],["G2","Bb2","D3"]];
+    var ci=0;
+    var padLoop = new Tone.Loop(function(time){
+        var bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+        if(bar>=3&&bar<11){
+            pad.triggerAttackRelease(ch[ci%ch.length],"1n",time,0.2);
+            ci++;
+        }
+    },"1n").start(0);
+
+    var nsLoop = new Tone.Loop(function(time){
+        var bar=Math.floor(Tone.Transport.getSecondsAtTime(time)/(60/bpm)/4);
+        if(bar>=1&&bar<12&&Math.random()>0.5){
+            ns.triggerAttackRelease("2n",time,0.12);
+        }
+    },"1n").start(0);
+
+    Tone.Transport.schedule(function(time){
+        padF.frequency.linearRampToValueAtTime(1400,time+20);
+    },"3:0:0");
+    Tone.Transport.schedule(function(time){
+        padF.frequency.linearRampToValueAtTime(300,time+8);
+    },"10:0:0");
+
+    window.toneJsInstruments={drone:drone,fm:fm,pad:pad,ns:ns};
+    window.toneJsParts={fmLoop:fmLoop,padLoop:padLoop,nsLoop:nsLoop};
+};
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

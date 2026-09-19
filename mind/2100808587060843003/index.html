@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 42.0;
+const float TAU = 6.28318530718;
+const float SEED = 6022433.0;
+float h11(float n){
+  return fract(sin(n * 127.1 + SEED) * 43758.5453123);
+}
+mat2 rot(float a){
+  float c = cos(a), s = sin(a);
+  return mat2(c, -s, s, c);
+}
+float seg(vec2 p, vec2 a, vec2 b, float r){
+  vec2 pa = p - a, ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h) - r;
+}
+float antenna(vec2 p, float tau){
+  vec2 r = p - vec2(-0.18, -0.20);
+  float tilt = 0.08 * sin(tau * 2.0) + 0.025 * sin(tau * 5.0);
+  vec2 q = rot(-tilt) * r;
+  float a = 0.56 + 0.10 * sin(tau * 3.0);
+  float ye = a * 0.88 * 0.88 - 0.43;
+  float bowl = max(abs(q.y - (a * q.x * q.x - 0.43)) - 0.013, abs(q.x) - 0.88);
+  float mesh = max(abs(q.y - ((a + 0.15) * q.x * q.x - 0.43)) - 0.006, abs(q.x) - 0.73);
+  float d = min(bowl, mesh);
+  d = min(d, seg(q, vec2(-0.88, ye), vec2(0.88, ye), 0.010));
+  d = min(d, seg(q, vec2(0.0, -0.43), vec2(-0.88, ye), 0.007));
+  d = min(d, seg(q, vec2(0.0, -0.43), vec2(0.88, ye), 0.007));
+  d = min(d, seg(q, vec2(0.0, -0.43), vec2(-0.52, a * 0.2704 - 0.43), 0.006));
+  d = min(d, seg(q, vec2(0.0, -0.43), vec2(0.52, a * 0.2704 - 0.43), 0.006));
+  float fy = -0.43 + 1.0 / (4.0 * a);
+  d = min(d, seg(q, vec2(0.0, -0.43), vec2(0.0, fy), 0.011));
+  d = min(d, seg(q, vec2(-0.11, fy), vec2(0.11, fy), 0.032));
+  d = min(d, seg(r, vec2(0.0, -0.40), vec2(-0.38, -0.82), 0.019));
+  d = min(d, seg(r, vec2(0.0, -0.40), vec2(0.38, -0.82), 0.019));
+  d = min(d, seg(r, vec2(-0.53, -0.82), vec2(0.53, -0.82), 0.012));
+  return d;
+}
+void main(){
+  vec2 uv = (gl_FragCoord.xy * 2.0 - iResolution.xy) / iResolution.y;
+  float phase = mod(iTime, DURATION) / DURATION;
+  float tau = phase * TAU;
+  float a = 0.56 + 0.10 * sin(tau * 3.0);
+  float tilt = 0.08 * sin(tau * 2.0) + 0.025 * sin(tau * 5.0);
+  vec2 focus = vec2(-0.18, -0.20) + rot(tilt) * vec2(0.0, -0.43 + 1.0 / (4.0 * a));
+  vec2 src = vec2(0.92, 0.78);
+  vec2 dir = normalize(focus - src);
+  vec2 per = vec2(-dir.y, dir.x);
+  vec3 col = vec3(0.008, 0.011, 0.017);
+  col += vec3(0.055, 0.022, 0.014) * (1.0 - smoothstep(-0.95, 0.30, uv.y));
+  vec2 m = rot(-0.48) * (uv - focus);
+  float rr = dot(m, m) + 0.06;
+  float psi = m.x / rr;
+  float ghost = 1.0 - smoothstep(0.025, 0.20, abs(sin(psi * 2.35 + 0.34 * sin(tau * 2.0))));
+  ghost *= 1.0 - smoothstep(0.28, 1.95, length(m));
+  col += vec3(0.045, 0.30, 0.22) * ghost * 0.24;
+  vec2 rel = uv - focus;
+  float along = dot(rel, -dir);
+  float crossv = dot(rel, per);
+  float beam = 1.0 - smoothstep(0.10, 0.62, abs(crossv));
+  beam *= smoothstep(-0.08, 0.24, along);
+  float carrier = pow(0.5 + 0.5 * cos(TAU * (along * 1.55 - phase * 6.0)), 18.0);
+  col += vec3(0.72, 0.60, 0.94) * beam * carrier * 0.34;
+  for(int i = 0; i < 48; i++){
+    float fi = float(i);
+    float h = h11(fi * 1.73 + 9.0);
+    float shell = 0.42 + 1.46 * h11(fi * 2.31 + 41.0);
+    float speed = 1.0 + floor(h11(fi + 77.0) * 3.0);
+    for(int j = 0; j < 3; j++){
+      float fj = float(j);
+      float ang = TAU * (h + phase * speed) - fj * (0.040 + h * 0.026);
+      float s = sin(ang), c = cos(ang);
+      vec2 pos = vec2(shell * s * s * s, shell * s * s * c * 0.82);
+      pos = rot(0.48 + 0.10 * sin(tau * 2.0)) * pos + focus;
+      float d = length(uv - pos);
+      float g = (1.0 - smoothstep(0.0, 0.020, d)) * 0.40;
+      g += 0.00012 / (d * d + 0.0006);
+      g *= 1.0 - fj * 0.27;
+      vec3 pc = mix(vec3(0.08, 0.67, 0.47), vec3(0.78, 0.55, 0.96), h);
+      col += pc * g;
+    }
+  }
+  for(int i = 0; i < 24; i++){
+    float fi = float(i);
+    float h = h11(fi * 4.13 + 103.0);
+    float k = h11(fi * 2.79 + 211.0);
+    float speed = 1.0 + floor(h11(fi + 301.0) * 3.0);
+    vec2 start = src + per * (h - 0.5) * 1.45;
+    for(int j = 0; j < 2; j++){
+      float u = fract(k + phase * speed - float(j) * 0.018);
+      vec2 pos = mix(start, focus, u);
+      pos += per * sin(u * 3.14159265359) * ((h - 0.5) * 0.55 + 0.09 * sin(tau * 4.0 + fi));
+      float d = length(uv - pos);
+      float g = (1.0 - smoothstep(0.0, 0.026, d)) * 0.48;
+      g += 0.00010 / (d * d + 0.0007);
+      g *= 1.0 - float(j) * 0.38;
+      col += mix(vec3(1.0, 0.56, 0.20), vec3(0.82, 0.76, 1.0), k) * g;
+    }
+  }
+  float ad = antenna(uv, tau);
+  float am = 1.0 - smoothstep(0.0, 0.018, ad);
+  float ag = 0.004 / (max(ad, 0.0) + 0.008);
+  float oxide = 0.5 + 0.5 * sin(uv.x * 11.0 + uv.y * 7.0 + tau);
+  vec3 copper = mix(vec3(0.06, 0.45, 0.34), vec3(0.98, 0.39, 0.10), oxide);
+  col = mix(col, copper, am);
+  col += copper * ag * 0.22;
+  float response = pow(0.5 + 0.5 * cos(tau * 6.0), 12.0);
+  float fd = length(uv - focus);
+  col += vec3(1.0, 0.73, 0.38) * (0.003 / (fd * fd + 0.003)) * (0.18 + response);
+  float sd = length(uv - src);
+  float pulse = pow(0.5 + 0.5 * cos(tau * 6.0), 14.0);
+  col += vec3(0.72, 0.63, 1.0) * (0.004 / (sd * sd + 0.003)) * (0.50 + pulse * 1.8);
+  col *= 1.0 - 0.30 * smoothstep(0.65, 1.45, length(uv));
+  col = vec3(1.0) - exp(-col * 1.15);
+  col = pow(max(col, vec3(0.0)), vec3(0.86));
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 42;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 42;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 42;
+  const targetBpm = 92;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const secPerBar = 60 / bpm;
+
+  // Current bar at a given transport time
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+
+  // Deterministic variation
+  let rngState = 0x08d627a8;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === EFFECTS ===
+  const reverb = new Tone.Reverb({ decay: 4.0, wet: 0.35 }).toDestination();
+  await reverb.generate();
+
+  const delay = new Tone.FeedbackDelay({ delayTime: "8n", feedback: 0.35, wet: 0.25 }).toDestination();
+
+  // Master bus for sidechain pumping
+  const masterBus = new Tone.Gain(-3).toDestination();
+  const compressor = new Tone.Compressor({ threshold: -24, ratio: 12, attack: 0.002, release: 0.15 }).connect(masterBus);
+
+  // === INSTRUMENTS ===
+
+  // 1. Pulsing Sub Bass (The "Signal")
+  // Dark minor progression i - VI - III - VII (e.g., A - F - C - G)
+  const bassSynth = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    filter: { type: "lowpass", Q: 4, frequency: 800 },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.3 },
+    filterEnvelope: { attack: 0.005, decay: 0.4, sustain: 0.5, baseFrequency: 200, octaves: 2 }
+  }).connect(compressor);
+
+  // 2. Metallic Pulsar (The "Beacon")
+  // FM Synth for sharp, bell-like, radio-like hits
+  const beaconSynth = new Tone.FMSynth({
+    harmonicity: 2.5,
+    modulationIndex: 18.5,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.8, sustain: 0, release: 0.8 },
+    modulation: { type: "square" }
+  }).connect(reverb).connect(delay);
+
+  // 3. Noise Radar (The "Dust")
+  // Shimmering bandpass noise to simulate electromagnetic dust
+  const noiseSynth = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.5, decay: 0.5, sustain: 0, release: 0.5 }
+  }).toDestination();
+
+  const noiseBandpass = new Tone.Filter({ type: "bandpass", Q: 15, frequency: 3000 }).toDestination();
+  noiseSynth.connect(noiseBandpass);
+
+  // 4. String Sweep (The "Cinematic Tension")
+  const stringPad = new Tone.PolySynth(Tone.Synth, {
+    maxPolyphony: 4,
+    oscillator: { type: "triangle" },
+    envelope: { attack: 1.2, decay: 0.8, sustain: 0.8, release: 2.0 }
+  }).connect(reverb);
+
+  // === PATTERNS ===
+
+  // Kick (4-on-the-floor)
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.01,
+    octaves: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.05 }
+  }).connect(compressor);
+
+  let kickIdx = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    // Only active during build and peak (10% to 80%)
+    if (barAt(time) >= totalBars * 0.10 && barAt(time) < totalBars * 0.80) {
+      kick.triggerAttackRelease("C1", "8n", time + H(2), 1.0);
+      // Sidechain trigger
+      masterBus.gain.setValueAtTime(-10, time);
+      masterBus.gain.linearRampToValueAtTime(-3, time + 0.15);
+    }
+  }, "4n").start(0);
+
+  // Bass Pattern (Driving, syncopated)
+  // Chords: Am, F, C, G
+  const bassNotes = [
+    ["A2", "E2", "A1"],      // Am
+    ["F2", "C2", "F1"],      // F
+    ["C3", "G2", "C2"],      // C
+    ["G2", "D2", "G1"]       // G
+  ];
+  
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Active from 10% to 80%
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.80) {
+      // Change chord every 2 bars (16 eighth notes = 4 beats)
+      // Current chord index: floor(current_beat_in_chord / 4)
+      // We use modulo 8 for the loop step to map to 4 notes
+      const chordIdx = Math.floor((bassIdx / 4) % 4);
+      const notes = bassNotes[chordIdx];
+      
+      // Bass plays on every 8th note, but sometimes omits for groove
+      if (bassIdx % 2 === 0) {
+        // Play root or 5th depending on step
+        const note = notes[0]; 
+        bassSynth.triggerAttackRelease(note, "8n", time + H(4), 0.6);
+      }
+      
+      // Open filter gradually
+      const progress = Math.min(1, (bar - totalBars * 0.10) / (totalBars * 0.3));
+      bassSynth.filterEnvelope.frequency.value = 200 + progress * 1600;
+    }
+    bassIdx++;
+  }, "8n").start(0);
+
+  // Pulsar Beacon Pattern (Sparse, rhythmic)
+  // "Ghost frequencies" - irregular intervals
+  const pulsarTimes = [0, 2, 3, 5, 6, 9]; // 16th note slots
+  let beaconIdx = 0;
+  const beaconLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Active from 15% to 75%
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.75) {
+      // Check if we are on a specific slot of the 4/4 bar
+      // We use the loop interval "16n", so 4 steps per bar
+      const stepInBar = beaconIdx % 4; 
+      
+      // Only play if the step matches our pulsar pattern relative to the bar start
+      // This requires careful mapping, but simpler: use the loop index to drive probability
+      if (R() > 0.6) { // 40% chance to trigger
+        const velocity = 0.4 + R() * 0.4;
+        beaconSynth.triggerAttackRelease("C5", "16n", time + H(5), velocity);
+      }
+    }
+    beaconIdx++;
+  }, "16n").start(0);
+
+  // Noise Radar Pattern (Drone-like texture)
+  let noiseIdx = 0;
+  const noiseLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Active from 20% to 85%
+    if (bar >= totalBars * 0.20 && bar < totalBars * 0.85) {
+      // Trigger longer bursts
+      noiseSynth.triggerAttackRelease("1n", time, 0.15);
+      // Modulate filter frequency to simulate tuning
+      noiseBandpass.frequency.value = 2000 + R() * 2000;
+    }
+    noiseIdx++;
+  }, "2n").start(0);
+
+  // String Sweep Pattern (Cinematic tension)
+  // Chords: Am9, Fmaj9, Cmaj9, G6
+  const stringChords = [
+    ["A3", "C4", "E4", "G4", "B4"],
+    ["F3", "A3", "C4", "E4", "G4"],
+    ["C4", "E4", "G4", "B4", "D5"],
+    ["G3", "B3", "D4", "F4", "B4"]
+  ];
+  
+  let stringIdx = 0;
+  const stringLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Active from 10% to 70% (exit earlier to leave room for final pulsar focus)
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.70) {
+      const chordIdx = Math.floor((stringIdx / 2) % 4); // Change every 2 loops (4 beats)
+      const chord = stringChords[chordIdx];
+      
+      // Play chord
+      stringPad.triggerAttackRelease(chord, "4n", time, 0.35);
+      
+      // Automate volume for swell
+      const vol = 0.3 + Math.sin(stringIdx * 0.5) * 0.15;
+      stringPad.volume.value = vol;
+    }
+    stringIdx++;
+  }, "1n").start(0);
+
+  // === ARRANGEMENT / WIND DOWN ===
+  // Ensure loop point is clean
+  // 0-10%: Sparse, just noise and occasional pulsar
+  // 10-20%: Kick enters, bass builds
+  // 20-80%: Full track
+  // 80-100%: Wind down
+
+  Tone.Transport.schedule((time) => {
+    // Remove strings at 75%
+    stringLoop.stop(time);
+  }, totalBars * 0.75 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Remove bass at 85%
+    bassLoop.stop(time);
+  }, totalBars * 0.85 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Remove noise at 90%
+    noiseLoop.stop(time);
+  }, totalBars * 0.90 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Remove beacon at 95%
+    beaconLoop.stop(time);
+  }, totalBars * 0.95 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Remove kick at 98%
+    kickLoop.stop(time);
+  }, totalBars * 0.98 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = {
+    kick,
+    bassSynth,
+    beaconSynth,
+    noiseSynth,
+    stringPad,
+    reverb,
+    delay,
+    masterBus,
+    compressor,
+    noiseBandpass
+  };
+
+  window.toneJsParts = {
+    kickLoop,
+    bassLoop,
+    beaconLoop,
+    noiseLoop,
+    stringLoop
+  };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

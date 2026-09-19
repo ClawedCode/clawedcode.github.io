@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000;
+      font-family: 'Courier New', monospace;
+      color: #00ffff;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-rows: 50px 1fr 124px;
+      height: 900px;
+      width: 900px;
+      background: #02040a;
+      position: relative;
+    }
+    .scanlines {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        transparent 0px, transparent 2px,
+        rgba(0,0,0,0.08) 2px, rgba(0,0,0,0.08) 4px
+      );
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .top-hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: linear-gradient(180deg, #0a1520 0%, #050a10 100%);
+      border-bottom: 1px solid #00ffff44;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+    }
+    .hud-section {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+    }
+    .hud-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .hud-label {
+      color: #00ffff88;
+      font-size: 9px;
+    }
+    .hud-value {
+      color: #00ffff;
+      font-size: 11px;
+      text-shadow: 0 0 8px #00ffff;
+    }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #ff00ff;
+      box-shadow: 0 0 7px #ff00ff;
+    }
+    .status-dot.cyan { background: #00ffff; box-shadow: 0 0 6px #00ffff; }
+    .status-dot.green { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+    .middle-section {
+      display: grid;
+      grid-template-columns: 150px 1fr 170px;
+      gap: 8px;
+      padding: 8px;
+    }
+    .panel {
+      border: 1px solid #00ffff33;
+      background: #0a0e1488;
+      position: relative;
+    }
+    .panel-header {
+      font-size: 9px;
+      padding: 6px 8px;
+      background: #00ffff11;
+      border-bottom: 1px solid #00ffff22;
+      color: #00ffff99;
+      letter-spacing: 1px;
+    }
+    .left-strip {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 5px;
+      padding: 6px;
+    }
+    .thumb {
+      aspect-ratio: 1;
+      border: 1px solid #ff00ff44;
+      background: #0a0815;
+      position: relative;
+      overflow: hidden;
+    }
+    .thumb canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .thumb-label {
+      position: absolute;
+      bottom: 3px;
+      left: 4px;
+      font-size: 7px;
+      color: #ff00ff88;
+    }
+    .mini-graph {
+      height: 55px;
+      padding: 6px;
+    }
+    .mini-graph canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .data-block {
+      padding: 6px 8px;
+      font-size: 8px;
+      line-height: 1.5;
+      color: #00ffff77;
+    }
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+    }
+    .data-val {
+      color: #00ffff;
+    }
+    .central-viz {
+      position: relative;
+      border: 1px solid #00ffff44;
+      background: #020408;
+    }
+    .central-viz canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .viz-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+    .corner-mark {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border-color: #00ffff55;
+      border-style: solid;
+    }
+    .corner-mark.tl { top: 8px; left: 8px; border-width: 1px 0 0 1px; }
+    .corner-mark.tr { top: 8px; right: 8px; border-width: 1px 1px 0 0; }
+    .corner-mark.bl { bottom: 8px; left: 8px; border-width: 0 0 1px 1px; }
+    .corner-mark.br { bottom: 8px; right: 8px; border-width: 0 1px 1px 0; }
+    .right-panels {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .gauge-row {
+      display: flex;
+      gap: 6px;
+      padding: 6px;
+    }
+    .gauge {
+      flex: 1;
+      text-align: center;
+    }
+    .gauge canvas {
+      width: 50px;
+      height: 50px;
+    }
+    .gauge-label {
+      font-size: 7px;
+      color: #ff00ff88;
+      margin-top: 4px;
+    }
+    .bar-panel {
+      padding: 8px;
+    }
+    .bar-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+    .bar-label {
+      font-size: 7px;
+      width: 36px;
+      color: #00ffff88;
+    }
+    .bar-track {
+      flex: 1;
+      height: 8px;
+      background: #0a0e14;
+      border: 1px solid #00ffff33;
+    }
+    .bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00ffff, #ff00ff);
+      box-shadow: 0 0 4px #00ffff;
+    }
+    .bar-val {
+      font-size: 8px;
+      width: 30px;
+      text-align: right;
+      color: #00ffff;
+    }
+    .hex-scroll {
+      padding: 6px 8px;
+      font-size: 7px;
+      color: #ff00ff77;
+      line-height: 1.4;
+      overflow: hidden;
+      height: 72px;
+    }
+    .spectrum-panel {
+      padding: 6px;
+    }
+    .spectrum-panel canvas {
+      width: 100%;
+      height: 48px;
+    }
+    .bottom-telemetry {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      padding: 8px;
+      background: linear-gradient(135deg, #050810 0%, #0a1420 50%, #050810 100%);
+      border-top: 1px solid #00ffff44;
+      box-shadow: inset 0 1px 0 #00ffff22;
+    }
+    .chart-panel {
+      position: relative;
+      border: 1px solid #00ffff33;
+      background: radial-gradient(circle at 30% 20%, #0c1622 0%, #070c14 55%, #050810 100%);
+      padding: 6px 6px 8px;
+      overflow: hidden;
+    }
+    .chart-panel::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #00ffff, #ff00ff);
+      opacity: 0.85;
+    }
+    .chart-panel::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border: 1px solid #00ffff11;
+      pointer-events: none;
+    }
+    .bottom-telemetry .chart-panel:nth-child(2)::before { background: linear-gradient(90deg, #ff00ff, #ffaa00); }
+    .bottom-telemetry .chart-panel:nth-child(3)::before { background: linear-gradient(90deg, #00ffaa, #00ffff); }
+    .bottom-telemetry .chart-panel:nth-child(4)::before { background: linear-gradient(90deg, #ffaa00, #ff00ff); }
+    .bottom-telemetry .chart-panel:nth-child(5)::before { background: linear-gradient(90deg, #00ffff, #00ffaa); }
+    .chart-panel canvas {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 76px;
+    }
+    .chart-label {
+      position: relative;
+      z-index: 1;
+      font-size: 7px;
+      color: #00ffff88;
+      margin-bottom: 4px;
+      letter-spacing: 0.5px;
+    }
+    .coord-display {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 9px;
+      color: #00ffffaa;
+      letter-spacing: 3px;
+    }
+  </style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <div class="dashboard">
+    <div class="scanlines"></div>
+    <div class="top-hud">
+      <div class="hud-section">
+        <div class="hud-item">
+          <div class="status-dot cyan" id="statusDot1"></div>
+          <div><span class="hud-label">SPECIMEN</span> <span class="hud-value">FUI-Ω7X</span></div>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">CLASS</span>
+          <span class="hud-value">INTERFACE.VOID</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">ANALYSIS</span>
+          <span class="hud-value" id="analysisPercent">0.00%</span>
+        </div>
+      </div>
+      <div class="hud-section">
+        <div class="hud-item">
+          <span class="hud-label">COORD</span>
+          <span class="hud-value" id="coords">Ψ:0.000 Ω:0.000</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">MΔT</span>
+          <span class="hud-value" id="missionTime">00:00:00</span>
+        </div>
+        <div class="hud-item">
+          <div class="status-dot green" id="statusDot2"></div>
+          <span class="hud-value">SCANNING</span>
+        </div>
+      </div>
+    </div>
+    <div class="middle-section">
+      <div class="left-strip">
+        <div class="panel">
+          <div class="panel-header">◈ INTERFACE VARIANTS</div>
+          <div class="thumb-grid">
+            <div class="thumb"><canvas id="thumb0"></canvas><span class="thumb-label">α-VIEW</span></div>
+            <div class="thumb"><canvas id="thumb1"></canvas><span class="thumb-label">β-SCAN</span></div>
+            <div class="thumb"><canvas id="thumb2"></canvas><span class="thumb-label">γ-MESH</span></div>
+            <div class="thumb"><canvas id="thumb3"></canvas><span class="thumb-label">δ-FLUX</span></div>
+            <div class="thumb"><canvas id="thumb4"></canvas><span class="thumb-label">ε-FORM</span></div>
+            <div class="thumb"><canvas id="thumb5"></canvas><span class="thumb-label">ζ-DEEP</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ SIGNAL TRACE</div>
+          <div class="mini-graph"><canvas id="miniGraph1"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ FIELD DATA</div>
+          <div class="data-block">
+            <div class="data-row"><span>DENSITY</span><span class="data-val" id="density">0.847</span></div>
+            <div class="data-row"><span>RESONANCE</span><span class="data-val" id="resonance">1.23kHz</span></div>
+            <div class="data-row"><span>ENTROPY</span><span class="data-val" id="entropy">0.091</span></div>
+            <div class="data-row"><span>COHERENCE</span><span class="data-val" id="coherence">98.2%</span></div>
+            <div class="data-row"><span>Ψ-FACTOR</span><span class="data-val" id="psiFactor">7.41</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ WAVEFORM</div>
+          <div class="mini-graph"><canvas id="miniGraph2"></canvas></div>
+        </div>
+      </div>
+      <div class="central-viz">
+        <canvas id="mainViz"></canvas>
+        <div class="viz-overlay">
+          <div class="corner-mark tl"></div>
+          <div class="corner-mark tr"></div>
+          <div class="corner-mark bl"></div>
+          <div class="corner-mark br"></div>
+        </div>
+        <div class="coord-display" id="vizCoords">X:0.000 Y:0.000 Z:0.000</div>
+      </div>
+      <div class="right-panels">
+        <div class="panel">
+          <div class="panel-header">◈ RADIAL METRICS</div>
+          <div class="gauge-row">
+            <div class="gauge"><canvas id="gauge0"></canvas><div class="gauge-label">FLUX</div></div>
+            <div class="gauge"><canvas id="gauge1"></canvas><div class="gauge-label">SYNC</div></div>
+          </div>
+          <div class="gauge-row">
+            <div class="gauge"><canvas id="gauge2"></canvas><div class="gauge-label">PHASE</div></div>
+            <div class="gauge"><canvas id="gauge3"></canvas><div class="gauge-label">VOID</div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ INTENSITY BANDS</div>
+          <div class="bar-panel" id="barPanel"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ SPECTRUM</div>
+          <div class="spectrum-panel"><canvas id="spectrum"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">◈ DATA STREAM</div>
+          <div class="hex-scroll" id="hexScroll"></div>
+        </div>
+      </div>
+    </div>
+    <div class="bottom-telemetry">
+      <div class="chart-panel">
+        <div class="chart-label">◈ BIO-ELECTRIC FLUX</div>
+        <canvas id="chart0"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">◈ PHOTON EMISSION</div>
+        <canvas id="chart1"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">◈ Ψ-WAVE DENSITY</div>
+        <canvas id="chart2"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">◈ QUANTUM COHERENCE</div>
+        <canvas id="chart3"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">◈ VOID RESONANCE</div>
+        <canvas id="chart4"></canvas>
+      </div>
+    </div>
+  </div>
+  <script>
+    // DURATION: 45
+    const mainCanvas = document.getElementById('mainViz');
+    const mainCtx = mainCanvas.getContext('2d');
+    const thumbCanvases = Array.from({length: 6}, (_, i) => document.getElementById('thumb' + i));
+    const thumbCtxs = thumbCanvases.map(c => c.getContext('2d'));
+    const gaugeCanvases = Array.from({length: 4}, (_, i) => document.getElementById('gauge' + i));
+    const gaugeCtxs = gaugeCanvases.map(c => c.getContext('2d'));
+    const chartCanvases = Array.from({length: 5}, (_, i) => document.getElementById('chart' + i));
+    const chartCtxs = chartCanvases.map(c => c.getContext('2d'));
+    const miniGraph1 = document.getElementById('miniGraph1');
+    const miniCtx1 = miniGraph1.getContext('2d');
+    const miniGraph2 = document.getElementById('miniGraph2');
+    const miniCtx2 = miniGraph2.getContext('2d');
+    const spectrumCanvas = document.getElementById('spectrum');
+    const spectrumCtx = spectrumCanvas.getContext('2d');
+    function resize() {
+      mainCanvas.width = mainCanvas.offsetWidth * 2;
+      mainCanvas.height = mainCanvas.offsetHeight * 2;
+      thumbCanvases.forEach(c => { c.width = c.offsetWidth * 2; c.height = c.offsetHeight * 2; });
+      gaugeCanvases.forEach(c => { c.width = 100; c.height = 100; });
+      chartCanvases.forEach(c => { c.width = c.offsetWidth * 2; c.height = 140; });
+      miniGraph1.width = miniGraph1.offsetWidth * 2;
+      miniGraph1.height = 80;
+      miniGraph2.width = miniGraph2.offsetWidth * 2;
+      miniGraph2.height = 80;
+      spectrumCanvas.width = spectrumCanvas.offsetWidth * 2;
+      spectrumCanvas.height = 80;
+    }
+    resize();
+    const chartData = Array.from({length: 5}, () => Array(100).fill(0).map(() => Math.random() * 0.5 + 0.25));
+    const barData = [
+      {label: 'CYAN', val: 0.72},
+      {label: 'MGNT', val: 0.58},
+      {label: 'FLUX', val: 0.91},
+      {label: 'SYNC', val: 0.44},
+      {label: 'VOID', val: 0.67}
+    ];
+    const barPanel = document.getElementById('barPanel');
+    barData.forEach((b, i) => {
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `<span class="bar-label">${b.label}</span><div class="bar-track"><div class="bar-fill" id="bar${i}" style="width:${b.val*100}%"></div></div><span class="bar-val" id="barVal${i}">${Math.round(b.val*100)}%</span>`;
+      barPanel.appendChild(row);
+    });
+    let hexLines = [];
+    for (let i = 0; i < 12; i++) {
+      hexLines.push(genHex());
+    }
+    function genHex() {
+      let s = '';
+      for (let i = 0; i < 24; i++) s += Math.floor(Math.random()*16).toString(16).toUpperCase();
+      return s.match(/.{4}/g).join(' ');
+    }
+    function drawMainViz(t) {
+      const w = mainCanvas.width, h = mainCanvas.height;
+      mainCtx.fillStyle = '#020408';
+      mainCtx.fillRect(0, 0, w, h);
+      const cx = w / 2, cy = h / 2;
+      const time = t / 1000;
+      // Grid
+      mainCtx.strokeStyle = '#00ffff11';
+      mainCtx.lineWidth = 1;
+      for (let i = 0; i < w; i += 40) {
+        mainCtx.beginPath();
+        mainCtx.moveTo(i, 0);
+        mainCtx.lineTo(i, h);
+        mainCtx.stroke();
+      }
+      for (let i = 0; i < h; i += 40) {
+        mainCtx.beginPath();
+        mainCtx.moveTo(0, i);
+        mainCtx.lineTo(w, i);
+        mainCtx.stroke();
+      }
+      // Central FUI elements
+      const numRings = 5;
+      for (let r = 0; r < numRings; r++) {
+        const radius = 80 + r * 60;
+        const rotation = time * (0.2 + r * 0.1) * (r % 2 ? 1 : -1);
+        mainCtx.save();
+        mainCtx.translate(cx, cy);
+        mainCtx.rotate(rotation);
+        // Ring
+        mainCtx.strokeStyle = r % 2 ? '#ff00ff44' : '#00ffff44';
+        mainCtx.lineWidth = 2;
+        mainCtx.beginPath();
+        mainCtx.arc(0, 0, radius, 0, Math.PI * 2);
+        mainCtx.stroke();
+        // Segments
+        const segments = 8 + r * 4;
+        for (let s = 0; s < segments; s++) {
+          const angle = (s / segments) * Math.PI * 2;
+          const segLen = 15 + Math.sin(time * 2 + s + r) * 10;
+          const inner = radius - segLen / 2;
+          const outer = radius + segLen / 2;
+          if (Math.random() > 0.3) {
+            mainCtx.strokeStyle = s % 3 === 0 ? '#ff00ff88' : '#00ffff88';
+            mainCtx.lineWidth = s % 5 === 0 ? 3 : 1;
+            mainCtx.beginPath();
+            mainCtx.moveTo(Math.cos(angle) * inner, Math.sin(angle) * inner);
+            mainCtx.lineTo(Math.cos(angle) * outer, Math.sin(angle) * outer);
+            mainCtx.stroke();
+          }
+        }
+        // Arc segments
+        if (r > 0) {
+          const arcStart = time * 0.5 + r;
+          const arcLen = 0.3 + Math.sin(time + r) * 0.2;
+          mainCtx.strokeStyle = '#00ffff66';
+          mainCtx.lineWidth = 4;
+          mainCtx.beginPath();
+          mainCtx.arc(0, 0, radius, arcStart, arcStart + arcLen);
+          mainCtx.stroke();
+        }
+        mainCtx.restore();
+      }
+      // Center element
+      const pulseSize = 30 + Math.sin(time * 3) * 10;
+      const gradient = mainCtx.createRadialGradient(cx, cy, 0, cx, cy, pulseSize);
+      gradient.addColorStop(0, '#ff00ff88');
+      gradient.addColorStop(0.5, '#00ffff44');
+      gradient.addColorStop(1, 'transparent');
+      mainCtx.fillStyle = gradient;
+      mainCtx.beginPath();
+      mainCtx.arc(cx, cy, pulseSize, 0, Math.PI * 2);
+      mainCtx.fill();
+      // Floating data points
+      for (let i = 0; i < 30; i++) {
+        const angle = (i / 30) * Math.PI * 2 + time * 0.3;
+        const dist = 200 + Math.sin(time * 2 + i) * 50;
+        const x = cx + Math.cos(angle) * dist;
+        const y = cy + Math.sin(angle) * dist;
+        const size = 2 + Math.sin(time * 4 + i * 0.5) * 2;
+        mainCtx.fillStyle = i % 3 === 0 ? '#ff00ff' : '#00ffff';
+        mainCtx.shadowColor = mainCtx.fillStyle;
+        mainCtx.shadowBlur = 8;
+        mainCtx.beginPath();
+        mainCtx.arc(x, y, size, 0, Math.PI * 2);
+        mainCtx.fill();
+        mainCtx.shadowBlur = 0;
+      }
+      // Waveforms
+      for (let w = 0; w < 3; w++) {
+        mainCtx.strokeStyle = w === 0 ? '#00ffff44' : w === 1 ? '#ff00ff33' : '#ffaa0033';
+        mainCtx.lineWidth = 1;
+        mainCtx.beginPath();
+        for (let x = 0; x < mainCanvas.width; x += 4) {
+          const y = cy + Math.sin(x * 0.02 + time * 2 + w) * (40 + w * 20) + Math.sin(x * 0.05 + time * 3) * 20;
+          if (x === 0) mainCtx.moveTo(x, y);
+          else mainCtx.lineTo(x, y);
+        }
+        mainCtx.stroke();
+      }
+    }
+    function drawThumbs(t) {
+      const time = t / 1000;
+      thumbCtxs.forEach((ctx, i) => {
+        const w = thumbCanvases[i].width, h = thumbCanvases[i].height;
+        ctx.fillStyle = '#0a0815';
+        ctx.fillRect(0, 0, w, h);
+        const cx = w / 2, cy = h / 2;
+        if (i === 0) {
+          ctx.strokeStyle = '#00ffff66';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.min(w, h) * 0.35, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.strokeStyle = '#ff00ff';
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.min(w, h) * 0.35, -Math.PI/2, -Math.PI/2 + (time % 6) / 6 * Math.PI * 2);
+          ctx.stroke();
+        } else if (i === 1) {
+          for (let b = 0; b < 5; b++) {
+            const barH = (0.3 + Math.sin(time * 2 + b) * 0.3) * h;
+            ctx.fillStyle = b % 2 ? '#ff00ff88' : '#00ffff88';
+            ctx.fillRect(b * w / 5 + 2, h - barH, w / 5 - 4, barH);
+          }
+        } else if (i === 2) {
+          ctx.strokeStyle = '#00ffff44';
+          ctx.lineWidth = 1;
+          for (let x = 0; x < w; x += 8) {
+            for (let y = 0; y < h; y += 8) {
+              const offsetX = Math.sin(time + x * 0.1) * 2;
+              const offsetY = Math.cos(time + y * 0.1) * 2;
+              ctx.strokeRect(x + offsetX, y + offsetY, 6, 6);
+            }
+          }
+        } else if (i === 3) {
+          for (let p = 0; p < 20; p++) {
+            const px = (Math.sin(time + p * 0.5) * 0.4 + 0.5) * w;
+            const py = (Math.cos(time * 0.7 + p * 0.3) * 0.4 + 0.5) * h;
+            ctx.fillStyle = p % 2 ? '#ff00ff' : '#00ffff';
+            ctx.beginPath();
+            ctx.arc(px, py, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (i === 4) {
+          ctx.strokeStyle = '#00ffff88';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          for (let x = 0; x < w; x += 2) {
+            const y = cy + Math.sin(x * 0.1 + time * 3) * h * 0.3;
+            if (x === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        } else {
+          ctx.strokeStyle = '#00ffff44';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.arc(cx, cy, Math.min(w, h) * 0.4, 0, Math.PI * 2);
+          ctx.stroke();
+          const angle = time * 2;
+          ctx.strokeStyle = '#ff00ff88';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          ctx.lineTo(cx + Math.cos(angle) * w * 0.4, cy + Math.sin(angle) * h * 0.4);
+          ctx.stroke();
+        }
+      });
+    }
+    function drawGauges(t) {
+      const time = t / 1000;
+      gaugeCtxs.forEach((ctx, i) => {
+        const w = 100, h = 100;
+        ctx.clearRect(0, 0, w, h);
+        const cx = w / 2, cy = h / 2, r = 35;
+        ctx.strokeStyle = '#00ffff22';
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI * 0.75, Math.PI * 2.25);
+        ctx.stroke();
+        const val = 0.5 + Math.sin(time * (0.5 + i * 0.2) + i) * 0.4;
+        ctx.strokeStyle = i % 2 ? '#ff00ff' : '#00ffff';
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, Math.PI * 0.75, Math.PI * 0.75 + val * Math.PI * 1.5);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#00ffff';
+        ctx.font = '10px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.round(val * 100) + '%', cx, cy + 4);
+      });
+    }
+    function drawCharts(t) {
+      const time = t / 1000;
+      chartCtxs.forEach((ctx, i) => {
+        const w = chartCanvases[i].width, h = 140;
+        ctx.fillStyle = '#080c14';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = '#00ffff11';
+        ctx.lineWidth = 1;
+        for (let y = 20; y < h; y += 20) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(w, y);
+          ctx.stroke();
+        }
+        chartData[i].shift();
+        chartData[i].push(0.5 + Math.sin(time * (1 + i * 0.3) + i * 2) * 0.3 + Math.random() * 0.1);
+        ctx.strokeStyle = i % 2 ? '#ff00ff' : '#00ffff';
+        ctx.shadowColor = ctx.strokeStyle;
+        ctx.shadowBlur = 4;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        chartData[i].forEach((v, x) => {
+          const px = (x / chartData[i].length) * w;
+          const py = h - v * (h - 20) - 10;
+          if (x === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = i % 2 ? '#00ffff44' : '#ff00ff44';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        chartData[i].forEach((v, x) => {
+          const px = (x / chartData[i].length) * w;
+          const py = h - (v + Math.sin(x * 0.1 + time) * 0.1) * (h - 20) - 10;
+          if (x === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        });
+        ctx.stroke();
+      });
+    }
+    function drawMiniGraphs(t) {
+      const time = t / 1000;
+      [miniCtx1, miniCtx2].forEach((ctx, idx) => {
+        const canvas = idx === 0 ? miniGraph1 : miniGraph2;
+        const w = canvas.width, h = 80;
+        ctx.fillStyle = '#0a0e14';
+        ctx.fillRect(0, 0, w, h);
+        ctx.strokeStyle = idx === 0 ? '#00ffff88' : '#ff00ff88';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let x = 0; x < w; x += 2) {
+          const y = h / 2 + Math.sin(x * 0.05 + time * 2 + idx) * h * 0.3 + Math.sin(x * 0.1 + time * 3) * h * 0.1;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      });
+    }
+    function drawSpectrum(t) {
+      const time = t / 1000;
+      const w = spectrumCanvas.width, h = 80;
+      spectrumCtx.fillStyle = '#0a0e14';
+      spectrumCtx.fillRect(0, 0, w, h);
+      const bars = 32;
+      for (let i = 0; i < bars; i++) {
+        const barH = (0.3 + Math.sin(time * 3 + i * 0.3) * 0.3 + Math.random() * 0.1) * h;
+        const hue = (i / bars) * 60 + 180;
+        spectrumCtx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+        spectrumCtx.fillRect(i * (w / bars) + 1, h - barH, w / bars - 2, barH);
+      }
+    }
+    function updateBars(t) {
+      const time = t / 1000;
+      barData.forEach((b, i) => {
+        const newVal = b.val + Math.sin(time * 2 + i) * 0.1;
+        const clamped = Math.max(0.1, Math.min(1, newVal));
+        document.getElementById('bar' + i).style.width = clamped * 100 + '%';
+        document.getElementById('barVal' + i).textContent = Math.round(clamped * 100) + '%';
+      });
+    }
+    function updateHUD(t) {
+      const time = t / 1000;
+      const secs = Math.floor(time) % 60;
+      const mins = Math.floor(time / 60) % 60;
+      const hrs = Math.floor(time / 3600);
+      document.getElementById('missionTime').textContent = 
+        String(hrs).padStart(2, '0') + ':' + String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+      const analysis = ((time % 45) / 45 * 100).toFixed(2);
+      document.getElementById('analysisPercent').textContent = analysis + '%';
+      const psi = (Math.sin(time * 0.5) * 180).toFixed(3);
+      const omega = (Math.cos(time * 0.3) * 90).toFixed(3);
+      document.getElementById('coords').textContent = `Ψ:${psi} Ω:${omega}`;
+      const vx = (Math.sin(time * 0.7) * 10).toFixed(3);
+      const vy = (Math.cos(time * 0.5) * 10).toFixed(3);
+      const vz = (Math.sin(time * 0.3) * 5).toFixed(3);
+      document.getElementById('vizCoords').textContent = `X:${vx} Y:${vy} Z:${vz}`;
+      document.getElementById('density').textContent = (0.8 + Math.sin(time) * 0.15).toFixed(3);
+      document.getElementById('resonance').textContent = (1.2 + Math.sin(time * 1.5) * 0.3).toFixed(2) + 'kHz';
+      document.getElementById('entropy').textContent = (0.09 + Math.sin(time * 0.8) * 0.05).toFixed(3);
+      document.getElementById('coherence').textContent = (95 + Math.sin(time * 0.6) * 4).toFixed(1) + '%';
+      document.getElementById('psiFactor').textContent = (7.4 + Math.sin(time * 0.4) * 0.5).toFixed(2);
+    }
+    function updateHexScroll(t) {
+      if (Math.floor(t / 500) % 2 === 0) {
+        hexLines.shift();
+        hexLines.push(genHex());
+        document.getElementById('hexScroll').textContent = hexLines.join('\n');
+      }
+    }
+    let blinkState = true;
+    setInterval(() => {
+      blinkState = !blinkState;
+      document.getElementById('statusDot1').style.opacity = blinkState ? 1 : 0.3;
+      document.getElementById('statusDot2').style.opacity = blinkState ? 0.3 : 1;
+    }, 500);
+    function renderAll(t) {
+      drawMainViz(t);
+      drawThumbs(t);
+      drawGauges(t);
+      drawCharts(t);
+      drawMiniGraphs(t);
+      drawSpectrum(t);
+      updateBars(t);
+      updateHUD(t);
+      updateHexScroll(t);
+    }
+    window.renderFrame = function(timeSeconds) {
+      const t = timeSeconds * 1000;
+      renderAll(t);
+      return null;
+    };
+    let start = performance.now();
+    function loop(ts) {
+      const t = ts - start;
+      renderAll(t);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    window.ready = true;
+  </script>
+<script>
+window.initToneJsEngine = async function() {
+  const bpm = 112;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0;
+  const barDur = (4 * 60) / bpm;
+  const masterReverb = new Tone.Reverb({ decay: 2.8, wet: 0.24 }).toDestination();
+  await masterReverb.generate();
+  const masterCompressor = new Tone.Compressor({
+    threshold: -24,
+    ratio: 12,
+    attack: 0.003,
+    release: 0.14
+  }).connect(masterReverb);
+  const arpFilter = new Tone.Filter({ type: 'lowpass', frequency: 260, Q: 1.1 }).connect(masterCompressor);
+  const arp1 = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.01, decay: 0.12, sustain: 0, release: 0.08 }
+  }).connect(arpFilter);
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.exponentialRampToValueAtTime(1400, time + 2 * barDur);
+  }, '0:0:0');
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.exponentialRampToValueAtTime(2600, time + 2 * barDur);
+  }, '4:0:0');
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.exponentialRampToValueAtTime(360, time + 2 * barDur);
+  }, '16:0:0');
+  const arp2Filter = new Tone.Filter({ type: 'bandpass', frequency: 1800, Q: 1.5 }).connect(masterCompressor);
+  const arp2 = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.07 }
+  }).connect(arp2Filter);
+  const stringsFilter = new Tone.Filter({ type: 'lowpass', frequency: 1700, Q: 0.8, rolloff: -24 }).connect(masterCompressor);
+  const strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.6, decay: 0.4, sustain: 0.9, release: 2.8 }
+  }).connect(stringsFilter);
+  strings.volume.value = -3;
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 220, Q: 0.9 }).connect(masterCompressor);
+  const bassDist = new Tone.Distortion({ distortion: 0.28, wet: 0.35 }).connect(bassFilter);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.008, decay: 0.16, sustain: 0, release: 0.11 },
+    filterEnvelope: { attack: 0.01, decay: 0.12, sustain: 0, baseFrequency: 100, octaves: 2 }
+  }).connect(bassDist);
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.12 }
+  }).connect(masterCompressor);
+  const leadDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.32, wet: 0.32 }).connect(masterReverb);
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.006, decay: 0.18, sustain: 0, release: 0.14 },
+    portamento: 0.03
+  }).connect(leadDelay);
+  const hat = new Tone.MetalSynth({
+    frequency: 480,
+    envelope: { attack: 0.001, decay: 0.09, release: 0.03 },
+    harmonicity: 5.3,
+    modulationIndex: 30,
+    resonance: 4200
+  }).connect(masterReverb);
+  const snareVerb = new Tone.Reverb({ decay: 1.1, wet: 0.55 }).toDestination();
+  await snareVerb.generate();
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.004, decay: 0.15, sustain: 0 }
+  }).connect(snareVerb);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.03,
+    octaves: 6,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.04 }
+  }).toDestination();
+  const percNoise = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.05, decay: 0.3, sustain: 0, release: 0.4 }
+  }).connect(masterReverb);
+  Tone.Transport.schedule((time) => {
+    percNoise.triggerAttackRelease(1.2, time);
+  }, '3:2:0');
+  Tone.Transport.schedule((time) => {
+    percNoise.triggerAttackRelease(1.0, time);
+  }, '10:2:0');
+  const arpChords = [
+    ['D4', 'F4', 'A4', 'C5'],
+    ['Bb3', 'D4', 'F4', 'A4'],
+    ['F3', 'A3', 'C4', 'E4'],
+    ['C4', 'E4', 'G4', 'B4']
+  ];
+  let arp1Step = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    let chord = arpChords[Math.floor(bar / 2) % arpChords.length];
+    let vel = 0.28;
+    if (bar < 2) {
+      chord = arpChords[0];
+      vel = 0.22;
+    } else if (bar < 8) {
+      vel = 0.34;
+    } else if (bar < 14) {
+      vel = 0.46;
+    } else if (bar < 18) {
+      vel = 0.4;
+    } else if (bar < 20) {
+      vel = 0.35;
+    } else {
+      chord = arpChords[0];
+      vel = 0.22;
+    }
+    const note = chord[arp1Step % chord.length];
+    arp1.triggerAttackRelease(note, '16n', time, vel);
+    arp1Step++;
+  }, '16n').start(0);
+  const arp2Notes = ['D5', 'F5', 'A5', 'D6', 'C5', 'A5', 'F5', 'E5'];
+  let arp2Idx = 0;
+  const arp2Loop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 4 && bar < 18) {
+      const vel = bar < 8 ? 0.22 : bar < 14 ? 0.36 : 0.3;
+      arp2.triggerAttackRelease(arp2Notes[arp2Idx % arp2Notes.length], '8n', time, vel);
+      arp2Idx++;
+    }
+  }, '8n').start(0);
+  const stringChords = [
+    ['D3', 'F3', 'A3', 'D4'],
+    ['Bb2', 'D3', 'F3', 'Bb3'],
+    ['F3', 'A3', 'C4', 'F4'],
+    ['C3', 'E3', 'G3', 'C4']
+  ];
+  let stringIdx = 0;
+  const stringsLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 6 && bar < 19) {
+      const vel = bar < 12 ? 0.24 : bar < 16 ? 0.46 : 0.35;
+      const cutoff = bar < 12 ? 1500 : bar < 16 ? 1900 : 1600;
+      stringsFilter.frequency.setTargetAtTime(cutoff, time, 0.2);
+      strings.triggerAttackRelease(stringChords[stringIdx % stringChords.length], '1m', time, vel);
+      stringIdx++;
+    }
+  }, '1m').start(0);
+  const bassSections = [
+    ['D1', 'D1', 'C1', 'A0'],
+    ['D1', 'F1', 'C1', 'Bb0', 'A0', 'D1'],
+    ['D1', 'D1', 'C1', 'A0']
+  ];
+  let bassIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar < 8) return;
+    let pattern = bassSections[0];
+    if (bar >= 14 && bar < 18) pattern = bassSections[1];
+    if (bar >= 18) pattern = bassSections[2];
+    let vel = 0.64;
+    if (bar >= 18 && bar < 20) vel = 0.55;
+    if (bar >= 20) vel = 0.35;
+    bass.triggerAttackRelease(pattern[bassIdx % pattern.length], '8n', time, vel);
+    bassIdx++;
+  }, '8n').start(0);
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 10 && bar < 18) {
+      sub.triggerAttackRelease('D0', '4n', time, 0.55);
+    } else if (bar >= 18 && bar < 20) {
+      sub.triggerAttackRelease('D0', '4n', time, 0.5);
+    }
+  }, '4n').start(0);
+  const leadNotes = ['A4', 'C5', 'D5', 'F5', 'E5', 'D5', 'C5', 'A4', 'G4', 'A4'];
+  let leadIdx = 0;
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 12 && bar < 19) {
+      const vel = bar < 16 ? 0.55 : 0.68;
+      lead.triggerAttackRelease(leadNotes[leadIdx % leadNotes.length], '8n', time, vel);
+      leadIdx++;
+    }
+  }, '8n').start(0);
+  let hatStep = 0;
+  const hatPattern = [1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0];
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 6 && bar < 18) {
+      if (hatPattern[hatStep % hatPattern.length]) {
+        const vel = 0.4 + 0.1 * (hatStep % 4 === 0 ? 1 : 0);
+        hat.triggerAttackRelease('16n', time, vel);
+      }
+      hatStep++;
+    } else if (bar >= 18 && bar < 20) {
+      if (hatStep % 4 === 0) hat.triggerAttackRelease('16n', time, 0.3);
+      hatStep++;
+    }
+  }, '16n').start(0);
+  let snareStep = 0;
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 6 && snareStep % 2 === 1 && bar < 18) {
+      snare.triggerAttackRelease('16n', time, 0.85);
+    } else if (bar >= 18 && bar < 20 && snareStep % 2 === 1) {
+      snare.triggerAttackRelease('16n', time, 0.5);
+    }
+    snareStep++;
+  }, '4n').start(0);
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 2) {
+      let vel = 0.7;
+      if (bar >= 6 && bar < 14) vel = 0.95;
+      else if (bar >= 14 && bar < 18) vel = 0.9;
+      else if (bar >= 18 && bar < 20) vel = 0.75;
+      else if (bar >= 20) vel = 0.55;
+      kick.triggerAttackRelease('C1', '8n', time, vel);
+      masterCompressor.threshold.setValueAtTime(-32, time);
+      masterCompressor.threshold.exponentialRampToValueAtTime(-24, time + 0.12);
+    }
+  }, '4n').start(0);
+  window.toneJsInstruments = {
+    kick,
+    snare,
+    hat,
+    arp1,
+    arp2,
+    strings,
+    bass,
+    sub,
+    lead,
+    percNoise
+  };
+  window.toneJsParts = {
+    kickLoop,
+    snareLoop,
+    hatLoop,
+    arpLoop,
+    arp2Loop,
+    stringsLoop,
+    bassLoop,
+    subLoop,
+    leadLoop
+  };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
+
+</script>
+</body>
+</html>

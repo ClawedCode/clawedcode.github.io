@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+let seed = 88;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+const n = [];
+for(let i=0; i<300; i++){
+n.push({bx: random()*1100-100, by: random()*1100-100, r: random()*1.5+0.5, p: random()*Math.PI*2, xp: random()*Math.PI*2, yp: random()*Math.PI*2, a: random()*20+5, type: random() > 0.85 ? 1 : 0});
+}
+const e = [];
+for(let i=0; i<n.length; i++){
+for(let j=i+1; j<n.length; j++){
+const dx = n[i].bx - n[j].bx;
+const dy = n[i].by - n[j].by;
+const d = Math.sqrt(dx*dx + dy*dy);
+if(d < 90) {
+e.push({n1: n[i], n2: n[j], d: d, p: random()*Math.PI*2, s: Math.floor(random()*3)+1, dir: random() > 0.5 ? 1 : -1});
+}
+}
+}
+window.renderFrame = function(t) {
+ctx.fillStyle = '#060403';
+ctx.fillRect(0, 0, 900, 900);
+const pr = t / duration;
+n.forEach(v => {
+v.x = v.bx + Math.sin(pr * Math.PI * 2 + v.xp) * v.a;
+v.y = v.by + Math.cos(pr * Math.PI * 2 + v.yp) * v.a;
+});
+ctx.lineCap = 'round';
+e.forEach(l => {
+ctx.beginPath();
+ctx.moveTo(l.n1.x, l.n1.y);
+ctx.lineTo(l.n2.x, l.n2.y);
+const ba = 0.05 + 0.05 * Math.sin(pr * Math.PI * 2 * l.s + l.p);
+ctx.strokeStyle = `rgba(30, 80, 70, ${ba})`;
+ctx.lineWidth = 1;
+ctx.stroke();
+let c = (pr * l.s * l.dir + l.p / (Math.PI*2)) % 1;
+if (c < 0) c += 1;
+const px = l.n1.x + (l.n2.x - l.n1.x) * c;
+const py = l.n1.y + (l.n2.y - l.n1.y) * c;
+const pa = Math.sin(c * Math.PI);
+const isA = l.n1.type === 1 || l.n2.type === 1;
+const r = isA ? 255 : 0;
+const g = isA ? 179 : 255;
+const b = isA ? 0 : 204;
+ctx.beginPath();
+ctx.arc(px, py, 1.5, 0, Math.PI*2);
+ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${pa * 0.8})`;
+ctx.fill();
+ctx.beginPath();
+ctx.arc(px, py, 5, 0, Math.PI*2);
+ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${pa * 0.2})`;
+ctx.fill();
+});
+n.forEach((v) => {
+const nc = (pr * 2 + v.p / (Math.PI*2)) % 1;
+const pu = Math.sin(nc * Math.PI * 2) * 0.5 + 0.5;
+const r = v.type === 1 ? 255 : 0;
+const g = v.type === 1 ? 179 : 255;
+const b = v.type === 1 ? 0 : 204;
+ctx.beginPath();
+ctx.arc(v.x, v.y, v.r + pu, 0, Math.PI*2);
+ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.3 + pu * 0.5})`;
+ctx.fill();
+ctx.beginPath();
+ctx.arc(v.x, v.y, v.r + pu * 4, 0, Math.PI*2);
+ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${0.1 * pu})`;
+ctx.fill();
+});
+return canvas.toDataURL('image/png');
+};
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+const bpm = 70;
+Tone.Transport.bpm.value = bpm;
+const mR = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+await mR.generate();
+const del = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.4, wet: 0.2 }).connect(mR);
+const fil = new Tone.Filter({ type: "lowpass", frequency: 800, Q: 1.5 }).connect(del);
+const sub = new Tone.MonoSynth({
+oscillator: { type: "sine" },
+envelope: { attack: 2, decay: 1, sustain: 1, release: 4 }
+}).toDestination();
+const bL = new Tone.Loop((time) => {
+const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+const nts = ["C1", "C1", "G0", "D1"];
+sub.triggerAttackRelease(nts[bar % 4], "1m", time, 0.6);
+}, "1m").start(0);
+const clk = new Tone.MetalSynth({
+frequency: 200,
+envelope: { attack: 0.001, decay: 0.05, release: 0.01 },
+harmonicity: 3.1,
+modulationIndex: 16,
+resonance: 2000
+}).connect(mR);
+const cL = new Tone.Loop((time) => {
+const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+if (Math.random() > 0.4 && bar < 14) {
+clk.triggerAttackRelease("32n", time, Math.random() * 0.2 + 0.1);
+}
+}, "8n").start(0);
+const pad = new Tone.PolySynth(Tone.Synth, {
+oscillator: { type: "triangle" },
+envelope: { attack: 1.5, decay: 1, sustain: 0.8, release: 3 }
+}).connect(fil);
+const chs = [
+["C3", "G3", "C4", "D#4"],
+["A#2", "F3", "A#3", "D4"],
+["G2", "D3", "G3", "A#3"],
+["D#2", "A#2", "D#3", "G3"]
+];
+let cI = 0;
+const pL = new Tone.Loop((time) => {
+const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+let pt = bar < 12 ? chs : [chs[0], chs[0], chs[0], chs[0]];
+pad.triggerAttackRelease(pt[cI % pt.length], "1m", time, 0.25);
+cI++;
+}, "2m").start(0);
+const arp = new Tone.Synth({
+oscillator: { type: "sine" },
+envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.1 }
+}).connect(del);
+const aN = ["C4", "D#4", "G4", "A#4", "C5", "G4"];
+let aI = 0;
+const aL = new Tone.Loop((time) => {
+const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+if (bar >= 2 && bar < 14 && Math.random() > 0.2) {
+arp.triggerAttackRelease(aN[aI % aN.length], "16n", time, 0.15);
+}
+aI++;
+}, "16n").start(0);
+Tone.Transport.schedule((time) => {
+fil.frequency.linearRampToValueAtTime(3000, time + 8 * (60 / bpm) * 4);
+}, "2:0:0");
+Tone.Transport.schedule((time) => {
+fil.frequency.linearRampToValueAtTime(800, time + 4 * (60 / bpm) * 4);
+}, "12:0:0");
+window.toneJsInstruments = { sub, clk, pad, arp };
+window.toneJsParts = { bL, cL, pL, aL };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
