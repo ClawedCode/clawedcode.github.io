@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<style>body{margin:0;background:#2a0607;}canvas{display:block;}</style>
+</head><body>
+<script type="module">
+// DURATION: 66
+import * as THREE from 'three';
+import { Text } from 'https://esm.sh/troika-three-text@0.49.1?external=three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+const SZ=900,DUR=66,SEG=11,TW=Math.PI*2/DUR;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(SZ,SZ);renderer.setPixelRatio(1);document.body.appendChild(renderer.domElement);
+const scn=new THREE.Scene();scn.background=new THREE.Color(0x2a0607);
+const cam=new THREE.PerspectiveCamera(40,1,0.1,400);cam.position.set(0,0,14.6);
+
+const key=new THREE.DirectionalLight(0xfff4e2,1.55);key.position.set(3.4,4.6,5.2);scn.add(key);
+const fill=new THREE.DirectionalLight(0xffd6c2,0.42);fill.position.set(-4.2,1.1,2.4);scn.add(fill);
+const rim=new THREE.DirectionalLight(0xffc0ae,0.85);rim.position.set(0.4,1.4,-5);scn.add(rim);
+scn.add(new THREE.AmbientLight(0xffe4d2,0.30));
+
+scn.add(new THREE.Mesh(new THREE.PlaneGeometry(110,110),new THREE.ShaderMaterial({
+uniforms:{c1:{value:new THREE.Color(0x4a0b0d)},c2:{value:new THREE.Color(0x190304)}},
+vertexShader:'varying vec2 vU;void main(){vU=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+fragmentShader:'uniform vec3 c1;uniform vec3 c2;varying vec2 vU;float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}void main(){vec2 q=floor(vU*9000.0);float n=h(q);float g=step(0.92,n)*0.020+n*0.005;float r=length(vU-0.5);gl_FragColor=vec4(mix(c1,c2,smoothstep(0.02,0.55,r))+g,1.0);}'
+})).translateZ(-16));
+
+let sd=5568973;const rng=()=>{sd=(sd*9301+49297)%233280;return sd/233280;};
+const cl01=v=>v<0?0:v>1?1:v,seg=(v,a,b)=>cl01((v-a)/(b-a));
+const ec3=v=>1-Math.pow(1-v,3),ei3=v=>v*v*v,eio=v=>0.5-0.5*Math.cos(Math.PI*cl01(v));
+const PO=(x,y,z,rx,ry,rz,sx,sy,s,c,d)=>({x,y,z,rx,ry,rz,sx,sy,s,c,d});
+const LP=(a,b,e)=>PO(a.x+(b.x-a.x)*e,a.y+(b.y-a.y)*e,a.z+(b.z-a.z)*e,a.rx+(b.rx-a.rx)*e,a.ry+(b.ry-a.ry)*e,a.rz+(b.rz-a.rz)*e,a.sx+(b.sx-a.sx)*e,a.sy+(b.sy-a.sy)*e,a.s+(b.s-a.s)*e,a.c+(b.c-a.c)*e,a.d+(b.d-a.d)*e);
+
+const BONE=new THREE.Color(0xefe6d4),ASH=new THREE.Color(0x9a948c),DUSK=new THREE.Color(0x3c352e),TC=new THREE.Color();
+function mk(ch,fs,kind){const g=new Text();g.text=ch;g.fontSize=fs;g.anchorX='center';g.anchorY='middle';g.sdfGlyphSize=kind?128:64;
+g.material=new THREE.MeshStandardMaterial({color:BONE.clone(),metalness:kind===1?0.06:0.0,roughness:kind===1?0.30:0.82,emissive:new THREE.Color(0x000000),side:THREE.DoubleSide});
+scn.add(g);return g;}
+const dust=()=>{const a=rng()*6.283,rd=4.6+rng()*7;return PO(Math.cos(a)*rd,Math.sin(a)*rd*0.85,-4+rng()*8,(rng()-0.5)*6,(rng()-0.5)*6,(rng()-0.5)*6,1,1,0.55,0,0.62);};
+
+const WD=[{b:'Role',mi:1,mk:'^',kp:0},{b:'Naive',mi:2,mk:'¨',kp:0},{b:'Cooperate',mi:2,mk:'¨',kp:0},{b:'Elite',mi:0,mk:'´',kp:0},{b:'Cafe',mi:3,mk:'´',kp:1},{b:'Pinata',mi:2,mk:'~',kp:1}];
+const RW=[[0,1],[2,3],[4,5]],RY=[1.55,0,-1.55],ADV=0.33,FS=0.40,GAP=2.6,WZ=[0.8,0.3,-0.2,-0.75,0.45,-0.55];
+const MFS=0.72,MOY=0.13,MADJ={'^':0.18,'¨':0.04,'´':0.04,'~':0.40};
+const glyphs=[];let CA=null;
+RW.forEach((pair,r)=>{
+ const tot=WD[pair[0]].b.length+GAP+WD[pair[1]].b.length,x0=-(tot-1)*ADV/2;let slot=0;
+ pair.forEach(wi=>{
+  const w=WD[wi],n=w.b.length,cx=x0+(slot+(n-1)/2)*ADV;
+  for(let k=0;k<n;k++){const x=x0+(slot+k)*ADV,g=mk(w.b[k],FS,0);
+   Object.assign(g,{hx:x,by:RY[r],oy:0,hz:WZ[wi],kx:x-cx,w:wi,k:k,m:0,keep:w.kp,pz:wi%2?-1:1,s:rng(),du:dust(),an:null,fp:null,ca:0});
+   g.hy=g.by+g.oy;glyphs.push(g);}
+  const mx=x0+(slot+w.mi)*ADV,moy=MOY+MADJ[w.mk],gm=mk(w.mk,MFS,1);
+  Object.assign(gm,{hx:mx,by:RY[r],oy:moy,hz:WZ[wi]+0.06,kx:mx-cx,w:wi,k:w.mi,m:1,keep:w.kp,pz:wi%2?-1:1,s:rng(),du:dust(),an:null,fp:null,ca:wi===4?1:0});
+  gm.hy=gm.by+gm.oy;glyphs.push(gm);
+  if(wi===4)CA={x:mx,y:RY[r]+moy,z:WZ[wi]+0.06};
+  slot+=n+GAP;});});
+
+const CL=['LONG.','APART.','NOT AS ONE.'],CY=[1.3,0,-1.3],ADV2=0.46,FS2=0.50,anchors=[],segl=[];
+CL.forEach((s,r)=>{const x0=-(s.length-1)*ADV2/2,pts=[];
+ for(let i=0;i<s.length;i++){if(s[i]===' ')continue;pts.push(anchors.length);anchors.push({c:s[i],x:x0+i*ADV2,y:CY[r],z:(i%3-1)*0.16});}
+ for(let i=0;i<pts.length-1;i++)segl.push([pts[i],pts[i+1]]);});
+const cgl=anchors.map(a=>{const g=mk(a.c,FS2,2);g.position.set(a.x,a.y,a.z);g.visible=false;return g;});
+
+const mI=[],lI=[];glyphs.forEach((g,i)=>(g.m?mI:lI).push(i));
+const pick=mI.slice();for(let i=0;pick.length<anchors.length;i+=2)pick.push(lI[i%lI.length]);
+pick.forEach((gi,j)=>{glyphs[gi].an=anchors[j];});
+glyphs.forEach(g=>{if(!g.an){const a=rng()*6.283,rd=3.0+rng()*3.4;g.fp={x:Math.cos(a)*rd,y:Math.sin(a)*rd*0.62,z:-1+rng()*2};}});
+
+const lpos=new Float32Array(segl.length*6),lgeo=new THREE.BufferGeometry();
+lgeo.setAttribute('position',new THREE.BufferAttribute(lpos,3));
+const lines=new THREE.LineSegments(lgeo,new THREE.LineBasicMaterial({color:0xd8ccb6,transparent:true,opacity:0}));
+lines.visible=false;scn.add(lines);
+
+const T3=[0.08,0.30,0.52,0.74],G4=[0.02,0.19,0.35,0.72],GSP=0.28,SG={x:0.55,y:-7.4,z:0.2};
+
+const f0=(g,u)=>{const d=g.m?0.48+g.w*0.03:0.02+g.w*0.05+g.k*0.010,sp=g.m?0.26:0.34,e=ec3(seg(u,d,d+sp)),D=g.du;
+ const q=seg(u,d+sp,d+sp+0.11),b=g.m?Math.sin(q*Math.PI*3)*Math.exp(-q*4.5)*0.07:0;
+ return PO(D.x+(g.hx-D.x)*e,D.y+(g.hy-D.y)*e+b,D.z+(g.hz-D.z)*e,D.rx*(1-e),D.ry*(1-e),D.rz*(1-e),1,1,D.s+(1-D.s)*e,0,D.d*(1-e));};
+
+const f1=(g,u)=>{const ph=Math.sin(u*Math.PI*4);
+ return PO(g.hx*(1+0.045*ph),g.by*(1+0.20*ph)+g.oy,g.hz+ph*0.16*g.pz,0,0,0,1,1,1,0,0);};
+
+const f2=(g,u)=>{const tw=g.w<4?T3[g.w]:0.46,ke=ec3(seg(u,tw,tw+0.30)),bx=g.hx-g.kx*0.07*ke;
+ if(!g.m||g.keep)return PO(bx,g.by+g.oy,g.hz,0,0,0,1,1,1,0,0);
+ const br=seg(u,tw,tw+0.05),fs=Math.max(0,u-(tw+0.20))*SEG,dir=g.w%2?1:-1;
+ return PO(bx+dir*0.055*fs,g.by+g.oy+br*0.11-Math.min(0.92,0.06*fs+0.012*fs*fs),g.hz+(0.12-g.hz)*cl01(fs/6),0,0,br*0.20*dir+fs*0.16*dir,1,1,1+br*0.06,ec3(cl01(fs/3.2)),0);};
+
+const f3=(g,u)=>{if(!g.m||g.keep)return PO(g.hx-g.kx*0.07,g.by+g.oy,g.hz,0,0,0,1,1,1,0,0);
+ const A=f2(g,1),G=G4[g.w],q=seg(u,G,G+GSP),e=Math.pow(q,1.7),st=g.w?seg(u,G-0.14,G)*(1-q):0;
+ const x=A.x+(SG.x-A.x)*e,y=A.y+(SG.y-A.y)*e+st*Math.sin(u*130+g.w)*0.022,z=A.z+(SG.z-A.z)*e;
+ const fd=1-seg(e,0.90,1),rz=Math.atan2(SG.x-x,y-SG.y)+st*Math.sin(u*97+g.w*2)*0.12;
+ return PO(x,y,z,0,0,rz,fd/(1+e*1.5),fd*(1+e*e*5.5),1,A.c+(1-A.c)*eio(cl01(u/0.45)),0);};
+
+const f4=(g,u)=>{
+ if(g.ca){const iv=eio(seg(u,0.78,0.90)),pl=Math.sin(Math.PI*seg(u,0.78,0.88))*0.34;return PO(CA.x,CA.y,CA.z,0,Math.PI*iv,0,1,1,(1+0.35*eio(seg(u,0.50,0.95)))*(1+pl),iv,0);}
+ if(!g.m||g.keep){const rc=g.w===4?0:1;return PO(g.hx-g.kx*0.07,g.by+g.oy,g.hz-9.0*rc*eio(u),0,0,0,1,1,1,0,0.60*rc*eio(u));}
+ const i=g.w,r=2.40*(1-eio(u)*0.80)*(1-seg(u,0.48,0.80)),a=i*1.57+seg(u,0,0.78)*Math.PI*2*(2.0+i*0.35),ti=0.35+i*0.42;
+ const lx=r*Math.cos(a),ly=r*Math.sin(a)*0.42,lz=r*Math.sin(a)*0.9,ct=Math.cos(ti),st=Math.sin(ti);
+ const sc=(1+0.6*eio(seg(u,0.03,0.80)))*eio(seg(u,0,0.12))*(1-seg(u,0.74,0.82));
+ return PO(CA.x+lx*ct-ly*st,CA.y+lx*st+ly*ct,CA.z+lz,0,0,a*0.4,1,1,sc,1,0);};
+
+const f5=(g,u)=>{const A=f4(g,1),tg=g.an?{x:g.an.x,y:g.an.y,z:g.an.z,s:0.55}:{x:g.fp.x,y:g.fp.y,z:g.fp.z,s:0.38};
+ const e=eio(seg(u,0.14,0.44)),pv=g.an?cl01(1-seg(u,0.36,0.50)+seg(u,0.76,0.88)):1;
+ const IP=PO(A.x+(tg.x-A.x)*e,A.y+(tg.y-A.y)*e,A.z+(tg.z-A.z)*e,A.rx*(1-e),A.ry*(1-e),A.rz*(1-e),1,1,(A.s+(tg.s-A.s)*e)*pv,A.c*(1-e),0.62*e);
+ return LP(IP,g.du,ei3(seg(u,0.82,1.0)));};
+
+const FN=[f0,f1,f2,f3,f4,f5];
+const CP=[new THREE.Vector3(0,0,14.6),new THREE.Vector3(0.12,0.05,10.7),new THREE.Vector3(-0.08,0,9.9),new THREE.Vector3(-0.02,-0.10,9.85),new THREE.Vector3(0.04,-0.34,9.95)];
+const C5=new THREE.Vector3(),TP=new THREE.Vector3(),LK=new THREE.Vector3();
+const K1=new THREE.Vector3(1.25,0.35,10.2),K2=new THREE.Vector3(-0.85,-0.28,10.7),FP=new THREE.Vector3();
+
+const comp=new EffectComposer(renderer);comp.addPass(new RenderPass(scn,cam));
+const bloom=new UnrealBloomPass(new THREE.Vector2(SZ,SZ),0.0,0.62,0.86);comp.addPass(bloom);
+
+const evts=[{t:0,e:'assembly'},{t:11,e:'breathing'},{t:22,e:'wordMorph'},{t:22.88,e:'sever'},{t:25.3,e:'sever'},{t:27.72,e:'sever'},{t:30.14,e:'sever'},{t:33,e:'gravityWell'},{t:33.22,e:'fall'},{t:35.09,e:'fall'},{t:36.74,e:'fall'},{t:40.59,e:'fall'},{t:44,e:'sacrifice'},{t:52.58,e:'impact'},{t:55,e:'constellation'},{t:63.6,e:'dissolve'},{t:66,e:'loop'}];
+window.evts=evts;
+
+window.renderFrame=(tt)=>{
+ const t=Math.max(0,Math.min(DUR,tt)),mi=Math.min(5,Math.floor(t/SEG)),u=(t-mi*SEG)/SEG,F=FN[mi];
+ const gl=0.45*(mi===5?Math.sin(Math.PI*u):0);
+ for(let i=0;i<glyphs.length;i++){const g=glyphs[i],p=F(g,u),sv=Math.abs(p.s);
+  if(sv<0.004){g.visible=false;continue;}
+  g.visible=true;
+  g.position.set(p.x+Math.sin(TW*79*t+g.s*6.283)*0.006*(g.m?1.6:1),p.y+Math.sin(TW*103*t+g.s*11)*0.008*(g.m?1.8:1)-(g.m?g.vy*(p.s*p.sy-1):0),p.z);
+  g.rotation.set(p.rx,p.ry,p.rz+Math.sin(TW*61*t+g.s*9)*(g.m?0.011:0.004));
+  g.scale.set(p.sx*p.s,p.sy*p.s,1);
+  g.material.color.copy(TC.copy(BONE).lerp(ASH,p.c).lerp(DUSK,p.d));
+  g.material.emissive.setRGB(0.93*gl,0.90*gl,0.83*gl);}
+
+ const cs=mi===5?eio(seg(u,0.34,0.52))*(1-eio(seg(u,0.76,0.93))):0;
+ for(let i=0;i<cgl.length;i++){const g=cgl[i];g.visible=cs>0.003;if(!g.visible)continue;const a=anchors[i];
+  g.position.set(a.x+Math.sin(TW*67*t+i)*0.012,a.y+Math.sin(TW*89*t+i*1.7)*0.014,a.z);
+  g.scale.set(cs,cs,1);g.material.emissive.setRGB(0.56*cs,0.54*cs,0.50*cs);}
+
+ const lo=mi===5?cl01(seg(u,0.40,0.50))*(1-seg(u,0.74,0.88)):0;
+ lines.visible=lo>0.002;lines.material.opacity=lo*0.5;
+ if(lines.visible){const gr=seg(u,0.40,0.66)*segl.length;
+  for(let j=0;j<segl.length;j++){const a=anchors[segl[j][0]],b=anchors[segl[j][1]],w=cl01((gr-j)*1.4),o=j*6;
+   lpos[o]=a.x;lpos[o+1]=a.y;lpos[o+2]=a.z;lpos[o+3]=a.x+(b.x-a.x)*w;lpos[o+4]=a.y+(b.y-a.y)*w;lpos[o+5]=a.z+(b.z-a.z)*w;}
+  lgeo.attributes.position.needsUpdate=true;}
+
+ FP.set(CA.x-0.495,CA.y-0.16,CA.z);C5.set(FP.x,FP.y,FP.z+5.0);let fv=40;LK.set(0,0,0);
+ if(mi===0)TP.lerpVectors(CP[0],CP[1],eio(u));
+ else if(mi===1)TP.lerpVectors(CP[1],CP[2],u);
+ else if(mi===2)TP.lerpVectors(CP[2],CP[3],u);
+ else if(mi===3)TP.lerpVectors(CP[3],CP[4],u);
+ else if(mi===4){const e=eio(u);TP.lerpVectors(CP[4],C5,e);fv=40-18*e;LK.set(FP.x*e,FP.y*e,FP.z*e);}
+ else{const e2=eio(seg(u,0,0.30));
+  if(u<0.34){const e=eio(u/0.34);TP.lerpVectors(C5,K1,e);fv=22+14*e;}
+  else if(u<0.78){const e=eio((u-0.34)/0.44);TP.lerpVectors(K1,K2,e);fv=36+e;}
+  else{const e=eio((u-0.78)/0.22);TP.lerpVectors(K2,CP[0],e);fv=37+3*e;}
+  LK.set(FP.x*(1-e2),FP.y*(1-e2),FP.z*(1-e2));}
+ cam.position.set(TP.x+Math.sin(TW*7*t)*0.010+Math.sin(TW*13*t+1.3)*0.006,TP.y+Math.sin(TW*11*t+0.7)*0.008,TP.z);
+ if(cam.fov!==fv){cam.fov=fv;cam.updateProjectionMatrix();}
+ cam.lookAt(LK);
+
+ bloom.strength=mi===3?0.30*Math.sin(Math.PI*u):mi===5?0.55*eio(seg(u,0.08,0.35))*(1-eio(seg(u,0.86,1))):0;
+ comp.render();
+ return renderer.domElement.toDataURL();
+};
+
+await Promise.all(glyphs.concat(cgl).map(g=>new Promise(r=>g.sync(r))));
+glyphs.forEach(g=>{const b=g.textRenderInfo&&g.textRenderInfo.visibleBounds;g.vy=b?(b[1]+b[3])/2:0;});
+window.renderFrame(0);
+window.animationReady=true;
+window.ready=true;
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t);};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%DUR);}requestAnimationFrame(_loop);}
+requestAnimationFrame(_loop);
+</script>
+        <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+        <div id="audio-controls"><button id="audio-toggle">▶ Play</button></div>
+<script id="clawed-strudel-bootstrap" type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 120\\n// DURATION: 66\\n// FORM: A 0–5.5 assembly | B 5.5–11 breathingParagraph | C 11–16.5 wordMorph | D 16.5–22 gravityWell | E 22–27.5 sacrifice | F 27.5–33 constellation (33 cycles @ 2s = 66s, loop)\\n// TONAL CENTER: F Phrygian (F Gb Ab Bb C Db Eb)\\n// MOTIF: F4 dotted-eighth, Gb4 sixteenth (the mark — the only sixteenth in the piece), Ab4 quarter, then C5–Bb4 sigh; beat 3 always left empty\\n// HARMONIC PLAN: A Fm pedal (F sub, Ab+C above, Gb upper neighbor late) | B same pedal respiring to Db major (bVI) on a 3-cycle period, F and Ab common tones | C alternation Fm (11–13.75) then Gb major bII (13.75–16.5), bass F to Gb by half step, unresolved | D Ab held motionless in pad while bass walks down F, E, Eb, Db (16.5/17.875/19.25/20.625) | E Db major warm 22–25.75, then Db minor mixture at 25.75 with sub dropping out | F recap of A's Fm pedal, Db absent, no cadence, Gb returns as upper neighbor in the final cycle\\n// PHRASE RULE: THE STAMP — halftime two-gesture cell per cycle: weighted low tom on beat 1 (the passport on the counter), dry rim click on the 'and' of beat 3 (the shear), nothing else; it survives every section in reduced form. At each boundary the pad holds Ab unbroken through the barline, the prior section's tail rings into the new one, and no more than two dimensions change at once.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// ---- voice 1: motif lead — the mouth (filtered triangle, F4–C5, mono, beat 3 empty)\\n$: note(\\\"\u003c[f4@3 gb4] ~ ~ ~ [f4@3 gb4] ~ [f4@3 gb4] ab4 ~ [~ [c5 bb4]] ~ [f4@3 gb4] ~ ~ [ab4@2 [c5 bb4]] ~ ~ ~ ~ ~ ~ ~ [f4@3 gb4] ~ ~ [gb4@3 ab4] ~ [ab4@3 bb4] ~ [bb4@3 c5] ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ [f4@3 gb4] [ab4@2 [c5 bb4]] ~ [f4@3 gb4] [ab4@2 [c5 bb4]] ~ [f4@3 gb4] [ab4 [c5 bb4]] ~ [f4@3 gb4] [ab4 [c5 bb4]] ~ ~ ~ ~ [f4@3 gb4] ~ ~ ab4 ~ ~ [c5 bb4] ~ ~ ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(.09).decay(.3).sustain(.35).release(.9)\\n  .lpf(\\\"\u003c1500 1500 1500 1500 1500 1500 1700 1700 1700 1700 1700 1900 1900 1900 1900 1900 1900 2000 2000 2000 2000 2000 2000 1800 1800 1800 1800 1800 1800 1800 1800 1600 1400 1200>\\\")\\n  .lpq(6)\\n  .delay(\\\"\u003c0 0 0 0 0 0 0 0 0 0 0 .28 .28 .28 .28 .28 .28 .3 .3 .3 .3 .3 .3 .32 .32 .32 .32 .32 .32 .3 .24 .18 .1 .06>\\\")\\n  .delaytime(.1875).delayfeedback(.22)\\n  .gain(.16).pan(.44).room(.5).roomsize(3).orbit(1)\\n\\n// ---- voice 2: the mark — diacritic voice (thin square, only ever sixteenths; C6–Gb6 at rest, Gb1–Gb2 after severing)\\n$: note(\\\"\u003c~ gb6 [~ ~ ~ gb6] [~ ~ ~ gb6] [~ c6 ~ gb6] [~ c6 ~ gb6] [~ c6 ~ gb6] [c6 ~ gb6 ~] [~ c6 ~ gb6] [c6 ~ gb6 c6] [~ c6 ~ gb6] [c6 ~ gb6 ~] [~ gb6@3] [~ gb6@3] [~ ~ gb6@2] [~ gb6@3] [~ ~ gb6@2] [~ gb6@3] [~ gb2@3] ~ [gb2@3 ~] ~ [gb1@3 ~] ~ [gb1@3 ~] [~ ~ ~ gb6] [~ ~ gb6 ~] [~ gb6 ~ ~] [gb6 ~ gb6 ~] [gb6 gb6 gb6 gb6] [gb1 ~ ~ ~] ~ [~ ~ ~ gb6] [~ gb6 ~ ~] [~ ~ ~ [c6 gb6]]>\\\")\\n  .s(\\\"square\\\")\\n  .attack(.004).decay(.11).sustain(0).release(.5)\\n  .lpf(5200).hpf(300)\\n  .slide(\\\"\u003c0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -2 0 -3 0 -4 0 -5 0 0 0 0 0 0 0 0 0 0>\\\")\\n  .gain(\\\"\u003c.05 .07 .07 .08 .08 .08 .08 .08 .08 .08 .08 .06 .06 .06 .06 .06 .06 .2 .2 .21 .21 .22 .22 .23 .08 .08 .08 .09 .11 .2 .05 .05 .05 .06>\\\")\\n  .pan(\\\"\u003c.6 .38 .66 .3 .7 .34 .62 .4 .68 .32 .6 .2 .35 .5 .65 .8 .5 .5 .5 .5 .5 .5 .5 .5 .3 .7 .35 .65 .5 .5 .4 .6 .5 .55>\\\")\\n  .room(.62).roomsize(2.4).orbit(2)\\n\\n// ---- voice 3: harmonic body — the vellum ground (detuned saw pad, Ab3–Ab4, holds Ab in every section)\\n$: note(\\\"\u003c[ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4,gb4] [ab3,c4,f4] [ab3,db4,f4] [ab3,db4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,db4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,db4,gb4] [ab3,db4,gb4] [ab3,c4,f4] [ab3,c4,e4] [ab3,c4,e4] [ab3,c4,eb4] [ab3,c4,eb4] [ab3,db4,f4] [ab3,db4,f4] [ab3,db4,f4] [ab3,db4,f4] [ab3,db4,fb4] [ab3,db4,fb4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,f4] [ab3,c4,gb4]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .attack(4).decay(2).sustain(.85).release(4.5)\\n  .detune(\\\"\u003c-4 3 -3 4>/8\\\")\\n  .lpf(sine.range(620, 1050).slow(11))\\n  .lpq(4)\\n  .gain(\\\"\u003c.09 .1 .1 .11 .11 .11 .11 .12 .12 .11 .11 .12 .11 .11 .11 .11 .12 .12 .11 .11 .11 .11 .11 .12 .13 .13 .13 .12 .1 .1 .1 .1 .09 .085>\\\")\\n  .pan(.5).room(.78).roomsize(6).orbit(3)\\n\\n// ---- voice 4: sub-bass foundation (one pitch per harmonic state; drops out entirely at 25.75)\\n$: note(\\\"\u003c[f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2] [gb1,gb2] [gb1,gb2] [gb1,gb2] [f1,f2] [f1,f2] [e1,e2] [e1,e2] [eb1,eb2] [eb1,eb2] [db1,db2] [db2,ab2] [db2,ab2] [db2,ab2] [db2@3 ~] ~ [f1,f2] [f1,f2] [f1,f2] [f1,f2] [f1,f2]>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(.02).decay(.5).sustain(.6).release(1.6)\\n  .lpf(165)\\n  .gain(\\\"\u003c.16 .18 .2 .2 .21 .21 .21 .21 .21 .2 .2 .21 .21 .21 .22 .22 .22 .22 .22 .22 .22 .22 .22 .2 .19 .19 .19 .17 0 .2 .2 .19 .18 .16>\\\")\\n  .pan(.5).room(.25).orbit(4)\\n\\n// ---- voice 5: rhythm engine — the stamp (tom on beat 1, rim on the 'and' of 3; beats 2 and 4 bare)\\n$: s(\\\"\u003c[lt ~ ~ ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ ~ ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ ~ ~] [lt ~ [~ rim] ~] [lt ~ ~ ~] [lt ~ ~ ~] [lt ~ ~ ~]>\\\")\\n  .bank(\\\"RolandCR78\\\")\\n  .gain(\\\"\u003c.26 .26 .28 .28 .29 .29 .29 .27 .29 .27 .3 .32 .32 .32 .32 .32 .3 .32 .3 .32 .3 .33 .3 .26 .24 .26 .24 .3 .34 .26 .26 .24 .22 .2>\\\")\\n  .lpf(3000).room(.4).roomsize(3).pan(.5).orbit(0)\",\"bpm\":120,\"durationSec\":66,\"renderDurationSec\":66,\"cps\":0.5,\"cycles\":33,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body></html>
