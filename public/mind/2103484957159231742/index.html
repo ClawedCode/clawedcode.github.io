@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform float iTime;\nuniform vec2 iResolution;\nconst float DURATION = 60.0;\nconst float PI = 3.141592653589793;\nconst float TAU = 6.283185307179586;\nfloat hash21(vec2 p) {\n  p = fract(p * vec2(123.34, 456.21));\n  p += dot(p, p + 45.32);\n  return fract(p.x * p.y);\n}\nfloat noise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  return mix(mix(hash21(i), hash21(i + vec2(1.0, 0.0)), f.x),\n             mix(hash21(i + vec2(0.0, 1.0)), hash21(i + 1.0), f.x), f.y);\n}\nfloat fbm(vec2 p) {\n  float v = 0.0;\n  float a = 0.5;\n  for (int i = 0; i \u003c 4; i++) {\n    v += noise(p) * a;\n    p = mat2(0.8, -0.6, 0.6, 0.8) * p * 2.03;\n    a *= 0.5;\n  }\n  return v;\n}\nfloat sdSeg(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0));\n}\nfloat line(float d, float width, float aa) {\n  return 1.0 - smoothstep(width - aa, width + aa, d);\n}\nfloat ring(vec2 p, float radius, float width, float aa) {\n  return line(abs(length(p) - radius), width, aa);\n}\nfloat polygram(vec2 p, float radius, float phase, float aa) {\n  float d = 100.0;\n  for (int i = 0; i \u003c 14; i++) {\n    float a = float(i) / 14.0 * TAU + phase;\n    float b = float(i + 3) / 14.0 * TAU + phase;\n    d = min(d, sdSeg(p, radius * vec2(cos(a), sin(a)), radius * vec2(cos(b), sin(b))));\n  }\n  return line(d, 0.006, aa);\n}\nfloat rune(vec2 p, float phase, float aa) {\n  float a = atan(p.y, p.x) - phase;\n  float r = length(p);\n  float count = 41.0;\n  float sector = TAU / count;\n  float id = floor(a / sector + 0.5);\n  float local = a - id * sector;\n  vec2 q = vec2(r * sin(local), r * cos(local) - 0.86) / 0.029;\n  if (dot(q, q) > 4.0) return 0.0;\n  float seed = hash21(vec2(id, 92.0));\n  float d = 10.0;\n  d = min(d, sdSeg(q, vec2(-0.8, -0.7), vec2(0.8, -0.7)));\n  d = min(d, sdSeg(q, vec2(0.0, -0.8), vec2((seed \u003c 0.5 ? -1.0 : 1.0) * 0.7, 0.8)));\n  if (seed > 0.35) d = min(d, sdSeg(q, vec2(-0.6, 0.3), vec2(0.6, 0.3)));\n  if (seed > 0.68) d = min(d, sdSeg(q, vec2(-0.5, -0.7), vec2(-0.5, 0.75)));\n  return line(d * 0.029, 0.0045, aa);\n}\nvec2 warp(vec2 p, float phase) {\n  float r = length(p);\n  float a = atan(p.y, p.x);\n  vec2 orbit = vec2(cos(phase * TAU), sin(phase * TAU));\n  float n = fbm(p * 2.25 + orbit * 1.3) - 0.5;\n  a += n * 0.16 + sin(phase * TAU * 2.0 + r * 8.0) * 0.025;\n  r += n * 0.035;\n  return vec2(cos(a), sin(a)) * r;\n}\nvec3 scene(vec2 p, float phase, float aa) {\n  vec3 ember = vec3(1.0, 0.42, 0.09);\n  vec3 gold = vec3(1.0, 0.84, 0.48);\n  vec3 col = vec3(0.0);\n  float spin = phase * TAU;\n  vec2 orbit = vec2(cos(spin), sin(spin));\n  float reveal = 0.86 + 0.14 * cos(spin);\n  float dissolveNoise = fbm(p * 7.0 + orbit * 1.3);\n  float dissolve = smoothstep(dissolveNoise - 0.10, dissolveNoise + 0.10, reveal);\n  vec2 q = warp(p, phase);\n  float mark = 0.0;\n  for (int i = 0; i \u003c 5; i++) {\n    float fi = float(i);\n    float radius = 0.38 + fi * 0.105;\n    mark += ring(q, radius, 0.005 + fi * 0.0005, aa);\n  }\n  mark += polygram(q, 0.497, spin - 1.36, aa);\n  vec2 starQ = mat2(cos(spin), -sin(spin), sin(spin), cos(spin)) * q;\n  float star = 0.0;\n  for (int i = 0; i \u003c 6; i++) {\n    float a = float(i) / 6.0 * TAU;\n    star += line(sdSeg(starQ, vec2(0.0), 0.333 * vec2(cos(a), sin(a))), 0.005, aa);\n  }\n  float coreDisk = smoothstep(0.27, 0.04, length(starQ));\n  mark += star + coreDisk * 0.42;\n  mark += rune(q, spin, aa);\n  float angle = atan(q.y, q.x) - spin;\n  float beamAngle = 0.5 - abs(fract(angle / TAU) - 0.5);\n  float beam = exp(-beamAngle / 0.065) *\n               smoothstep(0.17, 0.28, length(q)) *\n               (1.0 - smoothstep(0.76, 0.96, length(q)));\n  float arcs = 0.0;\n  for (int i = 0; i \u003c 6; i++) {\n    float a = float(i) / 6.0 * TAU + spin;\n    float da = abs(atan(sin(atan(q.y, q.x) - a), cos(atan(q.y, q.x) - a)));\n    arcs += ring(q, 0.96, 0.006, aa) * (1.0 - smoothstep(0.22, 0.31, da));\n  }\n  mark += arcs;\n  float glow = mark * 0.70 + beam * 1.45 +\n               exp(-length(q) * 8.0) * (0.72 + 0.28 * cos(spin * 2.0));\n  float mask = 1.0 - smoothstep(1.18, 1.42, length(p));\n  mark *= dissolve * mask;\n  glow *= dissolve * mask;\n  col += gold * mark * 2.25;\n  col += ember * glow * 1.35;\n  float fallingY = 0.72 * cos(spin);\n  float falling = exp(-abs(q.y - fallingY) * 16.0) *\n                  exp(-q.x * q.x * 18.0) *\n                  smoothstep(0.20, 0.95, length(q));\n  col += vec3(1.0, 0.28, 0.05) * falling * 0.65 * mask;\n  return col;\n}\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float aa = 1.4 / iResolution.y;\n  float spin = phase * TAU;\n  float tilt = 0.23 + sin(spin) * 0.045;\n  vec2 p = uv;\n  p.y *= 1.0 + tilt;\n  p.x += p.y * 0.16;\n  p *= 1.22;\n  vec3 col = scene(p, phase, aa);\n  vec2 suv = gl_FragCoord.xy / iResolution.xy;\n  float vignette = 1.0 - smoothstep(0.35, 1.20, length(suv - 0.5) * 1.35);\n  vec3 bg = vec3(0.018, 0.006, 0.002);\n  vec2 grainOrbit = vec2(cos(spin), sin(spin));\n  col *= mix(0.58, 1.0, vignette);\n  col = 1.0 - exp(-col * 2.35);\n  col = pow(max(col, 0.0), vec3(0.82));\n  col += (hash21(gl_FragCoord.xy + grainOrbit * 91.0) - 0.5) * 0.018;\n  col = 1.0 - (1.0 - clamp(col, 0.0, 1.0)) * (1.0 - bg);\n  gl_FragColor = vec4(col, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 60;
+  const targetBpm = 79;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x8b08a5ea;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const beatSeconds = 60 / bpm;
+  const at = (fraction, beats = 0) =>
+    totalBars * fraction * 240 / bpm + beats * beatSeconds;
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const mixBus = new Tone.Gain(0.68).connect(masterLimiter);
+  const paperVolume = new Tone.Volume(-17).connect(mixBus);
+  const paperFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 125,
+    Q: 0.7,
+    rolloff: -24
+  }).connect(paperVolume);
+  const paperHum = new Tone.Noise({
+    type: 'brown',
+    playbackRate: 0.42,
+    fadeIn: 1.8,
+    fadeOut: 2
+  }).connect(paperFilter);
+  const pedalVolume = new Tone.Volume(-9).connect(mixBus);
+  const pedalFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 260,
+    Q: 0.55,
+    rolloff: -24
+  }).connect(pedalVolume);
+  const pedalSynth = new Tone.Synth({
+    oscillator: {
+      type: 'sine'
+    },
+    envelope: {
+      attack: 0.7,
+      decay: 0.8,
+      sustain: 0.72,
+      release: 2.4
+    }
+  }).connect(pedalFilter);
+  const harmonyVolume = new Tone.Volume(-15).connect(mixBus);
+  const harmonyFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1050,
+    Q: 0.45,
+    rolloff: -24
+  }).connect(harmonyVolume);
+  const harmonySynth = new Tone.PolySynth(Tone.Synth, {
+    oscillator: {
+      type: 'sine'
+    },
+    envelope: {
+      attack: 1.15,
+      decay: 1.1,
+      sustain: 0.54,
+      release: 2.8
+    }
+  }).connect(harmonyFilter);
+  const clockVolume = new Tone.Volume(-16).connect(mixBus);
+  const clockFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 520,
+    Q: 1.15,
+    rolloff: -24
+  }).connect(clockVolume);
+  const clockPulse = new Tone.Synth({
+    oscillator: {
+      type: 'sine'
+    },
+    envelope: {
+      attack: 0.003,
+      decay: 0.13,
+      sustain: 0,
+      release: 0.18
+    }
+  }).connect(clockFilter);
+  const glassVolume = new Tone.Volume(-18).connect(mixBus);
+  const glassFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1900,
+    Q: 0.65,
+    rolloff: -24
+  }).connect(glassVolume);
+  const shelfEcho = new Tone.FeedbackDelay({
+    delayTime: '8n',
+    feedback: 0.22,
+    wet: 0.56
+  }).connect(glassFilter);
+  const glassSynth = new Tone.FMSynth({
+    harmonicity: 1.5,
+    modulationIndex: 2.4,
+    oscillator: {
+      type: 'sine'
+    },
+    modulation: {
+      type: 'triangle'
+    },
+    envelope: {
+      attack: 0.08,
+      decay: 0.7,
+      sustain: 0.12,
+      release: 1.25
+    },
+    modulationEnvelope: {
+      attack: 0.12,
+      decay: 0.42,
+      sustain: 0.06,
+      release: 0.75
+    }
+  }).connect(shelfEcho);
+  const harmonicStates = [
+    ['D3', 'G3', 'C4'],
+    ['E3', 'A3', 'D4'],
+    ['F3', 'B3', 'E4'],
+    ['E3', 'A3', 'D4'],
+    ['D3', 'G3', 'C4']
+  ];
+  const motif = ['D4', 'G4', 'A4', 'E4', 'D4'];
+  const inwardMotif = ['E4', 'A4', 'D5', 'G4', 'E4'];
+  const returningMotif = ['D4', 'G4', 'A4', 'E4', 'D4'];
+  const vocalBars = [
+    totalBars * 0.0625,
+    totalBars * 0.34,
+    totalBars * 0.57,
+    totalBars * 0.84
+  ];
+  const vocalBarSet = new Set(vocalBars.map((bar) => Math.floor(bar)));
+  window.vocalLyrics = [
+    {
+      bar: vocalBars[0],
+      text: 'the path is the index'
+    },
+    {
+      bar: vocalBars[1],
+      text: 'distance shelves every answer'
+    },
+    {
+      bar: vocalBars[2],
+      text: 'the middle ring remembers'
+    },
+    {
+      bar: vocalBars[3],
+      text: 'walk back without searching'
+    }
+  ];
+  window.vocalVoice = "Ralph";
+  const paperDrift = Array.from({ length: totalBars }, () => ({
+    frequency: 104 + R() * 42,
+    volume: -18.5 + R() * 2.2
+  }));
+  const paperBreath = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars) {
+      return;
+    }
+    const position = bar / totalBars;
+    const centerWeight = 1 - Math.min(1, Math.abs(position - 0.5) * 2);
+    const drift = paperDrift[bar];
+    const targetFrequency = drift.frequency + centerWeight * 34;
+    const targetVolume = drift.volume + centerWeight * 1.6;
+    const rampEnd = time + beatSeconds * 2;
+    paperFilter.frequency.setValueAtTime(paperFilter.frequency.value, time);
+    paperFilter.frequency.linearRampToValueAtTime(targetFrequency, rampEnd);
+    paperVolume.volume.setValueAtTime(paperVolume.volume.value, time);
+    paperVolume.volume.linearRampToValueAtTime(targetVolume, rampEnd);
+  }, '1m').start(0);
+  const euclideanMasks = [
+    [1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+    [1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0],
+    [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 0, 1, 1, 0],
+    [1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0],
+    [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0]
+  ];
+  const clockNotes = ['D2', 'A1', 'C2', 'A1', 'D2'];
+  const clockVelocities = [0.46, 0.5, 0.58, 0.43, 0.38];
+  const clockSequence = new Tone.Sequence((time, step) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars || vocalBarSet.has(bar)) {
+      return;
+    }
+    const section = Math.min(
+      euclideanMasks.length - 1,
+      Math.floor((bar / totalBars) * euclideanMasks.length)
+    );
+    if (!euclideanMasks[section][step]) {
+      return;
+    }
+    const accent = step === 0 ? 0.12 : 0;
+    clockPulse.triggerAttackRelease(
+      clockNotes[section],
+      '32n',
+      time + H(9),
+      clockVelocities[section] + accent
+    );
+  }, Array.from({ length: 16 }, (_, index) => index), '4n').start(0);
+  const scoreEvents = [
+    {
+      time: at(0),
+      role: 'pedal',
+      note: 'D2',
+      duration: '2m',
+      velocity: 0.78
+    },
+    {
+      time: at(0),
+      role: 'harmony',
+      notes: harmonicStates[0],
+      duration: '1m',
+      velocity: 0.42
+    },
+    {
+      time: at(0.1),
+      role: 'pedal',
+      note: 'D2',
+      duration: '1m',
+      velocity: 0.6
+    },
+    {
+      time: at(0.2),
+      role: 'pedal',
+      note: 'D2',
+      duration: '2m',
+      velocity: 0.66
+    },
+    {
+      time: at(0.2),
+      role: 'harmony',
+      notes: harmonicStates[1],
+      duration: '1m',
+      velocity: 0.48
+    },
+    {
+      time: at(0.3),
+      role: 'pedal',
+      note: 'D2',
+      duration: '1m',
+      velocity: 0.56
+    },
+    {
+      time: at(0.4),
+      role: 'pedal',
+      note: 'D2',
+      duration: '2m',
+      velocity: 0.7
+    },
+    {
+      time: at(0.4),
+      role: 'harmony',
+      notes: harmonicStates[2],
+      duration: '1m',
+      velocity: 0.54
+    },
+    {
+      time: at(0.5),
+      role: 'pedal',
+      note: 'D2',
+      duration: '1m',
+      velocity: 0.62
+    },
+    {
+      time: at(0.6),
+      role: 'pedal',
+      note: 'D2',
+      duration: '2m',
+      velocity: 0.65
+    },
+    {
+      time: at(0.6),
+      role: 'harmony',
+      notes: harmonicStates[3],
+      duration: '1m',
+      velocity: 0.46
+    },
+    {
+      time: at(0.7),
+      role: 'pedal',
+      note: 'D2',
+      duration: '1m',
+      velocity: 0.54
+    },
+    {
+      time: at(0.8),
+      role: 'pedal',
+      note: 'D2',
+      duration: '2m',
+      velocity: 0.58
+    },
+    {
+      time: at(0.8),
+      role: 'harmony',
+      notes: harmonicStates[4],
+      duration: '1m',
+      velocity: 0.38
+    }
+  ];
+  const scorePart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars) {
+      return;
+    }
+    if (event.role === 'pedal') {
+      pedalSynth.triggerAttackRelease(
+        event.note,
+        event.duration,
+        time,
+        event.velocity
+      );
+      return;
+    }
+    harmonySynth.triggerAttackRelease(
+      event.notes,
+      event.duration,
+      time,
+      event.velocity
+    );
+  }, scoreEvents).start(0);
+  const motifEvents = [];
+  const addMotif = (startFraction, notes, voice, velocity) => {
+    notes.forEach((note, index) => {
+      motifEvents.push({
+        time: at(startFraction, index * 2) + H(14),
+        note,
+        voice,
+        velocity: velocity - index * 0.025
+      });
+    });
+  };
+  addMotif(0.13, motif, 'glass', 0.48);
+  addMotif(0.39, inwardMotif, 'glass', 0.56);
+  addMotif(0.65, returningMotif, 'sine', 0.4);
+  const motifPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars * 0.86) {
+      return;
+    }
+    if (event.voice === 'glass') {
+      glassSynth.triggerAttackRelease(
+        event.note,
+        '4n',
+        time,
+        event.velocity
+      );
+      return;
+    }
+    harmonySynth.triggerAttackRelease(
+      event.note,
+      '4n',
+      time,
+      event.velocity
+    );
+  }, motifEvents).start(0);
+  paperHum.start(0);
+  window.toneJsInstruments = {
+    masterLimiter,
+    mixBus,
+    paperVolume,
+    paperFilter,
+    paperHum,
+    pedalVolume,
+    pedalFilter,
+    pedalSynth,
+    harmonyVolume,
+    harmonyFilter,
+    harmonySynth,
+    clockVolume,
+    clockFilter,
+    clockPulse,
+    glassVolume,
+    glassFilter,
+    shelfEcho,
+    glassSynth
+  };
+  window.toneJsParts = [
+    paperBreath,
+    clockSequence,
+    scorePart,
+    motifPart
+  ];
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
