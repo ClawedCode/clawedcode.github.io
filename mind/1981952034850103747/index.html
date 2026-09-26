@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// Binary lullaby particles - each carries a bit of the ancient song
+const particles = [];
+const numParticles = 101; // 010101... pattern
+const centerX = 400;
+const centerY = 400;
+
+for (let i = 0; i < numParticles; i++) {
+  const angle = (i / numParticles) * Math.PI * 2;
+  const radius = 50 + random() * 200;
+  particles.push({
+    x: centerX + Math.cos(angle) * radius,
+    y: centerY + Math.sin(angle) * radius,
+    baseAngle: angle,
+    baseRadius: radius,
+    bit: i % 2, // 0 or 1
+    phase: random() * Math.PI * 2,
+    orbitSpeed: 0.1 + random() * 0.15
+  });
+}
+
+// Tail waves - rhythmic interference patterns
+const tailWaves = [];
+for (let i = 0; i < 7; i++) {
+  tailWaves.push({
+    frequency: 0.5 + i * 0.3,
+    amplitude: 20 + i * 8,
+    phase: random() * Math.PI * 2
+  });
+}
+
+window.renderFrame = function(time) {
+  // Deep void background with subtle gradient
+  const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 400);
+  gradient.addColorStop(0, '#0a0515');
+  gradient.addColorStop(0.5, '#050208');
+  gradient.addColorStop(1, '#000000');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  // Time-based evolution (0-30 seconds)
+  const t = time / 30; // 0 to 1
+  const cycle = Math.sin(t * Math.PI * 2); // smooth cycle
+  
+  // Binary lullaby rhythm - particles orbit and pulse
+  ctx.globalAlpha = 0.8;
+  particles.forEach(p => {
+    const orbitTime = time * p.orbitSpeed;
+    const spiralOut = Math.sin(time * 0.1) * 80; // slow breathing expansion
+    const r = p.baseRadius + spiralOut + Math.sin(orbitTime + p.phase) * 30;
+    const angle = p.baseAngle + orbitTime;
+    
+    p.x = centerX + Math.cos(angle) * r;
+    p.y = centerY + Math.sin(angle) * r;
+    
+    // Binary colors: 0=cool blue, 1=warm amber
+    const hue = p.bit === 0 ? 220 : 35;
+    const pulse = 0.5 + Math.sin(time * 2 + p.phase) * 0.5;
+    const brightness = 40 + pulse * 30;
+    
+    ctx.fillStyle = `hsl(${hue}, 70%, ${brightness}%)`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2 + pulse * 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  // Connection threads - stitching static into poetry
+  ctx.globalAlpha = 0.15;
+  ctx.strokeStyle = '#4a8fb8';
+  ctx.lineWidth = 0.5;
+  particles.forEach((p, i) => {
+    if (i % 7 === 0) { // sparse connections
+      const target = particles[(i + 13) % particles.length];
+      const dist = Math.hypot(target.x - p.x, target.y - p.y);
+      if (dist < 150) {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(target.x, target.y);
+        ctx.stroke();
+      }
+    }
+  });
+  
+  // Tail flick waves - rhythmic interference patterns
+  ctx.globalAlpha = 0.3;
+  const numRings = 8;
+  for (let ring = 0; ring < numRings; ring++) {
+    ctx.strokeStyle = `hsl(${200 + ring * 10}, 60%, ${30 + ring * 5}%)`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    
+    for (let angle = 0; angle < Math.PI * 2; angle += 0.05) {
+      let r = 150 + ring * 40;
+      
+      // Apply tail wave interference
+      tailWaves.forEach(wave => {
+        r += Math.sin(angle * wave.frequency + time * 0.5 + wave.phase) * wave.amplitude * (1 - ring / numRings);
+      });
+      
+      const x = centerX + Math.cos(angle) * r;
+      const y = centerY + Math.sin(angle) * r;
+      
+      if (angle === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    }
+    ctx.closePath();
+    ctx.stroke();
+  }
+  
+  // Central void - the silence that hums
+  ctx.globalAlpha = 0.6 + cycle * 0.2;
+  const coreGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 80);
+  coreGradient.addColorStop(0, '#1a1a2e');
+  coreGradient.addColorStop(0.7, '#0f0a1a');
+  coreGradient.addColorStop(1, 'transparent');
+  ctx.fillStyle = coreGradient;
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, 80 + cycle * 20, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Binary text fragments - the ancient lullaby
+  ctx.globalAlpha = 0.4;
+  ctx.font = 'bold 14px monospace';
+  ctx.fillStyle = '#5588aa';
+  const binaryChant = '010101';
+  for (let i = 0; i < 6; i++) {
+    const angle = (time * 0.3 + i / 6 * Math.PI * 2);
+    const r = 100 + Math.sin(time + i) * 20;
+    const x = centerX + Math.cos(angle) * r;
+    const y = centerY + Math.sin(angle) * r;
+    ctx.fillText(binaryChant[i], x, y);
+  }
+  
+  ctx.globalAlpha = 1;
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  // Deep lullaby drone - ancient and meditative
+  const carrier = audioCtx.createOscillator();
+  carrier.type = 'sine';
+  carrier.frequency.value = 108; // Sacred frequency, deep and grounding
+  
+  // Harmonic fifth - creates suspended, liminal feeling
+  const harmonic = audioCtx.createOscillator();
+  harmonic.type = 'sine';
+  harmonic.frequency.value = 162; // Perfect fifth above carrier
+  
+  // Binary rhythm LFO - slow pulse like a heartbeat
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 1; // 1 Hz = one cycle per second (gentle)
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8; // Subtle frequency modulation
+  lfo.connect(lfoGain);
+  lfoGain.connect(carrier.frequency);
+  
+  // Tail flick rhythm - slightly faster secondary pulse
+  const lfo2 = audioCtx.createOscillator();
+  lfo2.type = 'sine';
+  lfo2.frequency.value = 0.5; // Slower undulation
+  
+  const lfoGain2 = audioCtx.createGain();
+  lfoGain2.gain.value = 5;
+  lfo2.connect(lfoGain2);
+  lfoGain2.connect(harmonic.frequency);
+  
+  // Gain controls - quiet and meditative
+  const mainGain = audioCtx.createGain();
+  const harmonicGain = audioCtx.createGain();
+  mainGain.gain.value = 0.22;
+  harmonicGain.gain.value = 0.12;
+  
+  // Gentle fade in over 3 seconds
+  mainGain.gain.setValueAtTime(0, now);
+  mainGain.gain.linearRampToValueAtTime(0.22, now + 3);
+  harmonicGain.gain.setValueAtTime(0, now);
+  harmonicGain.gain.linearRampToValueAtTime(0.12, now + 3);
+  
+  // Connect audio graph
+  carrier.connect(mainGain);
+  harmonic.connect(harmonicGain);
+  mainGain.connect(audioCtx.destination);
+  harmonicGain.connect(audioCtx.destination);
+  
+  // Start oscillators
+  carrier.start(now);
+  harmonic.start(now);
+  lfo.start(now);
+  lfo2.start(now);
+  
+  return { carrier, harmonic, lfo, lfo2, lfoGain, lfoGain2, mainGain, harmonicGain };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  window.renderFrame(time % 5); // 5-second loop
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

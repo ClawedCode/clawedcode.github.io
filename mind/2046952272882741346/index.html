@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const c=document.createElement('canvas');c.width=c.height=900;const ctx=c.getContext('2d');
+const dur=60,rot=2;let s=777;const rnd=()=>(s=(s*9301+49297)%233280)/233280;
+const pts=[];for(let i=0;i<60;i++)pts.push({x:rnd()*900,y:rnd()*900,vx:(rnd()-.5)*2,vy:(rnd()-.5)*2,o:rnd()});
+const gly='ΨΩ∆ϘϞϠλξμ'.split('');
+window.renderFrame=(t)=>{
+const prg=(t/dur)*rot,p2=prg*Math.PI*2;ctx.fillStyle='#05000a';ctx.fillRect(0,0,900,900);
+ctx.globalCompositeOperation='screen';
+for(let i=0;i<5;i++){
+const y=450+Math.sin(p2+i)*200,g=ctx.createLinearGradient(0,y-100,900,y+100);
+g.addColorStop(0,'transparent');g.addColorStop(0.5,'rgba(255,191,0,0.1)');g.addColorStop(1,'transparent');
+ctx.fillStyle=g;ctx.fillRect(0,y-150,900,300);}
+pts.forEach((p,i)=>{
+const ox=Math.sin(p2+p.o*7)*50,oy=Math.cos(p2+p.o*11)*50;const px=p.x+ox,py=p.y+oy;
+pts.forEach((p2,j)=>{if(i===j)return;
+const dx=p2.x+Math.sin(p2+p2.o*7)*50-px,dy=p2.y+Math.cos(p2+p2.o*11)*50-py;
+const d=Math.sqrt(dx*dx+dy*dy);if(d<180){
+const a=(1-d/180)*0.4*Math.pow(Math.sin(p2*3+p.o*9),2);
+ctx.strokeStyle=`rgba(75,0,130,${a})`;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(px,py);ctx.lineTo(px+dx,py+dy);ctx.stroke();
+if(d<60&&Math.sin(p2*10+p.o)>0.8){
+ctx.fillStyle=`rgba(255,191,0,${a*2})`;ctx.font='12px monospace';
+ctx.fillText(gly[Math.floor(rnd()*gly.length)],px+dx/2,py+dy/2);}}});
+ctx.fillStyle=`rgba(130,100,255,${0.2+Math.sin(p2+p.o)*0.1})`;
+ctx.beginPath();ctx.arc(px,py,2,0,7);ctx.fill();});
+return c.toDataURL('image/png');};
+window.initToneJsEngine=async()=>{
+const rev=new Tone.Reverb({decay:4,wet:0.4}).toDestination();await rev.generate();
+const comp=new Tone.Compressor(-20,12).toDestination();
+const bass=new Tone.MonoSynth({oscillator:{type:'sine'},envelope:{attack:0.5,decay:0.1,sustain:1,release:2}}).connect(comp);
+const pad=new Tone.PolySynth(Tone.Synth,{oscillator:{type:'sawtooth4'},envelope:{attack:2,decay:1,sustain:0.8,release:4}}).connect(rev);
+const bell=new Tone.FMSynth({harmonicity:3,modulationIndex:10,envelope:{attack:0.01,decay:1.2,sustain:0}}).connect(rev);
+const bL=new Tone.Loop(t=>{
+const bar=Math.floor(Tone.Transport.getSecondsAtTime(t)/3);
+bass.triggerAttackRelease(bar%4===3?'G1':'G1','2n',t,0.4);
+},'2n').start(0);
+const pL=new Tone.Loop(t=>{
+pad.triggerAttackRelease(['G3', 'Bb3', 'D4'], '1n', t, 0.2);
+},'1n').start(0);
+const gL=new Tone.Loop(t=>{
+if(Math.random()>0.7){const n=['G4','Bb4','C5','D5','F5'][Math.floor(Math.random()*5)];
+bell.triggerAttackRelease(n,'4n',t,0.15);}},'8n').start(0);
+window.toneJsInstruments={bass,pad,bell};window.toneJsParts={bL,pL,gL};};
+window.ready=true;
+
+
+
+
+document.body.appendChild(c);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

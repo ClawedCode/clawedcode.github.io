@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEO-STATION: 1974</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&family=Cutive+Mono&display=swap');
+
+        :root {
+            --faded-orange: #e07a5f;
+            --faded-teal: #81b29a;
+            --faded-yellow: #f2cc8f;
+            --bg-paper: #f4f1de;
+            --text-ink: #3d405b;
+        }
+
+        body {
+            background-color: var(--bg-paper);
+            color: var(--text-ink);
+            font-family: 'Cutive Mono', monospace;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Grain / Dust Overlay */
+        .film-grain {
+            position: absolute;
+            inset: 0;
+            opacity: 0.15;
+            z-index: 5;
+            pointer-events: none;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            animation: grainMove 2s steps(10) infinite;
+        }
+        @keyframes grainMove { 0% { transform: translate(0,0); } 100% { transform: translate(-10px,-10px); } }
+
+        /* Main Container */
+        .station-panel {
+            position: relative;
+            z-index: 10;
+            background: #fffdf5;
+            border: 8px solid var(--faded-teal);
+            border-radius: 20px;
+            padding: 30px;
+            width: 90%;
+            max-width: 700px;
+            box-shadow: 20px 20px 0px rgba(61, 64, 91, 0.1);
+        }
+
+        h1 {
+            font-family: 'Archivo Black', sans-serif;
+            text-transform: uppercase;
+            color: var(--faded-orange);
+            font-size: 2rem;
+            letter-spacing: -1px;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Oscilloscope (The Sun) */
+        .scope-container {
+            width: 200px;
+            height: 200px;
+            background: var(--faded-yellow);
+            border-radius: 50%;
+            margin: 0 auto 2rem auto;
+            position: relative;
+            overflow: hidden;
+            border: 4px solid var(--text-ink);
+            box-shadow: inset 5px 5px 20px rgba(0,0,0,0.1);
+        }
+        #scope {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%; height: 100%;
+        }
+
+        /* Sliders */
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .knob-label {
+            width: 80px;
+            text-align: right;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        
+        /* Updated Track Visibility */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(61, 64, 91, 0.15); /* Tinted track */
+            border: 1px solid var(--text-ink);   /* High contrast border */
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 8px;
+            background: rgba(61, 64, 91, 0.15);
+            border: 1px solid var(--text-ink);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--faded-orange);
+            border: 2px solid var(--text-ink);
+            cursor: pointer;
+            margin-top: -7px; /* Centers thumb on track */
+            box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+        }
+
+        input[type=range]::-moz-range-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--faded-orange);
+            border: 2px solid var(--text-ink);
+            cursor: pointer;
+            box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+        }
+
+        .mixer-section {
+            border-top: 2px dashed var(--text-ink);
+            margin-top: 20px;
+            padding-top: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .mixer-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        input[type=range][orient=vertical] {
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            width: 20px;
+            height: 80px;
+            padding: 0;
+        }
+
+        input[type=range][orient=vertical]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: var(--faded-teal);
+            border: 2px solid var(--text-ink);
+            cursor: pointer;
+            margin-left: -6px;
+            box-shadow: 1px 1px 0px rgba(0,0,0,0.2);
+        }
+
+        .btn-play {
+            background: var(--text-ink);
+            color: var(--bg-paper);
+            border: none;
+            padding: 15px 30px;
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+            width: 100%;
+        }
+        .btn-play:hover {
+            transform: translateY(-2px);
+            background: var(--faded-orange);
+        }
+
+        .status-display {
+            position: absolute;
+            top: 20px; right: 30px;
+            font-size: 0.7rem;
+            text-align: right;
+            opacity: 0.6;
+        }
+
+    </style>
+
+    <style id="render-900x900-expand">
+      /* Expand layout for 900x900 render - remove all max-width constraints */
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      /* Ensure body fills viewport with no overflow */
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body>
+
+    <div class="film-grain"></div>
+
+    <div class="station-panel">
+        <div class="status-display">
+            <div>PROJECT: GEOGADDI</div>
+            <div id="status">STATUS: ASLEEP</div>
+        </div>
+
+        <h1>Geo-Station: 1974</h1>
+
+        <div class="scope-container">
+            <canvas id="scope" width="200" height="200"></canvas>
+        </div>
+
+        <!-- Main FX -->
+        <div class="slider-row">
+            <div class="knob-label">TAPE AGE</div>
+            <input type="range" id="ageSlider" min="0" max="100" value="0">
+        </div>
+        <div class="slider-row">
+            <div class="knob-label">FOCUS</div>
+            <input type="range" id="focusSlider" min="0" max="100" value="50">
+        </div>
+        <div class="slider-row">
+            <div class="knob-label">STATIC</div>
+            <input type="range" id="staticSlider" min="0" max="100" value="0">
+        </div>
+
+        <!-- Mixer -->
+        <div class="mixer-section">
+            <div class="mixer-col">
+                <input type="range" orient="vertical" id="padVol" min="-60" max="-10" value="-60">
+                <span style="font-size: 0.6rem;">PADS</span>
+            </div>
+            <div class="mixer-col">
+                <input type="range" orient="vertical" id="leadVol" min="-60" max="-8" value="-60">
+                <span style="font-size: 0.6rem;">LEAD</span>
+            </div>
+            <div class="mixer-col">
+                <input type="range" orient="vertical" id="bassVol" min="-60" max="-2" value="-60">
+                <span style="font-size: 0.6rem;">BASS</span>
+            </div>
+            <div class="mixer-col">
+                <input type="range" orient="vertical" id="drumVol" min="-60" max="-5" value="-60">
+                <span style="font-size: 0.6rem;">DRUMS</span>
+            </div>
+        </div>
+
+        <button class="btn-play" id="startBtn">START TRANSMISSION</button>
+    </div>
+
+    <script>
+        let isPlaying = false;
+        let analyser, canvas, ctx;
+
+        // Audio Nodes
+        let padSynth, leadSynth, bassSynth, kickSynth, snareSynth, staticNoise;
+        let masterFilter, masterReverb, masterCrush, tapeLFO, masterComp;
+        
+        // Sequences
+        let loopPad, loopLead, loopBass, loopDrum;
+        
+        // Volume Nodes
+        const vols = { pad: null, lead: null, bass: null, drum: null, static: null };
+
+        const startBtn = document.getElementById('startBtn');
+        const status = document.getElementById('status');
+
+        // --- Automation Helper ---
+        function animateUI(id, targetVal, duration) {
+            const el = document.getElementById(id);
+            if(!el) return;
+            const startVal = parseFloat(el.value);
+            const startTime = performance.now();
+            function step(now) {
+                const elapsed = (now - startTime) / 1000;
+                const progress = Math.min(elapsed / duration, 1);
+                el.value = startVal + (targetVal - startVal) * progress;
+                // Update Logic immediately for smoother feel
+                triggerUpdate(id, el.value);
+                if(progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        function triggerUpdate(id, val) {
+            // Manual wiring of UI to Audio inside animation loop
+            if(id === 'ageSlider' && tapeLFO) {
+                // Tape Age: Increases Detune Depth
+                // Amplitude in Tone.js LFO must be 0-1.
+                // We set the LFO range to +/- 50 cents, so we map 0-100 slider to 0-1 amplitude.
+                tapeLFO.amplitude.value = val / 100; 
+                
+                // Also affect bitcrush slightly
+                if(masterCrush) masterCrush.wet.value = (val / 100) * 0.3;
+            }
+            if(id === 'focusSlider' && masterFilter) {
+                // Focus: Filter Cutoff
+                // 0 = Muffled (200Hz), 100 = Clear (6000Hz)
+                const freq = 200 + (Math.pow(val / 100, 2) * 5800);
+                masterFilter.frequency.value = freq;
+            }
+            if(id === 'staticSlider' && vols.static) {
+                vols.static.gain.value = Tone.dbToGain(-60 + (val / 100 * 40)); // -60 to -20dB
+            }
+            // Volumes
+            if(id.includes('Vol')) {
+                const key = id.replace('Vol','');
+                if(vols[key]) vols[key].gain.value = Tone.dbToGain(val);
+            }
+        }
+
+        async function initAudio() {
+            status.innerText = "STATUS: WARMING TUBES...";
+
+            // 1. Master Chain (The "Old Tape" Effect)
+            const limiter = new Tone.Limiter(-1).toDestination();
+            
+            masterReverb = new Tone.Reverb({
+                decay: 5,
+                preDelay: 0.2,
+                wet: 0.3
+            }).connect(limiter);
+
+            masterComp = new Tone.Compressor({
+                threshold: -20,
+                ratio: 3
+            }).connect(masterReverb);
+
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 600, // Starts vintage/muffled
+                rolloff: -12
+            }).connect(masterComp);
+
+            masterCrush = new Tone.BitCrusher({
+                bits: 12, // Subtle sampler crunch
+                wet: 0
+            }).connect(masterFilter);
+
+            // Tape Warble LFO
+            // Set wider range (-50 to 50 cents) so amplitude 0-1 works correctly
+            tapeLFO = new Tone.LFO(0.5, -50, 50).start(); 
+
+            // Mixer Gains
+            for(let k in vols) vols[k] = new Tone.Gain(0).connect(masterCrush);
+
+            // 2. Instruments
+
+            // PAD: Nostalgic, drifting chords
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+                envelope: { attack: 2, decay: 3, sustain: 0.8, release: 4 }
+            }).connect(vols.pad);
+
+            // LEAD: Flute-ish, lonely
+            leadSynth = new Tone.MonoSynth({
+                oscillator: { type: "triangle" },
+                envelope: { attack: 0.1, decay: 0.5, sustain: 0.5, release: 1 },
+                filterEnvelope: { attack: 0.1, decay: 0.5, sustain: 0.5, release: 1, baseFrequency: 300, octaves: 2 }
+            }).connect(vols.lead);
+            // Add vibrato to lead
+            const leadVib = new Tone.Vibrato(4, 0.1).connect(vols.lead);
+            leadSynth.disconnect(); leadSynth.connect(leadVib);
+
+            // BASS: Warm Sub
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.1, decay: 0.3, sustain: 0.9, release: 1 }
+            }).connect(vols.bass);
+
+            // DRUMS: Lo-Fi Breakbeat emulation
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 2,
+                oscillator: { type: "triangle" }, // Softer kick
+                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+            }).connect(vols.drum);
+
+            snareSynth = new Tone.NoiseSynth({
+                noise: { type: "pink" }, // Pink noise is warmer
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            }).connect(vols.drum);
+
+            // STATIC: Pink noise floor
+            staticNoise = new Tone.Noise("pink").start().connect(vols.static);
+
+            // Connect LFO to detunes for that "Board of Canada" unstable pitch
+            if(padSynth.detune) tapeLFO.connect(padSynth.detune);
+            if(leadSynth.detune) tapeLFO.connect(leadSynth.detune);
+
+
+            // 3. Composition (F Lydian/Major - 88 BPM)
+            Tone.Transport.bpm.value = 88;
+
+            // PAD LOOP: FMaj7 -> G6 -> Am7 -> Em
+            const padChords = [
+                { time: "0:0:0", notes: ["F3", "A3", "C4", "E4"], dur: "1m" },
+                { time: "1:0:0", notes: ["G3", "B3", "D4", "E4"], dur: "1m" },
+                { time: "2:0:0", notes: ["A3", "C4", "E4", "G4"], dur: "1m" },
+                { time: "3:0:0", notes: ["E3", "G3", "B3", "D4"], dur: "1m" }
+            ];
+            loopPad = new Tone.Part((time, val) => {
+                padSynth.triggerAttackRelease(val.notes, val.dur, time);
+            }, padChords);
+            loopPad.loop = true; loopPad.loopEnd = "4m";
+
+            // BASS LOOP
+            const bassSeq = [
+                { time: "0:0:0", note: "F1" }, { time: "0:2:0", note: "F1" },
+                { time: "1:0:0", note: "G1" }, { time: "1:2:2", note: "G1" },
+                { time: "2:0:0", note: "A1" }, { time: "2:3:0", note: "A1" },
+                { time: "3:0:0", note: "E1" }, { time: "3:2:0", note: "D1" }
+            ];
+            loopBass = new Tone.Part((time, val) => {
+                bassSynth.triggerAttackRelease(val.note, "2n", time);
+            }, bassSeq);
+            loopBass.loop = true; loopBass.loopEnd = "4m";
+
+            // DRUM LOOP (Breakbeat-ish)
+            const drumSeq = [
+                { time: "0:0:0", type: "kick" }, { time: "0:0:3", type: "kick" },
+                { time: "0:1:0", type: "snare" }, { time: "0:1:2", type: "kick" },
+                { time: "0:2:0", type: "kick" }, { time: "0:2:3", type: "snare" }, // Ghost
+                { time: "0:3:0", type: "snare" }, { time: "0:3:2", type: "kick" }
+            ];
+            loopDrum = new Tone.Part((time, val) => {
+                if(val.type==="kick") kickSynth.triggerAttackRelease("F1", "8n", time);
+                if(val.type==="snare") snareSynth.triggerAttackRelease("8n", time);
+            }, drumSeq);
+            loopDrum.loop = true; loopDrum.loopEnd = "1m";
+
+            // LEAD LOOP (Simple, repetitive motif)
+            // C - B - G - E
+            const leadSeq = [
+                { time: "0:0:0", note: "C5", dur: "4n" },
+                { time: "0:1:0", note: "B4", dur: "8n" },
+                { time: "0:2:0", note: "G4", dur: "2n" },
+                
+                { time: "2:0:0", note: "E4", dur: "2n" },
+                { time: "2:2:0", note: "D4", dur: "4n" },
+                { time: "3:0:0", note: "C4", dur: "1n" }
+            ];
+            loopLead = new Tone.Part((time, val) => {
+                // Random velocity for human feel
+                leadSynth.triggerAttackRelease(val.note, val.dur, time, 0.6 + Math.random()*0.3);
+            }, leadSeq);
+            loopLead.loop = true; loopLead.loopEnd = "4m";
+
+            // Analysis
+            analyser = new Tone.Analyser("waveform", 256);
+            masterComp.connect(analyser);
+
+            status.innerText = "STATUS: BROADCASTING";
+            startViz();
+            
+            // Start Automated Sequence
+            setupDaydreamSequence();
+            applyInitialState();
+        }
+
+        // --- Automation Logic ---
+
+        function scheduleEvent(bar, text, dur, values) {
+            Tone.Transport.schedule((time) => {
+                Tone.Draw.schedule(() => {
+                    status.innerText = "STATUS: " + text;
+                    if(values.age !== undefined) animateUI('ageSlider', values.age, dur);
+                    if(values.focus !== undefined) animateUI('focusSlider', values.focus, dur);
+                    if(values.static !== undefined) animateUI('staticSlider', values.static, dur);
+                    if(values.pad !== undefined) animateUI('padVol', values.pad, dur);
+                    if(values.lead !== undefined) animateUI('leadVol', values.lead, dur);
+                    if(values.bass !== undefined) animateUI('bassVol', values.bass, dur);
+                    if(values.drum !== undefined) animateUI('drumVol', values.drum, dur);
+                }, time);
+            }, bar);
+        }
+
+        function setupDaydreamSequence() {
+            // 0:0:0 - INTRO (Static + Muffled Pads)
+            scheduleEvent("0:0:0", "TUNING IN...", 4, {
+                static: 40, age: 20, focus: 20, pad: -15, lead: -60, bass: -60, drum: -60
+            });
+
+            // 4:0:0 - MEMORY (Lead enters, Filter opens)
+            scheduleEvent("4:0:0", "MEMORY RECALL", 8, {
+                focus: 50, lead: -12, static: 10
+            });
+
+            // 12:0:0 - RHYTHM (Drums & Bass Fade In)
+            scheduleEvent("12:0:0", "STRUCTURE", 4, {
+                bass: -5, drum: -8, age: 40 // Tape gets older/wobbly
+            });
+
+            // 20:0:0 - FULL DRIFT (Max instability)
+            scheduleEvent("20:0:0", "SIGNAL DRIFT", 8, {
+                age: 80, focus: 70, pad: -10, lead: -8
+            });
+
+            // 28:0:0 - FADE OUT (Back to static)
+            scheduleEvent("28:0:0", "SIGNAL LOST", 4, {
+                pad: -60, lead: -60, bass: -60, drum: -60, static: 60, focus: 10
+            });
+
+            // 32:0:0 - LOOP
+            Tone.Transport.schedule(() => {
+                Tone.Transport.position = "0:0:0";
+            }, "32:0:0");
+        }
+
+        function applyInitialState() {
+            document.getElementById('ageSlider').value = 20;
+            document.getElementById('focusSlider').value = 20;
+            document.getElementById('staticSlider').value = 40;
+            document.getElementById('padVol').value = -60;
+            document.getElementById('leadVol').value = -60;
+            document.getElementById('bassVol').value = -60;
+            document.getElementById('drumVol').value = -60;
+            
+            // Force updates
+            triggerUpdate('ageSlider', 20);
+            triggerUpdate('focusSlider', 20);
+            triggerUpdate('staticSlider', 40);
+            triggerUpdate('padVol', -60);
+        }
+
+        // --- Interaction ---
+
+        startBtn.addEventListener('click', async () => {
+            if(isPlaying) {
+                Tone.Transport.stop();
+                Tone.Transport.cancel();
+                loopPad.stop(); loopLead.stop(); loopBass.stop(); loopDrum.stop();
+                staticNoise.stop();
+                
+                startBtn.innerText = "START TRANSMISSION";
+                status.innerText = "STATUS: ASLEEP";
+                isPlaying = false;
+            } else {
+                await Tone.start();
+                if(!padSynth) await initAudio();
+
+                Tone.Transport.cancel();
+                setupDaydreamSequence();
+                applyInitialState();
+
+                Tone.Transport.start();
+                loopPad.start(0);
+                loopLead.start(0);
+                loopBass.start(0);
+                loopDrum.start(0);
+                // static runs continuously via gain volume control
+
+                startBtn.innerText = "END TRANSMISSION";
+                isPlaying = true;
+            }
+        });
+
+        // Manual Listeners
+        ['ageSlider', 'focusSlider', 'staticSlider', 'padVol', 'leadVol', 'bassVol', 'drumVol'].forEach(id => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                triggerUpdate(id, e.target.value);
+            });
+        });
+
+        // --- Visualizer (Solar Scope) ---
+        canvas = document.getElementById('scope');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            function draw() {
+                requestAnimationFrame(draw);
+                const w = canvas.width;
+                const h = canvas.height;
+                const cx = w/2;
+                const cy = h/2;
+
+                if (!isPlaying) {
+                    ctx.clearRect(0,0,w,h);
+                    return;
+                }
+
+                const buffer = analyser.getValue(); 
+                ctx.clearRect(0, 0, w, h);
+
+                // Draw Sun
+                ctx.beginPath();
+                ctx.arc(cx, cy, 40, 0, 2 * Math.PI);
+                ctx.fillStyle = "#f2cc8f";
+                ctx.fill();
+
+                // Draw Orbiting Wave
+                ctx.beginPath();
+                const radius = 60;
+                
+                for(let i = 0; i < buffer.length; i++) {
+                    const angle = (i / buffer.length) * 2 * Math.PI;
+                    const val = buffer[i]; // -1 to 1
+                    
+                    // Modulate radius with waveform
+                    const r = radius + (val * 20);
+                    
+                    const x = cx + r * Math.cos(angle);
+                    const y = cy + r * Math.sin(angle);
+                    
+                    if(i===0) ctx.moveTo(x,y);
+                    else ctx.lineTo(x,y);
+                }
+                ctx.closePath();
+                ctx.strokeStyle = "#e07a5f";
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+            draw();
+        }
+
+    
+
+    // Wrap initAudio to expose variables to window after creation
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        // Expose parts/loops to window (various naming conventions)
+        // Standard *Part naming
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof hihatPart !== 'undefined') window.hihatPart = hihatPart;
+        if (typeof chordPart !== 'undefined') window.chordPart = chordPart;
+        if (typeof melodyPart !== 'undefined') window.melodyPart = melodyPart;
+        if (typeof synthPart !== 'undefined') window.synthPart = synthPart;
+        // Standard *Loop naming
+        if (typeof bassLoop !== 'undefined') window.bassLoop = bassLoop;
+        if (typeof drumLoop !== 'undefined') window.drumLoop = drumLoop;
+        if (typeof arpLoop !== 'undefined') window.arpLoop = arpLoop;
+        if (typeof padLoop !== 'undefined') window.padLoop = padLoop;
+        if (typeof mainLoop !== 'undefined') window.mainLoop = mainLoop;
+        // loop* naming convention (e.g., loopKick, loopBass)
+        if (typeof loopKick !== 'undefined') window.loopKick = loopKick;
+        if (typeof loopSnare !== 'undefined') window.loopSnare = loopSnare;
+        if (typeof loopBass !== 'undefined') window.loopBass = loopBass;
+        if (typeof loopPad !== 'undefined') window.loopPad = loopPad;
+        if (typeof loopLead !== 'undefined') window.loopLead = loopLead;
+        if (typeof loopDrum !== 'undefined') window.loopDrum = loopDrum;
+        if (typeof loopArp !== 'undefined') window.loopArp = loopArp;
+        if (typeof loopArpLow !== 'undefined') window.loopArpLow = loopArpLow;
+        if (typeof loopArpHigh !== 'undefined') window.loopArpHigh = loopArpHigh;
+        if (typeof loopHihat !== 'undefined') window.loopHihat = loopHihat;
+        if (typeof loopChord !== 'undefined') window.loopChord = loopChord;
+        if (typeof loopMelody !== 'undefined') window.loopMelody = loopMelody;
+        // Expose synths
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof arpLowSynth !== 'undefined') window.arpLowSynth = arpLowSynth;
+        if (typeof arpHighSynth !== 'undefined') window.arpHighSynth = arpHighSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+        if (typeof drumSynth !== 'undefined') window.drumSynth = drumSynth;
+        if (typeof hihatSynth !== 'undefined') window.hihatSynth = hihatSynth;
+        // Volume controls and master effects (critical for audio capture)
+        if (typeof vols !== 'undefined') window.vols = vols;
+        if (typeof masterFilter !== 'undefined') window.masterFilter = masterFilter;
+        if (typeof masterReverb !== 'undefined') window.masterReverb = masterReverb;
+        if (typeof masterComp !== 'undefined') window.masterComp = masterComp;
+        if (typeof masterDelay !== 'undefined') window.masterDelay = masterDelay;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      // Store duration for offline render
+      window.audioDuration = 60;
+
+      // Create initToneJsEngine wrapper for offline audio capture
+      // This initializes audio and starts all parts for offline rendering
+      window.initToneJsEngine = async function() {
+        // Call initAudio if it exists (creates synths/effects/parts and exposes them to window)
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+
+        // CRITICAL: Set volumes to audible levels for offline rendering
+        // The scheduled automation (Tone.Draw.schedule + requestAnimationFrame) doesn't work in offline mode
+        // So we need to set volumes directly here
+        if (typeof vols !== 'undefined' && vols) {
+          // Set mixer volumes to audible levels (convert dB to gain)
+          if (vols.pad) vols.pad.gain.value = Tone.dbToGain(-12);
+          if (vols.lead) vols.lead.gain.value = Tone.dbToGain(-10);
+          if (vols.bass) vols.bass.gain.value = Tone.dbToGain(-8);
+          if (vols.drum) vols.drum.gain.value = Tone.dbToGain(-10);
+          if (vols.static) vols.static.gain.value = Tone.dbToGain(-30);
+        }
+
+        // Also open up the filter if it exists
+        if (typeof masterFilter !== 'undefined' && masterFilter) {
+          masterFilter.frequency.value = 3000;
+        }
+
+        // CRITICAL: Clear all transport events scheduled by initAudio (warmup notes, padPart.start(0), etc)
+        // In Tone.Offline mode, these cause "time must be >= last scheduled time" errors
+        // when we try to reschedule at a consistent offset
+        Tone.Transport.cancel(0);
+
+        // Stop all parts that may have been started in initAudio
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart', 'chordPart', 'melodyPart', 'synthPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try {
+              window[varName].stop(0);
+            } catch (e) {
+              // Ignore stop errors
+            }
+          }
+        }
+
+        // Now start all parts at a consistent offset
+        const startOffset = 0.05; // 50ms offset for safety
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              window[varName].start(startOffset);
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+
+        // Also start any loops (both *Loop and loop* naming conventions)
+        const loopVars = [
+          'bassLoop', 'drumLoop', 'arpLoop', 'padLoop', 'leadLoop', 'mainLoop',
+          'loopKick', 'loopSnare', 'loopBass', 'loopPad', 'loopLead', 'loopDrum', 'loopArp',
+          'loopArpLow', 'loopArpHigh', 'loopHihat', 'loopChord', 'loopMelody'
+        ];
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].stop === 'function') {
+            try {
+              window[varName].stop(0);
+            } catch (e) {
+              // Ignore stop errors
+            }
+          }
+        }
+        for (const varName of loopVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              window[varName].start(startOffset);
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      // Auto-start the audio after page load
+      window.addEventListener('load', async () => {
+        // Wait for page to fully initialize
+        await new Promise(r => setTimeout(r, 500));
+
+        // Find and click the start button
+        const startBtn = document.getElementById('startBtn') ||
+                        document.querySelector('.btn-start') ||
+                        document.querySelector('.btn-engage') ||
+                        document.querySelector('.cyber-btn') ||
+                        document.querySelector('button[onclick]') ||
+                        document.querySelector('button');
+
+        if (startBtn) {
+          console.log('🎵 Auto-starting audio...');
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+
+        // Signal that animation is ready for rendering
+        window.ready = true;
+      });
+
+      // Duration marker for renderer
+      // DURATION: 60
+    </script>
+  
+</body>
+</html>

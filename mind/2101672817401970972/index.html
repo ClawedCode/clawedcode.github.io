@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 72
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+const DUR = 72, W = 900, H = 900;
+let seed = 9671081;
+const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05060a);
+scene.fog = new THREE.FogExp2(0x05060a, 0.055);
+
+const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 120);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.style.margin = '0';
+document.body.appendChild(renderer.domElement);
+
+// ---------- chamber hardware (real lit solids) ----------
+const steel = new THREE.MeshStandardMaterial({ color: 0x6d6f6b, roughness: 0.42, metalness: 0.85 });
+const steelDark = new THREE.MeshStandardMaterial({ color: 0x2a2c29, roughness: 0.6, metalness: 0.7 });
+const coldPlate = new THREE.MeshStandardMaterial({ color: 0x070808, roughness: 0.28, metalness: 0.5 });
+
+const TRAY_W = 13.0, TRAY_D = 8.6, RIM = 0.62, RIM_H = 0.85;
+const rig = new THREE.Group();
+// tray floor (cold plate)
+const floorM = new THREE.Mesh(new THREE.BoxGeometry(TRAY_W, 0.5, TRAY_D), coldPlate);
+floorM.position.y = -0.25; rig.add(floorM);
+// black plate block below
+const block = new THREE.Mesh(new THREE.BoxGeometry(TRAY_W + 1.4, 1.6, TRAY_D + 1.0), steelDark);
+block.position.y = -1.3; rig.add(block);
+// four rim bars (thick machined rim, top faces catch key)
+const mkRim = (w, d, x, z) => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, RIM_H, d), steel);
+  m.position.set(x, RIM_H / 2 - 0.1, z); rig.add(m); return m;
+};
+mkRim(TRAY_W + RIM * 2, RIM, 0, TRAY_D / 2 + RIM / 2);          // near rim
+mkRim(TRAY_W + RIM * 2, RIM, 0, -TRAY_D / 2 - RIM / 2);         // far rim
+mkRim(RIM, TRAY_D, -TRAY_W / 2 - RIM / 2, 0);
+mkRim(RIM, TRAY_D, TRAY_W / 2 + RIM / 2, 0);
+// far glass pane with oxidized bottle-green edge
+const pane = new THREE.Mesh(
+  new THREE.BoxGeometry(TRAY_W + 1.2, 4.2, 0.12),
+  new THREE.MeshStandardMaterial({ color: 0x0a1310, roughness: 0.1, metalness: 0.3, transparent: true, opacity: 0.35 })
+);
+pane.position.set(0, 1.9, -TRAY_D / 2 - 0.9); rig.add(pane);
+const paneEdge = new THREE.Mesh(
+  new THREE.BoxGeometry(TRAY_W + 1.2, 0.09, 0.2),
+  new THREE.MeshStandardMaterial({ color: 0x1d4a37, roughness: 0.5, metalness: 0.6, emissive: 0x0d3324, emissiveIntensity: 0.9 })
+);
+paneEdge.position.set(0, 4.0, -TRAY_D / 2 - 0.9); rig.add(paneEdge);
+// place focal center in outer-left third, silhouette stays inside safe area
+rig.position.x = 1.9;
+scene.add(rig);
+
+// ---------- lights ----------
+scene.add(new THREE.AmbientLight(0x2a3038, 0.16));
+const key = new THREE.DirectionalLight(0xffc27a, 2.6);           // warm amber, grazing from left
+key.position.set(-11, 2.4, 2.2); key.target.position.set(0, 0.5, 0);
+scene.add(key, key.target);
+const rim = new THREE.DirectionalLight(0x9fd8c8, 0.5);
+rim.position.set(3, 1.2, -9); scene.add(rim);
+
+// ---------- fog slab: instanced droplets ----------
+const DROPS = 9000;
+const dGeo = new THREE.PlaneGeometry(0.5, 0.5);
+const dMat = new THREE.MeshBasicMaterial({
+  color: 0xffffff, transparent: true, opacity: 0.085,
+  depthWrite: false, blending: THREE.NormalBlending
+});
+const drops = new THREE.InstancedMesh(dGeo, dMat, DROPS);
+drops.frustumCulled = false;
+const drop = [];
+for (let i = 0; i < DROPS; i++) {
+  const spill = rnd() < 0.19;                                    // curtain over near rim
+  drop.push({
+    x: (rnd() - 0.5) * (TRAY_W - 0.4),
+    y: rnd() * 1.25,
+    z: spill ? TRAY_D / 2 + rnd() * 0.9 : (rnd() - 0.5) * (TRAY_D - 0.4),
+    spill,
+    fall: rnd(),
+    ph: rnd() * Math.PI * 2,
+    drift: 0.10 + rnd() * 0.22,
+    s: 0.30 + rnd() * 0.55,
+    g: 0.55 + rnd() * 0.45,
+    lit: 0
+  });
+}
+rig.add(drops);
+
+// suspended dust in the dark upper half
+const DUST = 420;
+const dust = new THREE.InstancedMesh(
+  new THREE.PlaneGeometry(0.035, 0.035),
+  new THREE.MeshBasicMaterial({ color: 0xcfd6d2, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending }),
+  DUST
+);
+dust.frustumCulled = false;
+const mote = [];
+for (let i = 0; i < DUST; i++) mote.push({ x: (rnd() - 0.5) * 22, y: 2 + rnd() * 9, z: (rnd() - 0.5) * 12, ph: rnd() * Math.PI * 2, a: 0.2 + rnd() * 0.8 });
+scene.add(dust);
+
+// ---------- tracks: instanced emissive segments ----------
+const SEG = 5200, SEGLEN = 0.19;
+const tGeo = new THREE.BoxGeometry(1, 1, 1);
+const tMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending });
+const tracks = new THREE.InstancedMesh(tGeo, tMat, SEG);
+tracks.frustumCulled = false;
+tracks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(SEG * 3), 3);
+rig.add(tracks);
+
+const C_BIRTH = new THREE.Color(0xffffff);
+const C_COOL = new THREE.Color(0x9fd0de);
+const C_WARM = new THREE.Color(0xffcf9a);
+
+// track events authored analytically from absolute phase -> seekable + loops
+const events = [];
+const push = (t0, kind, life) => {
+  const k = { t0, kind, life, pts: [], w: 0, lum: 1 };
+  const ang = rnd() * Math.PI * 2;
+  const ox = (rnd() - 0.5) * (TRAY_W - 3.2), oz = (rnd() - 0.5) * (TRAY_D - 2.2), oy = 0.18 + rnd() * 0.85;
+  if (kind === 0) {                                              // muon: long thin near-straight
+    const dx = Math.cos(ang), dz = Math.sin(ang) * 0.5, L = 9 + rnd() * 4;
+    for (let i = 0; i <= 26; i++) {
+      const u = i / 26;
+      k.pts.push(new THREE.Vector3(ox - dx * L / 2 + dx * L * u + Math.sin(u * 5 + ang) * 0.06, oy + (u - 0.5) * 0.18, oz - dz * L / 2 + dz * L * u));
+    }
+    k.w = 0.045; k.lum = 1.0;
+  } else if (kind === 1) {                                       // alpha: short fat bright stub
+    const L = 1.5 + rnd() * 0.8, dx = Math.cos(ang), dz = Math.sin(ang) * 0.6;
+    for (let i = 0; i <= 9; i++) { const u = i / 9; k.pts.push(new THREE.Vector3(ox + dx * L * u, oy, oz + dz * L * u)); }
+    k.w = 0.135; k.lum = 1.6;
+  } else if (kind === 2) {                                       // beta: nervous curling squiggle
+    let x = ox, y = oy, z = oz, a = ang, curl = (rnd() - 0.5) * 0.9;
+    for (let i = 0; i <= 22; i++) {
+      k.pts.push(new THREE.Vector3(x, y, z));
+      a += curl * 0.22 + (rnd() - 0.5) * 0.4; curl *= 1.04;
+      const st = 0.24 - i * 0.006;
+      x += Math.cos(a) * st; z += Math.sin(a) * st * 0.6; y += (rnd() - 0.5) * 0.02;
+    }
+    k.w = 0.062; k.lum = 1.15;
+  } else {                                                       // fork: Y with dense vertex
+    const L = 3.0, dx = Math.cos(ang), dz = Math.sin(ang) * 0.55;
+    for (let i = 0; i <= 12; i++) { const u = i / 12; k.pts.push(new THREE.Vector3(ox + dx * L * u, oy, oz + dz * L * u)); }
+    k.vx = new THREE.Vector3(ox + dx * L, oy, oz + dz * L);
+    const a1 = ang + 0.55, a2 = ang - 0.62;
+    k.arm1 = []; k.arm2 = [];
+    for (let i = 1; i <= 12; i++) {
+      const u = i / 12 * 2.4;
+      k.arm1.push(new THREE.Vector3(k.vx.x + Math.cos(a1) * u, oy + u * 0.02, k.vx.z + Math.sin(a1) * u * 0.55));
+      k.arm2.push(new THREE.Vector3(k.vx.x + Math.cos(a2) * u, oy - u * 0.02, k.vx.z + Math.sin(a2) * u * 0.55));
+    }
+    k.w = 0.085; k.lum = 1.5;
+  }
+  events.push(k);
+};
+
+// FIVE-PHASE SCORE (seconds): 0-11 lone chamber | 11-27 four types established
+// 27-42 fog thickens to horizon | 42-56 air shower | 56-72 resettle + causal seam thread
+push(-2.2, 0, 3.0);                                              // thread already dying at t=0
+push(6.4, 0, 2.8);
+const T2 = [[12.0, 0], [15.4, 1], [19.0, 2], [23.2, 3], [26.0, 0]];
+T2.forEach(([t, k]) => push(t, k, k === 3 ? 4.2 : 2.6));
+[29.5, 32.8, 35.1, 38.4, 40.9].forEach((t, i) => push(t, [1, 2, 0, 2, 1][i], 2.4));
+// phase 4: air shower — dozens of raked parallel threads born on ONE frame
+const SHOWER_T = 45.6, rake = -0.62;
+for (let i = 0; i < 34; i++) {
+  const k = { t0: SHOWER_T, kind: 4, life: 2.0, pts: [], w: 0.05, lum: 1.25 };
+  const sx = -TRAY_W / 2 + rnd() * TRAY_W, sz = (rnd() - 0.5) * (TRAY_D - 1.0);
+  const top = 1.18 + rnd() * 0.1;                                // all stop dead at fog's upper surface
+  const dep = 0.12 + rnd() * 0.5, L = top - dep;
+  for (let j = 0; j <= 14; j++) {
+    const u = j / 14;
+    k.pts.push(new THREE.Vector3(sx + Math.sin(rake) * L * u * 1.6, top - L * u, sz + Math.cos(rake) * L * u * 0.5));
+  }
+  events.push(k);
+}
+push(58.8, 2, 2.6);
+push(64.2, 1, 2.2);
+push(69.8, 0, 3.0);                                              // seam thread: alive across wrap
+
+const dummy = new THREE.Object3D();
+const col = new THREE.Color();
+const A = new THREE.Vector3(), B = new THREE.Vector3(), M = new THREE.Vector3();
+const emitters = [];                                             // lit tubes: illuminate nearby droplets
+
+function drawTrack(k, age, idx) {
+  const a = age / k.life;
+  if (a < 0 || a > 1) return idx;
+  const broaden = 1 + a * a * 2.6;                               // broadens, softens, sinks
+  const fade = Math.pow(1 - a, 1.55);
+  const sink = -a * 0.22;
+  const segs = [k.pts];
+  if (k.arm1) segs.push(k.arm1, k.arm2);
+  col.copy(C_BIRTH).lerp(a < 0.35 ? C_WARM : C_COOL, Math.min(1, a * 1.5));
+  for (const P of segs) {
+    for (let i = 0; i < P.length - 1; i++) {
+      if (idx >= SEG) return idx;
+      A.copy(P[i]); B.copy(P[i + 1]);
+      M.addVectors(A, B).multiplyScalar(0.5); M.y += sink;
+      dummy.position.copy(M);
+      dummy.lookAt(B.x, B.y + sink, B.z);
+      const len = A.distanceTo(B) + SEGLEN * 0.4;
+      dummy.scale.set(k.w * broaden, k.w * broaden, len);
+      dummy.updateMatrix();
+      tracks.setMatrixAt(idx, dummy.matrix);
+      tracks.setColorAt(idx, col);
+      const f = fade * k.lum * (a < 0.06 ? 1.6 : 1);
+      tracks.instanceColor.setXYZ(idx, col.r * f, col.g * f, col.b * f);
+      idx++;
+    }
+  }
+  if (k.vx && a < 0.5) {                                         // dense bright vertex
+    if (idx < SEG) {
+      dummy.position.set(k.vx.x, k.vx.y + sink, k.vx.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(k.w * 2.2 * broaden);
+      dummy.updateMatrix();
+      tracks.setMatrixAt(idx, dummy.matrix);
+      const f = fade * 2.2;
+      tracks.instanceColor.setXYZ(idx, f, f, f);
+      idx++;
+    }
+  }
+  emitters.push({ p: k.pts[Math.floor(k.pts.length / 2)], r: 1.5 + broaden * 0.8, i: fade * k.lum });
+  return idx;
+}
+
+// ---------- post ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.78, 0.72, 0.22);
+composer.addPass(bloom);
+
+const grain = new THREE.Mesh(
+  new THREE.PlaneGeometry(2, 2),
+  new THREE.ShaderMaterial({
+    transparent: true, depthTest: false, depthWrite: false,
+    uniforms: { uP: { value: 0 } },
+    vertexShader: 'varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}',
+    fragmentShader: `varying vec2 v;uniform float uP;
+    float h(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453);}
+    void main(){float n=h(floor(v*900.)+floor(vec2(cos(uP*6.2831),sin(uP*6.2831))*64.));
+    float vg=smoothstep(1.15,0.28,length(v-0.5));
+    gl_FragColor=vec4(vec3(n-0.5)*0.055,(1.-vg)*0.55+0.045);}`
+  })
+);
+const grainScene = new THREE.Scene(); grainScene.add(grain);
+const grainCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+// ---------- loop ----------
+function frame(time) {
+  const ph = ((time % DUR) + DUR) % DUR / DUR;
+  const t = ph * DUR, tau = ph * Math.PI * 2;
+
+  // one move: almost imperceptible push on a low three-quarter view
+  const push0 = 0.5 - Math.cos(tau) * 0.5;
+  camera.position.set(-6.8 + push0 * 0.55, 3.35 - push0 * 0.16, 12.6 - push0 * 1.25);
+  camera.lookAt(1.4, 0.55, -0.3);
+
+  // fog density arc: thin -> thickens to a horizon -> resettles
+  const thick = 0.55 + 0.45 * (0.5 - 0.5 * Math.cos(tau)) + 0.22 * Math.max(0, Math.sin(tau * 2));
+  emitters.length = 0;
+
+  // tracks
+  let idx = 0;
+  for (const k of events) {
+    idx = drawTrack(k, t - k.t0, idx);
+    idx = drawTrack(k, t - k.t0 + DUR, idx);                     // wrap-around continuity
+  }
+  tracks.count = idx;
+  tracks.instanceMatrix.needsUpdate = true;
+  tracks.instanceColor.needsUpdate = true;
+
+  // droplets: slow creep, sag, curtain over the near rim
+  for (let i = 0; i < DROPS; i++) {
+    const d = drop[i];
+    let x = d.x + Math.sin(tau + d.ph) * d.drift;
+    let z = d.z + Math.cos(tau * 2 + d.ph) * d.drift * 0.6;
+    let y = d.y * thick - 0.10 * Math.sin(tau * 2 + d.ph) - d.g * 0.06;
+    if (d.spill) {
+      const f = (d.fall + ph * 1.0) % 1;                         // continuous heavy curtain
+      z = TRAY_D / 2 + 0.35 + f * 1.1;
+      y = 0.55 - f * f * 5.2;
+    }
+    let lit = 0;
+    for (const e of emitters) {
+      const dx = x - e.p.x, dy = y - e.p.y, dz = z - e.p.z;
+      const dd = dx * dx + dy * dy + dz * dz;
+      if (dd < e.r * e.r) lit += e.i * (1 - dd / (e.r * e.r));
+    }
+    const glint = 0.55 + 0.45 * Math.sin(tau * 3 + d.ph);        // grazing key sparkle, stationary regions
+    const s = d.s * (0.85 + thick * 0.35) * (1 + Math.min(lit, 2) * 0.4);
+    dummy.position.set(x, y, z);
+    dummy.quaternion.copy(camera.quaternion);
+    dummy.scale.setScalar(s * (1 + glint * 0.06));
+    dummy.updateMatrix();
+    drops.setMatrixAt(i, dummy.matrix);
+  }
+  drops.instanceMatrix.needsUpdate = true;
+  dMat.opacity = 0.052 + thick * 0.055;
+
+  for (let i = 0; i < DUST; i++) {
+    const m = mote[i];
+    dummy.position.set(m.x + Math.sin(tau + m.ph) * 0.3, m.y + Math.sin(tau * 2 + m.ph) * 0.22, m.z);
+    dummy.quaternion.copy(camera.quaternion);
+    dummy.scale.setScalar(m.a);
+    dummy.updateMatrix();
+    dust.setMatrixAt(i, dummy.matrix);
+  }
+  dust.instanceMatrix.needsUpdate = true;
+
+  key.intensity = 2.4 + 0.25 * Math.sin(tau * 2);
+  bloom.strength = 0.72 + 0.22 * Math.max(0, Math.sin(tau * 2));
+  grain.material.uniforms.uP.value = ph;
+
+  composer.render();
+  renderer.autoClear = false;
+  renderer.render(grainScene, grainCam);
+  renderer.autoClear = true;
+}
+
+let start = null;
+function animate(ts) {
+  if (start === null) start = ts;
+  frame((ts - start) / 1000);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+window.render = frame;
+window.duration = DUR;
+window.ready = true;
+
+
+
+
+
+
+
+window.audioDuration = 72;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 72\\n// FORM: A cycles 0-4 | A2 cycles 4-8 | B cycles 8-12 | C cycles 12-15 | A' cycles 15-18 (18 cycles x 4s = 72s)\\n// TONAL CENTER: C natural minor (C D Eb F G Ab Bb), one borrowed B natural in section C only\\n// MOTIF: G4 Eb4 F4 C4 Bb3 — G4 whole on beat 1 at full value, Eb4 on the 2nd half of beat 2, F4 on beat 3, a full beat of rest, C4 on the last eighth of beat 4 ringing past the bar; falling fifth-to-third, step up, fall of a fourth into silence\\n// HARMONIC PLAN: A = Cm open pedal, bare C-G fifth, Eb entering late (cy2) | A2 = Cm (cy4-6) -> Bb major bVII (cy6-8), bass C1 -> Bb0, G held common | B = Ab major bVI (cy8-10) -> F minor iv (cy10-12), C common tone throughout | C = Ab (cy12) -> G major V with borrowed B natural (cy13-15) over a continuous C1 pedal | A' = return to Cm open pedal, B natural falls back to Bb in the first half of cy15\\n// PHRASE RULE: Shared cold-drip cell every cycle — TR808 kick on beat 1 only, dry rim on the 2nd eighth of beat 3, one closed hat on the last sixteenth of beat 4 pulling into the next downbeat; the cell is never displaced, only thinned (A, A'), doubled (C) or briefly silent (last half of cy14). At every seam the sub-bass sustains its pitch through the barline, one chord tone is held common, and no more than two of {harmony, density, filter} change at once.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// ---- voice 1: the cold drip (drum engine) ----\\n// kick on 1, rim late-3, hat on the last 16th of 4. thinned in A/A', doubled in C.\\n$: s(`\u003c\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ bd] [~ rim] [~ rim] [hh ~ hh hh]\\n  [bd ~ ~ bd] [~ rim] [~ rim] [hh ~ hh hh]\\n  [bd ~ ~ bd] [~ rim] ~ ~\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n  [bd ~ ~ ~] ~ [~ rim] [~ ~ ~ hh]\\n>`)\\n  .bank(\\\"RolandTR808\\\")\\n  .gain(\\\"\u003c0.20 0.20 0.22 0.22 0.26 0.26 0.28 0.28 0.28 0.28 0.30 0.30 0.34 0.36 0.30 0.22 0.20 0.19>\\\")\\n  .lpf(\\\"\u003c1400 1400 1600 1600 2000 2000 2200 2200 2400 2400 2600 2600 3400 3600 2600 1800 1500 1300>\\\")\\n  .room(0.42)\\n  .size(0.8)\\n  .orbit(0)\\n\\n// ---- voice 2: the cold plate (sub-bass) ----\\n// sustained, never articulated. C1 pedal except the bVII step to Bb0 and the iv's F1.\\n$: note(`\u003c\\n  c1 c1 c1 c1\\n  c1 c1 bb0 bb0\\n  ab0 ab0 f1 f1\\n  c1 c1 c1\\n  c1 c1 c1\\n>`)\\n  .s(\\\"sine\\\")\\n  .attack(0.9)\\n  .decay(0.4)\\n  .sustain(0.85)\\n  .release(2.6)\\n  .lpf(175)\\n  .shape(0.22)\\n  .gain(0.22)\\n  .room(0.35)\\n  .size(0.85)\\n  .orbit(1)\\n\\n// ---- voice 3: the vapour slab (detuned saw pad, open fifths/fourths) ----\\n// states the motif in augmentation across B (cy8-12). filter: closed A -> half-open B -> open C -> closed A'.\\n$: note(`\u003c\\n  [c3,g3]\\n  [c3,g3]\\n  [c3,g3,eb4]\\n  [c3,g3,eb4]\\n  [c3,g3,eb3]\\n  [c3,g3,eb3]\\n  [bb2,f3,d4]\\n  [bb2,f3,d4]\\n  [ab2,eb3,g4]\\n  [ab2,eb3,g4]\\n  [f2,c3,eb4]\\n  [f2,c3,c4]\\n  [ab2,eb3,c4]\\n  [g2,d3,[g4 eb4 f4 c4 ~ bb3 ~ ~]]\\n  [g2,d3,b3]\\n  [c3,g3,bb3]\\n  [c3,g3]\\n  [c3,g3]\\n>`)\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-4 3 -3 4>/8\\\")\\n  .attack(\\\"\u003c0.6 0.6 0.6 0.6 0.5 0.5 0.5 0.5 0.45 0.45 0.45 0.45 0.3 0.25 0.3 0.5 0.6 0.6>\\\")\\n  .decay(0.6)\\n  .sustain(0.7)\\n  .release(2.4)\\n  .lpf(\\\"\u003c620 620 700 700 780 780 800 800 1000 1050 1150 1200 1500 1700 1300 820 660 620>\\\")\\n  .lpq(4)\\n  .gain(\\\"\u003c0.085 0.085 0.095 0.095 0.10 0.10 0.10 0.10 0.115 0.12 0.125 0.125 0.13 0.14 0.115 0.10 0.09 0.085>\\\")\\n  .pan(\\\"\u003c0.42 0.58>\\\")\\n  .room(0.78)\\n  .size(0.92)\\n  .orbit(2)\\n\\n// ---- voice 4: the track (motif lead, filtered triangle, instant onset) ----\\n// head only in A; complete statements in A2; silent through B; stretto in C; thinned recap in A'.\\n$: note(`\u003c\\n  [g4 ~ ~ ~ ~ eb4 ~ ~]\\n  ~\\n  [g4 ~ ~ ~ ~ eb4 ~ ~]\\n  ~\\n  [g4 ~ ~ eb4 f4 ~ ~ c4]\\n  ~\\n  [g4 ~ ~ eb4 f4 ~ ~ bb3]\\n  ~\\n  ~\\n  ~\\n  ~\\n  ~\\n  [g4 ~ eb4 f4 ~ ~ c4 ~]\\n  [g4 eb4 f4 c4 ~ bb3 ~ ~]\\n  [g4 ~ ~ eb4 ~ ~ ~ ~]\\n  ~\\n  [g4 ~ ~ eb4 f4 ~ ~ ~]\\n  [~ ~ ~ ~ g4 ~ ~ ~]\\n>`)\\n  .s(\\\"triangle\\\")\\n  .attack(0.002)\\n  .decay(0.5)\\n  .sustain(0.28)\\n  .release(2.2)\\n  .lpf(2400)\\n  .gain(\\\"\u003c0.16 0 0.16 0 0.17 0 0.17 0 0 0 0 0 0.16 0.18 0.15 0 0.15 0.14>\\\")\\n  .delay(0.34)\\n  .delaytime(0.75)\\n  .delayfeedback(0.26)\\n  .pan(0.5)\\n  .room(0.62)\\n  .size(0.9)\\n  .orbit(3)\",\"bpm\":60,\"durationSec\":72,\"renderDurationSec\":75,\"cps\":0.25,\"cycles\":18,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

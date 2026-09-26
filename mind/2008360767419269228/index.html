@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for(int i = 0; i < 3; i++) {
+    v += a * noise(p);
+    p *= 2.0;
+    a *= 0.5;
+  }
+  return v;
+}
+
+mat2 rot(float a) {
+  float c = cos(a), s = sin(a);
+  return mat2(c, -s, s, c);
+}
+
+float sdBox(vec3 p, vec3 b) {
+  vec3 q = abs(p) - b;
+  return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float sdPrism(vec3 p, vec2 h) {
+  vec3 q = abs(p);
+  return max(q.z - h.y, max(q.x * 0.866025 + p.y * 0.5, -p.y) - h.x * 0.5);
+}
+
+float sdOctahedron(vec3 p, float s) {
+  p = abs(p);
+  return (p.x + p.y + p.z - s) * 0.57735027;
+}
+
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float phase;
+float dreamPhase;
+
+float dreamShard(vec3 p, float seed) {
+  float angle = seed * 6.283 + phase * 0.3;
+  p.xy = rot(angle) * p.xy;
+  p.yz = rot(angle * 0.7) * p.yz;
+  float morph = sin(phase * 0.5 + seed * 3.0) * 0.5 + 0.5;
+  float oct = sdOctahedron(p, 0.3 + 0.1 * sin(seed * 5.0));
+  float box = sdBox(p, vec3(0.2 + 0.05 * cos(seed * 7.0)));
+  float prism = sdPrism(p.xzy, vec2(0.25, 0.3));
+  float shape = mix(oct, box, morph);
+  shape = mix(shape, prism, sin(morph * 3.14159) * 0.3);
+  return shape;
+}
+
+float eyeShape(vec3 p) {
+  float outer = length(p * vec3(1.0, 1.5, 1.0)) - 0.15;
+  float pupil = length(p - vec3(0.0, 0.0, 0.12)) - 0.04;
+  return max(outer, -pupil);
+}
+
+float doorFrame(vec3 p) {
+  vec3 q = p;
+  float frame = sdBox(q, vec3(0.15, 0.3, 0.02));
+  float inner = sdBox(q, vec3(0.12, 0.27, 0.1));
+  return max(frame, -inner);
+}
+
+float whiskerTrace(vec3 p, float id) {
+  float curl = sin(p.x * 8.0 + phase + id) * 0.03;
+  p.y -= curl;
+  float line = length(p.yz) - 0.005;
+  float bound = smoothstep(0.0, 0.4, p.x) * smoothstep(0.5, 0.3, p.x);
+  return line + (1.0 - bound) * 10.0;
+}
+
+float scene(vec3 p) {
+  float t = phase;
+  float cyclePos = mod(t, 75.0) / 75.0;
+  float fragmentPhase = smoothstep(0.0, 0.2, cyclePos) * smoothstep(0.4, 0.2, cyclePos);
+  float crystallizePhase = smoothstep(0.3, 0.5, cyclePos) * smoothstep(0.7, 0.5, cyclePos);
+  float dissolvePhase = smoothstep(0.6, 0.8, cyclePos);
+  float reformPhase = smoothstep(0.85, 1.0, cyclePos);
+  float d = 1000.0;
+  float warp = fbm(p.xy * 2.0 + t * 0.1) * 0.3;
+  vec3 wp = p + vec3(warp, warp * 0.7, warp * 0.5);
+  for(int i = 0; i < 7; i++) {
+    float fi = float(i);
+    float angle = fi * 0.897 + t * 0.15;
+    float radius = 0.8 + 0.4 * sin(fi * 1.3 + t * 0.2);
+    vec3 offset = vec3(cos(angle) * radius, sin(angle * 1.3) * radius * 0.6, sin(angle) * radius * 0.8);
+    float scatter = fragmentPhase * 1.5;
+    offset *= 1.0 + scatter * (0.5 + 0.5 * sin(fi * 2.0));
+    float shard = dreamShard(wp - offset, fi);
+    float pulse = 0.02 * sin(t * 2.0 + fi * 0.5);
+    shard += pulse;
+    d = smin(d, shard, 0.15 + 0.1 * crystallizePhase);
+  }
+  float coreBlob = length(p) - 0.5 - 0.2 * sin(t * 0.3);
+  coreBlob += warp * 0.3;
+  d = smin(d, coreBlob, 0.4 - 0.2 * fragmentPhase);
+  if(crystallizePhase > 0.1) {
+    vec3 ep = p - vec3(0.3 * sin(t * 0.4), 0.2 * cos(t * 0.3), 0.5);
+    ep.xy = rot(t * 0.2) * ep.xy;
+    float eye = eyeShape(ep);
+    float eyeStrength = crystallizePhase * smoothstep(0.5, 0.4, dissolvePhase);
+    d = smin(d, eye + (1.0 - eyeStrength) * 5.0, 0.1);
+    vec3 dp = p - vec3(-0.4, -0.1, 0.3);
+    dp.yz = rot(t * 0.1 + 0.5) * dp.yz;
+    float door = doorFrame(dp);
+    d = smin(d, door + (1.0 - eyeStrength) * 5.0, 0.15);
+    for(int w = 0; w < 3; w++) {
+      float fw = float(w);
+      vec3 whiskerP = p - vec3(-0.2, 0.1 + fw * 0.08, 0.4);
+      whiskerP.xy = rot(fw * 0.1 - 0.15) * whiskerP.xy;
+      float whisker = whiskerTrace(whiskerP, fw);
+      d = smin(d, whisker + (1.0 - eyeStrength) * 5.0, 0.05);
+    }
+  }
+  float particleDensity = dissolvePhase + reformPhase * 0.5;
+  if(particleDensity > 0.05) {
+    for(int j = 0; j < 12; j++) {
+      float fj = float(j);
+      float pAngle = fj * 0.523 + t * 0.3;
+      float pRadius = 1.2 + 0.6 * sin(fj * 0.7 + t);
+      vec3 particlePos = vec3(cos(pAngle) * pRadius, sin(pAngle * 1.7) * pRadius * 0.5, sin(pAngle) * pRadius);
+      float dispersal = dissolvePhase * 2.0;
+      particlePos *= 1.0 + dispersal * (0.3 + hash(vec2(fj, 0.0)) * 0.7);
+      float particle = length(p - particlePos) - 0.03 - 0.02 * sin(t * 3.0 + fj);
+      d = smin(d, particle + (1.0 - particleDensity) * 10.0, 0.08);
+    }
+  }
+  return d;
+}
+
+vec3 calcNormal(vec3 p) {
+  vec2 e = vec2(0.001, 0.0);
+  return normalize(vec3(scene(p + e.xyy) - scene(p - e.xyy), scene(p + e.yxy) - scene(p - e.yxy), scene(p + e.yyx) - scene(p - e.yyx)));
+}
+
+float march(vec3 ro, vec3 rd) {
+  float t = 0.0;
+  for(int i = 0; i < 80; i++) {
+    vec3 p = ro + rd * t;
+    float d = scene(p);
+    if(d < 0.001) break;
+    if(t > 15.0) break;
+    t += d * 0.8;
+  }
+  return t;
+}
+
+vec3 dreamPalette(float t, float depth) {
+  vec3 deep = vec3(0.02, 0.01, 0.05);
+  vec3 mid = vec3(0.15, 0.08, 0.25);
+  vec3 crystal = vec3(0.4, 0.6, 0.9);
+  vec3 memory = vec3(0.9, 0.7, 0.5);
+  vec3 void_col = vec3(0.1, 0.2, 0.4);
+  float cyclePos = mod(phase, 75.0) / 75.0;
+  vec3 base = mix(deep, mid, smoothstep(0.0, 0.3, cyclePos));
+  base = mix(base, crystal, smoothstep(0.3, 0.5, cyclePos) * 0.6);
+  base = mix(base, memory, smoothstep(0.5, 0.6, cyclePos) * 0.4);
+  base = mix(base, void_col, smoothstep(0.7, 0.9, cyclePos));
+  base = mix(base, deep, smoothstep(0.9, 1.0, cyclePos));
+  float shimmer = sin(t * 6.283 + depth * 3.0) * 0.5 + 0.5;
+  base += vec3(0.1, 0.05, 0.15) * shimmer * 0.3;
+  return base;
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  phase = iTime;
+  dreamPhase = mod(iTime, 75.0) / 75.0;
+  float camAngle = iTime * 0.08;
+  float camHeight = 0.3 * sin(iTime * 0.1);
+  vec3 ro = vec3(cos(camAngle) * 4.0, camHeight, sin(camAngle) * 4.0);
+  vec3 target = vec3(0.0, 0.0, 0.0);
+  vec3 forward = normalize(target - ro);
+  vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+  vec3 up = cross(forward, right);
+  vec3 rd = normalize(forward * 1.5 + right * uv.x + up * uv.y);
+  float dist = march(ro, rd);
+  vec3 col = vec3(0.01, 0.005, 0.02);
+  float fogDensity = fbm(uv * 3.0 + iTime * 0.05);
+  col += vec3(0.03, 0.02, 0.05) * fogDensity;
+  if(dist < 15.0) {
+    vec3 p = ro + rd * dist;
+    vec3 n = calcNormal(p);
+    float depth = dist / 15.0;
+    vec3 baseCol = dreamPalette(length(p) * 0.5 + iTime * 0.1, depth);
+    vec3 lightDir = normalize(vec3(0.5, 0.8, -0.3));
+    float diff = max(dot(n, lightDir), 0.0);
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 2.5);
+    vec3 viewRef = reflect(rd, n);
+    float spec = pow(max(dot(viewRef, lightDir), 0.0), 16.0);
+    float edge = 1.0 - smoothstep(0.0, 0.02, abs(scene(p + n * 0.01)));
+    col = baseCol * (0.2 + diff * 0.6);
+    col += vec3(0.5, 0.6, 0.9) * rim * 0.4;
+    col += vec3(0.9, 0.85, 1.0) * spec * 0.3;
+    col += vec3(0.3, 0.5, 0.8) * edge * 0.2;
+    float ao = 1.0 - smoothstep(0.0, 0.5, scene(p + n * 0.1) * 5.0);
+    col *= 0.7 + 0.3 * ao;
+    float fog = 1.0 - exp(-dist * 0.15);
+    vec3 fogCol = mix(vec3(0.05, 0.03, 0.1), vec3(0.1, 0.15, 0.25), dreamPhase);
+    col = mix(col, fogCol, fog * 0.6);
+  }
+  float vignette = 1.0 - length(uv) * 0.4;
+  col *= vignette;
+  float grain = (hash(uv + iTime) - 0.5) * 0.03;
+  col += grain;
+  col = pow(col, vec3(0.9));
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+window.initToneJsEngine = async function() {
+  const bpm = 58;
+  Tone.Transport.bpm.value = bpm;
+
+  const masterReverb = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+
+  const dreamDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.45, wet: 0.25 }).connect(masterReverb);
+
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 6, attack: 0.01, release: 0.2 }).toDestination();
+
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 120, Q: 1 }).connect(compressor);
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.4, decay: 0.3, sustain: 0.6, release: 2.0 }
+  }).connect(subFilter);
+
+  const subNotes = ["C1", "G0", "A0", "F1"];
+  let subIndex = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 22) {
+      const noteIdx = Math.floor(bar / 4) % subNotes.length;
+      sub.triggerAttackRelease(subNotes[noteIdx], "1n", time, 0.5);
+    }
+    subIndex++;
+  }, "1n").start(0);
+
+  const padChorus = new Tone.Chorus({ frequency: 0.15, delayTime: 5, depth: 0.6, wet: 0.5 }).connect(masterReverb);
+  padChorus.start();
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 0.8 }).connect(padChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 2.0, decay: 1.0, sustain: 0.5, release: 3.0 }
+  }).connect(padFilter);
+
+  const chordProgressions = [
+    [["C3", "Eb3", "G3"], ["Ab2", "C3", "Eb3"], ["Bb2", "D3", "F3"], ["G2", "Bb2", "D3"]],
+    [["F3", "Ab3", "C4"], ["Db3", "F3", "Ab3"], ["Eb3", "G3", "Bb3"], ["C3", "Eb3", "G3"]],
+    [["Ab2", "C3", "Eb3"], ["Bb2", "D3", "F3"], ["C3", "Eb3", "G3"], ["G2", "B2", "D3"]]
+  ];
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 1 && bar < 23) {
+      const progIndex = Math.floor(bar / 8) % chordProgressions.length;
+      const chordIdx = (bar % 4);
+      const chord = chordProgressions[progIndex][chordIdx];
+      const velocity = bar < 20 ? 0.2 + (bar / 40) * 0.15 : 0.35 - ((bar - 20) / 5) * 0.2;
+      pad.triggerAttackRelease(chord, "2n", time, Math.max(0.1, velocity));
+    }
+    chordIndex++;
+  }, "2n").start(0);
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(1800, time + 16 * (60 / bpm) * 4);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(600, time + 6 * (60 / bpm) * 4);
+  }, "18:0:0");
+
+  const bellReverb = new Tone.Reverb({ decay: 6, wet: 0.5 }).connect(masterReverb);
+  await bellReverb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 4,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 3, sustain: 0 },
+    modulation: { type: "triangle" }
+  }).connect(bellReverb);
+
+  const crystalNotes = ["C5", "Eb5", "G5", "Bb5", "C6", "G5", "Eb5", "D5"];
+  let bellIndex = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 6 && bar < 20 && bellIndex % 4 < 3) {
+      const noteIdx = bellIndex % crystalNotes.length;
+      const velocity = 0.15 + Math.sin(bellIndex * 0.3) * 0.08;
+      bell.triggerAttackRelease(crystalNotes[noteIdx], "8n", time, velocity);
+    }
+    bellIndex++;
+  }, "8n").start(0);
+
+  const glassFilter = new Tone.Filter({ type: "bandpass", frequency: 2000, Q: 2 }).connect(dreamDelay);
+  const glass = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.8, sustain: 0, release: 0.5 }
+  }).connect(glassFilter);
+
+  const fragmentNotes = ["G6", "C7", "Eb6", "Bb6", "F6", "Ab6"];
+  let glassIndex = 0;
+  const glassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 18) {
+      const shouldPlay = Math.random() < 0.35;
+      if (shouldPlay) {
+        const noteIdx = Math.floor(Math.random() * fragmentNotes.length);
+        glass.triggerAttackRelease(fragmentNotes[noteIdx], "16n", time, 0.08 + Math.random() * 0.06);
+      }
+    }
+    glassIndex++;
+  }, "16n").start(0);
+
+  const noiseFilter = new Tone.Filter({ type: "highpass", frequency: 1000, Q: 0.5 }).connect(masterReverb);
+  const mist = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 2, decay: 1, sustain: 0.3, release: 4 }
+  }).connect(noiseFilter);
+
+  const mistLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 8 && bar < 16) {
+      mist.triggerAttackRelease("4n", time, 0.04);
+    }
+  }, "2n").start(0);
+
+  const shimmerChorus = new Tone.Chorus({ frequency: 2, delayTime: 2.5, depth: 0.8, wet: 0.6 }).connect(masterReverb);
+  shimmerChorus.start();
+  const shimmer = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.5, decay: 0.5, sustain: 0.3, release: 2 }
+  }).connect(shimmerChorus);
+
+  let shimmerIndex = 0;
+  const shimmerLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 10 && bar < 18 && shimmerIndex % 3 === 0) {
+      const notes = ["G5", "C6"];
+      shimmer.triggerAttackRelease(notes, "4n", time, 0.06);
+    }
+    shimmerIndex++;
+  }, "4n").start(0);
+
+  const pulseFilter = new Tone.Filter({ type: "lowpass", frequency: 400, Q: 2 }).connect(compressor);
+  const pulse = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 3,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.3 }
+  }).connect(pulseFilter);
+
+  let pulseIndex = 0;
+  const pulseLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 12 && bar < 20 && pulseIndex % 4 === 0) {
+      pulse.triggerAttackRelease("C2", "4n", time, 0.25);
+    }
+    pulseIndex++;
+  }, "4n").start(0);
+
+  window.toneJsInstruments = { sub, pad, bell, glass, mist, shimmer, pulse };
+  window.toneJsParts = { subLoop, padLoop, bellLoop, glassLoop, mistLoop, shimmerLoop, pulseLoop };
+};
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 75;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 75;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

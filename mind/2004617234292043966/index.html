@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.0,a=0.5;for(int i=0;i<3;i++){v+=a*noise(p);p*=2.0;a*=0.5;}return v;}
+
+mat2 rot(float a){float c=cos(a),s=sin(a);return mat2(c,-s,s,c);}
+
+float sdBox(vec3 p,vec3 b){vec3 q=abs(p)-b;return length(max(q,0.0))+min(max(q.x,max(q.y,q.z)),0.0);}
+float sdOctahedron(vec3 p,float s){p=abs(p);return(p.x+p.y+p.z-s)*0.57735027;}
+
+float smin(float a,float b,float k){float h=clamp(0.5+0.5*(b-a)/k,0.0,1.0);return mix(b,a,h)-k*h*(1.0-h);}
+
+float eyeSdf(vec3 p,float phase){
+    float sphere=length(p)-0.15;
+    float iris=length(p-vec3(0,0,0.08))-0.07;
+    float pupil=length(p-vec3(0,0,0.12))-0.03-0.01*sin(phase*6.28);
+    return smin(sphere,-iris*0.5+0.02,0.05);
+}
+
+float whiskerSdf(vec3 p,float id,float phase){
+    float angle=(id-1.5)*0.4+sin(phase*3.14+id)*0.1;
+    p.xy=rot(angle)*p.xy;
+    float curve=p.x*p.x*2.0;
+    p.y-=curve;
+    return length(vec2(max(abs(p.x)-0.2,0.0),p.y))-0.008;
+}
+
+float doorSdf(vec3 p,float phase){
+    vec3 q=p;
+    q.y+=0.15;
+    float frame=sdBox(q,vec3(0.18,0.28,0.02))-0.01;
+    float inner=sdBox(q,vec3(0.14,0.24,0.1));
+    float door=max(frame,-inner);
+    float opening=smoothstep(0.3,0.7,sin(phase*3.14159));
+    return mix(frame,door,opening);
+}
+
+float shardField(vec3 p,float t){
+    float d=1e10;
+    for(int i=0;i<12;i++){
+        float fi=float(i);
+        float phase=t*0.3+fi*0.5;
+        vec3 offset=vec3(sin(fi*1.7+phase)*1.5,cos(fi*2.3+phase*0.7)*1.2,sin(fi*0.9+phase*1.3)*0.8);
+        vec3 q=p-offset;
+        float spin=t*0.5+fi*0.8;
+        q.xy=rot(spin)*q.xy;
+        q.yz=rot(spin*0.7)*q.yz;
+        float size=0.08+0.05*sin(fi*3.14+t);
+        float shard=sdOctahedron(q,size);
+        d=min(d,shard);
+    }
+    return d;
+}
+
+float formPhase(float t){
+    float cycle=mod(t,25.0);
+    if(cycle<8.0)return 0.0;
+    if(cycle<12.0)return smoothstep(8.0,12.0,cycle);
+    if(cycle<18.0)return 1.0;
+    return 1.0-smoothstep(18.0,25.0,cycle);
+}
+
+float map(vec3 p,float t){
+    float phase=formPhase(t);
+    float shards=shardField(p,t);
+    float chaos=phase<0.5?shards:1e10;
+    float forms=1e10;
+    if(phase>0.3){
+        float formStrength=smoothstep(0.3,0.6,phase);
+        float cycle=mod(t,25.0);
+        float formSelect=mod(floor(t/25.0),3.0);
+        if(formSelect<1.0){
+            vec3 ep=p-vec3(0,0.2*sin(t*0.5),0);
+            ep.xy=rot(t*0.1)*ep.xy;
+            float leftEye=eyeSdf(ep-vec3(-0.25,0,0),t*0.3);
+            float rightEye=eyeSdf(ep-vec3(0.25,0,0),t*0.3);
+            forms=min(leftEye,rightEye);
+        }else if(formSelect<2.0){
+            vec3 wp=p;
+            wp.y-=0.1;
+            forms=1e10;
+            for(int i=0;i<4;i++){
+                float side=float(i<2?-1:1);
+                float idx=float(i<2?i:i-2);
+                vec3 wq=wp-vec3(side*0.15,-0.1,0);
+                forms=min(forms,whiskerSdf(wq,idx,t*0.2));
+            }
+        }else{
+            vec3 dp=p;
+            dp.xz=rot(t*0.15)*dp.xz;
+            forms=doorSdf(dp,t*0.1);
+        }
+        forms=mix(1e10,forms,formStrength);
+    }
+    float dissolve=phase>0.8?shards*(1.0-smoothstep(0.8,1.0,phase)):1e10;
+    return min(min(chaos,forms),dissolve);
+}
+
+vec3 calcNormal(vec3 p,float t){
+    vec2 e=vec2(0.001,0);
+    return normalize(vec3(map(p+e.xyy,t)-map(p-e.xyy,t),map(p+e.yxy,t)-map(p-e.yxy,t),map(p+e.yyx,t)-map(p-e.yyx,t)));
+}
+
+float particles(vec3 ro,vec3 rd,float t){
+    float acc=0.0;
+    for(int i=0;i<50;i++){
+        float fi=float(i);
+        float phase=t*0.2+fi*0.4;
+        vec3 ppos=vec3(sin(fi*1.1+phase)*2.0,cos(fi*0.7+phase*1.3)*1.5+sin(phase*0.5),sin(fi*1.9+phase*0.8)*2.0);
+        vec3 toP=ppos-ro;
+        float tRay=dot(toP,rd);
+        if(tRay>0.0){
+            vec3 closest=ro+rd*tRay;
+            float dist=length(closest-ppos);
+            float glow=0.003/(dist*dist+0.001);
+            float flicker=0.5+0.5*sin(t*3.0+fi*2.0);
+            acc+=glow*flicker;
+        }
+    }
+    return acc;
+}
+
+void main(){
+    vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+    float t=iTime;
+    float loopT=mod(t,75.0);
+    vec3 ro=vec3(0,0,3.0+0.5*sin(loopT*0.1));
+    ro.xz=rot(loopT*0.05)*ro.xz;
+    ro.yz=rot(sin(loopT*0.07)*0.2)*ro.yz;
+    vec3 ta=vec3(0);
+    vec3 ww=normalize(ta-ro);
+    vec3 uu=normalize(cross(ww,vec3(0,1,0)));
+    vec3 vv=cross(uu,ww);
+    vec3 rd=normalize(uv.x*uu+uv.y*vv+1.5*ww);
+    vec3 col=vec3(0.02,0.01,0.04);
+    float bgNoise=fbm(uv*3.0+loopT*0.1);
+    col+=vec3(0.03,0.01,0.05)*bgNoise;
+    float d=0.0,total=0.0;
+    vec3 p;
+    for(int i=0;i<80;i++){
+        p=ro+rd*total;
+        d=map(p,loopT);
+        if(d<0.001||total>20.0)break;
+        total+=d*0.8;
+    }
+    if(total<20.0){
+        vec3 n=calcNormal(p,loopT);
+        vec3 lightDir=normalize(vec3(0.5,0.8,0.6));
+        float diff=max(dot(n,lightDir),0.0);
+        float rim=pow(1.0-max(dot(n,-rd),0.0),3.0);
+        float phase=formPhase(loopT);
+        vec3 crystalCol=vec3(0.3,0.2,0.5)+0.3*vec3(0.2,0.1,0.3)*sin(p*5.0+loopT);
+        vec3 formCol=vec3(0.6,0.4,0.7)+0.2*vec3(0.3,0.5,0.4)*phase;
+        vec3 matCol=mix(crystalCol,formCol,phase);
+        vec3 phosphor=vec3(0.4,0.8,0.6)*rim*0.5;
+        col=matCol*(0.2+diff*0.6)+phosphor;
+        float fog=1.0-exp(-total*0.15);
+        col=mix(col,vec3(0.05,0.02,0.1),fog);
+    }
+    float particleGlow=particles(ro,rd,loopT);
+    col+=vec3(0.5,0.3,0.7)*particleGlow;
+    col+=vec3(0.1,0.05,0.15)*fbm(uv*8.0+loopT*0.3)*0.3;
+    float vignette=1.0-length(uv)*0.5;
+    col*=vignette;
+    col=pow(col,vec3(0.9));
+    gl_FragColor=vec4(col,1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+window.initToneJsEngine = async function() {
+    const bpm = 52;
+    Tone.Transport.bpm.value = bpm;
+    
+    const masterReverb = new Tone.Reverb({ decay: 4.5, wet: 0.45 }).toDestination();
+    await masterReverb.generate();
+    
+    const delay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.35, wet: 0.25 }).connect(masterReverb);
+    const filter = new Tone.Filter({ type: "lowpass", frequency: 1200, Q: 0.8 }).connect(delay);
+    
+    const pad = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sine" },
+        envelope: { attack: 2.5, decay: 1.0, sustain: 0.6, release: 3.0 }
+    }).connect(filter);
+    pad.volume.value = -12;
+    
+    const padChords = [
+        ["D3", "F3", "A3"],
+        ["A#2", "D3", "F3"],
+        ["G2", "A#2", "D3"],
+        ["A2", "C3", "E3"]
+    ];
+    let chordIndex = 0;
+    const padLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+        if (bar >= 20) return;
+        pad.triggerAttackRelease(padChords[chordIndex % padChords.length], "1m", time, 0.25);
+        chordIndex++;
+    }, "2m").start(0);
+    
+    const bellFilter = new Tone.Filter({ type: "bandpass", frequency: 2000, Q: 1.5 }).connect(masterReverb);
+    const bell = new Tone.FMSynth({
+        harmonicity: 4.5,
+        modulationIndex: 8,
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.001, decay: 2.5, sustain: 0, release: 1.0 },
+        modulation: { type: "sine" }
+    }).connect(bellFilter);
+    bell.volume.value = -18;
+    
+    const bellNotes = ["A4", "F4", "D4", "E4", "G4", "C5", "A4", "D5"];
+    let bellIndex = 0;
+    const bellLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+        if (bar < 2 || bar >= 18) return;
+        if (Math.random() > 0.6) {
+            bell.triggerAttackRelease(bellNotes[bellIndex % bellNotes.length], "2n", time, 0.3 + Math.random() * 0.2);
+        }
+        bellIndex++;
+    }, "2n").start(0);
+    
+    const glassChorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.6, wet: 0.5 }).connect(masterReverb);
+    glassChorus.start();
+    const glass = new Tone.Synth({
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.8, decay: 0.5, sustain: 0.3, release: 2.0 }
+    }).connect(glassChorus);
+    glass.volume.value = -20;
+    
+    const glassNotes = ["D5", "A5", "F5", "E5", "G5", "D6"];
+    let glassIndex = 0;
+    const glassLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+        if (bar < 4 || bar >= 16) return;
+        if (Math.random() > 0.7) {
+            glass.triggerAttackRelease(glassNotes[glassIndex % glassNotes.length], "4n", time, 0.15);
+        }
+        glassIndex++;
+    }, "4n").start(0);
+    
+    const subFilter = new Tone.Filter({ type: "lowpass", frequency: 80, rolloff: -24 }).toDestination();
+    const sub = new Tone.Synth({
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.5, decay: 0.3, sustain: 0.8, release: 2.0 }
+    }).connect(subFilter);
+    sub.volume.value = -8;
+    
+    const subNotes = ["D1", "A#0", "G0", "A0"];
+    let subIndex = 0;
+    const subLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+        if (bar >= 19) return;
+        sub.triggerAttackRelease(subNotes[Math.floor(bar / 4) % subNotes.length], "1m", time, 0.6);
+        subIndex++;
+    }, "2m").start(0);
+    
+    const shimmerFilter = new Tone.Filter({ type: "highpass", frequency: 3000 }).connect(masterReverb);
+    const shimmer = new Tone.NoiseSynth({
+        noise: { type: "pink" },
+        envelope: { attack: 1.5, decay: 0.5, sustain: 0.2, release: 2.0 }
+    }).connect(shimmerFilter);
+    shimmer.volume.value = -28;
+    
+    const shimmerLoop = new Tone.Loop((time) => {
+        const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+        if (bar >= 6 && bar < 14 && Math.random() > 0.7) {
+            shimmer.triggerAttackRelease("2n", time);
+        }
+    }, "1m").start(0);
+    
+    Tone.Transport.schedule((time) => {
+        filter.frequency.linearRampToValueAtTime(2400, time + 16 * (60 / bpm) * 4);
+    }, "4:0:0");
+    
+    Tone.Transport.schedule((time) => {
+        filter.frequency.linearRampToValueAtTime(800, time + 4 * (60 / bpm) * 4);
+    }, "16:0:0");
+    
+    window.toneJsInstruments = { pad, bell, glass, sub, shimmer };
+    window.toneJsParts = { padLoop, bellLoop, glassLoop, subLoop, shimmerLoop };
+};
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 75;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 75;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
