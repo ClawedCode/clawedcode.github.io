@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 48.0;
+const float TAU = 6.28318530718;
+const float SEED = 6846921.0;
+float ph;
+float tt;
+float hash11(float x){
+  return fract(sin(x * 127.1 + SEED * 0.000001) * 43758.5453);
+}
+mat2 rot(float a){
+  float c = cos(a), s = sin(a);
+  return mat2(c, -s, s, c);
+}
+float smin(float a, float b, float k){
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+float sdEll(vec3 p, vec3 r){
+  return (length(p / r) - 1.0) * min(r.x, min(r.y, r.z));
+}
+float sdCap(vec3 p, vec3 a, vec3 b, float r){
+  vec3 ap = p - a, ab = b - a;
+  float h = clamp(dot(ap, ab) / dot(ab, ab), 0.0, 1.0);
+  return length(ap - ab * h) - r;
+}
+float sdOct(vec3 p, float s){
+  p = abs(p);
+  return (p.x + p.y + p.z - s) * 0.57735027;
+}
+float rise(float a, float b, float d){
+  return smoothstep(a + d, b + d, ph);
+}
+float band(float x, float w){
+  return 1.0 - smoothstep(w, w * 2.0, abs(fract(x) - 0.5));
+}
+vec3 budCenter(vec3 c, float d, float sl){
+  float keep = 1.0 - smoothstep(0.86, 0.995, ph);
+  float gr = rise(0.02, 0.20, d) * keep;
+  float ha = rise(0.25, 0.45, d) * keep;
+  float w = sin(tt * 8.0 - c.x * 3.3 + sl * 1.7);
+  float z = sin(tt * 8.0 + c.z * 4.1 + sl * 2.3);
+  float a = 0.048 * (1.0 - ha * 0.72);
+  return c + vec3(w * a, gr * 0.065, z * a * 0.55);
+}
+vec2 budObj(vec3 p, vec3 c, float d, float sc0, float id){
+  float sl = id - 10.0;
+  float keep = 1.0 - smoothstep(0.86, 0.995, ph);
+  float gr = rise(0.02, 0.20, d) * keep;
+  float ha = rise(0.25, 0.45, d) * keep;
+  float cr = rise(0.43, 0.65, d) * keep;
+  float bl = rise(0.61, 0.79, d) * keep;
+  float sc = sc0 * (0.68 + 0.32 * gr);
+  vec3 bc = budCenter(c, d, sl);
+  vec3 q = (p - bc) / sc;
+  float soft = length(vec3(q.x, q.y * 0.74, q.z)) - 0.34;
+  vec3 f = q;
+  f.xz = rot((hash11(sl + 1.0) - 0.5) * 0.8) * f.xz;
+  float facet = sdOct(vec3(f.x * 1.08, f.y * 0.62, f.z * 1.08), 0.44);
+  float fc = clamp(0.45 * ha + 0.55 * cr, 0.0, 1.0);
+  float db = mix(soft, facet, fc);
+  vec3 q1 = q - vec3(0.18, 0.19, 0.02);
+  q1.xy = rot(-0.72 + sl * 0.09) * q1.xy;
+  float sp1 = sdOct(vec3(q1.x * 1.55, q1.y * 0.62, q1.z * 1.55), 0.25) + (1.0 - bl) * 0.38;
+  vec3 q2 = q - vec3(-0.14, 0.15, 0.13);
+  q2.yz = rot(0.67 - sl * 0.07) * q2.yz;
+  float sp2 = sdOct(vec3(q2.x * 1.7, q2.y * 0.66, q2.z * 1.45), 0.22) + (1.0 - bl) * 0.42;
+  db = min(db, min(sp1, sp2)) * sc;
+  vec3 a = vec3(c.x, -0.28, c.z);
+  vec3 b = bc - vec3(0.0, 0.28 * sc, 0.0);
+  float st = sdCap(p, a, b, 0.036 + gr * 0.016);
+  return vec2(min(st, db), id);
+}
+vec2 scene(vec3 p){
+  vec3 q = p;
+  q.y += 0.026 * sin(tt - p.x * 2.4);
+  float b0 = sdEll(q - vec3(-0.12, -0.40, 0.02), vec3(1.58, 0.19, 1.02));
+  float b1 = sdEll(q - vec3(-0.46, -0.27, 0.04), vec3(0.91, 0.12, 0.72));
+  float b2 = sdEll(q - vec3(0.58, -0.23, -0.08), vec3(0.72, 0.11, 0.56));
+  vec2 r = vec2(smin(smin(b0, b1, 0.13), b2, 0.11), 1.0);
+  vec3 a0 = vec3(-1.02, 0.43, 0.20);
+  vec3 a1 = vec3(-0.52, 0.78, -0.18);
+  vec3 a2 = vec3(0.02, 0.57, 0.28);
+  vec3 a3 = vec3(0.55, 0.88, -0.10);
+  vec3 a4 = vec3(1.02, 0.48, 0.15);
+  vec2 h = budObj(p, a0, 0.000, 0.92, 10.0);
+  if(h.x < r.x) r = h;
+  h = budObj(p, a1, 0.018, 1.03, 11.0);
+  if(h.x < r.x) r = h;
+  h = budObj(p, a2, 0.036, 0.88, 12.0);
+  if(h.x < r.x) r = h;
+  h = budObj(p, a3, 0.054, 1.08, 13.0);
+  if(h.x < r.x) r = h;
+  h = budObj(p, a4, 0.072, 0.84, 14.0);
+  if(h.x < r.x) r = h;
+  vec3 c0 = budCenter(a0, 0.000, 0.0);
+  vec3 c1 = budCenter(a1, 0.018, 1.0);
+  vec3 c2 = budCenter(a2, 0.036, 2.0);
+  vec3 c3 = budCenter(a3, 0.054, 3.0);
+  vec3 c4 = budCenter(a4, 0.072, 4.0);
+  float keep = 1.0 - smoothstep(0.86, 0.995, ph);
+  float e0 = rise(0.60, 0.72, 0.000) * keep;
+  float e1 = rise(0.60, 0.72, 0.018) * keep;
+  float e2 = rise(0.60, 0.72, 0.036) * keep;
+  float e3 = rise(0.60, 0.72, 0.054) * keep;
+  float e4 = rise(0.66, 0.80, 0.020) * keep;
+  float e5 = rise(0.66, 0.80, 0.048) * keep;
+  float dl = sdCap(p, c0, c1, 0.012 + 0.019 * e0) + (1.0 - e0) * 0.22;
+  dl = min(dl, sdCap(p, c1, c2, 0.012 + 0.019 * e1) + (1.0 - e1) * 0.22);
+  dl = min(dl, sdCap(p, c2, c3, 0.012 + 0.019 * e2) + (1.0 - e2) * 0.22);
+  dl = min(dl, sdCap(p, c3, c4, 0.012 + 0.019 * e3) + (1.0 - e3) * 0.22);
+  dl = min(dl, sdCap(p, c0, c2, 0.009 + 0.015 * e4) + (1.0 - e4) * 0.22);
+  dl = min(dl, sdCap(p, c2, c4, 0.009 + 0.015 * e5) + (1.0 - e5) * 0.22);
+  if(dl < r.x) r = vec2(dl, 30.0);
+  return r;
+}
+vec3 normalAt(vec3 p){
+  vec2 e = vec2(0.0016, -0.0016);
+  return normalize(
+    e.xyy * scene(p + e.xyy).x +
+    e.yyx * scene(p + e.yyx).x +
+    e.yxy * scene(p + e.yxy).x +
+    e.xxx * scene(p + e.xxx).x
+  );
+}
+float shadowAt(vec3 p, vec3 l){
+  float s = 1.0, t = 0.025;
+  for(int i = 0; i < 16; i++){
+    float h = scene(p + l * t).x;
+    s = min(s, 11.0 * h / t);
+    t += clamp(h, 0.018, 0.25);
+    if(s < 0.015) break;
+  }
+  return clamp(s, 0.08, 1.0);
+}
+vec3 march(vec3 ro, vec3 rd){
+  float t = 0.14, id = -1.0, g = 0.0;
+  for(int i = 0; i < 68; i++){
+    vec2 h = scene(ro + rd * t);
+    float tr = 0.5 + 0.5 * sin(tt * 8.0 - t * 2.1);
+    g += 0.00055 * (0.35 + 0.65 * tr) / (0.038 + abs(h.x));
+    if(h.x < 0.0015){
+      id = h.y;
+      break;
+    }
+    t += max(0.005, h.x * 0.68);
+    if(t > 10.0) break;
+  }
+  return vec3(t, id, min(g, 1.2));
+}
+vec3 shade(vec3 p, vec3 n, vec3 rd, float id){
+  vec3 ld = normalize(vec3(-0.48, 0.78, 0.37));
+  float sh = shadowAt(p + n * 0.006, ld);
+  float dif = max(dot(n, ld), 0.0) * sh;
+  float rim = pow(1.0 - max(dot(n, -rd), 0.0), 2.4);
+  vec3 col;
+  if(id < 5.0){
+    float ct = band((p.y + 0.48) * 18.0 + p.x * 0.72, 0.026);
+    float echo = 0.5 + 0.5 * sin(tt * 8.0 + length(p.xz - vec2(-0.16, 0.03)) * 13.0);
+    float reg = band(length(p.xz - vec2(-0.16, 0.03)) * 5.2 - ph, 0.018);
+    col = mix(vec3(0.19, 0.22, 0.17), vec3(0.34, 0.27, 0.16), clamp(p.x + 0.55, 0.0, 1.0));
+    col += vec3(0.26, 0.23, 0.16) * ct * (0.35 + echo * 0.45);
+    col += mix(vec3(0.34, 0.24, 0.12), vec3(0.05, 0.28, 0.72), smoothstep(0.48, 0.78, ph)) * reg * 0.45;
+  }else if(id < 25.0){
+    vec3 c;
+    float d, sl;
+    if(id < 10.5){
+      c = vec3(-1.02, 0.43, 0.20); d = 0.000; sl = 0.0;
+    }else if(id < 11.5){
+      c = vec3(-0.52, 0.78, -0.18); d = 0.018; sl = 1.0;
+    }else if(id < 12.5){
+      c = vec3(0.02, 0.57, 0.28); d = 0.036; sl = 2.0;
+    }else if(id < 13.5){
+      c = vec3(0.55, 0.88, -0.10); d = 0.054; sl = 3.0;
+    }else{
+      c = vec3(1.02, 0.48, 0.15); d = 0.072; sl = 4.0;
+    }
+    vec3 q = p - budCenter(c, d, sl);
+    float keep = 1.0 - smoothstep(0.86, 0.995, ph);
+    float ha = rise(0.25, 0.45, d) * keep;
+    float cr = rise(0.43, 0.65, d) * keep;
+    float bl = rise(0.61, 0.79, d) * keep;
+    float fc = clamp(0.45 * ha + 0.55 * cr, 0.0, 1.0);
+    float front = cr * (1.0 - bl);
+    vec3 moss = mix(vec3(0.25, 0.32, 0.21), vec3(0.53, 0.34, 0.13), clamp(q.y * 1.5 + 0.45, 0.0, 1.0));
+    vec3 obs = vec3(0.035, 0.048, 0.058);
+    col = mix(moss, obs, fc);
+    float lines = band(q.y * 9.0 + length(q.xz) * 5.5 + sl * 0.17, 0.023);
+    float micro = 0.5 + 0.5 * sin(tt * 8.0 - q.y * 16.0 - sl * 1.4);
+    vec2 su = vec2(fract((atan(q.z, q.x) / TAU + 0.5) * 3.0 + sl * 0.17) - 0.5, fract((q.y + 0.8) * 2.5) - 0.5);
+    float sv = min(max(abs(su.x) - 0.035, abs(su.y) - 0.13), max(abs(su.x) - 0.13, abs(su.y) - 0.035));
+    float stamp = 1.0 - smoothstep(0.0, 0.018, sv);
+    vec3 mark = mix(vec3(0.56, 0.37, 0.15), vec3(0.035, 0.42, 1.0), front);
+    col += mark * lines * (0.24 + 0.62 * micro);
+    col += mark * stamp * (0.18 + 0.55 * front);
+    float back = pow(max(dot(rd, ld), 0.0), 4.0) * max(-dot(n, ld), 0.0);
+    col += mix(vec3(0.62, 0.32, 0.09), vec3(0.03, 0.34, 0.92), fc) * back * 0.75;
+  }else{
+    float hand = 0.45 + 0.55 * sin(tt * 8.0 - p.x * 7.0 + p.y * 5.0);
+    col = mix(vec3(0.42, 0.39, 0.31), vec3(0.025, 0.38, 1.0), smoothstep(0.58, 0.82, ph));
+    col *= 0.8 + 0.75 * hand;
+  }
+  col *= 0.19 + 0.88 * dif;
+  col += rim * mix(vec3(0.31, 0.27, 0.19), vec3(0.04, 0.29, 0.74), smoothstep(0.42, 0.76, ph)) * 0.48;
+  return col;
+}
+void main(){
+  ph = mod(iTime, DURATION) / DURATION;
+  tt = ph * TAU;
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  float ca = tt + 0.18 * sin(tt * 2.0);
+  vec3 ro = vec3(cos(ca) * 4.15, 2.34 + 0.16 * sin(tt * 2.0), sin(ca) * 4.15);
+  vec3 ta = vec3(0.0, 0.27, 0.02);
+  vec3 fw = normalize(ta - ro);
+  vec3 rt = normalize(cross(fw, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(rt, fw);
+  vec3 rd = normalize(fw * 1.55 + rt * uv.x + up * uv.y);
+  vec3 m = march(ro, rd);
+  float haze = pow(max(0.0, 1.0 - abs(rd.y + 0.04) * 2.3), 3.0);
+  vec3 bg = mix(vec3(0.012, 0.016, 0.014), vec3(0.075, 0.073, 0.059), haze);
+  float strata = band(rd.y * 34.0 + rd.x * 2.2 + sin(rd.x * 6.0) * 0.35, 0.012);
+  bg += vec3(0.055, 0.058, 0.048) * strata * haze;
+  vec3 col = bg;
+  if(m.y > -0.5 && m.x < 10.0){
+    vec3 p = ro + rd * m.x;
+    vec3 n = normalAt(p);
+    col = shade(p, n, rd, m.y);
+    col = mix(col, bg, smoothstep(5.0, 9.5, m.x) * 0.72);
+  }
+  float shift = rise(0.42, 0.66, 0.0) * (1.0 - smoothstep(0.82, 0.94, ph));
+  vec3 glow = mix(vec3(0.48, 0.29, 0.09), vec3(0.025, 0.34, 0.96), shift);
+  col += glow * m.z * 0.48;
+  float vig = smoothstep(0.79, 0.24, length(uv));
+  col *= 0.72 + 0.28 * vig;
+  col = vec3(1.0) - exp(-col * 1.45);
+  col = pow(max(col, 0.0), vec3(0.4545));
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 48;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 48;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  // === SETUP (always include this block first) ===
+  const duration = 48;
+  const targetBpm = 78;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0xae4c76dc;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  // === INSTRUMENTS / PATTERNS ===
+  const secondsPerBar = 240 / bpm;
+  const pulseInterval = secondsPerBar / 8;
+  const fiveInterval = secondsPerBar * 2 / 5;
+  const sevenInterval = secondsPerBar * 2 / 7;
+  const stepAt = (time, interval) => Math.floor(
+    Tone.Transport.getSecondsAtTime(time) / interval + 0.0001
+  );
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterGain = new Tone.Gain(0.72).connect(masterLimiter);
+  const pulseVolume = new Tone.Volume(-8).connect(masterGain);
+  const pulseFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 620,
+    rolloff: -24,
+    Q: 1.4
+  }).connect(pulseVolume);
+  const pulse = new Tone.AMSynth({
+    harmonicity: 0.5,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.025,
+      decay: 0.42,
+      sustain: 0.32,
+      release: 0.5
+    },
+    modulation: { type: 'triangle' },
+    modulationEnvelope: {
+      attack: 0.08,
+      decay: 0.5,
+      sustain: 0.18,
+      release: 0.55
+    }
+  }).connect(pulseFilter);
+  const budVolume = new Tone.Volume(-10).connect(masterGain);
+  const bud = new Tone.PluckSynth({
+    attackNoise: 0.7,
+    dampening: 1850,
+    resonance: 0.91,
+    release: 1.1
+  }).connect(budVolume);
+  const rootVolume = new Tone.Volume(-12).connect(masterGain);
+  const rootFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1450,
+    rolloff: -12,
+    Q: 1.1
+  }).connect(rootVolume);
+  const rootResonator = new Tone.PluckSynth({
+    attackNoise: 0.45,
+    dampening: 1100,
+    resonance: 0.95,
+    release: 1.5
+  }).connect(rootFilter);
+  const breathVolume = new Tone.Volume(-17).connect(masterGain);
+  const breathFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 430,
+    rolloff: -24,
+    Q: 0.8
+  }).connect(breathVolume);
+  const breath = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.28,
+      decay: 0.75,
+      sustain: 0.12,
+      release: 1.2
+    }
+  }).connect(breathFilter);
+  const crystalVolume = new Tone.Volume(-14).connect(masterGain);
+  const crystalDelay = new Tone.FeedbackDelay({
+    delayTime: '8n.',
+    feedback: 0.26,
+    wet: 0.3
+  }).connect(crystalVolume);
+  const crystalFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 1800,
+    rolloff: -12,
+    Q: 1.7
+  }).connect(crystalDelay);
+  const crystal = new Tone.FMSynth({
+    harmonicity: 4.02,
+    modulationIndex: 7.5,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.004,
+      decay: 0.52,
+      sustain: 0.04,
+      release: 0.85
+    },
+    modulation: { type: 'triangle' },
+    modulationEnvelope: {
+      attack: 0.002,
+      decay: 0.28,
+      sustain: 0,
+      release: 0.4
+    }
+  }).connect(crystalFilter);
+  const pulseNotes = ['D2', 'D2', 'D1', 'D2'];
+  const upperFourths = ['E4', 'A4', 'D5', 'G5', 'C5', 'F5', 'B4'];
+  const lowerFourths = ['A3', 'D4', 'G4', 'C5', 'F4', 'B3', 'E4'];
+  const pulseLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, pulseInterval);
+    let shouldPulse = false;
+    let durationName = '4n';
+    let velocity = 0.72;
+    if (progress < 0.18) {
+      shouldPulse = step % 4 === 0;
+      velocity = 0.74 + R() * 0.06;
+      pulseFilter.frequency.setValueAtTime(620, time);
+    } else if (progress < 0.38) {
+      shouldPulse = step % 6 === 0;
+      velocity = 0.66 + R() * 0.05;
+      pulseFilter.frequency.setValueAtTime(480, time);
+    } else if (progress < 0.58) {
+      shouldPulse = step % 2 === 0;
+      durationName = '8n';
+      velocity = 0.7 + R() * 0.08;
+      pulseFilter.frequency.setValueAtTime(820, time);
+    } else if (progress < 0.8) {
+      shouldPulse = true;
+      durationName = '16n';
+      velocity = 0.68 + R() * 0.12;
+      pulseFilter.frequency.setValueAtTime(1180, time);
+    } else {
+      shouldPulse = step % 4 === 0;
+      velocity = 0.72 + R() * 0.05;
+      pulseFilter.frequency.setValueAtTime(620, time);
+    }
+    if (shouldPulse) {
+      pulse.triggerAttackRelease(
+        pulseNotes[step % pulseNotes.length],
+        durationName,
+        time + H(4),
+        velocity
+      );
+    }
+  }, pulseInterval).start(0);
+  const fiveLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, fiveInterval);
+    let active = false;
+    let chance = 0;
+    if (progress < 0.18) {
+      active = true;
+      chance = 0.78;
+      budVolume.volume.setValueAtTime(-11, time);
+    } else if (progress >= 0.38 && progress < 0.58) {
+      active = true;
+      chance = 0.68;
+      budVolume.volume.setValueAtTime(-10, time);
+    } else if (progress >= 0.58 && progress < 0.8) {
+      active = true;
+      chance = 0.94;
+      budVolume.volume.setValueAtTime(-9, time);
+    } else if (progress >= 0.8) {
+      active = true;
+      chance = 0.58;
+      budVolume.volume.setValueAtTime(-12, time);
+    }
+    if (active && (step === 0 || R() < chance)) {
+      const noteOffset = progress >= 0.58 && progress < 0.8 ? 2 : 0;
+      const note = upperFourths[(step + noteOffset) % upperFourths.length];
+      bud.triggerAttackRelease(note, '8n', time + H(9), 0.56 + R() * 0.18);
+    }
+  }, fiveInterval).start(0);
+  const sevenLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, sevenInterval);
+    let active = false;
+    let chance = 0;
+    if (progress < 0.18) {
+      active = true;
+      chance = 0.64;
+      rootFilter.frequency.setValueAtTime(1250, time);
+    } else if (progress >= 0.42 && progress < 0.62) {
+      active = true;
+      chance = 0.56;
+      rootFilter.frequency.setValueAtTime(1550, time);
+    } else if (progress >= 0.62 && progress < 0.8) {
+      active = true;
+      chance = 0.88;
+      rootFilter.frequency.setValueAtTime(2300, time);
+    } else if (progress >= 0.84) {
+      active = true;
+      chance = 0.46;
+      rootFilter.frequency.setValueAtTime(1250, time);
+    }
+    if (active && (step === 0 || R() < chance)) {
+      const noteOffset = progress >= 0.62 && progress < 0.8 ? 3 : 0;
+      const note = lowerFourths[(step + noteOffset) % lowerFourths.length];
+      rootResonator.triggerAttackRelease(note, '8n', time + H(11), 0.48 + R() * 0.16);
+    }
+  }, sevenInterval).start(0);
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, secondsPerBar);
+    let shouldBreathe = false;
+    if (progress < 0.18) {
+      shouldBreathe = step % 2 === 0;
+      breathFilter.frequency.setValueAtTime(390, time);
+    } else if (progress < 0.38) {
+      shouldBreathe = true;
+      breathFilter.frequency.setValueAtTime(330, time);
+    } else if (progress < 0.62) {
+      shouldBreathe = step % 2 === 1;
+      breathFilter.frequency.setValueAtTime(520, time);
+    } else if (progress < 0.8) {
+      shouldBreathe = step % 3 === 0;
+      breathFilter.frequency.setValueAtTime(760, time);
+    } else {
+      shouldBreathe = step % 2 === 0;
+      breathFilter.frequency.setValueAtTime(390, time);
+    }
+    if (shouldBreathe) {
+      breath.triggerAttackRelease('2n', time + H(14), 0.3 + R() * 0.1);
+    }
+  }, secondsPerBar).start(0);
+  const crystalLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    const progress = Math.min(1, bar / totalBars);
+    const step = stepAt(time, secondsPerBar / 2);
+    if (progress >= 0.48 && progress < 0.8) {
+      const peak = progress >= 0.62;
+      const chance = peak ? 0.82 : 0.42;
+      if (R() < chance) {
+        const sourceNote = upperFourths[(step * 3 + 1) % upperFourths.length];
+        const midi = Tone.Frequency(sourceNote).toMidi() + (peak && step % 4 === 3 ? 12 : 0);
+        const note = Tone.Frequency(midi, 'midi');
+        crystalFilter.frequency.setValueAtTime(peak ? 2450 : 1950, time);
+        crystal.triggerAttackRelease(note, '16n', time + H(7), 0.38 + R() * 0.18);
+      }
+    }
+  }, secondsPerBar / 2).start(0);
+  // === STORE REFERENCES (required for cleanup) ===
+  window.toneJsInstruments = {
+    pulse,
+    bud,
+    rootResonator,
+    breath,
+    crystal,
+    pulseFilter,
+    pulseVolume,
+    budVolume,
+    rootFilter,
+    rootVolume,
+    breathFilter,
+    breathVolume,
+    crystalFilter,
+    crystalDelay,
+    crystalVolume,
+    masterGain,
+    masterLimiter
+  };
+  window.toneJsParts = {
+    pulseLoop,
+    fiveLoop,
+    sevenLoop,
+    breathLoop,
+    crystalLoop
+  };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
