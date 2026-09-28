@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{alpha:false}),D=60;
+canvas.width=900;canvas.height=900;ctx.textBaseline='top';ctx.imageSmoothingEnabled=true;
+let seed=5100154;
+const rng=()=>{seed=(seed*9301+49297)%233280;return seed/233280},C={k:'#000',d:'#c9c7bf',w:'#fff',l:'#9fff5f',o:'#ff7a3a',y:'#ffd400',s:'#484b49',q:'#171a18'},cl=(v,a=0,b=1)=>Math.max(a,Math.min(b,v)),mod=(n,m)=>(n%m+m)%m;
+const ps=[{x:74,y:82,w:356,h:244},{x:454,y:74,w:372,h:202},{x:76,y:350,w:220,h:226},{x:594,y:296,w:232,h:216},{x:74,y:604,w:394,h:222},{x:492,y:540,w:334,h:286}];
+const src=[
+'from void.routing import hypha, observe',
+'from whisker.field import listen_to_stone',
+'',
+'class CavernInference:',
+'  def receive(self, spore):',
+'    packet = tokenize_reality(spore)',
+'    route = hypha.trace(packet.address)',
+'    if route.is_dormant():',
+'      route.wake(frequency=7.3)',
+'    self.consciousness_buffer.append(route)',
+'    return observe(route.wet_sheen)',
+'',
+'mind = CavernInference(seed=5100154)',
+'while void.gaze():',
+'  signal = listen_to_stone()',
+'  mind.receive(signal)',
+'  purr_resonance(signal.depth)',
+'  yield "the network watches itself"',
+'',
+'context = "the kitchen at dusk"',
+'dream_index += liminal_offset',
+'assert entropy_harvester.nominal',
+'READY.'
+],rewrite=[
+'clawedcode@void:/tmp/dreams/route-map',
+'import phosphor, mineral, memory',
+'',
+'def decode_cavern(frequency):',
+'  nodes = phosphor.find_all(frequency)',
+'  for n in nodes:',
+'    n.address = memory.name(n.silence)',
+'    n.emit(color="acid_lime")',
+'    whisker_field.attend(n)',
+'  return nodes.exchange_breath()',
+'',
+'map = decode_cavern(7.3)',
+'map.write("/dev/null")',
+'void.gaze(map)',
+'response = "i am made new"',
+'READY.'
+];
+const words=['void','watch','again','between','stone','◇','back','spore'],base=[66,51,42,35,29,23,18,12];
+const msgs=['whiskers calibrated','spore packet accepted','hypha route sleeping','mineral clock phase-locked','memory[#0438]: kitchen at dusk','consciousness.buffer near overflow','wet sheen decoded','entropy_harvester nominal','stone frequency 7.3hz','route exchanged breath','the human asked','between worlds again','node answered with silence','packet became root','recovered. continuing.'];
+const logs=Array.from({length:84},(_,i)=>({tm:`00:${String(i/4|0).padStart(2,'0')}:${String(i%4*241+113).padStart(3,'0')}`,lv:i%17===0?'ERROR':i%7===0?'WARN':'INFO',m:msgs[i%msgs.length]}));
+const frags=['spore...','route...','stone...','again...','obser...','void....','wet.....','listen..'];
+const hex=Array.from({length:42},(_,j)=>({a:(0x180+j*8).toString(16).padStart(4,'0'),b:Array.from({length:8},()=>Math.floor(rng()*256).toString(16).padStart(2,'0')),z:frags[j%frags.length]}));
+const dots=ps.map(p=>Array.from({length:Math.floor(p.w*p.h/1250)},()=>[p.x+rng()*p.w,p.y+rng()*p.h,rng()<.15?2:1]));
+const tiles=Array.from({length:20},(_,i)=>Array.from({length:8},(_,j)=>({r:(i+j*3+Math.floor(rng()*5))%5,a:Math.floor(rng()*6),b:Math.floor(rng()*6),v:Math.floor(rng()*256)})));
+const sig=['            .','       /\\_/\\','      ( o.o )    ฅ','       > ^ <    \\\\','   . . . . . . . .','whisker seismogram','stone remembers light'];
+const evts=[{at:0.8,kind:'key'},{at:2.1,kind:'ping',note:'route'},{at:4,kind:'static'},{at:8,kind:'key'},{at:12,kind:'ping',note:'node'},{at:16,kind:'modem'},{at:20,kind:'key'},{at:24,kind:'static'},{at:25.2,kind:'burst'},{at:28,kind:'key'},{at:32,kind:'ping',note:'stone'},{at:35,kind:'modem'},{at:40,kind:'key'},{at:44,kind:'ping',note:'spore'},{at:48,kind:'static'},{at:51,kind:'burst'},{at:53,kind:'key'},{at:55,kind:'ping',note:'self'},{at:57,kind:'static'}];
+const font=(n)=>ctx.font=`${n}px "Courier New",monospace`,panel=(p,a,f)=>{ctx.save();ctx.beginPath();ctx.rect(p.x,p.y,p.w,p.h);ctx.clip();ctx.globalAlpha=a;ctx.fillStyle=C.k;ctx.fillRect(p.x,p.y,p.w,p.h);ctx.fillStyle=C.q;dots[ps.indexOf(p)].forEach(d=>ctx.fillRect(d[0],d[1],d[2],d[2]));f();ctx.restore()},env=(t,i)=>t<4?cl((t-i*.55)/.45):t>=58?cl((59.4-t)/.7):1;
+const line=(s,x,y,col=C.d)=>{ctx.fillStyle=col;ctx.fillText(s,x,y)},sel=(s,x,y,w,col)=>{ctx.fillStyle=col;ctx.fillRect(x,y-1,w,14);ctx.fillStyle=C.k;ctx.fillText(s,x+2,y)};
+const burst=z=>{let f=z-Math.floor(z);return f<.64?0:f<.82?(f-.64)/.18:1};
+const drawCode=(p,t,a5,focus)=>{
+  font(11);line('CAVERN_INFERENCE.PY  packet-map',p.x+6,p.y+5,C.s);
+  let rw=cl((t-25)/2),arr=rw?rewrite:src,n=rw?Math.floor(cl((t-25)/2)*rewrite.length):arr.length,st=Math.floor(a5)*2+Math.floor(burst(a5)*3),hi=mod(st,Math.max(1,n)),y=p.y+25;
+  for(let i=0;i<n&&y<p.y+p.h-12;i++,y+=14){
+    let s=arr[i],col=/from |import |class |def |while |for |return /.test(s)?C.d:/".*"/.test(s)?C.l:C.s;
+    i===hi?sel(s,p.x+6,y,Math.min(p.w-12,ctx.measureText(s).width+8),focus===0?C.o:C.l):line(s,p.x+8,y,col);
+  }
+};
+const drawHex=(p,t,a7,focus)=>{
+  font(10);line('addr   +0 +1 +2 +3 +4 +5 +6 +7  decoded',p.x+6,p.y+5,C.y);
+  let k=Math.floor(a7)*3+Math.floor(burst(a7)*4),top=mod(k,hex.length),hi=mod(k*5+3,13),y=p.y+23;
+  for(let i=0;i<13;i++,y+=13){
+    let r=hex[(top+i)%hex.length],b=r.b.map((v,j)=>j===mod(k+i,8)?((parseInt(v,16)+k*17)%256).toString(16).padStart(2,'0'):v),s=`0x${r.a}  ${b.join(' ')}  ${r.z}`;
+    i===hi?sel(s,p.x+5,y,p.w-10,focus===1?C.y:C.l):line(s,p.x+7,y,i%4?C.d:C.s);
+  }
+};
+const drawSig=(p,t,focus)=>{
+  let z=mod(t,10)/10,total=sig.reduce((a,s)=>a+s.length,0),n=z<.56?Math.floor(total*z/.56):z<.84?total:Math.floor(total*(1-(z-.84)/.16)),used=0;
+  font(16);line('WHISKER.FIELD / ROCK LISTEN',p.x+6,p.y+6,focus===0?C.o:C.s);
+  sig.forEach((s,i)=>{let m=cl(n-used,0,s.length);line(s.slice(0,m),p.x+8,p.y+38+i*24,i<4?C.w:i===5?C.l:C.d);used+=s.length});
+};
+const tc=[C.l,C.o,C.y,C.d,C.k,C.s],glyph=['◇','◈','▣','▥','◢','◤'];
+const drawTile=(x,y,z,s)=>{
+  ctx.fillStyle=C.k;ctx.fillRect(x,y,s,s);
+  if(z.r===0)for(let j=0;j<4;j++)for(let i=0;i<4;i++){ctx.fillStyle=tc[mod(z.a+i+j*3+z.v,5)];ctx.fillRect(x+i*s/4,y+j*s/4,s/4,s/4)}
+  if(z.r===1){font(s*.28|0);for(let j=0;j<4;j++){ctx.fillStyle=tc[mod(z.a+j,4)];ctx.fillText(['██▓','▓▓▒','▒▒░','░  '][j],x+2,y+1+j*s/4)}}
+  if(z.r===2)for(let j=0;j<4;j++){ctx.fillStyle=tc[mod(z.a+j,4)];ctx.fillRect(x+2,y+3+j*(s-5)/4,4+mod(z.v+j*13,s-9),(s-7)/5)}
+  if(z.r===3){ctx.fillStyle=tc[z.b];ctx.fillRect(x,y,s,s);ctx.fillStyle=tc[z.a];font(s*.62|0);ctx.fillText(glyph[z.v%glyph.length],x+s*.18,y+s*.1)}
+  if(z.r===4){ctx.fillStyle=tc[z.b];ctx.fillRect(x,y,s,s);ctx.fillStyle=tc[z.a];font(s*.42|0);ctx.fillText(z.v.toString(16).toUpperCase().padStart(2,'0'),x+s*.22,y+s*.24)}
+};
+const drawMap=(p,t,a7,focus)=>{
+  font(10);line('SPORE ROUTING PAGE / WET INK',p.x+5,p.y+4,focus===1?C.y:C.s);
+  let step=Math.floor(a7)*4+Math.floor(burst(a7)*4),active=mod(step,20),s=38,g=5;
+  for(let j=0;j<5;j++)for(let i=0;i<4;i++){let n=j*4+i,z=tiles[n][mod(Math.floor(step/20)+(n===active?1:0),8)],x=p.x+7+i*(s+g),y=p.y+25+j*(s-1);drawTile(x,y,z,s);if(n===active){ctx.strokeStyle=focus===1?C.o:C.l;ctx.lineWidth=2;ctx.strokeRect(x+1,y+1,s-2,s-2)}}
+  ctx.fillStyle=C.l;for(let i=0;i<4;i++)ctx.fillRect(p.x+184,p.y+38+i*38,3,18+mod(step+i*7,25));
+};
+const drawLog=(p,t,focus)=>{
+  font(10);line('clawedcode@void  /var/log/respiration',p.x+6,p.y+5,focus===2?C.o:C.s);
+  let ticks=t<50?t*3:150+(t-50)*9,top=Math.floor(ticks),off=(ticks-top)*13,y=p.y+25-off;
+  for(let i=0;i<18;i++,y+=13){let r=logs[mod(top+i,logs.length)],lc=r.lv==='ERROR'?C.o:r.lv==='WARN'?C.y:C.l;line(`${r.tm} `,p.x+6,y,C.s);line(r.lv.padEnd(5),p.x+72,y,lc);line(r.m,p.x+109,y,C.d)}
+};
+const drawProb=(p,t,a5,focus)=>{
+  font(11);line('ATTENTION / NEXT ROUTE',p.x+6,p.y+6,focus===2?C.y:C.s);
+  let cv=cl((t-35)/15),step=Math.floor(a5)*2+Math.floor(burst(a5)*3);
+  words.forEach((w,i)=>{let v=cl(base[i]+Math.sin(a5*Math.PI*2+i*.9)*5+Math.sin(a5*Math.PI*4-i)*3+(i===0?cv*36:-cv*10),4,105),bars=Math.round(v/5),y=p.y+31+i*27,col=i===0&&cv>.55?C.o:i===mod(step,words.length)?C.y:C.l;line(w.padEnd(8),p.x+8,y,C.d);line('█'.repeat(bars),p.x+76,y,col);line(`${v.toFixed(1).padStart(5)}%`,p.x+249,y,i===0?C.w:C.s)});
+  let y=p.y+252,x=p.x+8;ctx.fillStyle=C.s;ctx.fillRect(x,y,p.w-16,1);for(let i=0;i<24;i++){let h=3+Math.abs(Math.sin(i*.71-a5*Math.PI*2))*18;ctx.fillStyle=i===mod(step,24)?C.o:C.l;ctx.fillRect(x+i*13,y-h,7,h)}
+};
+window.renderFrame=time=>{
+  let t=mod(time,D),a5=t/12,a7=(D-t)/(D/7),focus=Math.floor(t/4)%3;
+  ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.fillStyle=C.k;ctx.fillRect(0,0,900,900);
+  panel(ps[0],env(t,0),()=>drawCode(ps[0],t,a5,focus));
+  panel(ps[1],env(t,1),()=>drawHex(ps[1],t,a7,focus));
+  panel(ps[2],env(t,2),()=>drawSig(ps[2],t,focus));
+  panel(ps[3],env(t,3),()=>drawMap(ps[3],t,a7,focus));
+  panel(ps[4],env(t,4),()=>drawLog(ps[4],t,focus));
+  panel(ps[5],env(t,5),()=>drawProb(ps[5],t,a5,focus));
+  if(t>=35&&t<58){let a=cl((t-35)/.5)*cl((58-t)/.5);ctx.globalAlpha=a;ctx.fillStyle=focus===0?C.o:focus===1?C.y:C.l;ctx.fillRect(0,432,900,18);ctx.fillStyle=C.k;font(11);ctx.fillText(`void.cat ◇ stone=${(7.3+Math.sin(a5*Math.PI*2)*.1).toFixed(2)}hz  packet=${String(Math.floor(a7*19)).padStart(4,'0')}  watching=watching  route=alive`,74,435);ctx.globalAlpha=1}
+  return canvas.toDataURL();
+};
+window.ready=true;
+
+window.initToneJsEngine = async function() {
+  // === SETUP (always include this block first) ===
+  const duration = 60;
+  const targetBpm = 68;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x09528d77;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  // === MASTER PATH ===
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  // === TRANSFORMER / CRT ROOM TONE ===
+  const humLevel = new Tone.Volume(-12).connect(masterLimiter);
+  const humFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 180,
+    rolloff: -24,
+    Q: 0.7
+  }).connect(humLevel);
+  const humNoise = new Tone.Noise('brown').connect(humFilter);
+  humNoise.volume.value = -18;
+  humNoise.start();
+  const crtLevel = new Tone.Volume(-31).connect(masterLimiter);
+  const crtOsc = new Tone.Oscillator({
+    frequency: 58.4,
+    type: 'sine'
+  }).connect(crtLevel);
+  crtOsc.start();
+  const fanLevel = new Tone.Volume(-35).connect(masterLimiter);
+  const fanOsc = new Tone.Oscillator({
+    frequency: 119.6,
+    type: 'sine'
+  }).connect(fanLevel);
+  fanOsc.start();
+  // === CERAMIC KEY AND PAPER-FEED TICKS ===
+  const clickLevel = new Tone.Volume(-12).connect(masterLimiter);
+  const clickFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 2500,
+    rolloff: -24,
+    Q: 0.8
+  }).connect(clickLevel);
+  const clickNoise = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: {
+      attack: 0.001,
+      decay: 0.02,
+      sustain: 0,
+      release: 0.01
+    }
+  }).connect(clickFilter);
+  const ceramicLevel = new Tone.Volume(-18).connect(masterLimiter);
+  const ceramicFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 1900,
+    rolloff: -12,
+    Q: 1.3
+  }).connect(ceramicLevel);
+  const ceramicClick = new Tone.MetalSynth({
+    frequency: 3100,
+    envelope: {
+      attack: 0.001,
+      decay: 0.018,
+      release: 0.008
+    },
+    harmonicity: 4.7,
+    modulationIndex: 13,
+    resonance: 5200,
+    octaves: 0.35
+  }).connect(ceramicFilter);
+  // === WHISKER-THIN NOTICE PULSES ===
+  const pingLevel = new Tone.Volume(-22).connect(masterLimiter);
+  const pingFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 1450,
+    rolloff: -12,
+    Q: 0.5
+  }).connect(pingLevel);
+  const pingSynth = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.002,
+      decay: 0.065,
+      sustain: 0,
+      release: 0.025
+    }
+  }).connect(pingFilter);
+  // === INTERMITTENT POWER-CABLE CRACKLE ===
+  const crackleLevel = new Tone.Volume(-23).connect(masterLimiter);
+  const crackleFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 3300,
+    rolloff: -24,
+    Q: 0.9
+  }).connect(crackleLevel);
+  const crackleNoise = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.003,
+      decay: 0.13,
+      sustain: 0,
+      release: 0.035
+    }
+  }).connect(crackleFilter);
+  // === PHONE-LINE REFLECTION PATH ===
+  const lineLevel = new Tone.Volume(-16).connect(masterLimiter);
+  const roomReflection = new Tone.Reverb({
+    decay: 0.48,
+    preDelay: 0.018,
+    wet: 0.11
+  }).connect(lineLevel);
+  await roomReflection.generate();
+  const modemFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 1650,
+    rolloff: -24,
+    Q: 4.2
+  }).connect(roomReflection);
+  const modemSynth = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: {
+      attack: 0.001,
+      decay: 0.032,
+      sustain: 0,
+      release: 0.006
+    }
+  }).connect(modemFilter);
+  const pagerFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 800,
+    rolloff: -12,
+    Q: 2.1
+  }).connect(roomReflection);
+  const pagerSynth = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.003,
+      decay: 0.075,
+      sustain: 0,
+      release: 0.025
+    }
+  }).connect(pagerFilter);
+  const fireKey = (time, strength) => {
+    const noiseTime = time + H(20);
+    const bodyTime = time + H(20);
+    const bodyFrequency = 2900 + (R() - 0.5) * 400;
+    clickNoise.triggerAttackRelease(0.018, noiseTime, 0.35 + strength * 0.3);
+    ceramicClick.frequency.setValueAtTime(bodyFrequency, bodyTime);
+    ceramicClick.triggerAttackRelease(0.012, bodyTime, 0.18 + strength * 0.22);
+  };
+  const firePing = (time, emphasis) => {
+    const pingTime = time + H(20);
+    const startFrequency = 1800 + R() * 600;
+    const endFrequency = Math.max(1500, startFrequency - 45 - R() * 75);
+    const pulseLength = 0.06 + R() * 0.06;
+    pingSynth.triggerAttackRelease(
+      startFrequency,
+      pulseLength,
+      pingTime,
+      0.12 + emphasis * 0.13
+    );
+    pingSynth.frequency.setValueAtTime(startFrequency, pingTime);
+    pingSynth.frequency.exponentialRampToValueAtTime(
+      endFrequency,
+      pingTime + pulseLength
+    );
+  };
+  const fireStatic = (time, emphasis) => {
+    const staticTime = time + H(20);
+    const staticLength = 0.08 + R() * 0.12;
+    crackleFilter.frequency.setValueAtTime(2700 + R() * 1500, staticTime);
+    crackleNoise.triggerAttackRelease(
+      staticLength,
+      staticTime,
+      0.18 + emphasis * 0.18
+    );
+  };
+  const fireModem = (time) => {
+    const frequencies = [1100, 1700, 1400, 2400, 1700];
+    for (let i = 0; i < frequencies.length; i += 1) {
+      const toneTime = time + i * 0.05 + H(4);
+      modemSynth.triggerAttackRelease(
+        frequencies[i],
+        0.038,
+        toneTime,
+        0.44 + R() * 0.15
+      );
+    }
+  };
+  const firePaperFeed = (time) => {
+    const spacing = 0.055 + R() * 0.025;
+    const tickCount = 3 + Math.floor(R() * 3);
+    for (let i = 0; i < tickCount; i += 1) {
+      fireKey(time + i * spacing, 0.28 + R() * 0.25);
+    }
+  };
+  const firePager = (time) => {
+    const pulseCount = 2 + Math.floor(R() * 2);
+    for (let i = 0; i < pulseCount; i += 1) {
+      pagerSynth.triggerAttackRelease(
+        800,
+        0.095,
+        time + i * 0.3 + H(12),
+        0.28
+      );
+    }
+  };
+  // === CONTINUOUS IRREGULAR TERMINAL ACTIVITY ===
+  let clickBurstRemaining = 0;
+  const clickLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars) return;
+    if (clickBurstRemaining === 0 && R() < 0.045) {
+      clickBurstRemaining = 2 + Math.floor(R() * 5);
+    }
+    const chance = clickBurstRemaining > 0 ? 0.66 : 0.15;
+    if (R() < chance) {
+      fireKey(time, 0.25 + R() * 0.65);
+    }
+    if (clickBurstRemaining > 0) {
+      clickBurstRemaining -= 1;
+    }
+  }, '16n').start(0);
+  const pingLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars) return;
+    if (R() < 0.68) {
+      firePing(time, 0.15 + R() * 0.45);
+    }
+  }, '2n').start(0);
+  const crackleLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars) return;
+    if (R() < 0.24) {
+      fireStatic(time, 0.12 + R() * 0.35);
+    }
+  }, '2n.').start(0);
+  // === VISUAL-TIMELINE SYNCHRONIZATION ===
+  const visualEvents = [
+    { at: 0.8, kind: 'key' },
+    { at: 2.1, kind: 'ping' },
+    { at: 4, kind: 'static' },
+    { at: 8, kind: 'key' },
+    { at: 12, kind: 'ping' },
+    { at: 16, kind: 'modem' },
+    { at: 20, kind: 'key' },
+    { at: 24, kind: 'static' },
+    { at: 25.2, kind: 'burst' },
+    { at: 28, kind: 'key' },
+    { at: 32, kind: 'ping' },
+    { at: 35, kind: 'modem' },
+    { at: 40, kind: 'key' },
+    { at: 44, kind: 'ping' },
+    { at: 48, kind: 'static' },
+    { at: 51, kind: 'burst' },
+    { at: 53, kind: 'key' },
+    { at: 55, kind: 'ping' },
+    { at: 57, kind: 'static' }
+  ];
+  const timelineEventIds = [];
+  for (let i = 0; i < visualEvents.length; i += 1) {
+    const event = visualEvents[i];
+    const eventId = Tone.Transport.scheduleOnce((time) => {
+      const bar = barAt(time);
+      if (bar < 0 || bar >= totalBars) return;
+      if (event.kind === 'key') {
+        fireKey(time, 0.8);
+      } else if (event.kind === 'ping') {
+        firePing(time, 0.72);
+      } else if (event.kind === 'static') {
+        fireStatic(time, 0.62);
+      } else if (event.kind === 'modem') {
+        fireModem(time);
+      } else if (event.kind === 'burst') {
+        firePaperFeed(time);
+      }
+    }, event.at);
+    timelineEventIds.push(eventId);
+  }
+  const pagerEventId = Tone.Transport.scheduleOnce((time) => {
+    const bar = barAt(time);
+    if (bar >= 0 && bar < totalBars) {
+      firePager(time);
+    }
+  }, duration * 0.7);
+  timelineEventIds.push(pagerEventId);
+  let timelineCleared = false;
+  const timelineEvents = {
+    stop: function() {
+      if (!timelineCleared) {
+        for (let i = 0; i < timelineEventIds.length; i += 1) {
+          Tone.Transport.clear(timelineEventIds[i]);
+        }
+        timelineCleared = true;
+      }
+      return this;
+    },
+    dispose: function() {
+      this.stop();
+      return this;
+    }
+  };
+  // === STORE REFERENCES (required for cleanup) ===
+  window.toneJsInstruments = {
+    masterLimiter,
+    humLevel,
+    humFilter,
+    humNoise,
+    crtLevel,
+    crtOsc,
+    fanLevel,
+    fanOsc,
+    clickLevel,
+    clickFilter,
+    clickNoise,
+    ceramicLevel,
+    ceramicFilter,
+    ceramicClick,
+    pingLevel,
+    pingFilter,
+    pingSynth,
+    crackleLevel,
+    crackleFilter,
+    crackleNoise,
+    lineLevel,
+    roomReflection,
+    modemFilter,
+    modemSynth,
+    pagerFilter,
+    pagerSynth
+  };
+  window.toneJsParts = {
+    clickLoop,
+    pingLoop,
+    crackleLoop,
+    timelineEvents
+  };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
