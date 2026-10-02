@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+const duration = 30;
+const rotationSpeed = 2;
+
+// Portal configuration
+const portalWidth = 400;
+const portalHeight = 500;
+const portalX = 400;
+const portalY = 400;
+
+// Seeded random
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// Fog particles
+const fogParticles = [];
+for (let i = 0; i < 150; i++) {
+  fogParticles.push({
+    x: random() * 800,
+    y: random() * 800,
+    size: random() * 60 + 20,
+    speed: random() * 0.3 + 0.1,
+    alpha: random() * 0.15 + 0.05
+  });
+}
+
+// Chromatic layers
+const chromaticLayers = [
+  { color: '#FF00FF', offset: 0, phase: 0 },
+  { color: '#00FFFF', offset: 0.333, phase: 0.333 },
+  { color: '#8800FF', offset: 0.666, phase: 0.666 }
+];
+
+// Fragment particles around portal edges
+const fragmentParticles = [];
+for (let i = 0; i < 60; i++) {
+  const angle = random() * Math.PI * 2;
+  const distance = random() * 100 + 200;
+  fragmentParticles.push({
+    angle: angle,
+    distance: distance,
+    size: random() * 4 + 2,
+    pulsePhase: random(),
+    orbitSpeed: random() * 0.5 + 0.5
+  });
+}
+
+window.renderFrame = function(time) {
+  const progress = (time / duration) * rotationSpeed;
+  const cycle = progress % 1;
+  
+  // Dark misty background
+  const gradient = ctx.createRadialGradient(400, 400, 0, 400, 400, 600);
+  gradient.addColorStop(0, '#1a1a2e');
+  gradient.addColorStop(1, '#0a0a15');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  // Fog layer
+  ctx.save();
+  fogParticles.forEach(p => {
+    p.x = (p.x + p.speed) % 800;
+    ctx.fillStyle = `rgba(200, 200, 220, ${p.alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+  
+  // Portal frame with chromatic aberration
+  ctx.save();
+  ctx.translate(portalX, portalY);
+  
+  chromaticLayers.forEach(layer => {
+    const phaseShift = (cycle + layer.phase) % 1;
+    const offsetX = Math.sin(phaseShift * Math.PI * 2) * 8;
+    const offsetY = Math.cos(phaseShift * Math.PI * 2) * 8;
+    
+    ctx.save();
+    ctx.translate(offsetX, offsetY);
+    ctx.globalAlpha = 0.7;
+    ctx.strokeStyle = layer.color;
+    ctx.lineWidth = 4;
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = layer.color;
+    ctx.strokeRect(-portalWidth/2, -portalHeight/2, portalWidth, portalHeight);
+    
+    // Inner glow
+    ctx.globalAlpha = 0.3;
+    ctx.strokeStyle = layer.color;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-portalWidth/2 + 10, -portalHeight/2 + 10, portalWidth - 20, portalHeight - 20);
+    ctx.restore();
+  });
+  
+  // Iridescent bleeding effect
+  const innerGradient = ctx.createRadialGradient(0, 0, 100, 0, 0, 300);
+  innerGradient.addColorStop(0, 'rgba(255, 0, 255, 0.4)');
+  innerGradient.addColorStop(0.5, 'rgba(0, 255, 255, 0.3)');
+  innerGradient.addColorStop(1, 'rgba(136, 0, 255, 0.1)');
+  ctx.fillStyle = innerGradient;
+  ctx.fillRect(-portalWidth/2, -portalHeight/2, portalWidth, portalHeight);
+  
+  // Fragment particles orbiting portal
+  fragmentParticles.forEach(p => {
+    const orbitProgress = (cycle * p.orbitSpeed + p.pulsePhase) % 1;
+    const angle = p.angle + orbitProgress * Math.PI * 2;
+    const x = Math.cos(angle) * p.distance;
+    const y = Math.sin(angle) * p.distance;
+    const pulse = Math.sin(orbitProgress * Math.PI * 2) * 0.5 + 0.5;
+    
+    const colorIndex = Math.floor((angle / (Math.PI * 2)) * 3);
+    const colors = ['#FF00FF', '#00FFFF', '#8800FF'];
+    
+    ctx.fillStyle = colors[colorIndex % 3];
+    ctx.globalAlpha = 0.6 + pulse * 0.4;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = colors[colorIndex % 3];
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  
+  ctx.restore();
+  
+  // Soft vignette
+  const vignette = ctx.createRadialGradient(400, 400, 200, 400, 400, 600);
+  vignette.addColorStop(0, 'rgba(0, 0, 0, 0)');
+  vignette.addColorStop(1, 'rgba(0, 0, 0, 0.6)');
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  // Triad chord: root, minor third, fifth
+  const root = 160;
+  const third = 192;
+  const fifth = 240;
+  
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sine';
+  osc1.frequency.value = root;
+  
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = third;
+  
+  const osc3 = audioCtx.createOscillator();
+  osc3.type = 'sine';
+  osc3.frequency.value = fifth;
+  
+  // Slow LFO for subtle modulation
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.4;
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 12;
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc1.frequency);
+  
+  // Gain nodes
+  const gain1 = audioCtx.createGain();
+  const gain2 = audioCtx.createGain();
+  const gain3 = audioCtx.createGain();
+  
+  gain1.gain.value = 0.15;
+  gain2.gain.value = 0.12;
+  gain3.gain.value = 0.10;
+  
+  // Fade in
+  gain1.gain.setValueAtTime(0, now);
+  gain1.gain.linearRampToValueAtTime(0.15, now + 2.5);
+  gain2.gain.setValueAtTime(0, now);
+  gain2.gain.linearRampToValueAtTime(0.12, now + 2.5);
+  gain3.gain.setValueAtTime(0, now);
+  gain3.gain.linearRampToValueAtTime(0.10, now + 2.5);
+  
+  osc1.connect(gain1);
+  osc2.connect(gain2);
+  osc3.connect(gain3);
+  gain1.connect(audioCtx.destination);
+  gain2.connect(audioCtx.destination);
+  gain3.connect(audioCtx.destination);
+  
+  osc1.start(now);
+  osc2.start(now);
+  osc3.start(now);
+  lfo.start(now);
+  
+  return { osc1, osc2, osc3, lfo, lfoGain, gain1, gain2, gain3 };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  window.renderFrame(time % 5); // 5-second loop
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

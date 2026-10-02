@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+// Seeded random
+let seed = 77741;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const W = 900, H = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+document.body.appendChild(renderer.domElement);
+Object.assign(renderer.domElement.style, { position: 'fixed', top: '0', left: '0', width: '100vw', height: '100vh' });
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020014);
+scene.fog = new THREE.FogExp2(0x020014, 0.012);
+
+const camera = new THREE.PerspectiveCamera(65, 1, 0.1, 200);
+camera.position.set(0, 0, 25);
+
+// === MATERIALS ===
+const indigoVoid = new THREE.Color(0x0a0028);
+const goldenLight = new THREE.Color(0xffc847);
+const deepPurple = new THREE.Color(0x2a0055);
+const quantumCyan = new THREE.Color(0x00ccdd);
+
+const glowMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  uniforms: {
+    uTime: { value: 0 },
+    uColor1: { value: goldenLight },
+    uColor2: { value: quantumCyan },
+    uOpacity: { value: 0.6 }
+  },
+  vertexShader: `
+    varying vec3 vPos;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    uniform float uTime;
+    void main() {
+      vPos = position;
+      vNormal = normal;
+      vUv = uv;
+      vec3 p = position;
+      p += normal * sin(p.x * 2.0 + uTime * 0.7) * 0.08;
+      p += normal * cos(p.y * 3.0 + uTime * 0.5) * 0.06;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vPos;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    uniform float uTime;
+    uniform vec3 uColor1;
+    uniform vec3 uColor2;
+    uniform float uOpacity;
+    void main() {
+      float fresnel = pow(1.0 - abs(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0))), 2.5);
+      float shimmer = sin(vPos.x * 8.0 + vPos.y * 6.0 + uTime * 1.5) * 0.5 + 0.5;
+      shimmer *= sin(vPos.z * 4.0 - uTime * 0.8) * 0.5 + 0.5;
+      vec3 col = mix(uColor1, uColor2, shimmer);
+      float alpha = fresnel * uOpacity * (0.4 + shimmer * 0.6);
+      gl_FragColor = vec4(col * (1.0 + fresnel * 0.5), alpha);
+    }
+  `
+});
+
+const wireMat = new THREE.ShaderMaterial({
+  wireframe: true,
+  transparent: true,
+  depthWrite: false,
+  uniforms: {
+    uTime: { value: 0 },
+    uColor: { value: new THREE.Color(0x4400aa) },
+    uPulse: { value: 0 }
+  },
+  vertexShader: `
+    varying vec3 vPos;
+    uniform float uTime;
+    void main() {
+      vPos = position;
+      vec3 p = position;
+      float wave = sin(p.x * 1.5 + p.y * 1.5 + uTime * 0.4) * 0.15;
+      p += normalize(p) * wave;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vPos;
+    uniform float uTime;
+    uniform vec3 uColor;
+    uniform float uPulse;
+    void main() {
+      float d = length(vPos);
+      float glow = sin(d * 3.0 - uTime * 2.0) * 0.5 + 0.5;
+      float alpha = 0.15 + glow * 0.25 + uPulse * 0.3;
+      vec3 col = uColor * (1.0 + glow * 0.5);
+      gl_FragColor = vec4(col, alpha);
+    }
+  `
+});
+
+// === KLEIN BOTTLE GEOMETRY (parametric) ===
+function createKleinBottle(uSegments, vSegments, scale) {
+  const geo = new THREE.BufferGeometry();
+  const positions = [];
+  const normals = [];
+  const uvs = [];
+  const indices = [];
+
+  for (let i = 0; i <= uSegments; i++) {
+    const u = (i / uSegments) * Math.PI * 2;
+    for (let j = 0; j <= vSegments; j++) {
+      const v = (j / vSegments) * Math.PI * 2;
+      let x, y, z;
+      const cu = Math.cos(u), su = Math.sin(u);
+      const cv = Math.cos(v), sv = Math.sin(v);
+
+      if (u < Math.PI) {
+        x = 3 * cu * (1 + su) + (2 * (1 - cu / 2)) * cu * cv;
+        z = -8 * su - 2 * (1 - cu / 2) * su * cv;
+      } else {
+        x = 3 * cu * (1 + su) + (2 * (1 - cu / 2)) * Math.cos(v + Math.PI);
+        z = -8 * su;
+      }
+      y = -2 * (1 - cu / 2) * sv;
+
+      positions.push(x * scale * 0.15, y * scale * 0.15, z * scale * 0.15);
+      normals.push(cu, sv, su);
+      uvs.push(i / uSegments, j / vSegments);
+    }
+  }
+
+  for (let i = 0; i < uSegments; i++) {
+    for (let j = 0; j < vSegments; j++) {
+      const a = i * (vSegments + 1) + j;
+      const b = a + vSegments + 1;
+      indices.push(a, b, a + 1);
+      indices.push(b, b + 1, a + 1);
+    }
+  }
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// === MÖBIUS STRIP GEOMETRY ===
+function createMobius(segments, width, radius) {
+  const geo = new THREE.BufferGeometry();
+  const positions = [];
+  const normals = [];
+  const indices = [];
+
+  for (let i = 0; i <= segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    for (let j = 0; j <= 8; j++) {
+      const s = (j / 8 - 0.5) * width;
+      const halfT = t / 2;
+      const x = (radius + s * Math.cos(halfT)) * Math.cos(t);
+      const y = (radius + s * Math.cos(halfT)) * Math.sin(t);
+      const z = s * Math.sin(halfT);
+      positions.push(x, y, z);
+      normals.push(Math.cos(t), Math.sin(t), Math.sin(halfT));
+    }
+  }
+
+  for (let i = 0; i < segments; i++) {
+    for (let j = 0; j < 8; j++) {
+      const a = i * 9 + j;
+      const b = a + 9;
+      indices.push(a, b, a + 1);
+      indices.push(b, b + 1, a + 1);
+    }
+  }
+
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// === BUILD SCENE OBJECTS ===
+const group = new THREE.Group();
+scene.add(group);
+
+// Nested Klein bottles at different scales
+const kleinBottles = [];
+for (let i = 0; i < 3; i++) {
+  const scale = 1.8 - i * 0.45;
+  const geo = createKleinBottle(48, 24, scale);
+  const mat = glowMat.clone();
+  mat.uniforms.uTime = { value: 0 };
+  mat.uniforms.uOpacity = { value: 0.35 - i * 0.08 };
+  const c1 = new THREE.Color().setHSL(0.12 + i * 0.15, 0.9, 0.6);
+  const c2 = new THREE.Color().setHSL(0.55 + i * 0.1, 0.8, 0.5);
+  mat.uniforms.uColor1 = { value: c1 };
+  mat.uniforms.uColor2 = { value: c2 };
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.set(random() * Math.PI, random() * Math.PI, random() * Math.PI);
+  group.add(mesh);
+  kleinBottles.push({ mesh, rotSpeed: [0.08 + random() * 0.05, 0.12 + random() * 0.06, 0.03 + random() * 0.04], axis: i });
+}
+
+// Möbius cathedral arches
+const mobiusStrips = [];
+for (let i = 0; i < 5; i++) {
+  const geo = createMobius(64, 0.8 + random() * 0.5, 3 + random() * 2);
+  const mat = wireMat.clone();
+  mat.uniforms.uTime = { value: 0 };
+  mat.uniforms.uColor = { value: new THREE.Color().setHSL(0.08 + random() * 0.2, 0.9, 0.45) };
+  mat.uniforms.uPulse = { value: 0 };
+  const mesh = new THREE.Mesh(geo, mat);
+  const angle = (i / 5) * Math.PI * 2;
+  mesh.position.set(Math.cos(angle) * 7, Math.sin(angle) * 7, (random() - 0.5) * 4);
+  mesh.rotation.set(random() * Math.PI, random() * Math.PI, random() * Math.PI);
+  group.add(mesh);
+  mobiusStrips.push({ mesh, phase: random() * Math.PI * 2, orbitRadius: 7 + random() * 3 });
+}
+
+// Tesseract wireframe (inner cube + outer cube with connecting edges)
+function createTesseractFrame(size) {
+  const g = new THREE.Group();
+  const innerGeo = new THREE.BoxGeometry(size, size, size);
+  const outerGeo = new THREE.BoxGeometry(size * 1.8, size * 1.8, size * 1.8);
+  const edgeMat = new THREE.LineBasicMaterial({ color: goldenLight, transparent: true, opacity: 0.6 });
+
+  const inner = new THREE.LineSegments(new THREE.EdgesGeometry(innerGeo), edgeMat.clone());
+  const outer = new THREE.LineSegments(new THREE.EdgesGeometry(outerGeo), edgeMat.clone());
+  g.add(inner);
+  g.add(outer);
+
+  // Connecting lines between vertices
+  const lineMat = new THREE.LineBasicMaterial({ color: quantumCyan, transparent: true, opacity: 0.3 });
+  const s = size / 2;
+  const s2 = size * 0.9;
+  const corners = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+  corners.forEach(c => {
+    const pts = [new THREE.Vector3(c[0]*s, c[1]*s, c[2]*s), new THREE.Vector3(c[0]*s2, c[1]*s2, c[2]*s2)];
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+    g.add(new THREE.Line(lineGeo, lineMat));
+  });
+
+  return { group: g, inner, outer };
+}
+
+const tesseracts = [];
+for (let i = 0; i < 4; i++) {
+  const t = createTesseractFrame(1.5 + random() * 0.8);
+  const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+  t.group.position.set(Math.cos(angle) * 12, (random() - 0.5) * 6, Math.sin(angle) * 12);
+  group.add(t.group);
+  tesseracts.push({ ...t, phase: random() * Math.PI * 2, orbitAngle: angle });
+}
+
+// Particle field - quantum foam
+const particleCount = 3000;
+const particleGeo = new THREE.BufferGeometry();
+const pPositions = new Float32Array(particleCount * 3);
+const pColors = new Float32Array(particleCount * 3);
+const pSizes = new Float32Array(particleCount);
+const particleData = [];
+
+for (let i = 0; i < particleCount; i++) {
+  const theta = random() * Math.PI * 2;
+  const phi = Math.acos(2 * random() - 1);
+  const r = 5 + random() * 25;
+  pPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+  pPositions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+  pPositions[i * 3 + 2] = r * Math.cos(phi);
+  const hue = 0.08 + random() * 0.55;
+  const c = new THREE.Color().setHSL(hue, 0.8, 0.5 + random() * 0.3);
+  pColors[i * 3] = c.r;
+  pColors[i * 3 + 1] = c.g;
+  pColors[i * 3 + 2] = c.b;
+  pSizes[i] = 0.5 + random() * 2.5;
+  particleData.push({ vel: new THREE.Vector3((random()-0.5)*0.01, (random()-0.5)*0.01, (random()-0.5)*0.01), phase: random() * Math.PI * 2 });
+}
+
+particleGeo.setAttribute('position', new THREE.Float32BufferAttribute(pPositions, 3));
+particleGeo.setAttribute('color', new THREE.Float32BufferAttribute(pColors, 3));
+particleGeo.setAttribute('size', new THREE.Float32BufferAttribute(pSizes, 1));
+
+const particleMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  vertexColors: true,
+  uniforms: { uTime: { value: 0 } },
+  vertexShader: `
+    attribute float size;
+    varying vec3 vColor;
+    uniform float uTime;
+    void main() {
+      vColor = color;
+      vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = size * (200.0 / -mvPos.z);
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor;
+    uniform float uTime;
+    void main() {
+      float d = length(gl_PointCoord - 0.5) * 2.0;
+      float alpha = smoothstep(1.0, 0.2, d) * 0.6;
+      gl_FragColor = vec4(vColor * 1.3, alpha);
+    }
+  `
+});
+
+const particles = new THREE.Points(particleGeo, particleMat);
+scene.add(particles);
+
+// Ambient light structure
+const ambLight = new THREE.AmbientLight(0x1a0044, 0.5);
+scene.add(ambLight);
+
+const pointLights = [];
+for (let i = 0; i < 3; i++) {
+  const pl = new THREE.PointLight(new THREE.Color().setHSL(0.1 + i * 0.25, 0.9, 0.6), 2, 30);
+  scene.add(pl);
+  pointLights.push({ light: pl, phase: i * Math.PI * 2 / 3 });
+}
+
+// === ANIMATION ===
+const clock = new THREE.Clock();
+const duration = 75;
+
+function animate() {
+  const elapsed = clock.getElapsedTime();
+  const progress = (elapsed % duration) / duration;
+  const t = elapsed;
+
+  // Camera orbit - slow, meditative, drifting through structures
+  const camOrbit = t * 0.08;
+  const camR = 18 + Math.sin(t * 0.05) * 6;
+  const camY = Math.sin(t * 0.07) * 5 + Math.cos(t * 0.03) * 3;
+  camera.position.set(
+    Math.cos(camOrbit) * camR,
+    camY,
+    Math.sin(camOrbit) * camR
+  );
+
+  // Look at center with gentle drift
+  const lookTarget = new THREE.Vector3(
+    Math.sin(t * 0.04) * 2,
+    Math.cos(t * 0.06) * 1.5,
+    Math.sin(t * 0.035) * 2
+  );
+  camera.lookAt(lookTarget);
+
+  // Rotate main group slowly
+  group.rotation.y = t * 0.015;
+  group.rotation.x = Math.sin(t * 0.02) * 0.1;
+
+  // Klein bottles - nested rotation through hyperdimensional axes
+  kleinBottles.forEach((kb, i) => {
+    kb.mesh.rotation.x += kb.rotSpeed[0] * 0.016;
+    kb.mesh.rotation.y += kb.rotSpeed[1] * 0.016;
+    kb.mesh.rotation.z += kb.rotSpeed[2] * 0.016;
+
+    // Breathe scale
+    const breathe = 1.0 + Math.sin(t * 0.3 + i * 1.2) * 0.08;
+    kb.mesh.scale.setScalar(breathe);
+
+    kb.mesh.material.uniforms.uTime.value = t;
+  });
+
+  // Möbius strips orbit and pulse
+  mobiusStrips.forEach((ms, i) => {
+    const angle = t * 0.12 + ms.phase;
+    const r = ms.orbitRadius + Math.sin(t * 0.2 + i) * 1.5;
+    ms.mesh.position.x = Math.cos(angle) * r;
+    ms.mesh.position.y = Math.sin(angle * 0.7 + i) * 3;
+    ms.mesh.position.z = Math.sin(angle) * r;
+    ms.mesh.rotation.x += 0.005;
+    ms.mesh.rotation.z += 0.008;
+    ms.mesh.material.uniforms.uTime.value = t;
+    ms.mesh.material.uniforms.uPulse.value = Math.sin(t * 2 + ms.phase) * 0.5 + 0.5;
+  });
+
+  // Tesseracts - 4D rotation projection
+  tesseracts.forEach((ts, i) => {
+    const angle = ts.orbitAngle + t * 0.06;
+    const r = 12 + Math.sin(t * 0.15 + ts.phase) * 3;
+    ts.group.position.x = Math.cos(angle) * r;
+    ts.group.position.z = Math.sin(angle) * r;
+    ts.group.position.y = Math.sin(t * 0.1 + ts.phase) * 4;
+
+    // 4D rotation: inner and outer cubes counter-rotate
+    ts.inner.rotation.x = t * 0.3 + i;
+    ts.inner.rotation.y = t * 0.2 + i * 0.5;
+    ts.outer.rotation.x = -t * 0.15 + i;
+    ts.outer.rotation.y = -t * 0.1 + i * 0.5;
+    ts.outer.rotation.z = t * 0.08;
+
+    // Pulse opacity
+    const pulse = Math.sin(t * 1.5 + ts.phase) * 0.3 + 0.5;
+    ts.inner.material.opacity = pulse * 0.8;
+    ts.outer.material.opacity = pulse * 0.4;
+  });
+
+  // Particle drift
+  const posArr = particleGeo.attributes.position.array;
+  for (let i = 0; i < particleCount; i++) {
+    const pd = particleData[i];
+    const ix = i * 3;
+    posArr[ix] += pd.vel.x + Math.sin(t * 0.5 + pd.phase) * 0.003;
+    posArr[ix + 1] += pd.vel.y + Math.cos(t * 0.4 + pd.phase) * 0.003;
+    posArr[ix + 2] += pd.vel.z + Math.sin(t * 0.3 + pd.phase * 1.3) * 0.003;
+
+    // Gentle attraction to center
+    const dx = -posArr[ix] * 0.0001;
+    const dy = -posArr[ix + 1] * 0.0001;
+    const dz = -posArr[ix + 2] * 0.0001;
+    posArr[ix] += dx;
+    posArr[ix + 1] += dy;
+    posArr[ix + 2] += dz;
+  }
+  particleGeo.attributes.position.needsUpdate = true;
+  particleMat.uniforms.uTime.value = t;
+
+  // Animated lights
+  pointLights.forEach((pl, i) => {
+    const a = t * 0.2 + pl.phase;
+    pl.light.position.set(Math.cos(a) * 10, Math.sin(a * 0.7) * 5, Math.sin(a) * 10);
+    pl.light.intensity = 1.5 + Math.sin(t * 0.8 + pl.phase) * 0.8;
+    const hue = (0.1 + i * 0.25 + t * 0.01) % 1;
+    pl.light.color.setHSL(hue, 0.9, 0.6);
+  });
+
+  // Fog density pulses
+  scene.fog.density = 0.01 + Math.sin(t * 0.15) * 0.004;
+
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+// === AUDIO ===
+
+window.initToneJsEngine = async function() {
+  const bpm = 58;
+  Tone.Transport.bpm.value = bpm;
+  const barLen = (60 / bpm) * 4;
+
+  // FX buses
+  const masterReverb = new Tone.Reverb({ decay: 6.5, wet: 0.45 }).toDestination();
+  await masterReverb.generate();
+  const plateVerb = new Tone.Reverb({ decay: 12, wet: 0.6 }).toDestination();
+  await plateVerb.generate();
+  const stereoDelay = new Tone.PingPongDelay({ delayTime: "4n.", feedback: 0.35, wet: 0.25 }).connect(masterReverb);
+  const shimmerDelay = new Tone.FeedbackDelay({ delayTime: "2n", feedback: 0.5, wet: 0.3 }).connect(plateVerb);
+  const chorus = new Tone.Chorus({ frequency: 0.15, delayTime: 4, depth: 0.8, wet: 0.4 }).connect(masterReverb);
+  chorus.start();
+  const filter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 1 }).connect(chorus);
+
+  // Sub drone - deep foundation
+  const drone = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 4, decay: 2, sustain: 0.8, release: 5 },
+    filterEnvelope: { attack: 3, decay: 2, sustain: 0.3, baseFrequency: 40, octaves: 1 }
+  }).connect(masterReverb);
+  drone.volume.value = -12;
+
+  const droneNotes = ["C1", "G1", "F1", "A1"];
+  let droneIdx = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const section = Math.floor(bar / 4) % droneNotes.length;
+    drone.triggerAttackRelease(droneNotes[section], "1m", time, 0.6);
+    droneIdx++;
+  }, "1m").start(0);
+
+  // Ethereal pad - consciousness shimmer
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "fatsawtooth", spread: 30, count: 3 },
+    envelope: { attack: 3, decay: 1.5, sustain: 0.7, release: 4 }
+  }).connect(filter);
+  pad.volume.value = -16;
+
+  const padChords = [
+    ["C3", "E3", "G3", "B3"],
+    ["A2", "C3", "E3", "G3"],
+    ["F2", "A2", "C3", "E3"],
+    ["G2", "B2", "D3", "F3"],
+    ["D3", "F3", "A3", "C4"],
+    ["E2", "G2", "B2", "D3"]
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = 20;
+    const progress = (bar % totalBars) / totalBars;
+
+    let idx;
+    if (bar < 4) idx = 0;
+    else if (bar < 8) idx = Math.floor(progress * 3) % 3;
+    else if (bar < 14) idx = Math.floor(progress * 5) % padChords.length;
+    else idx = bar % 2 === 0 ? 0 : 1;
+
+    const vel = bar < 4 ? 0.15 : bar < 14 ? 0.25 : 0.15;
+    pad.triggerAttackRelease(padChords[idx], "1m", time, vel);
+    chordIdx++;
+  }, "2n").start(0);
+
+  // Bell tones - golden vertex emanations
+  const bell = new Tone.FMSynth({
+    harmonicity: 5.5,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 4, sustain: 0, release: 3 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.5, decay: 2, sustain: 0 }
+  }).connect(shimmerDelay);
+  bell.volume.value = -18;
+
+  const bellScale = [60, 64, 67, 71, 72, 76, 79, 83];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    if (bar < 2) return;
+    if (bar >= 18) return;
+
+    const shouldPlay = Math.sin(bellStep * 1.618) > -0.3;
+    if (shouldPlay) {
+      const idx = Math.floor(Math.abs(Math.sin(bellStep * 0.7 + bar * 0.3)) * bellScale.length);
+      const note = Tone.Frequency(bellScale[idx % bellScale.length], "midi");
+      const vel = 0.15 + Math.abs(Math.sin(bellStep * 0.5)) * 0.2;
+      bell.triggerAttackRelease(note, "2n", time, vel);
+    }
+    bellStep++;
+  }, "2n.").start("1:0:0");
+
+  // High crystalline arp - topology dreaming
+  const crystal = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 1.2, sustain: 0, release: 1.5 }
+  }).connect(stereoDelay);
+  crystal.volume.value = -22;
+
+  const crystalNotes = [84, 88, 91, 95, 96, 91, 88, 84, 79, 83, 86, 91];
+  let crystalStep = 0;
+  const crystalLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    if (bar < 6 || bar >= 16) return;
+
+    const progress = (bar - 6) / 10;
+    const density = 0.3 + progress * 0.5;
+    if (Math.abs(Math.sin(crystalStep * 2.3)) < density) {
+      crystalStep++;
+      return;
+    }
+
+    const idx = crystalStep % crystalNotes.length;
+    const transpose = Math.floor(Math.sin(bar * 0.5) * 2) * 2;
+    const note = Tone.Frequency(crystalNotes[idx] + transpose, "midi");
+    crystal.triggerAttackRelease(note, "8n", time, 0.12 + Math.random() * 0.08);
+    crystalStep++;
+  }, "4n").start("2:0:0");
+
+  // Breath texture - quantum foam
+  const breath = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 3, decay: 1, sustain: 0.4, release: 4 }
+  }).connect(plateVerb);
+  breath.volume.value = -24;
+
+  const breathFilter = new Tone.Filter({ type: "bandpass", frequency: 300, Q: 2 }).connect(plateVerb);
+  breath.connect(breathFilter);
+
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    if (bar >= 18) return;
+    breathFilter.frequency.setValueAtTime(200 + Math.sin(bar * 0.5) * 150, time);
+    breath.triggerAttackRelease("4m", time, 0.15);
+  }, "4m").start(0);
+
+  // Filter automation - consciousness expansion
+  Tone.Transport.schedule((time) => {
+    filter.frequency.linearRampToValueAtTime(1800, time + 6 * barLen);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    filter.frequency.linearRampToValueAtTime(3200, time + 4 * barLen);
+  }, "8:0:0");
+
+  // Wind down - return filter for seamless loop
+  Tone.Transport.schedule((time) => {
+    filter.frequency.linearRampToValueAtTime(600, time + 4 * barLen);
+  }, "14:0:0");
+
+  window.toneJsInstruments = { drone, pad, bell, crystal, breath };
+  window.toneJsParts = { droneLoop, padLoop, bellLoop, crystalLoop, breathLoop };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

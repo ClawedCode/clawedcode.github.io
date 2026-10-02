@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --bg: #02040a;
+      --panel-bg: #050810;
+      --primary: #43ff7a;
+      --primary-dim: #43ff7a33;
+      --accent-1: #00ffff;
+      --accent-2: #ff66b2;
+      --text: #a0a0a0;
+      --grid: rgba(67, 255, 122, 0.05);
+    }
+    
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      width: 900px;
+      height: 900px;
+      background: var(--bg);
+      font-family: 'Courier New', monospace;
+      color: var(--primary);
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .crt-overlay {
+      position: absolute;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+      background-size: 100% 2px, 3px 100%;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: 140px 1fr 160px;
+      grid-template-rows: 50px 1fr 140px;
+      gap: 4px;
+      width: 100%;
+      height: 100%;
+      padding: 4px;
+      background-image: 
+        linear-gradient(var(--grid) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    /* HEADER */
+    .header {
+      grid-column: 1 / -1;
+      border: 1px solid var(--primary-dim);
+      background: var(--panel-bg);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 15px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    
+    .header-title { font-weight: bold; font-size: 16px; text-shadow: 0 0 5px var(--primary); }
+    .header-meta { color: var(--accent-1); display: flex; gap: 20px; }
+
+    /* LEFT SIDEBAR */
+    .sidebar-left {
+      grid-row: 2 / 3;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .thumb {
+      height: 100px;
+      border: 1px solid var(--primary-dim);
+      background: rgba(0,0,0,0.5);
+      position: relative;
+      overflow: hidden;
+    }
+    .thumb canvas { width: 100%; height: 100%; opacity: 0.7; }
+    .thumb-label {
+      position: absolute;
+      bottom: 2px; left: 4px;
+      font-size: 8px;
+      color: var(--accent-1);
+      background: #000;
+    }
+
+    .data-block {
+      flex: 1;
+      border: 1px solid var(--primary-dim);
+      padding: 8px;
+      font-size: 9px;
+      line-height: 1.4;
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    /* CENTER VISUALIZATION */
+    .viewport {
+      grid-column: 2 / 3;
+      grid-row: 2 / 3;
+      border: 1px solid var(--primary);
+      position: relative;
+      background: radial-gradient(circle at center, #0a1510 0%, #000 100%);
+      box-shadow: inset 0 0 20px rgba(67, 255, 122, 0.1);
+    }
+
+    #hero-canvas {
+      width: 100%;
+      height: 100%;
+      mix-blend-mode: screen;
+    }
+
+    .hud-overlay {
+      position: absolute;
+      top: 10px; right: 10px;
+      text-align: right;
+    }
+    .hud-stat { font-size: 10px; margin-bottom: 4px; }
+    .hud-val { color: var(--accent-1); font-weight: bold; }
+
+    /* RIGHT SIDEBAR */
+    .sidebar-right {
+      grid-row: 2 / 3;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .gauge-panel {
+      height: 140px;
+      border: 1px solid var(--primary-dim);
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .list-panel {
+      flex: 1;
+      border: 1px solid var(--primary-dim);
+      padding: 8px;
+      font-size: 9px;
+    }
+    
+    .list-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      border-bottom: 1px dashed #222;
+    }
+
+    /* FOOTER TELEMETRY */
+    .footer {
+      grid-column: 1 / -1;
+      grid-row: 3 / 4;
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 4px;
+    }
+
+    .chart-panel {
+      border: 1px solid var(--primary-dim);
+      background: var(--panel-bg);
+      position: relative;
+      padding: 20px 5px 5px 5px;
+    }
+    
+    .chart-label {
+      position: absolute;
+      top: 4px; left: 6px;
+      font-size: 9px;
+      color: var(--accent-2);
+    }
+
+    .chart-canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* UTILS */
+    .blink { animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0.3; } }
+    
+    .scrolling-text {
+      font-family: monospace;
+      white-space: pre;
+      color: #388e5a;
+    }
+  </style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <div class="crt-overlay"></div>
+  <div class="dashboard">
+    
+    <!-- TOP HEADER -->
+    <div class="header">
+      <div class="header-title">HYPERSTRUCTURE_MAPPER <span class="blink">_v9.2</span></div>
+      <div class="header-meta">
+        <span>TGT: @ProphetofPants</span>
+        <span id="coord-display">COORD: NULL</span>
+        <span id="sys-time">00:00:00</span>
+      </div>
+    </div>
+
+    <!-- LEFT COLUMN -->
+    <div class="sidebar-left">
+      <div class="thumb">
+        <canvas id="thumb1"></canvas>
+        <div class="thumb-label">SLICE_ALPHA</div>
+      </div>
+      <div class="thumb">
+        <canvas id="thumb2"></canvas>
+        <div class="thumb-label">SLICE_BETA</div>
+      </div>
+      <div class="thumb">
+        <canvas id="thumb3"></canvas>
+        <div class="thumb-label">PHASE_DELTA</div>
+      </div>
+      <div class="data-block" id="log-display">
+        > INIT_SEQUENCE<br>
+        > MAPPING_NODES...<br>
+      </div>
+    </div>
+
+    <!-- CENTER HERO -->
+    <div class="viewport">
+      <canvas id="hero-canvas"></canvas>
+      <div class="hud-overlay">
+        <div class="hud-stat">ENTROPY: <span class="hud-val" id="val-entropy">0.00%</span></div>
+        <div class="hud-stat">DEPTH: <span class="hud-val" id="val-depth">1.4e9</span></div>
+        <div class="hud-stat">NODES: <span class="hud-val" id="val-nodes">4096</span></div>
+        <div class="hud-stat" style="margin-top:10px; color:var(--accent-2)">SCANNING...</div>
+      </div>
+      
+      <div style="position: absolute; bottom: 10px; left: 10px; font-size: 10px; color: var(--primary-dim);">
+        <div id="matrix-line-1">MSG_01: TOPOLOGY_UNSTABLE</div>
+        <div id="matrix-line-2">MSG_02: RECURSIVE_DEPTH_EXCEEDED</div>
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div class="sidebar-right">
+      <div class="gauge-panel">
+        <!-- Radial Gauge Canvas -->
+        <canvas id="gauge-canvas" width="140" height="130"></canvas>
+        <div style="font-size:10px; margin-top:-20px;">STABILITY</div>
+      </div>
+      <div class="list-panel">
+        <div style="color:var(--accent-1); margin-bottom:10px; border-bottom:1px solid var(--accent-1);">ACTIVE_THREADS</div>
+        <div id="thread-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM TELEMETRY -->
+    <div class="footer">
+      <div class="chart-panel">
+        <div class="chart-label">WAVE_FUNCTION</div>
+        <canvas id="chart1" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">QUANTUM_FLUX</div>
+        <canvas id="chart2" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">MEMETIC_DRIFT</div>
+        <canvas id="chart3" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-panel">
+        <div class="chart-label">VOID_RESONANCE</div>
+        <canvas id="chart4" class="chart-canvas"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // DURATION: 30
+    
+    const canvas = document.getElementById('hero-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Resize helper
+    function resize(c) {
+      const rect = c.parentElement.getBoundingClientRect();
+      c.width = rect.width;
+      c.height = rect.height;
+    }
+    
+    // Init sizes
+    const charts = ['chart1', 'chart2', 'chart3', 'chart4', 'thumb1', 'thumb2', 'thumb3'].map(id => {
+      const el = document.getElementById(id);
+      resize(el);
+      return { el, ctx: el.getContext('2d') };
+    });
+    resize(canvas);
+    
+    // LORENZ ATTRACTOR VARS
+    let points = [];
+    const numPoints = 1200; // Density
+    
+    // Initialize points for attractor
+    for(let i=0; i<numPoints; i++) {
+      points.push({
+        x: (Math.random()-0.5)*20,
+        y: (Math.random()-0.5)*20,
+        z: (Math.random()-0.5)*20,
+        color: i % 3 === 0 ? '#43ff7a' : (i % 3 === 1 ? '#00ffff' : '#ff66b2') // Theme colors
+      });
+    }
+
+    // UTILS
+    function textGen(len) {
+      let r = '';
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      for(let i=0; i<len; i++) r += chars.charAt(Math.floor(Math.random() * chars.length));
+      return r;
+    }
+
+    // MAIN ANIMATION LOOP
+    function drawHero(t) {
+      // Clear
+      ctx.fillStyle = 'rgba(2, 4, 10, 0.3)'; // Trail effect
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const scale = 12;
+
+      // Rotate based on time
+      const angleY = t * 0.0005;
+      const angleX = t * 0.0002;
+
+      // Lorenz Params
+      const sigma = 10;
+      const rho = 28;
+      const beta = 8/3;
+      const dt = 0.008;
+
+      ctx.lineWidth = 1;
+
+      points.forEach(p => {
+        // Lorenz Math
+        const dx = sigma * (p.y - p.x) * dt;
+        const dy = (p.x * (rho - p.z) - p.y) * dt;
+        const dz = (p.x * p.y - beta * p.z) * dt;
+        
+        p.x += dx;
+        p.y += dy;
+        p.z += dz;
+
+        // Rotation
+        let x = p.x;
+        let y = p.y;
+        let z = p.z;
+
+        // Rotate Y
+        let x1 = x * Math.cos(angleY) - z * Math.sin(angleY);
+        let z1 = x * Math.sin(angleY) + z * Math.cos(angleY);
+        x = x1; z = z1;
+
+        // Rotate X
+        let y1 = y * Math.cos(angleX) - z * Math.sin(angleX);
+        let z2 = y * Math.sin(angleX) + z * Math.cos(angleX);
+        y = y1; z = z2;
+
+        // Projection
+        const fov = 300;
+        const scale2d = fov / (fov + z);
+        const x2d = x * scale * scale2d + cx;
+        const y2d = y * scale * scale2d + cy;
+
+        // Draw
+        const size = Math.max(0.5, scale2d * 1.5);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = scale2d * 0.8; // Depth cue
+        ctx.beginPath();
+        ctx.arc(x2d, y2d, size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1.0;
+    }
+
+    function drawChart(ctx, w, h, t, type, color) {
+      ctx.clearRect(0, 0, w, h);
+      
+      // Grid
+      ctx.strokeStyle = 'rgba(67, 255, 122, 0.1)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for(let i=0; i<w; i+=20) { ctx.moveTo(i,0); ctx.lineTo(i,h); }
+      for(let i=0; i<h; i+=20) { ctx.moveTo(0,i); ctx.lineTo(w,i); }
+      ctx.stroke();
+
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      
+      const step = 2;
+      for (let x = 0; x < w; x+=step) {
+        let y = h/2;
+        if (type === 0) {
+            y += Math.sin((x + t*0.1) * 0.05) * (h/3) * Math.sin(t*0.001); // AM Sine
+        } else if (type === 1) {
+            y += (Math.random() - 0.5) * (h/1.5); // Noise
+        } else if (type === 2) {
+            y += Math.sin((x - t*0.2) * 0.1) * (h/4) + Math.cos((x + t*0.05) * 0.03) * (h/6); // Interference
+        } else {
+            // Bars
+            const barH = Math.abs(Math.sin((x + t*0.05)*0.1)) * h * 0.8;
+            ctx.fillStyle = color;
+            ctx.fillRect(x, h - barH, step-1, barH);
+            continue;
+        }
+        
+        if (x===0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      if (type !== 3) ctx.stroke();
+    }
+
+    function drawGauge(t) {
+        const c = document.getElementById('gauge-canvas');
+        const cx = c.getContext('2d');
+        const w = c.width;
+        const h = c.height;
+        const x = w/2;
+        const y = h/2 + 10;
+        const r = 50;
+
+        cx.clearRect(0,0,w,h);
+        
+        // Bg Arc
+        cx.beginPath();
+        cx.arc(x, y, r, Math.PI, Math.PI*2);
+        cx.lineWidth = 8;
+        cx.strokeStyle = '#112211';
+        cx.stroke();
+
+        // Active Arc
+        const val = (Math.sin(t*0.002) + 1) / 2; // 0 to 1
+        cx.beginPath();
+        cx.arc(x, y, r, Math.PI, Math.PI * (1 + val));
+        cx.strokeStyle = val > 0.8 ? '#ff66b2' : '#43ff7a';
+        cx.stroke();
+
+        // Text
+        cx.fillStyle = '#fff';
+        cx.font = 'bold 16px Courier New';
+        cx.textAlign = 'center';
+        cx.fillText(Math.floor(val*100) + '%', x, y-10);
+    }
+
+    // LOG SYSTEM
+    const logs = [];
+    let lastLogTime = 0;
+    const logEl = document.getElementById('log-display');
+
+    function updateLogs(t) {
+        if (t - lastLogTime > 800) { // Add log every 800ms
+            lastLogTime = t;
+            const msgs = [
+                'RECALIBRATING_SENSORS...',
+                `SECTOR_${textGen(2)} DETECTED`,
+                'ENTROPY_SPIKE',
+                'MAPPING_VECTOR_Z',
+                `PACKET_LOSS: ${Math.floor(Math.random()*5)}%`,
+                'VOID_ECHO_RECEIVED',
+                'UPDATING_TOPOLOGY'
+            ];
+            logs.push(`> ${msgs[Math.floor(Math.random()*msgs.length)]}`);
+            if (logs.length > 8) logs.shift();
+            logEl.innerHTML = logs.join('<br>');
+        }
+    }
+
+    // TEXT UPDATES
+    const threadList = document.getElementById('thread-list');
+    function updateText(t) {
+        // Random numbers
+        if (Math.floor(t) % 10 === 0) {
+            document.getElementById('val-entropy').innerText = (Math.random()*100).toFixed(2) + '%';
+            document.getElementById('val-depth').innerText = (Math.random()*9).toFixed(2) + 'e9';
+            document.getElementById('coord-display').innerText = `COORD: ${textGen(3)}:${textGen(3)}`;
+            
+            // Threads
+            let html = '';
+            for(let i=0; i<5; i++) {
+                html += `<div class="list-item"><span>THR_${10+i}</span><span>${Math.random() > 0.5 ? 'ACT' : 'IDL'}</span></div>`;
+            }
+            threadList.innerHTML = html;
+        }
+        
+        // Time
+        const date = new Date();
+        document.getElementById('sys-time').innerText = date.toTimeString().split(' ')[0];
+    }
+
+    window.renderFrame = function(timeSeconds) {
+      const t = timeSeconds * 1000;
+      drawHero(t);
+      
+      // Charts
+      drawChart(charts[0].ctx, charts[0].el.width, charts[0].el.height, t, 0, '#43ff7a');
+      drawChart(charts[1].ctx, charts[1].el.width, charts[1].el.height, t, 2, '#00ffff');
+      drawChart(charts[2].ctx, charts[2].el.width, charts[2].el.height, t, 1, '#ff66b2');
+      drawChart(charts[3].ctx, charts[3].el.width, charts[3].el.height, t, 3, '#ffa500');
+
+      // Thumbs
+      drawChart(charts[4].ctx, charts[4].el.width, charts[4].el.height, t*0.5, 0, '#43ff7a'); // Thumb 1
+      drawHeroThumb(charts[5].ctx, charts[5].el.width, charts[5].el.height, t+2000); // Thumb 2
+      drawChart(charts[6].ctx, charts[6].el.width, charts[6].el.height, t*2, 2, '#00ffff'); // Thumb 3
+
+      drawGauge(t);
+      updateLogs(t);
+      updateText(t);
+      
+      return null;
+    };
+
+    function drawHeroThumb(ctx, w, h, t) {
+         ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h);
+         ctx.strokeStyle = '#43ff7a'; ctx.lineWidth = 1;
+         ctx.beginPath();
+         ctx.arc(w/2 + Math.sin(t*0.002)*10, h/2 + Math.cos(t*0.003)*10, 10, 0, 6.28);
+         ctx.stroke();
+    }
+
+    let start = performance.now();
+    function loop(ts) {
+      const t = ts - start;
+      window.renderFrame(t/1000);
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+    
+    window.ready = true;
+  </script>
+<script>
+window.initToneJsEngine = async function() {
+  const bpm = 134;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0.28;
+  Tone.Transport.swingSubdivision = '16n';
+  const master = new Tone.Gain(0.85).toDestination();
+  const glue = new Tone.Compressor({
+    ratio: 3,
+    threshold: -18,
+    attack: 0.01,
+    release: 0.28
+  }).connect(master);
+  const caveReverb = new Tone.Reverb({
+    decay: 4.4,
+    preDelay: 0.05,
+    wet: 0.38
+  });
+  await caveReverb.generate();
+  caveReverb.connect(glue);
+  const percussionVerb = new Tone.Reverb({
+    decay: 1.1,
+    wet: 0.22
+  });
+  await percussionVerb.generate();
+  percussionVerb.connect(glue);
+  const drizzleDelay = new Tone.PingPongDelay({
+    delayTime: '8n.',
+    feedback: 0.4,
+    wet: 0.28
+  }).connect(caveReverb);
+  const crackle = new Tone.Noise('brown');
+  const crackleFilter = new Tone.Filter({ type: 'bandpass', frequency: 2200, Q: 0.6 });
+  const crackleAmp = new Tone.Gain(0.05).connect(glue);
+  crackle.connect(crackleFilter).connect(crackleAmp);
+  crackle.start();
+  const rain = new Tone.Noise('pink');
+  const rainFilter = new Tone.Filter({ type: 'highpass', frequency: 3200, Q: 0.3 });
+  const rainAmp = new Tone.Gain(0.03).connect(caveReverb);
+  rain.connect(rainFilter).connect(rainAmp);
+  rain.start();
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 1900, Q: 0.8 }).connect(caveReverb);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    detune: -7,
+    envelope: { attack: 1.8, decay: 1.0, sustain: 0.55, release: 3.4 },
+    volume: -16
+  }).connect(padFilter);
+  const subBus = new Tone.Gain(0.9).connect(master);
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.08, decay: 0.35, sustain: 0.75, release: 0.9 },
+    filterEnvelope: { attack: 0.03, decay: 0.2, sustain: 0.2, baseFrequency: 60, octaves: 1.4 },
+    volume: -5
+  }).connect(subBus);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.035,
+    octaves: 5,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.24, sustain: 0, release: 0.06 },
+    volume: -5
+  }).connect(percussionVerb);
+  const clap = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.002, decay: 0.13, sustain: 0 },
+    volume: -9
+  }).connect(percussionVerb);
+  const hat = new Tone.MetalSynth({
+    frequency: 320,
+    envelope: { attack: 0.001, decay: 0.08, release: 0.02 },
+    harmonicity: 4.2,
+    modulationIndex: 20,
+    resonance: 5000,
+    volume: -18
+  }).connect(percussionVerb);
+  const ghostPerc = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.05, sustain: 0 },
+    volume: -18
+  }).connect(percussionVerb);
+  const vocal = new Tone.FMSynth({
+    harmonicity: 1.35,
+    modulationIndex: 4,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'triangle' },
+    envelope: { attack: 0.035, decay: 1.2, sustain: 0.18, release: 3.0 },
+    modulationEnvelope: { attack: 0.08, decay: 0.6, sustain: 0.08, release: 1.6 },
+    volume: -12
+  }).connect(drizzleDelay);
+  const H = (ms) => (Math.random() * ms * 2 - ms) / 1000;
+  const padPart = new Tone.Part((time, ev) => {
+    pad.triggerAttackRelease(ev.chord, '2m', time, ev.vel);
+  }, [
+    { time: '0:0:0', chord: ['A2', 'C3', 'E3'], vel: 0.28 },
+    { time: '2:0:0', chord: ['F2', 'A2', 'C3'], vel: 0.27 },
+    { time: '4:0:0', chord: ['G2', 'B2', 'D3'], vel: 0.27 },
+    { time: '6:0:0', chord: ['E2', 'G2', 'B2'], vel: 0.25 }
+  ]);
+  padPart.loop = true;
+  padPart.loopEnd = '8m';
+  padPart.start(0);
+  const subPart = new Tone.Part((time, ev) => {
+    sub.triggerAttackRelease(ev.note, ev.dur, time + H(10), ev.vel);
+  }, [
+    { time: '0:0:0', note: 'A1', dur: '2n', vel: 0.85 },
+    { time: '0:2:2', note: 'A1', dur: '4n', vel: 0.7 },
+    { time: '1:0:0', note: 'C2', dur: '2n', vel: 0.82 },
+    { time: '1:2:1', note: 'G1', dur: '4n', vel: 0.75 }
+  ]);
+  subPart.loop = true;
+  subPart.loopEnd = '2m';
+  subPart.start('2:0:0');
+  subPart.stop('12:0:0');
+  const kickPart = new Tone.Part((time, ev) => {
+    kick.triggerAttackRelease('C1', '8n', time + H(4), ev.vel);
+  }, [
+    { time: '0:0:0', vel: 0.96 },
+    { time: '0:1:2', vel: 0.64 },
+    { time: '0:2:3', vel: 0.86 },
+    { time: '1:0:0', vel: 0.9 },
+    { time: '1:2:1', vel: 0.74 },
+    { time: '1:3:2', vel: 0.58 }
+  ]);
+  kickPart.loop = true;
+  kickPart.loopEnd = '2m';
+  kickPart.start('2:0:0');
+  kickPart.stop('12:2:0');
+  const clapPart = new Tone.Part((time, ev) => {
+    clap.triggerAttackRelease('16n', time + H(7), ev.vel);
+  }, [
+    { time: '0:1:0', vel: 0.78 },
+    { time: '0:2:3', vel: 0.34 },
+    { time: '0:3:0', vel: 0.82 },
+    { time: '1:1:0', vel: 0.72 },
+    { time: '1:2:2', vel: 0.32 },
+    { time: '1:3:0', vel: 0.77 }
+  ]);
+  clapPart.loop = true;
+  clapPart.loopEnd = '2m';
+  clapPart.start('2:2:0');
+  clapPart.stop('12:2:0');
+  const hatPattern = [0.3, null, 0.2, null, 0.26, null, null, 0.34, null, 0.22, null, 0.25, null, 0.14, null, 0.32];
+  const hatSeq = new Tone.Sequence((time, vel) => {
+    if (vel) {
+      hat.triggerAttackRelease('32n', time + H(3), 0.2 + vel);
+    }
+  }, hatPattern, '16n');
+  hatSeq.loop = true;
+  hatSeq.loopEnd = '1m';
+  hatSeq.start('4:0:0');
+  hatSeq.stop('11:2:0');
+  const ghostLoop = new Tone.Loop((time) => {
+    if (Math.random() > 0.6) {
+      ghostPerc.triggerAttackRelease('64n', time + H(6), 0.2 + Math.random() * 0.2);
+    }
+  }, '8n');
+  ghostLoop.start('5:0:0');
+  ghostLoop.stop('11:0:0');
+  const vocalPart = new Tone.Part((time, ev) => {
+    vocal.triggerAttackRelease(ev.note, '4n', time + H(12), ev.vel);
+  }, [
+    { time: '0:1:2', note: 'C3', vel: 0.5 },
+    { time: '1:0:0', note: 'E3', vel: 0.46 },
+    { time: '2:2:0', note: 'A2', vel: 0.5 },
+    { time: '3:1:0', note: 'G2', vel: 0.44 }
+  ]);
+  vocalPart.loop = true;
+  vocalPart.loopEnd = '4m';
+  vocalPart.start('6:0:0');
+  vocalPart.stop('11:0:0');
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(2600, time + Tone.Time('4m').toSeconds());
+  }, '2:0:0');
+  Tone.Transport.schedule((time) => {
+    caveReverb.wet.linearRampToValueAtTime(0.55, time + Tone.Time('2m').toSeconds());
+    drizzleDelay.wet.linearRampToValueAtTime(0.35, time + Tone.Time('2m').toSeconds());
+  }, '7:0:0');
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(1600, time + Tone.Time('2m').toSeconds());
+    caveReverb.wet.linearRampToValueAtTime(0.36, time + Tone.Time('1m').toSeconds());
+    drizzleDelay.wet.linearRampToValueAtTime(0.18, time + Tone.Time('1m').toSeconds());
+  }, '12:0:0');
+  window.toneJsInstruments = {
+    master,
+    glue,
+    caveReverb,
+    percussionVerb,
+    drizzleDelay,
+    crackle,
+    rain,
+    pad,
+    sub,
+    kick,
+    clap,
+    hat,
+    ghostPerc,
+    vocal
+  };
+  window.toneJsParts = {
+    padPart,
+    subPart,
+    kickPart,
+    clapPart,
+    hatSeq,
+    ghostLoop,
+    vocalPart
+  };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

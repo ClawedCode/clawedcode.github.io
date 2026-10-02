@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 64
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+const DUR = 64, W = 900, H = 900;
+const BG = 0x070b1a;
+
+let seed = 14540042;
+function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.FogExp2(BG, 0.012);
+
+const camera = new THREE.PerspectiveCamera(42, W / H, 0.1, 400);
+
+const existing = document.querySelector('canvas');
+const renderer = existing
+  ? new THREE.WebGLRenderer({ antialias: true, canvas: existing })
+  : new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.34;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+if (!renderer.domElement.parentNode) document.body.appendChild(renderer.domElement);
+document.body.style.margin = '0';
+document.body.style.background = '#070b1a';
+
+const composer = new EffectComposer(renderer);
+composer.setSize(W, H);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.62, 0.70, 0.30));
+
+// ---- palette: teal / ember / pale violet on indigo-black
+const COL = [0x3fd8c8, 0xff8a42, 0xbda6ff];
+const DIM = [0x1a6a66, 0x6b3416, 0x4a3a78];
+
+// ---- sparse starfield (static, cached at init)
+{
+  const N = 520, p = new Float32Array(N * 3), c = new Float32Array(N * 3);
+  const base = new THREE.Color(0x9fb4d8);
+  for (let i = 0; i < N; i++) {
+    const r = 70 + rnd() * 90, th = rnd() * Math.PI * 2, ph = Math.acos(2 * rnd() - 1);
+    p[i * 3] = r * Math.sin(ph) * Math.cos(th);
+    p[i * 3 + 1] = r * Math.cos(ph) * 0.8;
+    p[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
+    const f = 0.22 + rnd() * rnd() * 0.95;
+    c[i * 3] = base.r * f; c[i * 3 + 1] = base.g * f; c[i * 3 + 2] = base.b * f;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({
+    size: 0.52, sizeAttenuation: true, vertexColors: true,
+    transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending, fog: false
+  })));
+}
+
+// ---- three bodies of comparable mass on one closed choreography, 120 degrees apart in phase.
+// Every harmonic used is 1, 2 or 4 -- none is a multiple of 3 -- so the three offset copies
+// sum to zero and the barycenter stays exactly at the origin, bounded and always in frame.
+const M = [1.0, 0.94, 1.08];
+const OFF = [0, 2 * Math.PI / 3, 4 * Math.PI / 3];
+const CIRCUITS = 2;   // integer: loop closes exactly at DURATION
+
+function bodyPos(i, phase, out) {
+  const u = phase * Math.PI * 2 * CIRCUITS + OFF[i];
+  const breathe = 1 + 0.15 * Math.sin(phase * Math.PI * 4);   // harmonic 2 of the loop
+  out.set(
+    (2.95 * Math.sin(u) + 0.66 * Math.sin(4 * u)) * breathe,
+    1.10 * Math.sin(2 * u) + 0.32 * Math.sin(4 * u + 1.1),
+    (2.62 * Math.cos(u) + 0.72 * Math.cos(2 * u)) * breathe
+  );
+  return out;
+}
+
+const TRAIL = 640;
+const bodies = M.map((m, i) => ({
+  m,
+  pos: bodyPos(i, 0, new THREE.Vector3()),
+  col: new THREE.Color(COL[i]),
+  dim: new THREE.Color(DIM[i])
+}));
+
+// trail: fading gradient line, oldest -> transparent
+const lines = bodies.map(() => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
+  g.setAttribute('color', new THREE.BufferAttribute(new Float32Array(TRAIL * 3), 3));
+  g.setDrawRange(0, TRAIL);
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({
+    vertexColors: true, transparent: true, opacity: 0.96, depthWrite: false,
+    blending: THREE.AdditiveBlending
+  }));
+  scene.add(l);
+  return l;
+});
+
+// cores: small, tightly emissive; shells give scale contrast
+const cores = bodies.map((b) => {
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.10 + b.m * 0.045, 20, 16),
+    new THREE.MeshBasicMaterial({ color: b.col })
+  );
+  const shell = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34 + b.m * 0.08, 24, 18),
+    new THREE.MeshBasicMaterial({
+      color: b.dim, transparent: true, opacity: 0.34,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    })
+  );
+  scene.add(core, shell);
+  return { core, shell };
+});
+
+// thin interaction chords: the "third presence" made visible
+const chordPairs = [[0, 1], [1, 2], [0, 2]];
+const chords = chordPairs.map(() => {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const l = new THREE.Line(g, new THREE.LineBasicMaterial({
+    color: 0x8fa2d8, transparent: true, opacity: 0.0,
+    depthWrite: false, blending: THREE.AdditiveBlending
+  }));
+  scene.add(l);
+  return l;
+});
+
+const bary = new THREE.Vector3();
+const baryDot = new THREE.Mesh(
+  new THREE.SphereGeometry(0.045, 10, 8),
+  new THREE.MeshBasicMaterial({ color: 0xc2d2f0, transparent: true, opacity: 0.7, depthWrite: false })
+);
+scene.add(baryDot);
+
+const tv = new THREE.Vector3();
+function writeTrails(phase) {
+  // fade window breathes on an integer harmonic so the "shedding" phases stay legible
+  const span = 0.052 + 0.042 * (0.5 + 0.5 * Math.cos(phase * Math.PI * 4));
+  for (let bi = 0; bi < 3; bi++) {
+    const b = bodies[bi], l = lines[bi];
+    const pa = l.geometry.attributes.position.array;
+    const ca = l.geometry.attributes.color.array;
+    for (let k = 0; k < TRAIL; k++) {
+      const f = k / (TRAIL - 1);                 // 0 = oldest, 1 = current position
+      bodyPos(bi, phase - span * (1 - f), tv);
+      pa[k * 3] = tv.x; pa[k * 3 + 1] = tv.y; pa[k * 3 + 2] = tv.z;
+      const g = Math.pow(f, 1.7);
+      ca[k * 3] = b.col.r * (0.10 + 1.25 * g);
+      ca[k * 3 + 1] = b.col.g * (0.10 + 1.25 * g);
+      ca[k * 3 + 2] = b.col.b * (0.10 + 1.25 * g);
+    }
+    l.geometry.attributes.position.needsUpdate = true;
+    l.geometry.attributes.color.needsUpdate = true;
+  }
+}
+
+// ---- phase score: gather | braid | close pass | shed | reseed
+function saturation(phase) {
+  const s = Math.pow(Math.max(0, Math.sin(phase * Math.PI * 2)), 3);
+  return 0.70 + 0.30 * s;
+}
+
+function render(time) {
+  const t = ((time % DUR) + DUR) % DUR;
+  const phase = t / DUR, tau = phase * Math.PI * 2;
+
+  for (let i = 0; i < 3; i++) bodyPos(i, phase, bodies[i].pos);
+  writeTrails(phase);
+
+  bary.set(0, 0, 0);
+  let mt = 0;
+  for (const b of bodies) { bary.addScaledVector(b.pos, b.m); mt += b.m; }
+  bary.divideScalar(mt);
+  baryDot.position.copy(bary);
+
+  const sat = saturation(phase);
+  for (let i = 0; i < 3; i++) {
+    const b = bodies[i], c = cores[i];
+    c.core.position.copy(b.pos);
+    c.shell.position.copy(b.pos);
+    const micro = 1 + 0.18 * Math.sin(tau * 5 + i * 2.1);
+    c.shell.scale.setScalar(micro);
+    c.core.material.color.copy(b.col).multiplyScalar(1.15 + 0.55 * sat);
+    c.shell.material.color.copy(b.dim).lerp(b.col, 0.40 * sat);
+    c.shell.material.opacity = 0.24 + 0.20 * sat;
+    lines[i].material.opacity = 0.78 + 0.22 * sat;
+  }
+
+  for (let k = 0; k < 3; k++) {
+    const [i, j] = chordPairs[k];
+    const a = bodies[i].pos, c = bodies[j].pos;
+    const arr = chords[k].geometry.attributes.position.array;
+    arr[0] = a.x; arr[1] = a.y; arr[2] = a.z;
+    arr[3] = c.x; arr[4] = c.y; arr[5] = c.z;
+    chords[k].geometry.attributes.position.needsUpdate = true;
+    const d = a.distanceTo(c);
+    chords[k].material.opacity = (0.07 + 0.34 * Math.max(0, 1 - d / 4.4)) * sat;
+  }
+
+  // one camera move: slow drift on a wide arc, reframing the barycenter, never a body
+  const R = 13.6 + Math.sin(tau) * 1.7;
+  camera.position.set(
+    Math.cos(tau + 0.8) * R * 0.86,
+    2.4 + Math.sin(tau * 2) * 1.4,
+    Math.sin(tau + 0.8) * R
+  );
+  const look = bary.clone();
+  look.x += Math.sin(tau * 2) * 0.35;
+  camera.lookAt(look);
+  camera.up.set(Math.sin(tau) * 0.06, 1, 0).normalize();
+
+  composer.render();
+}
+
+let driven = false;
+let start = null;
+function loop(now) {
+  if (driven) return;
+  if (start === null) start = now;
+  render((now - start) / 1000);
+  requestAnimationFrame(loop);
+}
+
+render(0);
+
+if (typeof window !== 'undefined') {
+  window.renderFrame = (t) => { driven = true; render(t); };
+  window.animationDuration = DUR;
+  window.ready = true;
+  requestAnimationFrame(loop);
+}
+
+
+
+
+
+
+
+window.audioDuration = 64;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 90\\n// DURATION: 64\\n// FORM: A 0-4.5 | A1 4.5-10 | B 10-15 | A2 15-20 | A3 20-24 (24 cycles @ 90bpm = 64s)\\n// TONAL CENTER: E Dorian\\n// MOTIF: E4 G4 B4 (+F#4 A4 as displaced answer) — one-cycle cell grouped 3+3+2 eighths: E4 on the downbeat held 3/8, G4 on the 4th eighth held 3/8, B4 on the 7th eighth with the 8th eighth silent\\n// HARMONIC PLAN: A = Em9 pedal (E G B D F#) | A1 = Em9 to c7.5 then Cmaj9/E, bass E->C, pad holds G+B | B = Am11 (A C E G D), bass A then G at c13.5, B withheld from pad | A2 = Cmaj9/E then Em9add11 from c17.5, bass G->E, B recovered | A3 = Em9 pedal, identical voicing/register to A, bass E held\\n// PHRASE RULE: Shared 3+3+2 halftime cell — sub kick on beat 1, weighted kick on the 7th eighth, clap only on beat 3, rim tick one sixteenth late on the 5th eighth; kick placement never moves for 24 cycles, only density/clap/rim change. At every boundary the pad sustains a common tone (B, or G across section B) while the sub-bass moves by step; at most two dimensions change at once.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// ---- voice 1: rhythmic / drum engine — 3+3+2 halftime, placement locked all 24 cycles\\n$: s(\\\"\u003c[bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ bd ~]>*1\\\")\\n  .bank(\\\"RolandTR808\\\")\\n  .gain(\\\"\u003c0 0 0.3 0.3 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.34 0.3 0.3 0.28 0.28>\\\")\\n  .lpf(320).shape(0.12).room(0.22).orbit(0)\\n  .stack(\\n    s(\\\"\u003c[~ ~ ~ ~ [~ rim] ~ ~ ~] [~ ~ ~ ~ [~ rim] ~ ~ ~] [~ ~ ~ ~ [~ rim] ~ [~ rim] ~]>\\\")\\n      .bank(\\\"RolandCR78\\\")\\n      .gain(\\\"\u003c0 0 0.16 0.16 0.18 0.18 0.18 0.18 0.18 0.18 0.2 0.2 0.2 0.2 0.18 0.18 0.18 0.18 0.18 0.18 0.16 0.14 0.12 0.12>\\\")\\n      .hpf(900).lpf(4200).room(0.4).delay(0.18).orbit(0),\\n    s(\\\"\u003c[~ ~ ~ ~ [cp,sd] ~ ~ ~]>\\\")\\n      .bank(\\\"RolandTR808\\\")\\n      .gain(\\\"\u003c0 0 0 0 0.24 0.24 0.24 0.24 0.24 0.24 0 0 0.22 0.22 0.22 0.24 0.24 0.24 0.24 0.24 0.2 0.16 0 0>\\\")\\n      .lpf(2600).room(0.42).orbit(0)\\n  )\\n\\n// ---- voice 2: sub-bass foundation — the ember body. roots only, step or common tone: E -> C -> A -> G -> E\\n$: note(\\\"\u003ce1 e1 e1 e1 e1 e1 e1 [e1 ~ ~ e2] c2 c2 [c2 ~ ~ c2] a1 a1 a1 [a1 ~ ~ ~] g1 g1 g1 [g1 ~ ~ g2] e1 e1 e1 e1 e1 e1 e1 e1 e1>\\\")\\n  .s(\\\"sine\\\")\\n  .lpf(174).shape(0.2)\\n  .attack(0.08).release(1.6)\\n  .gain(0.22).room(0.2).orbit(1)\\n\\n// ---- voice 3: harmonic body — detuned saws, open 9ths, holds B (G through section B) across every boundary\\n$: note(\\\"\u003c[e3,b3,d4,f#4]!4 [e3,b3,d4,f#4] [e3,g3,b3,d4] [e3,g3,b3,d4] [e3,g3,b3,e4] [e3,g3,b3,d4] [c3,g3,b3,e4] [c3,g3,b3,e4] [c3,g3,b3,e4] [a3,c4,g4,d4] [a3,c4,g4,d4] [a3,c4,g4,d4] [g3,c4,d4,a4] [g3,c4,d4,a4] [c3,g3,b3,e4] [c3,g3,b3,e4] [c3,g3,b3,e4] [e3,g3,b3,a4] [e3,g3,b3,a4] [e3,g3,b3,d4] [e3,b3,d4,f#4] [e3,b3,d4,f#4] [e3,b3,d4,f#4]>\\\")\\n  .s(\\\"sawtooth\\\").detune(\\\"\u003c-7 7 -5 6>/8\\\")\\n  .lpf(sine.range(620, 1080).slow(12))\\n  .attack(0.6).release(3.2)\\n  .gain(0.11).room(0.72).roomsize(5).pan(0.42).orbit(2)\\n\\n// ---- voice 4: motif lead — filtered triangle, the only voice with silence around it, constant delay space\\n$: note(\\\"\u003c[e4@3 g4@3 b4@2] ~ [e4@3 g4@3 b4@2] ~ [e4@3 g4@3 b4@2] [~ ~ f#4@3 a4@3] [e4@3 g4@3 b4@2] [~ ~ f#4@3 a4@3] [e4@3 g4@3 b4@2] ~ [b4@2 g4@2 e4@2 ~@2] [e5@3 b5@3 g5@2] [b5@2 g5@2 e5@2 ~@2] [e5@3 b5@3 ~@2] [b4@3 g4@3 e4@2] [e3,e4]@1 [g3,g4]@1 [b3,b4]@1 [e3,e4]@1 [g3,g4]@1 [e4@4 g4@4] [e4@3 g4@3 ~@2] [e4@4 g4@4] [e4@4 ~@4]>\\\")\\n  .s(\\\"triangle\\\")\\n  .lpf(1900).slide(0.12)\\n  .attack(0.12).release(1.4)\\n  .gain(0.17).delay(0.42).delaytime(0.3333).delayfeedback(0.42).room(0.5).pan(0.6).orbit(3)\\n\\n// ---- voice 5: third-body canon — lead's exact pitches, 1.5 cycles late, never coincides. the pale violet body\\n$: note(\\\"\u003c~ ~ [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 g5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 b5@3 e6@3] [~@2 b5@3 e6@3] [~@2 g5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 g5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 b5@3] [~@2 g5@3 b5@3] [~@2 e5@3 b5@3] [~@2 e5@3 ~@3] ~ ~ ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .lpf(2400)\\n  .attack(0.05).release(2.2)\\n  .gain(0.06).room(0.7).roomsize(5).pan(0.28).orbit(4)\",\"bpm\":90,\"durationSec\":64,\"renderDurationSec\":67,\"cps\":0.375,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

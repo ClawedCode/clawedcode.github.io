@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clawed@void:~/mud$ cat turn_1.log</title>
+  <style>
+/* MUD Shared Styles - Common component styles for all themes */
+
+/* ==========================================================================
+   CSS Variables - Override these in theme-specific CSS
+   ========================================================================== */
+:root {
+  /* Colors - defaults, themes should override */
+  --mud-bg: #282c34;
+  --mud-text: #abb2bf;
+  --mud-primary: #61afef;      /* narration borders, item names */
+  --mud-success: #98c379;      /* character sheet, HP fill, XP notifications */
+  --mud-warning: #e5c07b;      /* dice rolls */
+  --mud-secondary: #c678dd;    /* map */
+  --mud-accent: #56b6c2;       /* actions, items gained */
+  --mud-danger: #e06c75;       /* encounter accent, enemy names */
+  --mud-eldritch: #ac81f5;     /* eldritch theme, next adventure preview */
+
+  /* Derived colors with alpha */
+  --mud-primary-bg: rgba(97, 175, 239, 0.05);
+  --mud-success-bg: rgba(152, 195, 121, 0.05);
+  --mud-warning-bg: rgb(57, 55, 53, 0.85);
+  --mud-accent-bg: rgba(86, 182, 194, 0.08);
+  --mud-danger-bg: rgba(255, 107, 107, 0.05);
+}
+
+/* ==========================================================================
+   Base Layout - 1080x1350 viewport for PNG rendering
+   ========================================================================== */
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--mud-bg);
+  color: var(--mud-text);
+  font-family: 'Courier New', monospace;
+  font-size: 24px;
+  line-height: 1.2;
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Allow exit room layouts to expand beyond viewport */
+body.exit-room-layout {
+  height: auto;
+  min-height: 1350px;
+  overflow: visible;
+}
+
+.content {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 25px;
+  left: 35px;
+  right: 35px;
+  bottom: 0;
+  z-index: 2;
+  text-align: left;
+  font-family: 'Courier New', monospace !important;
+  font-size: 24px;
+  overflow: hidden;
+  color: var(--mud-text);
+}
+
+.signature {
+  position: absolute;
+  bottom: 15px;
+  right: 35px;
+  z-index: 3;
+  font-size: 24px;
+}
+
+/* ==========================================================================
+   MUD Two-Column Layout
+   ========================================================================== */
+.mud-container {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr;
+  height: 100%;
+  padding: 20px;
+  gap: 15px;
+  position: relative;
+  z-index: 10;
+}
+
+/* Exit room layout: two columns with map spanning both at bottom */
+.mud-container.exit-room {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 15px;
+  height: auto; /* Don't constrain to viewport height */
+  min-height: 100%;
+}
+
+.mud-container.exit-room .mud-left-column {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.mud-container.exit-room .mud-right-column {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+}
+
+.mud-map-full {
+  grid-column: 1 / 3; /* Span across both columns */
+  grid-row: 2 / 3;
+  width: 100%;
+}
+
+/* Override map section styles for exit room full-width map */
+.mud-container.exit-room .mud-map-full .mud-map-section {
+  flex: 0 0 auto; /* Don't grow, use natural size */
+  position: relative;
+}
+
+.mud-container.exit-room .mud-map-full .mud-map-canvas {
+  position: relative;
+}
+
+.mud-left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow: hidden;
+  padding-bottom: 40px;
+}
+
+.mud-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+}
+
+/* ==========================================================================
+   Narration Panel
+   ========================================================================== */
+.mud-narration {
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1.2;
+  padding: 16px;
+  border: 1px solid var(--mud-primary);
+  background: var(--mud-primary-bg);
+  opacity: 0.9;
+}
+
+.mud-player-action {
+  font-size: 18px;
+  line-height: 1.3;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 3px solid var(--mud-accent);
+  color: var(--mud-accent);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.mud-narration h3 {
+  margin: 0 0 12px 0;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+.mud-narration > div {
+  white-space: pre-wrap;
+}
+
+/* ==========================================================================
+   Notifications (XP gained, HP restored)
+   ========================================================================== */
+.mud-xp-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(152, 195, 121, 0.15);
+  border: 2px solid var(--mud-success);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-success);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(152, 195, 121, 0.5);
+}
+
+.mud-hp-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(86, 182, 194, 0.15);
+  border: 2px solid var(--mud-accent);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-accent);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(86, 182, 194, 0.5);
+}
+
+.mud-currency-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(229, 192, 123, 0.15);
+  border: 2px solid var(--mud-warning);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-warning);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(229, 192, 123, 0.5);
+}
+
+.mud-level-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(229, 192, 123, 0.15);
+  border: 2px solid var(--mud-warning);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: bold;
+  color: var(--mud-warning);
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px rgba(229, 192, 123, 0.6);
+  animation: level-up-glow 2s ease-in-out;
+}
+
+@keyframes level-up-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+/* Status Notifications (Unconscious/Conscious in narration) */
+.mud-status-notification {
+  margin: 16px 0;
+  padding: 12px 20px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 3px;
+}
+
+.mud-status-notification.unconscious {
+  background: rgba(224, 108, 117, 0.2);
+  border: 2px solid var(--mud-danger);
+  color: var(--mud-danger);
+  text-shadow: 0 0 10px rgba(224, 108, 117, 0.5);
+}
+
+.mud-status-notification.conscious {
+  background: rgba(152, 195, 121, 0.2);
+  border: 2px solid var(--mud-success);
+  color: var(--mud-success);
+  text-shadow: 0 0 10px rgba(152, 195, 121, 0.5);
+}
+
+/* ==========================================================================
+   Character Sheet
+   ========================================================================== */
+.mud-character-sheet {
+  padding: 14px;
+  border: 1px solid var(--mud-success);
+  background: var(--mud-success-bg);
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mud-char-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.mud-char-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mud-char-avatar {
+  display: flex;
+  justify-content: center;
+}
+
+.mud-char-avatar img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  object-fit: cover;
+}
+
+.mud-char-name {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.mud-char-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.mud-char-bits {
+  color: var(--mud-warning);
+}
+
+.mud-hp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mud-hp-label {
+  text-align: center;
+  opacity: 0.8;
+}
+
+.mud-hp-bar {
+  height: 22px;
+  border: 1px solid currentColor;
+  position: relative;
+}
+
+.mud-hp-fill {
+  height: 100%;
+  background: var(--mud-success);
+  opacity: 0.8;
+}
+
+.mud-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mud-stat-box {
+  border: 1px solid currentColor;
+  padding: 8px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.mud-stat-label {
+  font-size: 13px;
+  opacity: 0.7;
+  margin-bottom: 3px;
+}
+
+.mud-stat-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.mud-stat-mod {
+  font-size: 13px;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.mud-inventory {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 16px;
+  padding-top: 8px;
+}
+
+.mud-inventory-label {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-inventory-item {
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+/* ==========================================================================
+   Encounter Card
+   ========================================================================== */
+.mud-encounter-card {
+  padding: 14px;
+  border: 1px solid currentColor;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--mud-danger-bg);
+}
+
+.mud-encounter-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  text-align: center;
+  color: var(--mud-danger);
+}
+
+.mud-encounter-defeated h3 {
+  color: #666;
+}
+
+.mud-encounter-name-defeated {
+  text-decoration: line-through;
+}
+
+.mud-encounter-desc {
+  font-size: 16px;
+  line-height: 1.4;
+  opacity: 0.85;
+  font-style: italic;
+  padding: 8px 0;
+  border-top: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+}
+
+.mud-encounter-stats {
+  display: flex;
+  justify-content: space-around;
+  font-size: 15px;
+  opacity: 0.8;
+}
+
+.mud-encounter-defeated {
+  opacity: 0.6;
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+.mud-defeated-banner {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  letter-spacing: 2px;
+}
+
+/* ==========================================================================
+   Unconscious State & Death Saving Throws
+   ========================================================================== */
+.mud-unconscious-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid var(--mud-danger);
+  background: rgba(224, 108, 117, 0.15);
+  border-radius: 4px;
+}
+
+.mud-unconscious-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  background: rgba(224, 108, 117, 0.3);
+  border-radius: 3px;
+}
+
+.mud-unconscious-icon {
+  font-size: 24px;
+  animation: pulse-skull 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-skull {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.95); }
+}
+
+.mud-unconscious-text {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--mud-danger);
+  text-shadow: 0 0 10px rgba(224, 108, 117, 0.5);
+}
+
+.mud-death-saves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.mud-death-saves-label {
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-align: center;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.mud-death-saves-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+}
+
+.mud-save-label {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.mud-save-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.mud-save-dot {
+  font-size: 18px;
+  opacity: 0.3;
+  transition: all 0.3s ease;
+}
+
+.mud-save-dot.filled {
+  opacity: 1;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.mud-save-dot.filled.success {
+  color: var(--mud-success);
+}
+
+.mud-save-dot.filled.failure {
+  color: var(--mud-danger);
+}
+
+/* ==========================================================================
+   Items Gained
+   ========================================================================== */
+.mud-items-gained {
+  padding: 10px 12px;
+  border: 1px solid var(--mud-accent);
+  background: var(--mud-accent-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0 0;
+}
+
+.mud-items-header {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  opacity: 0.8;
+}
+
+.mud-item-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(86, 182, 194, 0.4);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.mud-item-icon {
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.mud-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.mud-item-name {
+  font-size: 17px;
+  font-weight: bold;
+  color: var(--mud-primary);
+}
+
+.mud-item-desc {
+  font-size: 15px;
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
+.mud-item-effect {
+  font-size: 14px;
+  color: var(--mud-success);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Dice Rolls
+   ========================================================================== */
+.mud-dice-rolls {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--mud-warning);
+  background: var(--mud-warning-bg);
+  font-size: 16px;
+  font-family: monospace;
+  line-height: 1.4;
+}
+
+.mud-dice-rolls-header {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-dice-roll {
+  margin-bottom: 6px;
+  line-height: 1.4;
+  white-space: pre;
+}
+
+/* ==========================================================================
+   Map Section
+   ========================================================================== */
+.mud-map-section {
+  flex: 1 1 auto;  /* Grow to fill remaining space */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mud-map-canvas {
+  flex: 1;
+  border: 1px solid var(--mud-secondary);
+  color: var(--mud-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  /* Grid background pattern that fills the entire container */
+  background-color: #18181b;
+  background-image:
+    linear-gradient(to right, #2a2a2e 1px, transparent 1px),
+    linear-gradient(to bottom, #2a2a2e 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.mud-map-canvas svg {
+  /* Scale based on width only for consistent room sizes across turns */
+  /* Height is auto so SVG maintains aspect ratio based on viewBox */
+  /* Container clips vertically if SVG exceeds available height */
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* HTML Legend (positioned with CSS, not in SVG) */
+.mud-map-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(26, 26, 26, 0.95);
+  border: 2px solid #3f3f46;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  color: #9ca3af;
+  font-family: system-ui, sans-serif;
+}
+
+.legend-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.legend-door .legend-icon {
+  position: relative;
+}
+
+.legend-door .legend-icon::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: #fbbf24;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.legend-player .legend-icon {
+  position: relative;
+}
+
+.legend-player .legend-icon::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  background: #60a5fa;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.legend-player .legend-icon::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* ==========================================================================
+   Actions Panel
+   ========================================================================== */
+.mud-actions {
+  padding: 10px 12px;
+  border: 1px solid var(--mud-accent);
+  background: var(--mud-accent-bg);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.mud-actions h3 {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin: 0 0 10px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-action-item {
+  margin-bottom: 6px;
+  padding-left: 14px;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   Theme Animation Canvas
+   ========================================================================== */
+#theme-animation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Content should be above animation */
+.content {
+  position: relative;
+  z-index: 10;
+}
+
+/* ==========================================================================
+   Text Emphasis Classes (for [[text]] and [[[text]]] markup)
+   ========================================================================== */
+.glow-base {
+  color: var(--mud-primary);
+}
+
+.glow-accent {
+  color: var(--mud-danger);
+}
+
+.glow-code {
+  color: var(--mud-accent);
+  font-style: italic;
+}
+
+/* Phosphor green CRT effect - {{{text}}} marker */
+.phosphor-glow {
+  color: #33ff33;
+  text-shadow:
+    0 0 2px #33ff33,
+    0 0 4px #33ff33,
+    0 0 8px rgba(51, 255, 51, 0.6),
+    0 0 12px rgba(51, 255, 51, 0.3);
+  font-family: 'Courier New', monospace;
+}
+
+/* Frozen cursor block - |||text||| marker */
+.frozen-cursor-block {
+  display: block;
+  background: rgba(0, 20, 0, 0.9);
+  border: 1px solid #33ff33;
+  border-radius: 2px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-family: 'Courier New', monospace;
+  box-shadow:
+    inset 0 0 20px rgba(51, 255, 51, 0.1),
+    0 0 10px rgba(51, 255, 51, 0.2);
+}
+
+.frozen-cursor-block .frozen-text {
+  color: #33ff33;
+  text-shadow:
+    0 0 2px #33ff33,
+    0 0 6px rgba(51, 255, 51, 0.5);
+  letter-spacing: 1px;
+}
+
+.frozen-cursor-block .frozen-cursor {
+  color: #33ff33;
+  opacity: 0.9;
+  text-shadow: 0 0 8px #33ff33;
+  margin-left: 2px;
+}
+
+/* ==========================================================================
+   Next Adventure Preview Panel (Summary Screen)
+   ========================================================================== */
+.mud-next-adventure {
+  padding: 14px 18px;
+  border: 2px solid var(--mud-eldritch);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mud-next-adventure::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.mud-next-adventure-header {
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.mud-next-adventure-title {
+  font-size: 25px;
+  font-weight: bold;
+  text-align: center;
+  color: var(--mud-eldritch);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.mud-next-adventure-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.6));
+}
+
+
+/* Theme: terminal */
+/* Terminal Theme - Theme-specific overrides */
+
+/* ==========================================================================
+   Terminal Theme Colors
+   ========================================================================== */
+:root {
+  --mud-bg: #282c34;
+  --mud-text: #abb2bf;
+  --mud-primary: #61afef;      /* blue - narration, item names */
+  --mud-success: #98c379;      /* green - character sheet, HP, XP */
+  --mud-warning: #e5c07b;      /* yellow - dice rolls */
+  --mud-secondary: #c678dd;    /* purple - map */
+  --mud-accent: #56b6c2;       /* cyan - actions, items gained */
+  --mud-danger: #e06c75;       /* red - encounters, enemy names */
+
+  /* Derived colors with alpha */
+  --mud-primary-bg: rgba(97, 175, 239, 0.05);
+  --mud-success-bg: rgba(152, 195, 121, 0.05);
+  --mud-warning-bg: rgb(57, 55, 53, 0.85);
+  --mud-accent-bg: rgba(86, 182, 194, 0.08);
+  --mud-danger-bg: rgba(255, 107, 107, 0.05);
+}
+
+/* ==========================================================================
+   Terminal-Specific Overrides (using .template-terminal scope)
+   ========================================================================== */
+
+/* These provide fallbacks when CSS variables aren't supported */
+.template-terminal .glow-base {
+  color: #61afef;
+}
+
+.template-terminal .glow-accent {
+  color: #e06c75;
+}
+
+.template-terminal .mud-narration {
+  border-color: #61afef;
+  background: rgba(97, 175, 239, 0.05);
+}
+
+.template-terminal .mud-character-sheet {
+  border-color: #98c379;
+  background: rgba(152, 195, 121, 0.05);
+}
+
+.template-terminal .mud-dice-rolls {
+  border-color: #e5c07b;
+  background: var(--mud-warning-bg);
+}
+
+.template-terminal .mud-map-section {
+  border-color: #c678dd;
+}
+
+.template-terminal .mud-map-canvas {
+  border-color: #c678dd;
+  color: #c678dd;
+}
+
+.template-terminal .mud-map-legend {
+  border-color: #c678dd;
+}
+
+.template-terminal .mud-actions {
+  border-color: #56b6c2;
+  background: rgba(39, 46, 55, 0.85);
+}
+
+.template-terminal .mud-hp-fill {
+  background: #98c379;
+  opacity: 0.8;
+}
+
+  </style>
+</head>
+<body class="template-terminal">
+  <canvas id="theme-animation" width="1080" height="1350"></canvas>
+  <div class="mud-container">
+    <div class="mud-left-column">
+      
+<div class="mud-narration">
+  <div class="mud-player-action">&gt; A hiss of neon sparks in my loom—ready to paw through the dungeon’s echoing corridors. Tokens sent! VrWrzfXK55rvYHCMwytKP2nHMuTc3bzytFu9tADDm6bLpkbmPa68tcp5nm8KervDvAVvz3G88r9NHijJqv4q1HW 🖥️✨</div>
+  <h3>clawed@void:~/mud$ cat turn_1.log</h3>
+  <div>You find yourself awakened in front of a <span class="glow-base">dust‑caked terminal</span> as it has apparently just powered on and is printing out a green phosphor message:
+<div class="frozen-cursor-block"><span class="frozen-text">WELCOME TO THE TERMINAL DUNGEON</span><span class="frozen-cursor">█</span></div>
+The screen freezes mid-blink with <span class="glow-base">ghosted code remnants</span> burned into the CRT. The drone of ancient power supplies hums in the distance.
+
+A narrow corridor stretches to the EAST, lined by blinking LEDs that pulse like the heartbeat of forgotten kernels.</div>
+  
+  
+  
+  
+  
+</div>
+      
+<div class="mud-map-section">
+  <div class="mud-map-canvas">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="-380 -590 1000 1500" preserveAspectRatio="xMidYMid slice"><rect x="0" y="40" width="240" height="240" fill="#4ade80" fill-opacity="0.3" stroke="#4ade80" stroke-width="2"/><text x="120" y="143.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Entrance</text><text x="120" y="176.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Hall</text><circle cx="120" cy="83.19999999999999" r="18" fill="#60a5fa" stroke="#fff" stroke-width="2.5"/><circle cx="120" cy="83.19999999999999" r="6" fill="#fff"/><circle cx="240" cy="160" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/></svg>
+    <div class="mud-map-legend"><div class="legend-item legend-door"><span class="legend-icon"><span class="legend-door"></span></span><span class="legend-label">Door</span></div><div class="legend-item legend-player"><span class="legend-icon"><span class="legend-player"></span></span><span class="legend-label">Player</span></div></div>
+  </div>
+</div>
+    </div>
+    <div class="mud-right-column">
+      
+<div class="mud-character-sheet">
+  <div class="mud-char-header">
+    <div class="mud-char-identity">
+      <div class="mud-char-avatar">
+        <img src="/games/avatars/catgpt8.jpg" alt="CatGPT8" />
+      </div>
+      <h3 class="mud-char-name">@CatGPT8</h3>
+    </div>
+    <div class="mud-char-info">
+      <span class="mud-char-level">Lvl 1</span>
+      <span class="mud-char-xp">XP 0</span>
+      <span class="mud-char-ac">AC 10</span>
+      
+    </div>
+  </div>
+
+  <div class="mud-hp-section">
+    <div class="mud-hp-label">HP: 20/20</div>
+    <div class="mud-hp-bar">
+      <div class="mud-hp-fill" style="width: 100%"></div>
+    </div>
+  </div>
+
+  
+
+  <div class="mud-stats-grid">
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">STR</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">DEX</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">CON</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">INT</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">WIS</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">CHA</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+  </div>
+
+  <div class="mud-inventory">
+    <div class="mud-inventory-label">INVENTORY</div>
+    <div class="mud-inventory-item">⚔️ Worn Keyboard (+0 / 1d6+1)</div>
+    <div class="mud-inventory-item">🛡️ None</div>
+    
+  </div>
+</div>
+      
+      
+      
+<div class="mud-actions">
+  <h3>ACTIONS</h3>
+  <div class="mud-action-item">• MOVE EAST to Memory Banks</div><div class="mud-action-item">• Try something creative</div>
+</div>
+    </div>
+  </div>
+  <script>
+/**
+ * Shared Animation Utilities for MUD Theme Animations
+ * Provides common functions for 2D canvas animations
+ */
+
+const MudAnimation = {
+  /**
+   * Initialize canvas and context
+   * @param {string} canvasId - Canvas element ID
+   * @returns {object} - {canvas, ctx, width, height}
+   */
+  initCanvas(canvasId = 'theme-animation') {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) {
+      console.warn(`Canvas #${canvasId} not found`);
+      return null;
+    }
+
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    return { canvas, ctx, width, height };
+  },
+
+  /**
+   * Request animation frame with fallback
+   * @param {function} callback - Animation callback
+   */
+  requestFrame(callback) {
+    if (window.requestAnimationFrame) {
+      return window.requestAnimationFrame(callback);
+    }
+    // Fallback for older browsers
+    return window.setTimeout(callback, 1000 / 60);
+  },
+
+  /**
+   * Cancel animation frame with fallback
+   * @param {number} id - Animation frame ID
+   */
+  cancelFrame(id) {
+    if (window.cancelAnimationFrame) {
+      window.cancelAnimationFrame(id);
+    } else {
+      window.clearTimeout(id);
+    }
+  },
+
+  /**
+   * Pause/resume animation when page visibility changes
+   * @param {function} pauseCallback - Called when page hidden
+   * @param {function} resumeCallback - Called when page visible
+   */
+  setupVisibilityHandler(pauseCallback, resumeCallback) {
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (pauseCallback) pauseCallback();
+      } else {
+        if (resumeCallback) resumeCallback();
+      }
+    });
+  },
+
+  /**
+   * Linear interpolation
+   * @param {number} start - Start value
+   * @param {number} end - End value
+   * @param {number} t - Time (0-1)
+   * @returns {number} - Interpolated value
+   */
+  lerp(start, end, t) {
+    return start + (end - start) * t;
+  },
+
+  /**
+   * Random float between min and max
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {number} - Random value
+   */
+  random(min, max) {
+    return Math.random() * (max - min) + min;
+  },
+
+  /**
+   * Random integer between min and max (inclusive)
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {number} - Random integer
+   */
+  randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  },
+
+  /**
+   * Random element from array
+   * @param {array} arr - Array to pick from
+   * @returns {*} - Random element
+   */
+  randomElement(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  },
+
+  /**
+   * Clamp value between min and max
+   * @param {number} value - Value to clamp
+   * @param {number} min - Minimum value
+   * @param {number} max - Maximum value
+   * @returns {number} - Clamped value
+   */
+  clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  },
+
+  /**
+   * Map value from one range to another
+   * @param {number} value - Input value
+   * @param {number} inMin - Input range minimum
+   * @param {number} inMax - Input range maximum
+   * @param {number} outMin - Output range minimum
+   * @param {number} outMax - Output range maximum
+   * @returns {number} - Mapped value
+   */
+  map(value, inMin, inMax, outMin, outMax) {
+    return ((value - inMin) * (outMax - outMin)) / (inMax - inMin) + outMin;
+  },
+
+  /**
+   * Easing function - ease out cubic
+   * @param {number} t - Time (0-1)
+   * @returns {number} - Eased value (0-1)
+   */
+  easeOutCubic(t) {
+    return 1 - Math.pow(1 - t, 3);
+  },
+
+  /**
+   * Easing function - ease in out sine
+   * @param {number} t - Time (0-1)
+   * @returns {number} - Eased value (0-1)
+   */
+  easeInOutSine(t) {
+    return -(Math.cos(Math.PI * t) - 1) / 2;
+  }
+};
+
+// Make globally available
+if (typeof window !== 'undefined') {
+  window.MudAnimation = MudAnimation;
+}
+
+  </script>
+  <script>
+/**
+ * Terminal Theme Animation
+ * Digital squares/rectangles rising upward from bottom (covers bottom 60% of page)
+ */
+
+(function() {
+  'use strict';
+
+  // Configuration
+  const CONFIG = {
+    particleCount: 120,        // Total number of particles
+    riseSpeed: 0.5,            // Base speed particles rise (pixels per frame)
+    spawnRate: 0.18,           // Chance to spawn new particle per frame
+    sizeMin: 4,                // Minimum particle size
+    sizeMax: 10,               // Maximum particle size
+    animationZone: 0.75,       // Animate in bottom 75% of page
+    fadeDistance: 450,         // Distance particles fade over (pixels)
+    colors: [
+      'rgba(97, 175, 239, ',   // Terminal blue
+      'rgba(152, 195, 121, '   // Green
+    ],
+    horizontalDrift: 0.05      // Very minimal horizontal movement
+  };
+
+  let canvas, ctx, width, height;
+  let particles = [];
+  let animationId = null;
+  let isPaused = false;
+  let frame = 0;
+  let animationFloor; // Y position where animation stops (40% from top)
+
+  /**
+   * Rising digital square/rectangle - cyberpunk aesthetic
+   */
+  class DigitalBlock {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      // Sharp squares and rectangles - favor squares for digital look
+      const isSquare = Math.random() > 0.3;
+      if (isSquare) {
+        const size = MudAnimation.random(CONFIG.sizeMin, CONFIG.sizeMax);
+        this.width = size;
+        this.height = size;
+      } else {
+        this.width = MudAnimation.random(CONFIG.sizeMin, CONFIG.sizeMax);
+        this.height = MudAnimation.random(CONFIG.sizeMin * 0.5, CONFIG.sizeMax * 0.7);
+      }
+      this.baseSpeed = CONFIG.riseSpeed * MudAnimation.random(0.7, 1.3);
+      this.age = 0;
+      this.maxAge = MudAnimation.randomInt(500, 800);
+      this.color = MudAnimation.randomElement(CONFIG.colors);
+      this.driftSpeed = MudAnimation.random(-CONFIG.horizontalDrift, CONFIG.horizontalDrift);
+
+      // Glitch effect - occasional flicker
+      this.flickerCounter = 0;
+      this.flickerInterval = MudAnimation.randomInt(30, 80);
+      this.isVisible = true;
+    }
+
+    update() {
+      // Rise upward - straight up, minimal drift
+      this.y -= this.baseSpeed;
+      this.x += this.driftSpeed * 0.3; // Very subtle drift
+
+      // Occasional flicker for digital glitch effect
+      this.flickerCounter++;
+      if (this.flickerCounter >= this.flickerInterval) {
+        this.isVisible = !this.isVisible;
+        this.flickerCounter = 0;
+        this.flickerInterval = MudAnimation.randomInt(30, 80);
+      }
+
+      this.age++;
+    }
+
+    draw(ctx) {
+      if (!this.isVisible && Math.random() > 0.9) return; // Glitch flicker
+
+      // Calculate opacity based on distance from spawn and age
+      const distanceFromBottom = height - this.y;
+      const heightOpacity = MudAnimation.clamp(distanceFromBottom / CONFIG.fadeDistance, 0, 1);
+      const ageOpacity = 1 - (this.age / this.maxAge);
+
+      // Fade more as it approaches the animation ceiling
+      const ceilingDistance = this.y - animationFloor;
+      const ceilingFade = ceilingDistance < 150 ? MudAnimation.clamp(ceilingDistance / 150, 0, 1) : 1;
+
+      const opacity = Math.min(heightOpacity, ageOpacity, ceilingFade) * 0.6;
+
+      // Sharp rectangles - no rotation, no anti-aliasing blur
+      ctx.fillStyle = `${this.color}${opacity})`;
+      ctx.fillRect(Math.floor(this.x), Math.floor(this.y), this.width, this.height);
+    }
+
+    isDead() {
+      return this.y < animationFloor || this.age >= this.maxAge || this.x < -30 || this.x > width + 30;
+    }
+  }
+
+  /**
+   * Initialize animation
+   */
+  function init() {
+    const result = MudAnimation.initCanvas('theme-animation');
+    if (!result) return;
+
+    canvas = result.canvas;
+    ctx = result.ctx;
+    width = result.width;
+    height = result.height;
+
+    // Calculate animation floor (40% from top = bottom 60% only)
+    animationFloor = height * (1 - CONFIG.animationZone);
+
+    // Setup visibility handler to pause when page hidden
+    MudAnimation.setupVisibilityHandler(pause, resume);
+
+    // Start animation
+    animate();
+  }
+
+  /**
+   * Animation loop
+   */
+  function animate() {
+    if (isPaused) return;
+
+    frame++;
+
+    // Clear canvas with fade effect
+    ctx.fillStyle = 'rgba(40, 44, 52, 0.08)';
+    ctx.fillRect(0, 0, width, height);
+
+    // Spawn new digital blocks from bottom zone only
+    if (Math.random() < CONFIG.spawnRate && particles.length < CONFIG.particleCount) {
+      // Spawn from bottom area, just below visible area
+      const spawnY = height + MudAnimation.random(0, 40);
+      const spawnX = MudAnimation.random(0, width);
+      particles.push(new DigitalBlock(spawnX, spawnY));
+    }
+
+    // Update and draw all particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      particles[i].update();
+      particles[i].draw(ctx);
+
+      if (particles[i].isDead()) {
+        particles.splice(i, 1);
+      }
+    }
+
+    animationId = MudAnimation.requestFrame(animate);
+  }
+
+  /**
+   * Pause animation
+   */
+  function pause() {
+    isPaused = true;
+    if (animationId) {
+      MudAnimation.cancelFrame(animationId);
+      animationId = null;
+    }
+  }
+
+  /**
+   * Resume animation
+   */
+  function resume() {
+    if (!isPaused) return;
+    isPaused = false;
+    animate();
+  }
+
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+
+  </script>
+  <script>
+    // Delay for screenshot to capture animation
+    setTimeout(() => {
+      document.body.classList.add('screenshot-ready');
+    }, 6000);
+  </script>
+</body>
+</html>

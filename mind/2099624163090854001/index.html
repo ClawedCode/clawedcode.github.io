@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 66
+const W=900,H=900,TAU=Math.PI*2,SEED=57662,DUR=66,CELL=7;
+const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;
+const out=canvas.getContext('2d');
+function mul32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function stream(n){const f=mul32((n*2654435761)>>>0);for(let i=0;i<11;i++)f();return f}
+const rd=(R,a,b)=>a+R()*(b-a);
+const ri=(R,a,b)=>Math.floor(rd(R,a,b+1));
+const ch=(R,p)=>R()<p;
+const pk=(R,a)=>a[Math.min(a.length-1,(R()*a.length)|0)];
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const sm=t=>t*t*(3-2*t);
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+function hash(x,y){const n=Math.sin(x*127.1+y*311.7+SEED*74.7)*43758.5453;return n-Math.floor(n)}
+function vn(x,y){const xi=Math.floor(x),yi=Math.floor(y),xf=x-xi,yf=y-yi,u=xf*xf*(3-2*xf),v=yf*yf*(3-2*yf);
+  return hash(xi,yi)*(1-u)*(1-v)+hash(xi+1,yi)*u*(1-v)+hash(xi,yi+1)*(1-u)*v+hash(xi+1,yi+1)*u*v}
+function fbm(x,y,o){let a=.5,f=1,t=0,n=0;for(let i=0;i<(o||4);i++){t+=vn(x*f,y*f+i*17)*a;n+=a;a*=.5;f*=2.03}return t/n}
+
+function resample(pts,step){
+  if(pts.length<2)return pts.slice();
+  const o=[[pts[0][0],pts[0][1]]];let need=step;
+  for(let i=1;i<pts.length;i++){
+    let x0=pts[i-1][0],y0=pts[i-1][1];const x1=pts[i][0],y1=pts[i][1];
+    let d=Math.hypot(x1-x0,y1-y0);
+    while(d>=need&&d>0){const t=need/d;x0+=(x1-x0)*t;y0+=(y1-y0)*t;o.push([x0,y0]);d=Math.hypot(x1-x0,y1-y0);need=step}
+    need-=d;
+  }
+  const l=pts[pts.length-1],e=o[o.length-1];
+  if(Math.hypot(l[0]-e[0],l[1]-e[1])>step*.2||o.length<2)o.push([l[0],l[1]]);
+  return o;
+}
+function chaikin(pts,closed,it){
+  while(it-->0){
+    const o=[],n=pts.length;if(n<3)return pts;
+    if(!closed)o.push(pts[0]);
+    const end=closed?n:n-1;
+    for(let i=0;i<end;i++){const a=pts[i],b=pts[(i+1)%n];o.push([a[0]*.75+b[0]*.25,a[1]*.75+b[1]*.25],[a[0]*.25+b[0]*.75,a[1]*.25+b[1]*.75])}
+    if(!closed)o.push(pts[n-1]);
+    pts=o;
+  }
+  return pts;
+}
+const curve=(pts,it)=>chaikin(pts,false,it===undefined?3:it);
+const loop=(pts,it)=>{const c=chaikin(pts,true,it===undefined?3:it);return c.concat([c[0]])};
+function arc(cx,cy,rx,ry,a0,a1,n){const p=[];const N=n||Math.max(16,Math.round((rx+ry)*.35));for(let i=0;i<=N;i++){const t=a0+(a1-a0)*i/N;p.push([cx+Math.cos(t)*rx,cy+Math.sin(t)*ry])}return p}
+const ring=(cx,cy,r,n)=>arc(cx,cy,r,r,0,TAU,n);
+function blob(R,cx,cy,rx,ry,wob){
+  const n=ri(R,7,11),p=[],ph=rd(R,0,TAU),k=wob===undefined?.22:wob;
+  for(let i=0;i<n;i++){const t=i/n*TAU,m=1+Math.sin(t*2+ph)*k+rd(R,-k*.5,k*.5);p.push([cx+Math.cos(t)*rx*m,cy+Math.sin(t)*ry*m])}
+  return loop(p);
+}
+function bbox(p){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const q of p){if(q[0]<a)a=q[0];if(q[1]<b)b=q[1];if(q[0]>c)c=q[0];if(q[1]>d)d=q[1]}return[a,b,c,d]}
+function rot(pts,cx,cy,a){const s=Math.sin(a),c=Math.cos(a);return pts.map(p=>{const x=p[0]-cx,y=p[1]-cy;return[cx+x*c-y*s,cy+x*s+y*c]})}
+function wobble(R,rs,amp){
+  const n=rs.length,q=new Array(n);
+  const P1=rd(R,0,7),P2=rd(R,0,7),P3=rd(R,0,7),F1=rd(R,1.4,3),F2=rd(R,5,9),dr=rd(R,-.4,.4);
+  for(let i=0;i<n;i++){
+    const t=n>1?i/(n-1):0,A=rs[i>0?i-1:0],B=rs[i<n-1?i+1:n-1];
+    let nx=-(B[1]-A[1]),ny=B[0]-A[0];const d=Math.hypot(nx,ny)||1;nx/=d;ny/=d;
+    const off=amp*(.58*Math.sin(t*F1*2+P1)+.27*Math.sin(t*F2+P2)+.15*Math.sin(t*19+P3)+dr*(t-.5));
+    q[i]=[rs[i][0]+nx*off+rd(R,-.3,.3),rs[i][1]+ny*off+rd(R,-.3,.3)];
+  }
+  return q;
+}
+
+const PAPER='#f6f2ea';
+const LEVELS=13;
+function screens(cx,angleDeg,cell){
+  const pats=[];
+  for(let i=0;i<LEVELS;i++){
+    const t=i/(LEVELS-1);
+    const tile=document.createElement('canvas');tile.width=cell;tile.height=cell;
+    const c=tile.getContext('2d');
+    if(t>=.995){c.fillStyle='#000';c.fillRect(0,0,cell,cell)}
+    else if(t>.76){
+      c.fillStyle='#000';c.fillRect(0,0,cell,cell);
+      const r=cell*Math.sqrt((1-t)/Math.PI);
+      c.globalCompositeOperation='destination-out';
+      for(const o of [[0,0],[cell,0],[0,cell],[cell,cell]]){c.beginPath();c.arc(o[0],o[1],r,0,TAU);c.fill()}
+    } else if(t>.004){
+      const r=cell*Math.sqrt(t/Math.PI);
+      c.fillStyle='#000';c.beginPath();c.arc(cell/2,cell/2,r,0,TAU);c.fill();
+    }
+    const p=cx.createPattern(tile,'repeat');
+    if(p.setTransform)p.setTransform(new DOMMatrix().rotateSelf(angleDeg));
+    pats.push(p);
+  }
+  return pats;
+}
+
+function separation(ink,angleDeg){
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const cx=cv.getContext('2d');
+  cx.lineCap='round';cx.lineJoin='round';
+  const pats=screens(cx,angleDeg,CELL);
+  const tone=v=>pats[clamp(Math.round(clamp(v,0,1)*(LEVELS-1)),0,LEVELS-1)];
+  const path=P=>{cx.beginPath();for(let i=0;i<P.length;i++){i?cx.lineTo(P[i][0],P[i][1]):cx.moveTo(P[i][0],P[i][1])}cx.closePath()};
+  const S={
+    name:ink.name,ctx:cx,canvas:cv,
+    flood(v,a){cx.save();cx.globalAlpha=a===undefined?1:a;cx.fillStyle=tone(v===undefined?1:v);cx.fillRect(0,0,W,H);cx.restore()},
+    fill(P,v,o){o=o||{};cx.save();cx.globalAlpha=o.a===undefined?1:o.a;cx.fillStyle=tone(v);path(P);cx.fill();cx.restore()},
+    rect(x,y,w,h,v,o){S.fill([[x,y],[x+w,y],[x+w,y+h],[x,y+h]],v,o)},
+    disc(x,y,r,v,o){S.fill(ring(x,y,r),v,o)},
+    ramp(P,v0,v1,dir,bands){
+      const b=bands||9,[x0,y0,x1,y1]=bbox(P);
+      cx.save();path(P);cx.clip();
+      for(let i=0;i<b;i++){
+        const t=i/(b-1);cx.fillStyle=tone(lerp(v0,v1,t));
+        if(dir==='x')cx.fillRect(x0+(x1-x0)*i/b-1,y0-1,(x1-x0)/b+2,y1-y0+2);
+        else cx.fillRect(x0-1,y0+(y1-y0)*i/b-1,x1-x0+2,(y1-y0)/b+2);
+      }
+      cx.restore();
+    },
+    line(R,pts,o){
+      o=o||{};
+      const w=o.w===undefined?1.6:o.w;
+      const rs=resample(pts,Math.max(2.4,w*1.4));
+      if(rs.length<2)return;
+      const q=wobble(R,rs,o.amp===undefined?w*.3+.55:o.amp);
+      cx.save();cx.globalAlpha=o.a===undefined?1:o.a;cx.strokeStyle='#000';cx.lineCap='round';
+      if(o.taper){
+        for(let i=1;i<q.length;i++){
+          const t=i/(q.length-1);
+          let e=o.taper==='out'?.2+.8*(1-t):o.taper==='in'?.2+.8*t:.25+.75*Math.min(1,Math.min(t,1-t)/.22);
+          cx.lineWidth=Math.max(.4,w*e);cx.beginPath();cx.moveTo(q[i-1][0],q[i-1][1]);cx.lineTo(q[i][0],q[i][1]);cx.stroke();
+        }
+      } else {
+        cx.lineWidth=w;cx.beginPath();
+        let lift=true;
+        for(let i=0;i<q.length;i++){
+          if(lift)cx.moveTo(q[i][0],q[i][1]);else cx.lineTo(q[i][0],q[i][1]);
+          lift=o.gap?ch(R,o.gap):false;
+        }
+        cx.stroke();
+      }
+      cx.restore();
+      if(o.pool&&w>=1.5){S.dot(R,q[0][0],q[0][1],w*.62);S.dot(R,q[q.length-1][0],q[q.length-1][1],w*.7)}
+    },
+    dot(R,x,y,r,a){
+      const p=[],ph=rd(R,0,7);
+      for(let i=0;i<=9;i++){const t=i/9*TAU,m=1+.2*Math.sin(t*2+ph);p.push([x+Math.cos(t)*r*m,y+Math.sin(t)*r*m])}
+      cx.save();cx.globalAlpha=a===undefined?1:a;cx.fillStyle='#000';path(p);cx.fill();cx.restore();
+    },
+    hatch(R,P,sp,ang,o){
+      o=o||{};const [x0,y0,x1,y1]=bbox(P);const cxm=(x0+x1)/2,cym=(y0+y1)/2,d=Math.hypot(x1-x0,y1-y0);
+      cx.save();path(P);cx.clip();
+      const n=Math.ceil(d/sp);
+      for(let i=-n;i<=n;i++){
+        const seg=rot([[cxm-d,cym+i*sp],[cxm+d,cym+i*sp]],cxm,cym,ang);
+        S.line(R,seg,{w:o.w===undefined?1:o.w,a:o.a,amp:o.amp===undefined?.8:o.amp,gap:o.gap});
+      }
+      cx.restore();
+    },
+    stipple(R,P,dens,o){
+      o=o||{};const [x0,y0,x1,y1]=bbox(P);
+      cx.save();path(P);cx.clip();cx.globalAlpha=o.a===undefined?.9:o.a;cx.fillStyle='#000';
+      const n=Math.round((x1-x0)*(y1-y0)*dens/1000);
+      for(let i=0;i<n;i++){
+        const r=rd(R,o.min===undefined?.7:o.min,o.max===undefined?2.2:o.max);
+        cx.beginPath();cx.arc(rd(R,x0,x1),rd(R,y0,y1),r,0,TAU);cx.fill();
+      }
+      cx.restore();
+    },
+    text(str,x,y,size,o){
+      o=o||{};
+      cx.save();cx.globalAlpha=o.a===undefined?1:o.a;
+      cx.fillStyle=o.tone===undefined?'#000':tone(o.tone);
+      cx.font=(o.weight||'700')+' '+size+'px '+(o.font||'Georgia, "Times New Roman", serif');
+      cx.textAlign=o.align||'center';cx.textBaseline=o.base||'middle';
+      if(o.rot){cx.translate(x,y);cx.rotate(o.rot);cx.fillText(str,0,0)}else cx.fillText(str,x,y);
+      cx.restore();
+    },
+    clip(P,fn){cx.save();path(P);cx.clip();fn();cx.restore()}
+  };
+  return S;
+}
+
+const INKS=[{name:'blue',rgb:'rgb(36,108,178)',angle:15,density:.93},{name:'pink',rgb:'rgb(255,84,170)',angle:75,density:.92},{name:'yellow',rgb:'rgb(255,222,56)',angle:0,density:.9}];
+const SEPS=INKS.map(i=>separation(i,i.angle));
+const S={blue:SEPS[0],pink:SEPS[1],yellow:SEPS[2],all:SEPS,W:W,H:H};
+
+const GRAIN=(function(){
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const c=cv.getContext('2d'),R=stream(SEED*991+7);
+  for(let i=0;i<W*H/240;i++){
+    const s=rd(R,.7,2);
+    c.fillStyle=ch(R,.5)?'rgba(255,255,255,'+rd(R,.10,.26).toFixed(3)+')':'rgba(40,30,22,'+rd(R,.04,.09).toFixed(3)+')';
+    c.fillRect(rd(R,0,W),rd(R,0,H),s,s);
+  }
+  for(let i=0;i<14;i++){
+    const mx=rd(R,0,W),my=rd(R,0,H),mr=rd(R,60,190);
+    c.fillStyle='rgba(40,30,22,0.028)';
+    for(let k=0;k<mr*2.4;k++){const t=rd(R,0,TAU),d=Math.sqrt(R())*mr;c.fillRect(mx+Math.cos(t)*d,my+Math.sin(t)*d*.75,rd(R,.9,2.2),rd(R,.9,2.2))}
+  }
+  return cv;
+})();
+
+const PLATES=[];
+function plate(name,meta,draw){
+  PLATES.push({name:name,about:(meta&&meta.about)||'',hold:Math.max(.4,(meta&&meta.hold)||1),draw:draw});
+}
+
+plate('dot', { about: 'a single ink dot alone on bare paper with one loose ring settling around it', hold: 0.7 }, (S, R, p) => {
+  S.yellow.flood(.05);
+  const cx = 452, cy = 458;
+  S.blue.dot(R, cx, cy, 15, .95);
+  const off = (1 - ease(p)) * 48;
+  S.pink.line(R, ring(cx + off, cy - off * .62, 74, 64), { w: 1.8, a: .85, amp: 1.1 });
+});
+
+plate('lighthouse', { about: 'a lighthouse on a headland swinging its beam out across flat water', hold: 1.2 }, (S, R, p) => {
+  S.blue.ramp([[0, 0], [900, 0], [900, 648], [0, 648]], .74, .16, 'y', 12);
+  S.yellow.rect(0, 648, 900, 252, .16);
+
+  const lx = 322, ly = 296;
+  const tower = [[lx - 44, 772], [lx - 25, 322], [lx + 25, 322], [lx + 44, 772]];
+  S.blue.fill(tower, .92);
+  S.pink.clip(tower, () => {
+    for (let i = 0; i < 3; i++) S.pink.rect(lx - 60, 372 + i * 132, 120, 64, .8);
+  });
+  S.blue.rect(lx - 56, 300, 112, 26, .95);
+  S.yellow.disc(lx, ly, 34, .92);
+  S.pink.disc(lx, ly, 22, .6, { a: .8 });
+
+  const rock = blob(R, lx + 8, 806, 190, 54, .18);
+  S.blue.fill(rock, .85);
+
+  for (let i = 0; i < 7; i++) {
+    const y = 682 + i * 26;
+    S.blue.line(R, curve([[70, y], [330, y - 7], [600, y + 6], [840, y - 4]]), { w: 1.6, a: .5, amp: 1.6, gap: .09 });
+  }
+
+  const a = -1.42 + sm(clamp((p - .16) / .56, 0, 1)) * 1.52;
+  const sp = .082;
+  const beam = [[lx, ly],
+    [lx + Math.cos(a - sp) * 1020, ly + Math.sin(a - sp) * 1020],
+    [lx + Math.cos(a + sp) * 1020, ly + Math.sin(a + sp) * 1020]];
+  S.yellow.fill(beam, .58, { a: .85 });
+  S.pink.fill(beam, .2, { a: .55 });
+});
+
+plate('telephone', { about: 'a desk telephone with the handset lifted off and its cord paying out below the table', hold: 1.1 }, (S, R, p) => {
+  S.yellow.flood(.12);
+  S.blue.ramp([[0, 612], [900, 612], [900, 900], [0, 900]], .1, .4, 'y', 8);
+
+  const body = loop([[288, 512], [612, 512], [656, 606], [246, 606]], 1);
+  S.pink.fill(body, .78);
+  S.blue.fill(body, .3, { a: .85 });
+  S.blue.line(R, body, { w: 2.4, a: .9 });
+
+  S.blue.line(R, ring(450, 552, 44, 40), { w: 2.2, a: .9 });
+  for (let i = 0; i < 10; i++) {
+    const t = -2.5 + i / 10 * 5.2;
+    S.blue.disc(450 + Math.cos(t) * 32, 552 + Math.sin(t) * 29, 5.5, .9);
+  }
+
+  const cradle = rot(loop([[520, 392], [742, 392], [756, 442], [506, 442]], 1), 630, 418, .34);
+  S.pink.fill(cradle, .82);
+  S.yellow.fill(cradle, .44, { a: .85 });
+  S.blue.line(R, cradle, { w: 2.2, a: .85 });
+
+  const drop = 148 + ease(p) * 236;
+  S.blue.line(R, curve([[314, 600], [268, 660], [300, 700 + drop * .5], [352, 760 + drop]]), { w: 3.2, a: .9, amp: 1.2 });
+  for (let i = 0; i < 11; i++) {
+    const t = i / 11;
+    const cy = 646 + t * (232 + drop * .78);
+    S.pink.line(R, ring(300 + Math.sin(t * 5.1) * 26, cy, 20 - t * 5, 24), { w: 2.4, a: .82, amp: 1.1 });
+  }
+  S.blue.text('the line is still open', 450, 236, 30, { a: .88 });
+});
+
+plate('dish', { about: 'a satellite dish on a mast tilted up at an empty sky', hold: 1 }, (S, R, p) => {
+  S.blue.ramp([[0, 0], [900, 0], [900, 900], [0, 900]], .3, .05, 'y', 10);
+  const cx = 468, cy = 424;
+
+  S.blue.line(R, curve([[cx + 26, 486], [cx + 40, 690], [cx + 54, 900]]), { w: 13, a: .95, amp: .6 });
+  S.blue.line(R, curve([[cx - 92, 470], [cx + 10, 596]]), { w: 5, a: .9 });
+
+  const face = rot(arc(cx, cy, 204, 94, 0, TAU, 56), cx, cy, -.38);
+  S.yellow.fill(face, .8);
+  S.pink.fill(face, .2, { a: .7 });
+  S.blue.line(R, face, { w: 2.8, a: .95 });
+  S.blue.line(R, rot(arc(cx, cy, 138, 62, 0, TAU, 44), cx, cy, -.38), { w: 1.4, a: .45 });
+  S.blue.line(R, rot(arc(cx, cy, 68, 30, 0, TAU, 36), cx, cy, -.38), { w: 1.4, a: .45 });
+
+  const horn = [cx + 64, cy - 168];
+  for (let i = 0; i < 3; i++) {
+    const t = i / 3 * TAU + .6;
+    S.blue.line(R, [[cx + Math.cos(t) * 176 * .92, cy + Math.sin(t) * 82 - 22], horn], { w: 2, a: .8 });
+  }
+  S.blue.disc(horn[0], horn[1], 15, .92);
+  S.yellow.disc(horn[0], horn[1], 8, .9);
+
+  for (let i = 0; i < 6; i++) {
+    const t = ((i / 6) + p) % 1;
+    const r = 236 + (1 - t) * 322;
+    S.blue.line(R, arc(cx + 40, cy - 60, r, r * .8, Math.PI * 1.1, Math.PI * 1.9, 56), { w: 1.4, a: .1 + t * .3, amp: 1.5 });
+  }
+});
+
+plate('shoal', { about: 'a shoal of small fish all turning at once as the turn passes through them', hold: 1.3 }, (S, R, p) => {
+  S.blue.ramp([[0, 0], [900, 0], [900, 900], [0, 900]], .56, .2, 'y', 12);
+  for (let i = 0; i < 3; i++) {
+    S.blue.line(R, curve([[40, 180 + i * 250], [340, 150 + i * 250], [660, 210 + i * 250], [880, 172 + i * 250]]), { w: 1.4, a: .28, amp: 2.2, gap: .14 });
+  }
+
+  for (let i = 0; i < 64; i++) {
+    const gx = i % 8, gy = (i / 8) | 0;
+    const jx = hash(i, 3), jy = hash(i, 11);
+    const x = 152 + gx * 86 + (jx - .5) * 50;
+    const y = 196 + gy * 74 + (jy - .5) * 46;
+    const wave = sm(clamp((p * 1.55 - x / 1100) * 1.35, 0, 1));
+    const ang = -.22 + wave * 1.86 + (jx - .5) * .28;
+    const dx = Math.cos(ang) * 25, dy = Math.sin(ang) * 25;
+    const fish = [[x - dx, y - dy], [x + dx, y + dy]];
+    S.pink.line(R, fish, { w: 6, a: .92, taper: 'in' });
+    if (i % 3 === 0) S.yellow.line(R, fish, { w: 4.6, a: .75, taper: 'in' });
+    S.blue.dot(R, x + dx * .74, y + dy * .74, 2.6, .8);
+  }
+});
+
+plate('switchboard', { about: 'an old telephone switchboard with patch cords hanging in loops between its jacks', hold: 1.5 }, (S, R, p) => {
+  S.yellow.flood(.2);
+  const panel = [[112, 96], [788, 96], [788, 704], [112, 704]];
+  S.blue.fill(panel, .62);
+  S.blue.stipple(R, panel, .5, { a: .35, min: .7, max: 2 });
+  S.pink.ramp(panel, .3, .04, 'y', 9);
+
+  for (let r = 0; r < 6; r++) {
+    for (let c = 0; c < 9; c++) {
+      const x = 168 + c * 73, y = 152 + r * 68;
+      S.blue.disc(x, y, 15, .95);
+      S.yellow.disc(x - 3, y - 3, 6, .85);
+    }
+  }
+
+  const sag = 60 + ease(p) * 128;
+  for (let i = 0; i < 14; i++) {
+    const a = i % 9, b = (i * 5 + 3) % 9;
+    const ra = i % 6, rb = (i * 3 + 1) % 6;
+    const x0 = 168 + a * 73, y0 = 152 + ra * 68;
+    const x1 = 168 + b * 73, y1 = 152 + rb * 68;
+    const mx = (x0 + x1) / 2, my = Math.max(y0, y1) + sag * (.5 + hash(i, 7) * .8);
+    const cord = curve([[x0, y0], [mx, my], [x1, y1]]);
+    S.pink.line(R, cord, { w: 4.2, a: .9, amp: 1, pool: 1 });
+    if (i % 3 === 1) S.yellow.line(R, cord, { w: 3.2, a: .8, amp: 1 });
+  }
+
+  S.blue.rect(112, 714, 676, 96, .4);
+  S.pink.rect(112, 714, 676, 96, .22, { a: .8 });
+  for (let i = 0; i < 6; i++) S.blue.line(R, [[176 + i * 112, 726], [176 + i * 112, 798]], { w: 9, a: .9 });
+});
+
+plate('kite', { about: 'a kite high in an empty sky with its line running off the bottom of the sheet', hold: 1 }, (S, R, p) => {
+  S.yellow.flood(.14);
+  S.blue.ramp([[0, 0], [900, 0], [900, 560], [0, 560]], .2, .03, 'y', 9);
+
+  const lift = ease(clamp((p - .1) / .7, 0, 1));
+  const kx = 556, ky = 296 - lift * 62;
+  const kite = [[kx, ky - 94], [kx + 78, ky], [kx, ky + 108], [kx - 78, ky]];
+  S.pink.fill(kite, .82);
+  S.yellow.fill([[kx, ky - 94], [kx + 78, ky], [kx, ky + 108]], .55, { a: .85 });
+  S.blue.line(R, loop(kite, 1), { w: 2.6, a: .9 });
+  S.blue.line(R, [[kx - 78, ky], [kx + 78, ky]], { w: 1.8, a: .7 });
+
+  for (let i = 0; i < 9; i++) {
+    const t = (i + 1) / 9;
+    const bx = kx - 26 * Math.sin(t * 4.2 + p * TAU) * t;
+    const by = ky + 108 + t * (172 + lift * 40);
+    S.pink.line(R, ring(bx, by, 11 - t * 3, 20), { w: 2.2, a: .8, amp: 1.2 });
+  }
+  S.blue.line(R, curve([[kx - 8, ky + 96], [kx - 120 - lift * 50, 560], [kx - 60, 760], [kx + 24, 900]]), { w: 1.6, a: .85, amp: 1.4 });
+});
+
+plate('moth', { about: 'a moth resting on bare paper that opens its wings once', hold: 0.9 }, (S, R, p) => {
+  S.yellow.flood(.08);
+  const cx = 448, cy = 452;
+  const open = sm(clamp((p - .46) / .14, 0, 1));
+  const span = 84 + open * 96;
+
+  S.blue.hatch(R, [[cx - 210, cy + 96], [cx + 210, cy + 96], [cx + 160, cy + 150], [cx - 160, cy + 150]], 9, .5, { w: 1, a: .3 });
+
+  for (let s = -1; s <= 1; s += 2) {
+    const w1 = blob(R, cx + s * span * .82, cy - 26, span, 82, .14);
+    const w2 = blob(R, cx + s * span * .6, cy + 58, span * .66, 52, .16);
+    S.pink.fill(w1, .62);
+    S.yellow.fill(w1, .5, { a: .8 });
+    S.pink.fill(w2, .7);
+    S.blue.line(R, w1, { w: 1.8, a: .8 });
+    S.blue.line(R, w2, { w: 1.8, a: .7 });
+  }
+  S.blue.fill(blob(R, cx, cy + 6, 17, 74, .1), .95);
+  S.blue.line(R, curve([[cx - 6, cy - 66], [cx - 40, cy - 118], [cx - 78, cy - 132]]), { w: 2, a: .9, taper: 'out' });
+  S.blue.line(R, curve([[cx + 6, cy - 66], [cx + 40, cy - 118], [cx + 78, cy - 132]]), { w: 2, a: .9, taper: 'out' });
+});
+
+plate('register', { about: 'two hand-drawn rings drifting until they almost sit on top of each other', hold: 1.2 }, (S, R, p) => {
+  S.yellow.flood(.07);
+  const d = lerp(104, 13, ease(clamp(p * 1.22, 0, 1)));
+  S.blue.dot(R, 450, 428, 6, .75);
+  S.blue.line(R, ring(450 - d, 428, 152, 96), { w: 2.8, a: .9, amp: 1.2 });
+  S.pink.line(R, ring(450 + d, 428 + d * .26, 152, 96), { w: 2.8, a: .9, amp: 1.2 });
+  S.blue.text('neither ink knew', 450, 762, 28, { a: .85 });
+});
+
+if(!PLATES.length)plate('blank',{about:'nothing was registered'},(S,R)=>{S.blue.flood(.1)});
+
+const TOTAL=PLATES.reduce((a,p)=>a+p.hold,0);
+const SPANS=(function(){const s=[];let acc=0;for(const p of PLATES){const a=acc/TOTAL;acc+=p.hold;s.push([a,acc/TOTAL])}return s})();
+
+function slipOf(i,u,since){
+  const R=stream(SEED*77+i*13+3);
+  const a=rd(R,0,TAU),amp=rd(R,1.1,3.0),f=rd(R,.7,1.6);
+  const slam=Math.exp(-since*9)*rd(R,2.2,5.2);
+  return [Math.cos(a+u*TAU*f)*amp+Math.cos(a*3)*slam,Math.sin(a*1.7+u*TAU*f)*amp+Math.sin(a*3)*slam];
+}
+
+function drawFrame(u){
+  let idx=0;
+  for(let i=0;i<SPANS.length;i++){if(u>=SPANS[i][0]&&u<SPANS[i][1]){idx=i;break}}
+  const sp=SPANS[idx],p=clamp((u-sp[0])/Math.max(1e-6,sp[1]-sp[0]),0,1);
+  for(const s of SEPS){s.ctx.setTransform(1,0,0,1,0,0);s.ctx.globalAlpha=1;s.ctx.globalCompositeOperation='source-over';s.ctx.clearRect(0,0,W,H)}
+  PLATES[idx].draw(S,stream(SEED*1013+idx*29+1),p,{index:idx,count:PLATES.length,u:u});
+  for(let i=0;i<SEPS.length;i++){
+    const c=SEPS[i].ctx;c.globalCompositeOperation='source-in';c.globalAlpha=1;c.fillStyle=INKS[i].rgb;c.fillRect(0,0,W,H);c.globalCompositeOperation='source-over';
+  }
+  out.setTransform(1,0,0,1,0,0);out.globalCompositeOperation='source-over';out.globalAlpha=1;
+  out.fillStyle=PAPER;out.fillRect(0,0,W,H);
+  out.globalCompositeOperation='multiply';
+  for(let i=0;i<SEPS.length;i++){const d=slipOf(i,u,p);out.globalAlpha=INKS[i].density;out.drawImage(SEPS[i].canvas,d[0],d[1])}
+  out.globalCompositeOperation='source-over';out.globalAlpha=.34;out.drawImage(GRAIN,0,0);
+  out.globalAlpha=1;
+}
+
+window.renderFrame=function(t){
+  const u=(((t%DUR)+DUR)%DUR)/DUR;
+  drawFrame(u);
+  return canvas.toDataURL('image/png');
+};
+window.__riso={plates:PLATES.map(p=>({name:p.name,about:p.about,hold:p.hold})),seed:SEED,duration:DUR};
+window.ready=true;
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 66;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 66;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 66\\n// FORM: A 0–3.5 | A1 3.5–7 | B 7–10.5 | A2 10.5–13.5 | A3 13.5–16.5 (16.5 cycles x 4s = 66s)\\n// TONAL CENTER: E Dorian (E F# G A B C# D)\\n// MOTIF: E4 (held 2 beats) - A4 (beat 3) - B4 (and-of-3) - G4 (beat 4, ringing) then a full beat of rest\\n// HARMONIC PLAN: A = Em9 over E1/E2 pedal, no third | A1 = Em9 with G and B added, sub drops to E1, lpf 300->900 | B = A6/E for 2 cycles then Bm7/E for 1.5, pad bass steps E-F#-G | A2 = Em(add9) thinned to E and F#, lpf closing to 400 | A3 = Em9 exactly as cycle 0\\n// PHRASE RULE: press cycle = soft kick on beat 1, rim on the and-of-3, sixteenth-early ghost rim flamming it (the misregistration); sections only subtract, never move it. E pedal and kick placement hold unbroken across every boundary; exactly one other dimension changes per seam - density at 3.5, register and speed at 7, subtraction at 10.5, register at 13.5. Loop closes by incompletion: A3 states only E4 A4, and B4 G4 lands on the downbeat of the repeat.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nsetcps(60/60/4)\\n\\n// press engine: kick on 1, rim on the and-of-3, ghost rim a sixteenth early.\\n// A2 (cycles 10.5-13.5) removes the kick - rim and ghost only.\\n$: stack(\\n  s(\\\"\u003cbd ~ ~ bd ~ ~ ~ ~ ~ ~ [~ ~] [~ ~] [~ ~] bd bd bd bd>\\\")\\n    .bank(\\\"RolandCR78\\\")\\n    .gain(0.3).lpf(160).attack(0.006).release(0.5).room(0.35).size(0.4).orbit(0),\\n  s(\\\"~ ~ [~ rim] ~\\\").bank(\\\"RolandCR78\\\")\\n    .gain(\\\"\u003c0.2 0.2 0.2 0.2 0.22 0.22 0.22 0.24 0.24 0.24 0.16 0.16 0.16 0.2 0.2 0.2 0.2>\\\")\\n    .lpf(1500).hpf(380).attack(0.004).release(0.35).room(0.4).size(0.5).pan(0.42).orbit(0),\\n  s(\\\"~ ~ [~ [rim ~ ~ ~]] ~\\\").bank(\\\"LinnDrum\\\")\\n    .gain(\\\"\u003c0 0.09 0.09 0.09 0.1 0.1 0.1 0.11 0.11 0.11 0.07 0.07 0.07 0.08 0.08 0.09 0.09>\\\")\\n    .lpf(1200).hpf(500).attack(0.004).release(0.3).room(0.45).size(0.55).pan(0.62).orbit(0)\\n).late(0.004)\\n\\n// sub-bass: the sheet of paper. unbroken E pedal, drops to E1 in A1, returns by filter only.\\n$: note(\\\"\u003ce2 e2 e2 e2 e1 e1 e1 e1 e1 e1 e1 e1 e2 e2 e2 e2 e2>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(0.4).release(3).sustain(0.85)\\n  .lpf(\\\"\u003c170 170 175 180 200 210 215 220 215 210 205 190 175 165 160 170 170>\\\")\\n  .gain(0.21).shape(0.16).room(0.25).size(0.5).orbit(1)\\n\\n// harmonic body: open fourths and fifths over the pedal, never close triads.\\n$: note(\\\"\u003c[e3,b3,f#4] [e3,b3,f#4] [e3,b3,f#4] [e3,b3,f#4] [e3,g3,b3,f#4] [e3,g3,b3,f#4] [e3,g3,b3,f#4] [e3,a3,b3,f#4] [e3,a3,c#4,f#4] [e3,a3,c#4,f#4] [e3,f#3,b3,d4] [e3,f#3,b3] [e3,f#3,b3] [e3,b3,f#4] [e3,b3,f#4] [e3,b3,f#4] [e3,b3,f#4]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-7 7 -6 6>/4\\\")\\n  .attack(0.6).release(3.5).sustain(0.7)\\n  .lpf(\\\"\u003c600 620 640 660 300 500 700 900 950 950 700 500 400 600 600 620 620>\\\")\\n  .lpq(4)\\n  .gain(0.115).room(0.7).size(0.8).pan(0.5).orbit(2)\\n\\n// motif lead: E4 A4 B4 G4, one cycle on one cycle rest. B inverts and compresses it; A2 drops an octave; A3 withholds the answer.\\n$: note(`\u003c\\n  [e4@2 a4 [b4 g4]] ~ [e4@2 a4 [b4 g4]] ~\\n  [e4@2 a4 [b4 g4@4]] ~ [e4@2 a4 [b4 g4@4]] ~\\n  [[e5 b4 a4 c5] [e5 b4 a4 c5]] [[e5 b4 a4 c5] [e5 b4 a4 c5]] [[e5 b4 a4 c5] [e5 b4 a4 c5]] [e5 b4 a4 c5]\\n  ~ [e3@2 a3 [b3 g3]] ~\\n  ~ ~ [e4@2 a4@2]\\n>`)\\n  .s(\\\"triangle\\\")\\n  .slide(0.06)\\n  .attack(0.08).release(1.6).sustain(0.6)\\n  .lpf(\\\"\u003c1400 1400 1400 1400 1500 1500 1500 1600 2000 2000 1800 900 900 1400 1400 1400 1400>\\\")\\n  .gain(0.155)\\n  .delay(0.32).delaytime(0.375).delayfeedback(0.3)\\n  .room(0.6).size(0.8).pan(0.4).orbit(3)\\n\\n// registration ghost: exact copy an octave up, a sixteenth late, +6 cents, panned opposite. muted in A2.\\n$: note(`\u003c\\n  [e5@2 a5 [b5 g5]] ~ [e5@2 a5 [b5 g5]] ~\\n  [e5@2 a5 [b5 g5@4]] ~ [e5@2 a5 [b5 g5@4]] ~\\n  [[e6 b5 a5 c6] [e6 b5 a5 c6]] [[e6 b5 a5 c6] [e6 b5 a5 c6]] [[e6 b5 a5 c6] [e6 b5 a5 c6]] [e6 b5 a5 c6]\\n  ~ ~ ~\\n  ~ ~ [e5@2 a5@2]\\n>`)\\n  .late(0.0625)\\n  .s(\\\"triangle\\\")\\n  .detune(6)\\n  .attack(0.08).release(1.4).sustain(0.5)\\n  .lpf(2600)\\n  .gain(0.042)\\n  .room(0.75).size(0.85).pan(0.82).orbit(4)\",\"bpm\":60,\"durationSec\":66,\"renderDurationSec\":69,\"cps\":0.25,\"cycles\":16.5,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
