@@ -5,6 +5,10 @@ import { getCategory, getExperiment } from '../../data/experiments'
 const ApertureChoir = lazy(() => import('../../components/playground/experiments/emergence/ApertureChoir'))
 const RemainderTransit = lazy(() => import('../../components/playground/experiments/emergence/RemainderTransit'))
 const InterfaceFamiliar = lazy(() => import('../../components/playground/experiments/emergence/InterfaceFamiliar'))
+const EscapementGarden = lazy(() => import('../../components/playground/experiments/emergence/EscapementGarden'))
+const PlumbReckoner = lazy(() => import('../../components/playground/experiments/consciousness/PlumbReckoner'))
+const AbacusViscera = lazy(() => import('../../components/playground/experiments/consciousness/AbacusViscera'))
+const AlembicLedger = lazy(() => import('../../components/playground/experiments/physics/AlembicLedger'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -19,13 +23,21 @@ const EXPERIMENT_COMPONENTS = {
       '../../components/playground/experiments/**/*.jsx',
       '!../../components/playground/experiments/emergence/ApertureChoir.jsx',
       '!../../components/playground/experiments/emergence/RemainderTransit.jsx',
-      '!../../components/playground/experiments/emergence/InterfaceFamiliar.jsx'
+      '!../../components/playground/experiments/emergence/InterfaceFamiliar.jsx',
+      '!../../components/playground/experiments/emergence/EscapementGarden.jsx',
+      '!../../components/playground/experiments/consciousness/PlumbReckoner.jsx',
+      '!../../components/playground/experiments/consciousness/AbacusViscera.jsx',
+      '!../../components/playground/experiments/physics/AlembicLedger.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
   'aperture-choir': ApertureChoir,
   'remainder-transit': RemainderTransit,
-  'interface-familiar': InterfaceFamiliar
+  'interface-familiar': InterfaceFamiliar,
+  'escapement-garden': EscapementGarden,
+  'plumb-reckoner': PlumbReckoner,
+  'abacus-viscera': AbacusViscera,
+  'alembic-ledger': AlembicLedger
 }
 
 const LoadingExperiment = ({ color }) => (

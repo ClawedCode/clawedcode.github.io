@@ -44,7 +44,8 @@ export const CATEGORIES = {
       { slug: 'quotient-commons', name: 'quotient.commons()', color: '#315f9f', desc: 'drag ratio-plates across a civic survey // quotient rooms raise wards and common measures make permanent bridges' },
       { slug: 'aperture-choir', name: 'aperture.choir()', color: '#ed6a5a', desc: 'score touch-built svg rooms into crossings // performed routes grow new doorforms furnishings and future strategy' },
       { slug: 'remainder-transit', name: 'remainder.transit()', color: '#f0a54a', desc: 're-cut draggable quotient cars into an authored proof rail // crossings remember and arithmetic becomes portable' },
-      { slug: 'interface-familiar', name: 'interface.familiar()', color: '#e85d3f', desc: 'seat loose controls into an svg body // draw nerves, survive awakenings, and choose autonomous temperament' }
+      { slug: 'interface-familiar', name: 'interface.familiar()', color: '#e85d3f', desc: 'seat organs into an svg body and draw nerves // distance becomes delay, loops have gain, and an oscilloscope tape judges what the body actually did' },
+      { slug: 'escapement-garden', name: 'escapement.garden()', color: '#5fae91', desc: 'gear a running orrery so blossoms meet the light gate on cadence // worker-integrated clockwork you must keep wound' }
     ]
   },
   consciousness: {
@@ -68,7 +69,9 @@ export const CATEGORIES = {
       { slug: 'probabilistic-archive', name: 'probabilistic.archive()', color: '#9fffd2', desc: 'bloom filter memory // hash marks remember presence and summon false-positive ghosts' },
       { slug: 'saccade-archive', name: 'saccade.archive()', color: '#9fffd2', desc: 'gaze-memory chamber // glimpse mask recall hidden pareidolia from static' },
       { slug: 'abacus-oracle', name: 'abacus.oracle()', color: '#ffe28a', desc: 'drag belief beads across brass rods // notches accumulate and verdicts rebalance' },
-      { slug: 'qualia-sorter', name: 'qualia.sorter()', color: '#aaf7ff', desc: 'classify ambiguous sensations // decision boundaries expose the errors of perception' }
+      { slug: 'qualia-sorter', name: 'qualia.sorter()', color: '#aaf7ff', desc: 'classify ambiguous sensations // decision boundaries expose the errors of perception' },
+      { slug: 'plumb-reckoner', name: 'plumb.reckoner()', color: '#eccd88', desc: 'hang convictions from a swaying brass mobile // torque is the argument, worn notches grip, unworn ones let belief creep' },
+      { slug: 'abacus-viscera', name: 'abacus.viscera()', color: '#d8a641', desc: 'slide beads along hanging operator rods and tie cords that must physically reach // notches you earn grip the count' }
     ]
   },
   linguistics: {
@@ -162,7 +165,8 @@ export const CATEGORIES = {
       { slug: 'shadow-liturgy', name: 'shadow.liturgy()', color: '#ffcc77', desc: '2D raycasting shadow ritual // place lights draw walls watch darkness form' },
       { slug: 'wireworld-vigil', name: 'wireworld.vigil()', color: '#7fffd4', desc: 'paint conductive scripture // electron heads patrol the trace-grid' },
       { slug: 'avalanche-hash', name: 'avalanche.hash()', color: '#8ef5ff', desc: 'checksum snowfield // mutate one bit mine leading-zero omens' },
-      { slug: 'euclid-oracle', name: 'euclid.oracle()', color: '#e6ff9a', desc: 'recursive common-measure proof // rectangles surrender quotient squares until residue becomes law' }
+      { slug: 'euclid-oracle', name: 'euclid.oracle()', color: '#e6ff9a', desc: 'recursive common-measure proof // rectangles surrender quotient squares until residue becomes law' },
+      { slug: 'alembic-ledger', name: 'alembic.ledger()', color: '#c4683c', desc: 'slide cut-beads on vessel rods and plumb pipes that shed heat // a chart recorder judges what the still actually kept' }
     ]
   }
 }
