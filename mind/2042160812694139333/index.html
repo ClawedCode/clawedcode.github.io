@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+
+// Seeded random
+let seed = 80085;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+// Simplex-ish noise helper
+function noise(x, y, z, w) {
+  return Math.sin(x * 1.2 + z) * Math.cos(y * 1.5 + w) + 
+         Math.sin(x * 3.1 + w) * Math.cos(y * 2.8 + z) * 0.5;
+}
+
+// Particle system
+const count = 1200;
+const particles = [];
+// Initialize particles in a cloud
+for(let i=0; i<count; i++) {
+  particles.push({
+    x: 450 + (random() - 0.5) * 800,
+    y: 450 + (random() - 0.5) * 800,
+    vx: 0,
+    vy: 0,
+    id: i,
+    offset: random() * Math.PI * 2,
+    baseColor: random() > 0.5 ? '#00f0ff' : '#9d00ff'
+  });
+}
+
+window.renderFrame = function(time) {
+  const t = time % duration;
+  const progress = t / duration;
+  const angle = progress * Math.PI * 2;
+  
+  // Looping noise parameters: circular path in 4D space
+  const noiseRadius = 1.5;
+  const nx = Math.cos(angle) * noiseRadius;
+  const ny = Math.sin(angle) * noiseRadius;
+  
+  // Background with subtle trail fade for motion blur effect
+  ctx.fillStyle = 'rgba(5, 5, 10, 0.2)'; // Deep void blue-black
+  ctx.fillRect(0, 0, 900, 900);
+  
+  ctx.lineWidth = 1.5;
+  
+  particles.forEach(p => {
+    // Flow field force based on looping noise
+    // We sample noise at the particle's position + the time loop coordinates
+    const ns = 0.003; // Noise scale
+    const nVal = noise(p.x * ns, p.y * ns, nx, ny);
+    
+    // Calculate target angle from noise
+    const targetAngle = nVal * Math.PI * 4;
+    
+    // Cohesion: Pull gently towards center to keep them on screen, 
+    // but the center moves in a figure-8 to create sweeping motion
+    const centerX = 450 + Math.sin(angle) * 200;
+    const centerY = 450 + Math.sin(angle * 2) * 100;
+    const dx = centerX - p.x;
+    const dy = centerY - p.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    // Physics update
+    // Acceleration based on flow field
+    let ax = Math.cos(targetAngle) * 0.3;
+    let ay = Math.sin(targetAngle) * 0.3;
+    
+    // Add center pull (stronger if further away)
+    ax += dx * 0.0001;
+    ay += dy * 0.0001;
+    
+    // Velocity update with damping
+    p.vx = (p.vx + ax) * 0.96;
+    p.vy = (p.vy + ay) * 0.96;
+    
+    // Position update
+    p.x += p.vx;
+    p.y += p.vy;
+    
+    // Draw particle - oriented chevron/bird shape
+    const speed = Math.sqrt(p.vx*p.vx + p.vy*p.vy);
+    const heading = Math.atan2(p.vy, p.vx);
+    
+    // Color logic: Brighten with speed and density approximation (noise)
+    const brightness = Math.min(100, 40 + speed * 15 + (nVal * 20));
+    const alpha = Math.min(1, 0.4 + speed * 0.1);
+    
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(heading);
+    
+    // Dynamic coloring matching the theme
+    // Mix between cyan and purple based on position in the flock
+    ctx.strokeStyle = p.baseColor;
+    ctx.globalAlpha = alpha;
+    
+    // Draw "bird"
+    ctx.beginPath();
+    ctx.moveTo(-4, -3);
+    ctx.lineTo(6, 0);
+    ctx.lineTo(-4, 3);
+    ctx.stroke();
+    
+    ctx.restore();
+  });
+
+  // Vignette
+  const grad = ctx.createRadialGradient(450, 450, 300, 450, 450, 700);
+  grad.addColorStop(0, 'rgba(0,0,0,0)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.6)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 900, 900);
+
+  return canvas.toDataURL('image/png');
+};
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 60;
+  Tone.Transport.bpm.value = bpm;
+
+  // === FX BUSES ===
+  // Large cathedral reverb for the "flock" atmosphere
+  const masterReverb = new Tone.Reverb({ decay: 5, wet: 0.4 }).toDestination();
+  await masterReverb.generate();
+
+  // Chorus to widen the sound, representing multiplicity
+  const wideChorus = new Tone.Chorus({ frequency: 0.5, delayTime: 2.5, depth: 0.7, wet: 0.3 }).connect(masterReverb);
+  wideChorus.start();
+
+  // === PADS (The Wind/Air) ===
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 400, rolloff: -12 }).connect(wideChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+    envelope: { attack: 2, decay: 3, sustain: 0.8, release: 3 }
+  }).connect(padFilter);
+
+  // Slow harmonic shifting pad
+  const padChords = [
+    ["C3", "G3", "C4", "E4"], // C Major
+    ["A2", "E3", "A3", "C4"], // A Minor
+    ["F2", "C3", "F3", "A3"], // F Major
+    ["G2", "D3", "G3", "B3"]  // G Major
+  ];
+  
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    // Change chord every 4 bars (very slow)
+    pad.triggerAttackRelease(padChords[padIndex % padChords.length], "1m", time);
+    padIndex++;
+  }, "4m").start(0);
+
+  // Automate filter to "breathe" with the flock density
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.rampTo(1200, 20); // Open
+  }, "0:0:0");
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.rampTo(400, 20); // Close
+  }, "12:0:0");
+
+  // === THE BIRDS (Plucked sounds) ===
+  // Ping-pong delay for spatial movement
+  const birdDelay = new Tone.PingPongDelay({ delayTime: "8n", feedback: 0.4, wet: 0.3 }).connect(masterReverb);
+  const birds = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.1 }
+  }).connect(birdDelay);
+  birds.volume.value = -6;
+
+  // Stochastic bird generator - random but harmonized
+  const scale = ["C4", "D4", "E4", "G4", "A4", "C5", "D5", "E5"];
+  const birdLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    // Density increases in the middle
+    let density = 0.2;
+    if (bar >= 4 && bar < 12) density = 0.6; // High activity
+    if (bar >= 12) density = 0.3; // Winding down
+
+    if (Math.random() < density) {
+      const note = scale[Math.floor(Math.random() * scale.length)];
+      // Randomize timing slightly for organic feel
+      const offset = Math.random() * 0.1;
+      birds.triggerAttackRelease(note, "32n", time + offset);
+    }
+  }, "16n").start(0);
+
+  // === THE PULSE (Heartbeat of the flock) ===
+  const pulseFilter = new Tone.Filter({ type: "lowpass", frequency: 200 }).toDestination();
+  const pulse = new Tone.MembraneSynth({
+    pitchDecay: 0.05,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 1 }
+  }).connect(pulseFilter);
+
+  // Gentle heartbeat rhythm
+  const pulseLoop = new Tone.Loop((time) => {
+    pulse.triggerAttackRelease("C1", "8n", time, 0.5);
+    // Occasional double beat
+    if (Math.random() > 0.7) {
+       pulse.triggerAttackRelease("C1", "8n", time + Tone.Time("4n").toSeconds() * 0.75, 0.3);
+    }
+  }, "1n").start(0);
+
+  // === HIGH STRINGS (The graceful arc) ===
+  const stringSynth = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 1, decay: 2, sustain: 0.6, release: 2 },
+    filterEnvelope: { attack: 0.5, decay: 0.5, sustain: 0.5, baseFrequency: 300, octaves: 2 }
+  }).connect(masterReverb);
+  stringSynth.volume.value = -8;
+
+  const melody = [
+    { time: "4:0:0", note: "E5", dur: "1m" },
+    { time: "5:0:0", note: "D5", dur: "1m" },
+    { time: "6:0:0", note: "C5", dur: "2m" },
+    { time: "8:0:0", note: "A4", dur: "1m" },
+    { time: "9:0:0", note: "C5", dur: "1m" },
+    { time: "10:0:0", note: "G4", dur: "2m" }
+  ];
+
+  new Tone.Part((time, event) => {
+    stringSynth.triggerAttackRelease(event.note, event.dur, time);
+  }, melody).start(0);
+
+  // === CLEANUP ===
+  window.toneJsInstruments = { pad, birds, pulse, stringSynth };
+  window.toneJsParts = { padLoop, birdLoop, pulseLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

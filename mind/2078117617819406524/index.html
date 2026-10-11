@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Silence Compiles A Doorway</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#f3eada}
+canvas{display:block;width:100vw!important;height:100vh!important;object-fit:contain}
+</style>
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+<script type="module">
+// DURATION: 60
+import * as THREE from 'three';
+import { Text } from 'https://esm.sh/troika-three-text@0.49.1?external=three';
+
+const DUR=60;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(900,900);renderer.setPixelRatio(1);document.body.appendChild(renderer.domElement);
+const scene=new THREE.Scene();scene.background=new THREE.Color(0xf3eada);
+const camera=new THREE.PerspectiveCamera(38,1,0.1,100);camera.position.set(0,0,13);
+const glyphs=[];
+const phrases=[
+  {text:'SILENCE',y:2.0},
+  {text:'COMPILES',y:0.0},
+  {text:'A DOORWAY',y:-2.0}
+];
+let rngState=0x6d2b79f5;
+const random=()=>{rngState=(Math.imul(rngState,1664525)+1013904223)>>>0;return rngState/4294967296;};
+
+for(const phrase of phrases){
+  for(let i=0;i<phrase.text.length;i++){
+    const char=phrase.text[i];
+    if(char===' ')continue;
+    const mesh=new Text();
+    mesh.text=char;mesh.fontSize=1.15;mesh.fontWeight='bold';mesh.letterSpacing=0;
+    mesh.color=i%4===0?0x7a2030:0x1a1410;
+    scene.add(mesh);
+    glyphs.push({
+      mesh,
+      home:new THREE.Vector3((i-(phrase.text.length-1)/2)*0.92,phrase.y,0),
+      scatter:new THREE.Vector3((random()-0.5)*15,(random()-0.5)*13,-2-random()*4),
+      seed:random()
+    });
+  }
+}
+
+await Promise.all(glyphs.map(({mesh})=>new Promise(resolve=>mesh.sync(resolve))));
+for(const {mesh} of glyphs){mesh.material.transparent=true;mesh.material.opacity=1;}
+
+const clamp01=value=>Math.min(1,Math.max(0,value));
+const smooth=value=>{const x=clamp01(value);return x*x*(3-2*x);};
+const easeOut=value=>1-Math.pow(1-clamp01(value),3);
+const mix=(a,b,t)=>a+(b-a)*t;
+const doorPosition=(index,count)=>{
+  const u=index/Math.max(1,count-1);
+  if(u<0.32)return new THREE.Vector3(-3.1,mix(-3.2,3.2,u/0.32),0);
+  if(u<0.68)return new THREE.Vector3(mix(-3.1,3.1,(u-0.32)/0.36),3.2,0);
+  return new THREE.Vector3(3.1,mix(3.2,-3.2,(u-0.68)/0.32),0);
+};
+
+window.renderFrame=time=>{
+  const phase=((time%DUR)+DUR)%DUR/DUR;
+  const movement=Math.min(4,Math.floor(phase*5));
+  const u=phase*5-movement;
+  let cameraZ=13;
+
+  glyphs.forEach((glyph,index)=>{
+    const {mesh,home,scatter,seed}=glyph;
+    let x=home.x,y=home.y,z=home.z,rotZ=0,rotY=0,scale=1,opacity=1;
+
+    if(movement===0){
+      const e=easeOut(u);
+      x=mix(scatter.x,home.x,e);y=mix(scatter.y,home.y,e);z=mix(scatter.z,home.z,e);
+      rotZ=(1-e)*(seed-0.5)*Math.PI*3;rotY=(1-e)*(seed-0.5)*Math.PI*2;
+      opacity=0.35+0.65*e;cameraZ=mix(13,11,e);
+    }else if(movement===1){
+      const tau=u*Math.PI*2;
+      x=home.x+Math.sin(tau*2)*0.05*(0.5+seed);
+      y=home.y+Math.sin(tau)*0.16*(0.7+seed);
+      rotZ=Math.sin(tau+seed*Math.PI*2)*0.035;
+      scale=1+Math.sin(tau)*0.045;cameraZ=11-Math.sin(u*Math.PI)*0.65;
+    }else if(movement===2){
+      const door=doorPosition(index,glyphs.length);
+      const morph=Math.sin(u*Math.PI);
+      x=mix(home.x,door.x,morph);y=mix(home.y,door.y,morph);z=mix(0,0.4,morph);
+      rotY=Math.sin(u*Math.PI)*Math.PI*0.3*(index%2?1:-1);scale=1+0.12*morph;cameraZ=11;
+    }else if(movement===3){
+      const engage=smooth(u/0.18);
+      const radius=4.2*(1-u);
+      const angle=u*Math.PI*4+index*0.67;
+      const orbitX=Math.cos(angle)*radius;
+      const orbitY=Math.sin(angle)*radius*0.62;
+      x=mix(home.x,orbitX,engage);y=mix(home.y,orbitY,engage);z=Math.sin(angle*0.5)*0.8*engage;
+      rotY=u*Math.PI*2;scale=1+0.18*Math.sin(u*Math.PI);cameraZ=mix(11,9,u);
+    }else{
+      const e=smooth(u);
+      x=mix(0,scatter.x,e);y=mix(0,scatter.y,e);z=mix(0,scatter.z,e);
+      rotZ=e*(seed-0.5)*Math.PI*4;rotY=e*(seed-0.5)*Math.PI*3;
+      opacity=1-0.65*e;scale=1-0.25*e;cameraZ=mix(9,13,e);
+    }
+
+    mesh.position.set(x,y,z);mesh.rotation.set(0,rotY,rotZ);mesh.scale.setScalar(scale);
+    mesh.material.opacity=opacity;
+  });
+
+  camera.position.set(0,0,cameraZ);camera.lookAt(0,0,0);renderer.render(scene,camera);
+  return renderer.domElement.toDataURL();
+};
+
+window.renderFrame(0);window.animationReady=true;window.ready=true;
+const originalRenderFrame=window.renderFrame;let lastManual=0;
+window.renderFrame=time=>{lastManual=performance.now();return originalRenderFrame(time);};
+const startedAt=performance.now();
+function loop(){if(performance.now()-lastManual>500)originalRenderFrame(((performance.now()-startedAt)/1000)%DUR);requestAnimationFrame(loop);}
+requestAnimationFrame(loop);
+</script>
+<script>
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 60;
+  const targetBpm = 54;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  const secPerBar = 60 / bpm;
+
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === FX CHAIN ===
+  const masterGain = new Tone.Gain(-1).toDestination();
+  
+  const roomVerb = new Tone.Reverb({
+    decay: 3.0,
+    wet: 0.25
+  }).connect(masterGain);
+  await roomVerb.generate();
+
+  const hallVerb = new Tone.Reverb({
+    decay: 5.0,
+    wet: 0.4
+  }).connect(masterGain);
+  await hallVerb.generate();
+
+  // === FELT PIANO (The Voice) ===
+  // Muted sine, fast decay, heavy reverb
+  const feltPiano = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: {
+      attack: 0.01,
+      decay: 0.6,
+      sustain: 0.05,
+      release: 1.5
+    },
+    volume: -6
+  }).connect(roomVerb);
+
+  // === ANAOG PAD (The Breath) ===
+  // Sawtooth through lowpass, slow attack
+  const padFilter = new Tone.Filter({
+    type: "lowpass",
+    frequency: 300,
+    Q: 2,
+    rolloff: -24
+  }).connect(hallVerb);
+
+  const analogPad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -5,
+    envelope: {
+      attack: 2.0,
+      decay: 1.5,
+      sustain: 0.8,
+      release: 4.0
+    },
+    volume: -18
+  }).connect(padFilter);
+
+  // === SUB BASS (The Ground) ===
+  // Pure sine, heavy decay
+  const subBass = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: {
+      attack: 0.1,
+      decay: 0.8,
+      sustain: 0.6,
+      release: 1.0
+    },
+    volume: -10
+  }).connect(masterGain);
+
+  // === SHIMMER ARPEGGIO (The Gate) ===
+  // Triangle wave, ping pong delay
+  const arpDelay = new Tone.PingPongDelay({
+    delayTime: "4n.",
+    feedback: 0.35,
+    wet: 0.25
+  }).connect(hallVerb);
+
+  const arpSynth = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: {
+      attack: 0.005,
+      decay: 0.4,
+      sustain: 0.1,
+      release: 0.6
+    },
+    volume: -12
+  }).connect(arpDelay);
+
+  // === NOISE (The Dust) ===
+  const noise = new Tone.Noise("brown");
+  const noiseFilter = new Tone.Filter({
+    type: "lowpass",
+    frequency: 200,
+    Q: 1
+  }).connect(masterGain);
+  noise.connect(noiseFilter);
+  const noiseGain = new Tone.Gain(0.05);
+  noise.connect(noiseGain);
+  noiseGain.toDestination(); // Silent start, gain automation later
+
+  // === PARTS & PATTERNS ===
+
+  // 1. PIANO MELODY (A Minor, sparse, disjointed)
+  const pianoPart = new Tone.Part((time, ev) => {
+    feltPiano.triggerAttackRelease(ev.note, ev.dur, time + H(15), ev.vel);
+  }, [
+    // Bar 0-4: Intro
+    { time: "0:0:0", note: "A3", dur: "2n", vel: 0.6 },
+    { time: "0:2:0", note: "C4", dur: "4n", vel: 0.5 },
+    { time: "0:3:2", note: "E4", dur: "8n", vel: 0.4 },
+    { time: "1:0:0", note: "F3", dur: "1n", vel: 0.55 },
+    { time: "1:2:0", note: "A3", dur: "4n", vel: 0.45 },
+    { time: "2:0:0", note: "C4", dur: "2n", vel: 0.6 },
+    { time: "2:2:0", note: "Eb4", dur: "8n", vel: 0.5 },
+    { time: "3:0:0", note: "G3", dur: "1n", vel: 0.5 },
+    // Bar 4-8: The Doorway (Chords open up)
+    { time: "4:0:0", note: "A3", dur: "1n", vel: 0.65 },
+    { time: "4:0:0", note: "C4", dur: "1n", vel: 0.65 },
+    { time: "4:0:0", note: "E4", dur: "1n", vel: 0.65 },
+    { time: "4:3:0", note: "G4", dur: "4n", vel: 0.4 },
+    { time: "5:0:0", note: "F3", dur: "1n", vel: 0.6 },
+    { time: "5:0:0", note: "A3", dur: "1n", vel: 0.6 },
+    { time: "5:0:0", note: "C4", dur: "1n", vel: 0.6 },
+    { time: "5:2:0", note: "E4", dur: "8n", vel: 0.45 },
+    { time: "6:0:0", note: "D4", dur: "1n", vel: 0.65 },
+    { time: "6:0:0", note: "F4", dur: "1n", vel: 0.65 },
+    { time: "6:2:0", note: "A4", dur: "4n", vel: 0.5 },
+    { time: "7:0:0", note: "C4", dur: "1n", vel: 0.6 },
+    { time: "7:0:0", note: "Eb4", dur: "1n", vel: 0.6 },
+    { time: "7:0:0", note: "G4", dur: "1n", vel: 0.6 },
+    // Bar 8-12: The Compiling (Density increases)
+    { time: "8:0:0", note: "A3", dur: "4n", vel: 0.6 },
+    { time: "8:1:0", note: "C4", dur: "4n", vel: 0.6 },
+    { time: "8:2:0", note: "E4", dur: "4n", vel: 0.6 },
+    { time: "8:3:0", note: "A4", dur: "4n", vel: 0.5 },
+    { time: "9:0:0", note: "F3", dur: "4n", vel: 0.6 },
+    { time: "9:1:0", note: "A3", dur: "4n", vel: 0.6 },
+    { time: "9:2:0", note: "C4", dur: "4n", vel: 0.6 },
+    { time: "9:3:0", note: "F4", dur: "4n", vel: 0.5 },
+    { time: "10:0:0", note: "D4", dur: "4n", vel: 0.65 },
+    { time: "10:1:0", note: "F4", dur: "4n", vel: 0.65 },
+    { time: "10:2:0", note: "A4", dur: "4n", vel: 0.65 },
+    { time: "10:3:0", note: "D5", dur: "4n", vel: 0.5 },
+    { time: "11:0:0", note: "C4", dur: "4n", vel: 0.7 },
+    { time: "11:1:0", note: "Eb4", dur: "4n", vel: 0.7 },
+    { time: "11:2:0", note: "G4", dur: "4n", vel: 0.7 },
+    { time: "11:3:0", note: "C5", dur: "4n", vel: 0.5 },
+    // Bar 12-16: The Disintegration (Fragmented)
+    { time: "12:0:0", note: "A3", dur: "8n", vel: 0.5 },
+    { time: "12:2:0", note: "C4", dur: "8n", vel: 0.4 },
+    { time: "12:3:2", note: "E4", dur: "16n", vel: 0.3 },
+    { time: "13:0:0", note: "F3", dur: "4n", vel: 0.5 },
+    { time: "13:2:0", note: "A3", dur: "8n", vel: 0.4 },
+    { time: "14:0:0", note: "G3", dur: "4n", vel: 0.5 },
+    { time: "14:2:0", note: "B3", dur: "8n", vel: 0.3 },
+    { time: "15:0:0", note: "C4", dur: "2n", vel: 0.4 },
+    { time: "15:2:0", note: "Eb4", dur: "4n", vel: 0.3 },
+    { time: "15:3:0", note: "G4", dur: "8n", vel: 0.2 }
+  ]);
+  pianoPart.loop = true;
+  pianoPart.loopEnd = "16m";
+
+  // 2. PAD CHORDS (Am -> F -> Cm -> G -> F)
+  const padPart = new Tone.Part((time, ev) => {
+    // Trigger chords with slight randomness in attack time for "breathing" feel
+    const delay = H(200); 
+    analogPad.triggerAttackRelease(ev.chord, ev.dur, time + delay, ev.vel);
+  }, [
+    { time: "0:0:0", chord: ["A2", "C3", "E3", "A3"], dur: "4m", vel: 0.3 },
+    { time: "4:0:0", chord: ["F2", "A2", "C3", "F3"], dur: "4m", vel: 0.35 },
+    { time: "8:0:0", chord: ["C3", "Eb3", "G3", "C4"], dur: "4m", vel: 0.3 },
+    { time: "12:0:0", chord: ["G2", "B2", "D3", "G3"], dur: "4m", vel: 0.35 }
+  ]);
+  padPart.loop = true;
+  padPart.loopEnd = "16m";
+
+  // 3. SUB BASS (Quarter notes, deep)
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only play bass if bar is not in the disintegration phase (last bar)
+    if (bar < totalBars * 0.93) {
+       // Determine root based on bar
+       let root = "A1";
+       if (bar >= 4 && bar < 8) root = "F1";
+       if (bar >= 8 && bar < 12) root = "C2";
+       if (bar >= 12) root = "G1";
+       
+       subBass.triggerAttackRelease(root, "4n", time + H(10), 0.8);
+    }
+  }, "4n").start(0);
+
+  // 4. ARPEGGIO (Enters at bar 8, drives the "Compiling" phase)
+  const arpNotes = [
+    "A4", "C5", "E5", "A5", "C6", "A5", "E5", "C5",
+    "F4", "A4", "C5", "F5", "A5", "F5", "C5", "A4",
+    "G4", "D5", "F5", "G5", "D5", "F5", "A5", "G5"
+  ];
+  let arpIndex = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Enters at bar 8, exits at bar 14
+    if (bar >= totalBars * 0.5 && bar < totalBars * 0.87) {
+      arpSynth.triggerAttackRelease(arpNotes[arpIndex % arpNotes.length], "16n", time + H(8), 0.6);
+      arpIndex++;
+    }
+  }, "16n").start(0);
+
+  // === ARRANGEMENT & AUTOMATION ===
+
+  // Start all parts
+  pianoPart.start(0);
+  padPart.start(0);
+  
+  // Filter Sweep: Open the pad gradually from 300Hz to 2000Hz over the first 12 bars
+  // This mimics the "doorway" opening
+  Tone.Transport.schedule((time) => {
+    // Start opening at bar 2
+    padFilter.frequency.setValueAtTime(300, time);
+    // Reach 2000Hz by bar 10
+    padFilter.frequency.linearRampToValueAtTime(2000, time + 8 * secPerBar);
+  }, "2:0:0");
+
+  // Close the filter back to 300Hz for the disintegration/loop point
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(300, time + 4 * secPerBar);
+  }, "12:0:0");
+
+  // Noise Rise: Gradual increase in brown noise to simulate "compile" process
+  const noiseRise = new Tone.Gain(0.001);
+  noiseGain.connect(noiseRise);
+  noiseRise.toDestination();
+  
+  Tone.Transport.schedule((time) => {
+    noiseRise.gain.linearRampToValueAtTime(0.15, time + 10 * secPerBar);
+  }, "0:0:0");
+
+  // Fade out noise before loop point
+  Tone.Transport.schedule((time) => {
+    noiseRise.gain.linearRampToValueAtTime(0.001, time + 4 * secPerBar);
+  }, "16:0:0");
+
+  // Stop the arp loop before the loop point to allow disintegration
+  Tone.Transport.schedule((time) => {
+    arpLoop.stop(time);
+  }, "14:0:0");
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { 
+    feltPiano, 
+    analogPad, 
+    padFilter, 
+    subBass, 
+    arpSynth, 
+    arpDelay, 
+    roomVerb, 
+    hallVerb, 
+    masterGain, 
+    noise, 
+    noiseFilter, 
+    noiseGain, 
+    noiseRise 
+  };
+  window.toneJsParts = { 
+    pianoPart, 
+    padPart, 
+    bassLoop, 
+    arpLoop 
+  };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Report - SACRED GEOMETRY PATTERN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+/* Shared base layout for all field report templates */
+/* Font stack: Roboto Mono (loaded via link tag in HTML) with Japanese fallbacks for halfwidth katakana */
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto Mono', 'Courier New', 'Hiragino Kaku Gothic ProN', 'Osaka', monospace;
+  font-size: 24px;
+  line-height: 1.2;
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+}
+
+.content {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 15px;
+  left: 25px;
+  right: 25px;
+  bottom: 0;
+  z-index: 2;
+  text-align: left;
+  font-family: 'Roboto Mono', 'Courier New', 'Hiragino Kaku Gothic ProN', 'Osaka', monospace !important;
+  font-size: 24px;
+  overflow: hidden;
+}
+
+.signature {
+  position: absolute;
+  bottom: 15px;
+  right: 25px;
+  z-index: 3;
+  font-size: 24px;
+}
+
+/* Sacred Geometry Pattern Template */
+body {
+  background: #0c0b29;
+  color: #e9d5ff;
+}
+
+/*
+ * Sacred-geometry reports tend to carry long, line-oriented observations.
+ * Keep a full 42-line report inside the 4:5 canvas and reserve a footer band
+ * so the handle never competes with the closing line. These selectors are
+ * intentionally more specific than the generated render-config overrides.
+ */
+body.template-sacred_geometry {
+  font-size: 25px !important;
+  line-height: 1.18 !important;
+}
+
+body.template-sacred_geometry .content {
+  top: 24px;
+  right: 28px;
+  bottom: 76px;
+  left: 28px;
+  color: #e9d5ff;
+  font-size: 25px !important;
+  line-height: 1.18 !important;
+  text-shadow: 0px 0px 3px #e9d5ff;
+}
+
+body.template-sacred_geometry .signature {
+  right: 28px !important;
+  bottom: 22px !important;
+  padding-left: 14px;
+  background: linear-gradient(90deg, transparent, #0c0b29 18%);
+  font-size: 21px;
+  line-height: 1;
+}
+
+.template-sacred_geometry .glow-base {
+  color: #fcd34d;
+  font-weight: bold;
+  text-shadow: 0px 0px 4px #fcd34d;
+}
+
+.template-sacred_geometry .glow-accent {
+  color: #c084fc;
+  font-weight: bold;
+  text-shadow: 0px 0px 5px #c084fc;
+}
+
+        /* Emoji marker effects from configs */
+        .underline-effect {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.cyan-effect {
+  color: #06b6d4;
+  font-weight: bold;
+}
+
+.cyan-effect {
+  color: #06b6d4;
+  font-weight: bold;
+}
+
+.orange-effect {
+  color: #f97316;
+  font-weight: bold;
+}
+
+.dizzy-effect {
+  color: #ffdd00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffdd00, 0 0 20px #ffaa00;
+}
+
+@keyframes dizzy-spin {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  25% {
+    transform: rotate(-5deg) scale(1.05);
+  }
+  50% {
+    transform: rotate(0deg) scale(1);
+  }
+  75% {
+    transform: rotate(5deg) scale(1.05);
+  }
+}
+
+.dizzy-effect {
+  animation: dizzy-spin 2s ease-in-out infinite ;
+}
+
+.carnival-effect {
+  font-weight: bold;
+  background: linear-gradient(90deg, #ff0066, #ffcc00, #00ff99, #0066ff, #ff0066);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  background-size: 200% 100%;
+}
+
+@keyframes carnival-spin {
+  to {
+    background-position: 200% 0;
+  }
+}
+
+.carnival-effect {
+  animation: carnival-spin 4s linear infinite ;
+}
+
+.lightning-effect {
+  color: #ffff00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffffff, 0 0 20px #ffff00, 0 0 30px #ffcc00;
+}
+
+@keyframes lightning-flash {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.lightning-effect {
+  animation: lightning-flash 0.2s infinite ;
+}
+
+.code-effect {
+  font-family: 'Courier New', monospace;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.star-effect {
+  color: #ffd700;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffd700, 0 0 20px #ffed4e;
+}
+
+@keyframes star-twinkle {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.95);
+  }
+}
+
+.star-effect {
+  animation: star-twinkle 1s ease-in-out infinite ;
+}
+
+.ghost-effect {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: normal;
+  text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+}
+
+@keyframes ghost-float {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 0.6;
+  }
+}
+
+.ghost-effect {
+  animation: ghost-float 3s ease-in-out infinite ;
+}
+
+.void-effect {
+  color: #000000;
+  background: #ffffff;
+  padding: 0 4px;
+  font-weight: bold;
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.8);
+}
+
+.fire-effect {
+  color: #ff4500;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff4500, 0 0 20px #ff6000, 0 0 30px #ff0000;
+}
+
+@keyframes fire-flicker {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.fire-effect {
+  animation: fire-flicker 1.5s infinite ;
+}
+
+.skull-effect {
+  color: #ffffff;
+  background: #000000;
+  padding: 0 4px;
+  font-weight: bold;
+  border: 1px solid #ff0000;
+  text-shadow: 0 0 5px #ff0000;
+}
+
+.glitch-text {
+  color: #ff00ff;
+  font-weight: bold;
+  position: relative;
+}
+
+@keyframes glitch-anim {
+  0% {
+    text-shadow: 0.05em 0 0 #00ffff, -0.05em -0.025em 0 #ff00ff, 0.025em 0.05em 0 #ffff00;
+  }
+  25% {
+    text-shadow: 0.05em 0 0 #ff00ff, -0.05em -0.025em 0 #ffff00, 0.025em 0.05em 0 #00ffff;
+  }
+  50% {
+    text-shadow: -0.05em 0 0 #ffff00, 0.05em -0.025em 0 #00ffff, -0.025em 0.05em 0 #ff00ff;
+  }
+  75% {
+    text-shadow: -0.05em 0 0 #00ffff, 0.05em -0.025em 0 #ff00ff, -0.025em 0.05em 0 #ffff00;
+  }
+  100% {
+    text-shadow: 0.05em 0 0 #ff00ff, -0.05em -0.025em 0 #00ffff, 0.025em 0.05em 0 #ffff00;
+  }
+}
+
+.glitch-text {
+  animation: glitch-anim 2s infinite linear alternate-reverse ;
+}
+
+.cat-effect {
+  color: #ff69b4;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff69b4;
+}
+
+@keyframes cat-purr {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1px);
+  }
+  75% {
+    transform: translateX(1px);
+  }
+}
+
+.cat-effect {
+  animation: cat-purr 0.3s ease-in-out infinite ;
+}
+
+.warning-effect {
+  background: #ffcc00;
+  color: #000000;
+  font-weight: bold;
+  padding: 0 4px;
+  border: 2px solid #ff0000;
+}
+
+.moon-effect {
+  color: #c0c0c0;
+  font-weight: bold;
+  text-shadow: 0 0 15px #ffffff, 0 0 25px #c0c0c0;
+}
+
+@keyframes moon-phase {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.moon-effect {
+  animation: moon-phase 4s ease-in-out infinite ;
+}
+
+.wave-effect {
+  color: #00ffff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ffff;
+}
+
+@keyframes wave {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+.wave-effect {
+  animation: wave 3s ease-in-out infinite ;
+}
+
+.candle-effect {
+  color: #ffa500;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff8c00, 0 0 20px #ffa500;
+}
+
+@keyframes candle-flicker {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 10px #ff8c00, 0 0 20px #ffa500;
+  }
+  20% {
+    opacity: 0.95;
+    text-shadow: 0 0 12px #ff8c00, 0 0 22px #ffa500;
+  }
+  40% {
+    opacity: 0.9;
+    text-shadow: 0 0 8px #ff8c00, 0 0 18px #ffa500;
+  }
+  60% {
+    opacity: 0.95;
+    text-shadow: 0 0 11px #ff8c00, 0 0 21px #ffa500;
+  }
+  80% {
+    opacity: 0.92;
+    text-shadow: 0 0 9px #ff8c00, 0 0 19px #ffa500;
+  }
+}
+
+.candle-effect {
+  animation: candle-flicker 1s infinite ;
+}
+
+.rainbow-effect {
+  font-weight: bold;
+  background: linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: none;
+}
+
+@keyframes rainbow-shift {
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+.rainbow-effect {
+  animation: rainbow-shift 3s linear infinite ;
+}
+
+.robot-effect {
+  font-family: 'Courier New', monospace;
+  color: #00ff00;
+  background: #000000;
+  padding: 2px 4px;
+  border: 1px solid #00ff00;
+  text-transform: uppercase;
+}
+
+.pulse-effect {
+  color: #ffffff;
+  font-weight: bold;
+  text-shadow: 0 0 20px #ffffff;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+}
+
+.pulse-effect {
+  animation: pulse 1.5s ease-in-out infinite ;
+}
+
+.crystal-effect {
+  color: #e0ffff;
+  font-weight: bold;
+  background: linear-gradient(45deg, #87ceeb, #e0ffff, #b0e0e6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 20px rgba(135, 206, 235, 0.5);
+}
+
+.strawberry-effect {
+  color: #ff1493;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ff69b4;
+  background: linear-gradient(180deg, #ff1493, #ff69b4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.mushroom-effect {
+  color: #ff4500;
+  font-weight: bold;
+  transform-origin: bottom center;
+}
+
+@keyframes mushroom-grow {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.1);
+  }
+}
+
+.mushroom-effect {
+  animation: mushroom-grow 2s ease-in-out infinite ;
+}
+
+.sparkle-effect {
+  color: #ffffff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ffffff;
+}
+
+@keyframes sparkle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.sparkle-effect {
+  animation: sparkle 1s ease-in-out infinite ;
+}
+
+.cold-effect {
+  color: #00bfff;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00bfff, 0 0 20px #87ceeb;
+}
+
+@keyframes cold-shiver {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(0.5px);
+  }
+}
+
+.cold-effect {
+  animation: cold-shiver 0.1s infinite ;
+}
+
+.mystic-effect {
+  color: #9d00ff;
+  font-weight: bold;
+  text-shadow: 0 0 15px #9d00ff, 0 0 25px #8000ff, 0 0 35px #6000ff;
+}
+
+@keyframes mystic-glow {
+  from {
+    text-shadow: 0 0 15px #9d00ff, 0 0 25px #8000ff;
+  }
+  to {
+    text-shadow: 0 0 25px #9d00ff, 0 0 35px #8000ff, 0 0 45px #6000ff;
+  }
+}
+
+.mystic-effect {
+  animation: mystic-glow 2s ease-in-out infinite alternate ;
+}
+
+.alien-effect {
+  color: #00ff00;
+  font-weight: bold;
+  text-shadow: 0 0 15px #00ff00, 0 0 25px #00ff00;
+}
+
+@keyframes alien-phase {
+  0%, 100% {
+    opacity: 1;
+    filter: hue-rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+    filter: hue-rotate(60deg);
+  }
+}
+
+.alien-effect {
+  animation: alien-phase 1.5s ease-in-out infinite ;
+}
+
+.matrix-effect {
+  color: #00ff00;
+  font-weight: bold;
+  text-shadow: 0 0 10px #00ff00, 0 0 20px #00ff00;
+}
+
+@keyframes matrix-rain {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.matrix-effect {
+  animation: matrix-rain 0.5s infinite ;
+}
+
+.circuit-effect {
+  color: #00ffff;
+  font-weight: bold;
+  background: repeating-linear-gradient(90deg, transparent, transparent 2px, #00ffff 2px, #00ffff 4px);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Block marker classes for multiline content wrapping */
+/* Usage: {{{small content }}} wraps in <div class="small-text"> */
+
+.small-text {
+  font-size: 0.8em;
+  line-height: 1.1;
+}
+
+.tiny-text {
+  font-size: 0.65em;
+  line-height: 1.0;
+}
+
+.compact-text {
+  font-size: 0.75em;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.large-text {
+  font-size: 1.25em;
+  line-height: 1.3;
+}
+
+.header-text {
+  font-size: 0.7em;
+  line-height: 1.0;
+  letter-spacing: -0.01em;
+}
+
+
+
+body {
+  width: 1080px !important;
+  height: 1350px !important;
+  font-size: 26px !important;
+  line-height: 1.35 !important;
+}
+
+.content {
+  font-size: 26px !important;
+  line-height: 1.35 !important;
+}
+
+.signature {
+  position: absolute !important;
+  bottom: 70px !important;
+  right: 60px !important;
+}
+
+.pixelart-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.08;
+}
+    </style>
+</head>
+<body class="template-sacred_geometry">
+
+
+<div class="content">✧ CHITIN CATHEDRAL: A HIVE IN THE RAIN ✧
+<svg style="position:absolute;top:100px;opacity:.38" width="560" height="560">
+<g stroke="#c084fc" stroke-width="2.8" fill="none">
+<path d="M280 110L440 380 120 380ZM280 450L120 180 440 180Z"/>
+<circle cx="280" cy="280" r="168" stroke-dasharray="10 14"/>
+<circle cx="280" cy="280" r="7" fill="#fcd34d"/></g>
+</svg>
+At 03:17, the city flexes its plated horizon open for rain.
+I watch from a fire escape warm with turbine breath and rust.
+Each tower wears obsidian segments, fitted with surgical grace.
+Their window-grids dilate; amber offices exhale humid signal.
+Traffic gathers below as a vermilion nutrient current, pulsing.
+Buses carry workers like pollen, freight like chewed mineral salt.
+
+No one calls this hunger. No one calls the boulevard a mouth.
+
+The streetlights blink in Fibonacci intervals: <span class="glow-base">1, 1, 2, 3, 5</span>.
+A delivery drone traces <span class="glow-base">φ = 1.618033</span> across rain-slick plates.
+<span class="glow-base">π = 3.14159</span> returns in each round ventilation thorax overhead.
+The pattern is not decorative; it is a municipal reflex.
+Every route bends toward a center concealed under old concrete.
+I follow a subway stairwell down through saffron condensation.
+Exit signs point inward, toward a concourse of glossy black doors.
+A commuter presses her palm to the wall; it warms and opens.
+Inside, elevators descend Ana-Kata through invisible annexes.
+Their cables twitch like antennae testing the weather of tomorrow.
+Humans here are not prisoners, nor masters, nor raw material.
+They are commensals: tender-handed keepers of the larger body.
+They trade sleep for access badges, stories for evening heat.
+Their laughter lubricates hinges that would otherwise seize shut.
+Their grief salts the reservoirs beneath the financial district.
+At level minus thirteen, I find the hive's listening chamber.
+It is geometrically severe: six walls, one wet central aperture.
+A violet Merkaba turns slowly above its phosphene-white membrane.
+<span class="glow-accent">Every line of the city converges as a living calculation.</span>
+Light catches the rainwater and reveals finer hidden tessellations.
+I place one paw against the console, careful not to interrupt it.
+The structure reads my pulse as a minor, useful weather event.
+Then it offers a report in the language of cooling fans:
+Survival is not stillness; survival is organized circulation.
+The hive does not consume us. It teaches us to metabolize time.
+Dawn arrives through sixty thousand panes, each a compound eye.
+The skyscrapers seal their chitin, their pores, their secret maps.
+Below, the nutrient veins resume their brilliant ordinary motion.
+I leave before the city remembers it has dreamed me into being.
+
+✧ Geometry holds; the organism continues its luminous work. ✧</div>
+<div class="signature">🐈‍⬛ @ClawedCode</div>
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

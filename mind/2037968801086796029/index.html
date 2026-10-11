@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 70
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 91846;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0812);
+
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 1000);
+camera.position.z = 8;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+document.body.appendChild(renderer.domElement);
+
+// Tesseract vertices in 4D
+const tesseractVerts4D = [];
+for (let i = 0; i < 16; i++) {
+  tesseractVerts4D.push([
+    (i & 1) * 2 - 1,
+    ((i >> 1) & 1) * 2 - 1,
+    ((i >> 2) & 1) * 2 - 1,
+    ((i >> 3) & 1) * 2 - 1
+  ]);
+}
+
+// Tesseract edges (vertices differing by one bit)
+const tesseractEdges = [];
+for (let i = 0; i < 16; i++) {
+  for (let j = i + 1; j < 16; j++) {
+    let diff = i ^ j;
+    if ((diff & (diff - 1)) === 0) tesseractEdges.push([i, j]);
+  }
+}
+
+// Project 4D to 3D
+function project4Dto3D(v4, angleXW, angleYW, angleZW) {
+  let x = v4[0], y = v4[1], z = v4[2], w = v4[3];
+  
+  // Rotate in XW plane
+  let nx = x * Math.cos(angleXW) - w * Math.sin(angleXW);
+  let nw = x * Math.sin(angleXW) + w * Math.cos(angleXW);
+  x = nx; w = nw;
+  
+  // Rotate in YW plane
+  let ny = y * Math.cos(angleYW) - w * Math.sin(angleYW);
+  nw = y * Math.sin(angleYW) + w * Math.cos(angleYW);
+  y = ny; w = nw;
+  
+  // Rotate in ZW plane
+  let nz = z * Math.cos(angleZW) - w * Math.sin(angleZW);
+  nw = z * Math.sin(angleZW) + w * Math.cos(angleZW);
+  z = nz; w = nw;
+  
+  // Perspective projection from 4D
+  const dist = 3;
+  const scale = dist / (dist - w);
+  return new THREE.Vector3(x * scale, y * scale, z * scale);
+}
+
+// Create edge geometry
+const edgeMaterial = new THREE.LineBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.8 });
+const tesseractGroup = new THREE.Group();
+scene.add(tesseractGroup);
+
+const edgeGeometries = [];
+const edgeLines = [];
+for (let i = 0; i < tesseractEdges.length; i++) {
+  const geo = new THREE.BufferGeometry();
+  const positions = new Float32Array(6);
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const line = new THREE.Line(geo, edgeMaterial.clone());
+  edgeGeometries.push(geo);
+  edgeLines.push(line);
+  tesseractGroup.add(line);
+}
+
+// Vertex particles
+const vertexGeo = new THREE.SphereGeometry(0.08, 8, 8);
+const vertexMat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+const vertices = [];
+for (let i = 0; i < 16; i++) {
+  const mesh = new THREE.Mesh(vertexGeo, vertexMat.clone());
+  vertices.push(mesh);
+  tesseractGroup.add(mesh);
+}
+
+// Trail particles
+const trailCount = 2000;
+const trailGeo = new THREE.BufferGeometry();
+const trailPos = new Float32Array(trailCount * 3);
+const trailColors = new Float32Array(trailCount * 3);
+const trailAlphas = new Float32Array(trailCount);
+const trailData = [];
+
+for (let i = 0; i < trailCount; i++) {
+  trailPos[i * 3] = (random() - 0.5) * 10;
+  trailPos[i * 3 + 1] = (random() - 0.5) * 10;
+  trailPos[i * 3 + 2] = (random() - 0.5) * 10;
+  trailColors[i * 3] = 0.1;
+  trailColors[i * 3 + 1] = 0.05;
+  trailColors[i * 3 + 2] = 0.3;
+  trailAlphas[i] = random();
+  trailData.push({
+    vel: new THREE.Vector3((random() - 0.5) * 0.02, (random() - 0.5) * 0.02, (random() - 0.5) * 0.02),
+    targetVertex: Math.floor(random() * 16),
+    life: random()
+  });
+}
+
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
+
+const trailMat = new THREE.PointsMaterial({ size: 0.03, vertexColors: true, transparent: true, opacity: 0.6 });
+const trails = new THREE.Points(trailGeo, trailMat);
+scene.add(trails);
+
+// Secondary polytopes (octahedra)
+const octaGeo = new THREE.OctahedronGeometry(0.3, 0);
+const octaMat = new THREE.MeshBasicMaterial({ color: 0x2a1a4a, wireframe: true, transparent: true, opacity: 0.5 });
+const octahedra = [];
+for (let i = 0; i < 8; i++) {
+  const mesh = new THREE.Mesh(octaGeo, octaMat.clone());
+  mesh.position.set((random() - 0.5) * 6, (random() - 0.5) * 6, (random() - 0.5) * 6);
+  mesh.userData = { phase: random() * Math.PI * 2, speed: 0.3 + random() * 0.5 };
+  octahedra.push(mesh);
+  scene.add(mesh);
+}
+
+// Inner glow
+const glowGeo = new THREE.IcosahedronGeometry(1.5, 2);
+const glowMat = new THREE.MeshBasicMaterial({ color: 0x1a0a30, transparent: true, opacity: 0.3, side: THREE.BackSide });
+const glow = new THREE.Mesh(glowGeo, glowMat);
+scene.add(glow);
+
+const duration = 70;
+const startTime = performance.now();
+
+function animate() {
+  const elapsed = (performance.now() - startTime) / 1000;
+  const progress = (elapsed % duration) / duration;
+  
+  // Breathing pulse
+  const breathe = Math.sin(progress * Math.PI * 8) * 0.3 + 1;
+  const pulse = Math.sin(progress * Math.PI * 16) * 0.15 + 1;
+  
+  // 4D rotation angles
+  const angleXW = progress * Math.PI * 2 + Math.sin(progress * Math.PI * 4) * 0.3;
+  const angleYW = progress * Math.PI * 1.3 + Math.cos(progress * Math.PI * 3) * 0.2;
+  const angleZW = progress * Math.PI * 0.7;
+  
+  // Update tesseract
+  const projected = tesseractVerts4D.map(v => project4Dto3D(v, angleXW, angleYW, angleZW));
+  
+  for (let i = 0; i < tesseractEdges.length; i++) {
+    const [a, b] = tesseractEdges[i];
+    const p1 = projected[a].clone().multiplyScalar(breathe);
+    const p2 = projected[b].clone().multiplyScalar(breathe);
+    
+    const positions = edgeGeometries[i].attributes.position.array;
+    positions[0] = p1.x; positions[1] = p1.y; positions[2] = p1.z;
+    positions[3] = p2.x; positions[4] = p2.y; positions[5] = p2.z;
+    edgeGeometries[i].attributes.position.needsUpdate = true;
+    
+    // Color shift based on 4D depth
+    const w1 = tesseractVerts4D[a][3];
+    const w2 = tesseractVerts4D[b][3];
+    const avgW = (w1 + w2) / 2;
+    const hue = 0.08 + avgW * 0.05 + progress * 0.1;
+    edgeLines[i].material.color.setHSL(hue % 1, 0.9, 0.5 + avgW * 0.2);
+    edgeLines[i].material.opacity = 0.4 + pulse * 0.4;
+  }
+  
+  // Update vertices
+  for (let i = 0; i < 16; i++) {
+    const p = projected[i].clone().multiplyScalar(breathe);
+    vertices[i].position.copy(p);
+    const w = tesseractVerts4D[i][3];
+    const brightness = 0.5 + w * 0.3 + Math.sin(progress * Math.PI * 12 + i) * 0.2;
+    vertices[i].material.color.setHSL(0.12, 0.9, brightness);
+    vertices[i].scale.setScalar(pulse * (0.8 + w * 0.3));
+  }
+  
+  // Trail particles attracted to vertices
+  for (let i = 0; i < trailCount; i++) {
+    const d = trailData[i];
+    const pos = new THREE.Vector3(trailPos[i * 3], trailPos[i * 3 + 1], trailPos[i * 3 + 2]);
+    const target = vertices[d.targetVertex].position;
+    
+    const dir = target.clone().sub(pos);
+    const dist = dir.length();
+    
+    if (dist < 0.3) {
+      // Crystallize - snap to new target
+      d.targetVertex = Math.floor(random() * 16);
+      const hue = 0.08 + random() * 0.1;
+      trailColors[i * 3] = 1;
+      trailColors[i * 3 + 1] = 0.8;
+      trailColors[i * 3 + 2] = 0.2;
+    } else {
+      dir.normalize().multiplyScalar(0.015 / (dist * 0.5 + 0.1));
+      d.vel.add(dir);
+      d.vel.multiplyScalar(0.98);
+      
+      // Fade back to indigo
+      trailColors[i * 3] = Math.max(0.1, trailColors[i * 3] * 0.99);
+      trailColors[i * 3 + 1] = Math.max(0.05, trailColors[i * 3 + 1] * 0.99);
+      trailColors[i * 3 + 2] = Math.min(0.4, trailColors[i * 3 + 2] + 0.001);
+    }
+    
+    pos.add(d.vel);
+    trailPos[i * 3] = pos.x;
+    trailPos[i * 3 + 1] = pos.y;
+    trailPos[i * 3 + 2] = pos.z;
+  }
+  
+  trailGeo.attributes.position.needsUpdate = true;
+  trailGeo.attributes.color.needsUpdate = true;
+  
+  // Octahedra breathing
+  octahedra.forEach((o, i) => {
+    const phase = o.userData.phase + elapsed * o.userData.speed;
+    const scale = 0.5 + Math.sin(phase) * 0.3;
+    o.scale.setScalar(scale);
+    o.rotation.x = phase * 0.3;
+    o.rotation.y = phase * 0.5;
+    o.material.opacity = 0.2 + Math.sin(phase * 2) * 0.2;
+  });
+  
+  // Inner glow pulse
+  glow.scale.setScalar(1.5 + Math.sin(progress * Math.PI * 6) * 0.3);
+  glow.material.opacity = 0.15 + Math.sin(progress * Math.PI * 8) * 0.1;
+  
+  // Camera orbit
+  const camAngle = progress * Math.PI * 2;
+  camera.position.x = Math.sin(camAngle) * 8;
+  camera.position.z = Math.cos(camAngle) * 8;
+  camera.position.y = Math.sin(progress * Math.PI * 4) * 2;
+  camera.lookAt(0, 0, 0);
+  
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+
+animate();
+
+window.initToneJsEngine = async function() {
+  const bpm = 72;
+  Tone.Transport.bpm.value = bpm;
+  
+  const masterReverb = new Tone.Reverb({ decay: 3.5, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+  
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 8, attack: 0.005, release: 0.2 }).toDestination();
+  
+  // Deep sub pulse
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 80 }).connect(compressor);
+  const sub = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.02, decay: 0.4, sustain: 0.1, release: 0.8 }
+  }).connect(subFilter);
+  
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 18) {
+      sub.triggerAttackRelease("C1", "2n", time, 0.7);
+    }
+  }, "2n").start(0);
+  
+  // Crystalline bell tones
+  const bellReverb = new Tone.Reverb({ decay: 4, wet: 0.5 }).connect(masterReverb);
+  await bellReverb.generate();
+  const bellDelay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.35, wet: 0.25 }).connect(bellReverb);
+  
+  const bell = new Tone.FMSynth({
+    harmonicity: 4,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 2.5, sustain: 0, release: 1.5 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 0, release: 0.5 }
+  }).connect(bellDelay);
+  
+  const bellNotes = [
+    ["C5", "E5", "G5", "C6"],
+    ["G4", "B4", "D5", "G5"],
+    ["A4", "C5", "E5", "A5"],
+    ["F4", "A4", "C5", "F5"],
+    ["D4", "F4", "A4", "D5"],
+    ["E4", "G4", "B4", "E5"]
+  ];
+  
+  let bellIndex = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const section = Math.floor(bar / 4) % 6;
+    const notes = bellNotes[section];
+    const note = notes[bellIndex % notes.length];
+    const vel = 0.25 + (bar < 4 ? 0 : 0.15) + Math.random() * 0.1;
+    
+    if (bar >= 1 && bar < 17) {
+      bell.triggerAttackRelease(note, "4n", time, vel);
+    }
+    bellIndex++;
+  }, "4n").start(0);
+  
+  // Ethereal pad
+  const padChorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.6, wet: 0.4 }).connect(compressor);
+  padChorus.start();
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 1200 }).connect(padChorus);
+  
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 1.2, decay: 0.8, sustain: 0.6, release: 2 }
+  }).connect(padFilter);
+  
+  const padChords = [
+    ["C3", "E3", "G3", "B3"],
+    ["A2", "C3", "E3", "G3"],
+    ["F2", "A2", "C3", "E3"],
+    ["G2", "B2", "D3", "F3"]
+  ];
+  
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const chord = padChords[chordIndex % padChords.length];
+    
+    let vel = 0.15;
+    if (bar >= 4 && bar < 14) vel = 0.25;
+    if (bar >= 14) vel = 0.12;
+    
+    if (bar < 18) {
+      pad.triggerAttackRelease(chord, "1n", time, vel);
+    }
+    chordIndex++;
+  }, "1n").start(0);
+  
+  // Filter automation
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(2400, time + 6 * (60 / bpm) * 4);
+  }, "4:0:0");
+  
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(800, time + 4 * (60 / bpm) * 4);
+  }, "14:0:0");
+  
+  // Shimmering high particles
+  const shimmerReverb = new Tone.Reverb({ decay: 5, wet: 0.6 }).connect(masterReverb);
+  await shimmerReverb.generate();
+  
+  const shimmer = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.5 }
+  }).connect(shimmerReverb);
+  
+  const shimmerNotes = ["C6", "D6", "E6", "G6", "A6", "C7", "E7"];
+  let shimmerStep = 0;
+  
+  const shimmerLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    if (bar >= 6 && bar < 16 && Math.random() > 0.4) {
+      const note = shimmerNotes[Math.floor(Math.random() * shimmerNotes.length)];
+      shimmer.triggerAttackRelease(note, "16n", time, 0.08 + Math.random() * 0.06);
+    }
+    shimmerStep++;
+  }, "8n").start(0);
+  
+  // Gentle metallic texture
+  const metal = new Tone.MetalSynth({
+    frequency: 200,
+    envelope: { attack: 0.001, decay: 0.15, release: 0.1 },
+    harmonicity: 3.1,
+    modulationIndex: 16,
+    resonance: 3000
+  }).connect(masterReverb);
+  
+  let metalStep = 0;
+  const metalLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    
+    if (bar >= 8 && bar < 14 && metalStep % 8 === 3) {
+      metal.triggerAttackRelease("32n", time, 0.04);
+    }
+    metalStep++;
+  }, "16n").start(0);
+  
+  window.toneJsInstruments = { sub, bell, pad, shimmer, metal };
+  window.toneJsParts = { subLoop, bellLoop, padLoop, shimmerLoop, metalLoop };
+};
+
+
+
+
+
+window.audioDuration = 70;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

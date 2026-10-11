@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas');canvas.width=900;canvas.height=900;
+const ctx=document.createElement('canvas')&&canvas.getContext('2d');
+const W=900,H=900,D=60,TAU=Math.PI*2,BG='#060b15',AMB='255,176,84',WHT='226,234,246';
+let seed=6531056;function rnd(){seed=(seed*9301+49297)%233280;return seed/233280;}
+const cl=(v,a,b)=>v<a?a:v>b?b:v;
+const PA={x:72,y:104,w:452,h:452},PB={x:556,y:104,w:272,h:452},PC={x:72,y:592,w:756,h:212};
+const g=document.createElement('canvas');g.width=W;g.height=H;const gx=g.getContext('2d');
+gx.fillStyle=BG;gx.fillRect(0,0,W,H);
+function panel(p,nx,ny,mx,my){
+gx.fillStyle='#09101e';gx.fillRect(p.x,p.y,p.w,p.h);
+for(let i=1;i<nx;i++){const x=Math.round(p.x+p.w*i/nx)+.5;gx.strokeStyle='rgba(148,176,218,'+(i%mx?0.05:0.13)+')';gx.lineWidth=1;gx.beginPath();gx.moveTo(x,p.y+3);gx.lineTo(x,p.y+p.h-3);gx.stroke();}
+for(let i=1;i<ny;i++){const y=Math.round(p.y+p.h*i/ny)+.5;gx.strokeStyle='rgba(148,176,218,'+(i%my?0.05:0.13)+')';gx.lineWidth=1;gx.beginPath();gx.moveTo(p.x+3,y);gx.lineTo(p.x+p.w-3,y);gx.stroke();}
+gx.strokeStyle='rgba(180,202,232,0.26)';gx.lineWidth=1;gx.strokeRect(p.x+.5,p.y+.5,p.w-1,p.h-1);}
+panel(PA,10,10,5,5);panel(PB,6,12,3,4);panel(PC,12,4,6,2);
+const AX=PA.x+PA.w/2,AY=PA.y+PA.h/2,AR=PA.w*0.4;
+(function(){const cx=AX+.5,cy=AY+.5;gx.strokeStyle='rgba('+WHT+',0.3)';gx.lineWidth=1;gx.beginPath();gx.moveTo(cx,PA.y+9);gx.lineTo(cx,PA.y+PA.h-9);gx.moveTo(PA.x+9,cy);gx.lineTo(PA.x+PA.w-9,cy);gx.stroke();
+gx.strokeStyle='rgba('+WHT+',0.46)';gx.beginPath();for(let i=-25;i<=25;i++){if(!i)continue;const d=i*(AR/25),L=i%5?3:7;gx.moveTo(cx+d,cy-L);gx.lineTo(cx+d,cy+L);gx.moveTo(cx-L,cy+d);gx.lineTo(cx+L,cy+d);}gx.stroke();})();
+const BX=PB.x+PB.w/2,BS=150,CB=PC.y+PC.h-34;
+gx.strokeStyle='rgba('+WHT+',0.22)';gx.lineWidth=1;gx.beginPath();gx.moveTo(BX+.5,PB.y+6);gx.lineTo(BX+.5,PB.y+PB.h-6);gx.moveTo(PC.x+10,CB+.5);gx.lineTo(PC.x+PC.w-10,CB+.5);gx.stroke();
+const vig=ctx.createRadialGradient(450,430,180,450,450,640);vig.addColorStop(0,'rgba(0,0,0,0)');vig.addColorStop(1,'rgba(0,0,0,0.55)');
+const NT=46,SP=(PC.w-40)/(NT-1),BASE=[],DROP=[],DC=[];
+for(let i=0;i<NT;i++)BASE.push(PC.x+20+SP*i);
+for(let k=0;k<12;k++){const row=[];let c=0;for(let i=0;i<NT;i++){const d=rnd()<0.13;row.push(d);if(d)c++;}DROP.push(row);DC.push(c);}
+const REF=[];for(let i=0;i<=220;i++){const u=i/220*TAU;REF.push([AX+Math.sin(3*u)*AR,AY-Math.sin(2*u+0.18)*AR]);}
+function psi(t){const h=TAU*t/D;return 1.15*(1-Math.cos(h))/2+0.24*(1-Math.cos(2*h))/2+0.08*(1-Math.cos(3*h))/2;}
+function shear(t){return 1+0.055*Math.sin(TAU*4*t/D)+0.028*Math.sin(TAU*7*t/D+1.1);}
+function err(t){return psi(t)+0.055*Math.sin(TAU*9*t/D)+0.028*Math.sin(TAU*23*t/D+0.7);}
+function aPt(u,t){const p=psi(t),o=p/1.5,s=shear(t);return[AX+(Math.sin(3*u)+0.075*o*Math.sin(u))*AR,AY-(Math.sin(2*u+0.18+p)*s+0.1*o*Math.cos(u))*AR];}
+function aPath(t,n){ctx.beginPath();for(let i=0;i<=n;i++){const q=aPt(i/n*TAU,t);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);}ctx.closePath();}
+window.renderFrame=function(time){
+const t=((time%D)+D)%D,th=TAU*t/D;
+const bA=0.46+0.54*(0.5+0.5*Math.cos(th)),bB=0.46+0.54*(0.5+0.5*Math.cos(th-TAU/3)),bC=0.46+0.54*(0.5+0.5*Math.cos(th-2*TAU/3));
+ctx.drawImage(g,0,0);ctx.lineJoin='round';ctx.lineCap='round';
+ctx.setLineDash([8,7]);ctx.beginPath();for(let i=0;i<=220;i++)i?ctx.lineTo(REF[i][0],REF[i][1]):ctx.moveTo(REF[0][0],REF[0][1]);
+ctx.lineWidth=1;ctx.strokeStyle='rgba('+WHT+','+(0.3*bA+0.12)+')';ctx.stroke();ctx.setLineDash([]);
+const lag=[2.3,1.35,0.6],lal=[0.06,0.1,0.17];
+for(let k=0;k<3;k++){aPath(t-lag[k],150);ctx.lineWidth=2.4;ctx.strokeStyle='rgba('+AMB+','+(lal[k]*bA)+')';ctx.stroke();}
+aPath(t,260);ctx.lineWidth=7;ctx.strokeStyle='rgba('+AMB+','+(0.05*bA)+')';ctx.stroke();
+ctx.lineWidth=1.5;ctx.strokeStyle='rgba('+AMB+','+(0.9*bA)+')';ctx.stroke();
+const uh=t/3*TAU;ctx.beginPath();for(let i=0;i<=26;i++){const q=aPt(uh-0.44+0.44*i/26,t);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]);}
+ctx.lineWidth=3.2;ctx.strokeStyle='rgba(255,226,186,'+(0.45+0.4*bA)+')';ctx.stroke();
+const hp=aPt(uh,t);ctx.fillStyle='rgba(255,244,228,0.95)';ctx.beginPath();ctx.arc(hp[0],hp[1],2.7,0,TAU);ctx.fill();
+ctx.save();ctx.beginPath();ctx.rect(PB.x+1,PB.y+1,PB.w-2,PB.h-2);ctx.clip();
+ctx.beginPath();for(let i=0;i<=190;i++){const f=i/190,x=BX+(psi(t-f*12)-0.72)*BS,y=PB.y+f*PB.h;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+ctx.lineWidth=1;ctx.strokeStyle='rgba('+WHT+','+(0.26+0.2*bB)+')';ctx.stroke();
+ctx.beginPath();for(let i=0;i<=190;i++){const f=i/190,x=BX+(err(t-f*12)-0.72)*BS,y=PB.y+f*PB.h;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+ctx.lineWidth=6;ctx.strokeStyle='rgba('+AMB+','+(0.05*bB)+')';ctx.stroke();
+ctx.lineWidth=1.6;ctx.strokeStyle='rgba('+AMB+','+(0.88*bB)+')';ctx.stroke();
+const hx=BX+(err(t)-0.72)*BS;ctx.strokeStyle='rgba(255,230,196,'+(0.2+0.25*bB)+')';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PB.x+4,PB.y+2.5);ctx.lineTo(PB.x+PB.w-4,PB.y+2.5);ctx.stroke();
+ctx.fillStyle='rgba(255,244,228,0.95)';ctx.beginPath();ctx.arc(hx,PB.y+3,2.8,0,TAU);ctx.fill();ctx.restore();
+const bk=Math.floor(t/5)%12,wp=(t/7.5)%1,px=PC.x-70+(PC.w+140)*wp,dr=psi(t)/1.5;
+for(let i=0;i<NT;i++){const x=Math.round(BASE[i])+.5,k=Math.exp(-Math.pow((x-px)/70,2));
+ctx.strokeStyle='rgba('+WHT+','+(0.16+0.3*k*bC)+')';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,CB);ctx.lineTo(x,CB-20-14*k);ctx.stroke();}
+for(let i=0;i<NT;i++){if(DROP[bk][i])continue;
+const ox=dr*SP*(0.55+0.9*i/NT),x=BASE[i]+ox,k=Math.exp(-Math.pow((x-px)/70,2));
+let dd=(x-PC.x+SP*99)%SP;const nd=Math.min(dd,SP-dd),gl=Math.pow(1-cl(nd/16,0,1),2);
+ctx.strokeStyle='rgba('+AMB+','+(0.2+0.45*bC+0.3*k)+')';ctx.lineWidth=2.4;ctx.beginPath();ctx.moveTo(x,CB+4);ctx.lineTo(x,CB+4+26+16*k);ctx.stroke();
+if(gl>0.02){ctx.strokeStyle='rgba(255,236,206,'+(0.55*gl*(0.5+0.5*bC))+')';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,PC.y+8);ctx.lineTo(x,PC.y+PC.h-8);ctx.stroke();}}
+ctx.font='11px "Courier New",monospace';ctx.textAlign='left';
+ctx.fillStyle='rgba('+WHT+',0.55)';ctx.fillText('PHASE COMPARATOR   STD-A 3 : STD-B 2',72,88);
+ctx.textAlign='right';ctx.fillStyle='rgba('+WHT+',0.38)';ctx.fillText('T '+t.toFixed(2)+' S',828,88);
+ctx.textAlign='left';ctx.fillStyle='rgba('+WHT+',0.34)';
+ctx.fillText('XY PHASE PLANE',PA.x+10,PA.y+20);ctx.fillText('PH ERR / TIME',PB.x+10,PB.y+20);ctx.fillText('TICK COINCIDENCE',PC.x+10,PC.y+20);
+ctx.fillStyle='rgba('+AMB+',0.7)';ctx.fillText('D '+err(t).toFixed(4)+' RAD',PB.x+10,PB.y+PB.h-12);
+ctx.textAlign='right';ctx.fillStyle='rgba('+WHT+',0.34)';ctx.fillText('DROPPED '+DC[bk],PC.x+PC.w-10,PC.y+20);
+ctx.fillText('SHEAR '+shear(t).toFixed(3),PA.x+PA.w-10,PA.y+PA.h-12);
+if(t>46&&t<58){const f=(t-46)/12,yf=Math.round(838-752*f)+.5,e=cl(Math.min((t-46)/1.2,(58-t)/1.2),0,1);
+const gr=ctx.createLinearGradient(0,yf,0,yf+300);gr.addColorStop(0,'rgba(6,11,21,'+(0.92*e)+')');gr.addColorStop(1,'rgba(6,11,21,0)');
+ctx.fillStyle=gr;ctx.fillRect(0,yf,W,320);
+ctx.strokeStyle='rgba('+WHT+','+(0.1*e)+')';ctx.lineWidth=6;ctx.beginPath();ctx.moveTo(60,yf);ctx.lineTo(840,yf);ctx.stroke();
+ctx.strokeStyle='rgba(255,224,178,'+(0.55*e)+')';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(60,yf);ctx.lineTo(840,yf);ctx.stroke();}
+ctx.fillStyle=vig;ctx.fillRect(0,0,W,H);
+return canvas.toDataURL('image/png');};
+window.ready=true;
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 60\\n// FORM: A 0-3.5; A' 3.5-7; B 7-10.5; A'' 10.5-13; A coda 13-15\\n// TONAL CENTER: F# natural minor\\n// MOTIF: F#4 C#5 B4 A4 F#4; F#4 sustains through beats 1-2.5, C#5 attacks on beat 3, B4 on beat 4, A4 on beat 4.5, then a half-beat rest before the closing F#4 pickup\\n// HARMONIC PLAN: A 0-3.5 F#m pedal; A' 3.5-7 D(add9) with F# common tone and return to F# pedal at 5.5; B 7-10.5 Bm7 into A(sus2) at 9; A'' 10.5-13 restored F#m with A1-B1-C#2-F#1 bass walk; A coda 13-15 opening F#m voicing only\\n// PHRASE RULE: Halftime two-cycle cell: TR808 kick on beat 1, CR78 rim on beat 3.5, closed hats on the and of 2 and the and of 4; across boundaries retain F# or step by no more than a whole tone, carry a common pad tone, and change exactly one of density or articulation while preserving kick and rim\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\nconst bassLine = '\u003cf#1 f#1 f#1 [f#1 d1] d1 [d1 f#1] f#1 f#1 f#1 f#1 [f#1 a1] b1 [c#2 f#1] f#1 f#1>'\\nconst padLine = '\u003c[a3,c#4,f#4] [a3,c#4,f#4] [a3,c#4,f#4] [[a3,c#4,f#4] [d3,a3,e4,f#4]] [d3,a3,e4,f#4] [d3,a3,e4,f#4] [d3,a3,e4,f#4] [b2,d4,f#4,a4] [b2,d4,f#4,a4] [a2,b3,e4] [a2,b3,e4] [a3,c#4,f#4,c#5] [a3,c#4,f#4,c#5] [a3,c#4,f#4] [a3,c#4,f#4]>'\\nconst leadLine = '\u003c[f#4@5 c#5@2 b4 a4 ~] ~ [f#4@5 c#5@2 b4 a4 ~] [[f#4@5 c#5@2 b4 a4 ~] ~] [f#4@5 c#5@2 b4 a4 ~] ~ [f#4@5 c#5@2 b4 a4 ~] [~ f#4@5 c#5@2 b4 ~] ~ [~ f#4@5 c#5@2 b4 ~] [[~ f#4 c#5 b4] [f#4 c#5 b4 a4]] [f#4@5 c#5@2 b4 a4 ~] [f#4@5 c#5@2 b4 a4 ~] [f#4@3 c#5@2 ~] ~>'\\nconst overtoneLine = '\u003c~ ~ ~ ~ ~ ~ ~ [~ c#6@5 g#6@2 f#6 ~] ~ [~ c#6@5 g#6@2 f#6 ~] [[~ c#6 g#6 f#6] [c#6 g#6 f#6 e6]] [c#6@5 g#6@2 f#6 e6 ~] [c#6@5 g#6@2 f#6 e6 ~] ~ ~>'\\n$: stack(\\n  s('\u003c[bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~] [bd ~ ~ ~ ~ ~ ~ ~]>')\\n    .bank('RolandTR808')\\n    .gain(0.3),\\n  s('\u003c[~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ~ ~ rim ~ ~] [~ ~ ~ ~ ~ rim ~ ~] [~ ~ ~ ~ ~ rim ~ ~] [~ ~ ~ ~ ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ch ~ rim ~ ch] [~ ~ ~ ~ ~ rim ~ ~] [~ ~ ~ ~ ~ rim ~ ~]>')\\n    .bank('RolandCR78')\\n    .gain(0.13)\\n    .hpf(520)\\n)\\n  .room(0.32)\\n  .orbit(0)\\n$: stack(\\n  note(bassLine)\\n    .s('sine')\\n    .gain(0.2),\\n  note(bassLine)\\n    .s('sawtooth')\\n    .gain(0.045)\\n    .lpf(155)\\n    .detune(-3),\\n  note('\u003c~ ~ ~ ~ [f#3@5 c#4@2 ~] ~ [f#3@5 c#4@2 ~] ~ ~ ~ ~ ~ ~ ~ ~>')\\n    .s('sine')\\n    .gain(0.035)\\n    .lpf(240)\\n)\\n  .attack(0.12)\\n  .release(1.8)\\n  .room(0.28)\\n  .orbit(1)\\n$: note(padLine)\\n  .s('sawtooth')\\n  .attack(0.48)\\n  .release(2.4)\\n  .lpf(880)\\n  .detune('\u003c-4 3 -3 4>/8')\\n  .gain(0.095)\\n  .room(0.76)\\n  .pan('\u003c0.38 0.62>/4')\\n  .orbit(2)\\n$: note(leadLine)\\n  .s('triangle')\\n  .attack(0.24)\\n  .release(1.65)\\n  .lpf(1850)\\n  .gain(0.145)\\n  .room(0.62)\\n  .delay(0.375)\\n  .pan('\u003c0.3 0.7>/2')\\n  .orbit(3)\\n$: note(overtoneLine)\\n  .s('sine')\\n  .attack(0.42)\\n  .release(2.2)\\n  .gain(0.052)\\n  .room(0.82)\\n  .delay(0.375)\\n  .pan('\u003c0.68 0.32>/4')\\n  .orbit(4)\",\"bpm\":60,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.25,\"cycles\":15,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

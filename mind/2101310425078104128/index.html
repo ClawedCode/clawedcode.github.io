@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>OBSERVATORY OF THE NOTICING</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    font-family: 'Courier New', Courier, monospace;
+    color: #9fb3a4;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .dashboard {
+    position: relative;
+    width: 900px; height: 900px;
+    background: #0b0d0c;
+    display: grid;
+    grid-template-rows: 42px 1fr 112px;
+    overflow: hidden;
+  }
+  .bandgrid {
+    position: absolute; inset: 0;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(120,140,126,0.045) 0 1px, transparent 1px 30px),
+      repeating-linear-gradient(90deg, rgba(120,140,126,0.045) 0 1px, transparent 1px 30px);
+    pointer-events: none; z-index: 1;
+  }
+  .paper {
+    position: absolute; inset: 0; pointer-events: none; z-index: 2;
+    opacity: 0.16; mix-blend-mode: screen;
+  }
+  .scanbar {
+    position: absolute; left: 0; width: 900px; height: 90px; top: 0;
+    background: linear-gradient(180deg, rgba(122,160,138,0) 0%, rgba(122,160,138,0.055) 48%, rgba(180,90,48,0.05) 52%, rgba(122,160,138,0) 100%);
+    pointer-events: none; z-index: 30;
+  }
+  .vignette {
+    position: absolute; inset: 0; pointer-events: none; z-index: 31;
+    background: radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.62) 100%);
+  }
+  .scanlines::after {
+    content: ''; position: absolute; inset: 0; z-index: 32;
+    background: repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,0.14) 2px 4px);
+    pointer-events: none;
+  }
+
+  /* ---- TOP HUD ---- */
+  .hud {
+    position: relative; z-index: 10;
+    border-bottom: 1px solid rgba(122,160,138,0.30);
+    background: linear-gradient(90deg, #0d100e 0%, #101512 55%, #0c0f0d 100%);
+    display: flex; align-items: stretch; gap: 0;
+  }
+  .hud .cell {
+    padding: 4px 8px; border-right: 1px solid rgba(122,160,138,0.14);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .k { font-size: 6px; letter-spacing: 1.6px; color: #5d7266; text-transform: uppercase; }
+  .v { font-size: 10px; letter-spacing: 1px; color: #cfe3d4; }
+  .v.rust { color: #c86a34; }
+  .v.bone { color: #e6e1d2; }
+  .dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:#c86a34; margin-right:4px; vertical-align:middle; }
+
+  /* ---- MIDDLE ---- */
+  .mid {
+    position: relative; z-index: 10;
+    display: grid;
+    grid-template-columns: 116px 1fr 148px;
+  }
+  .col { display: flex; flex-direction: column; gap: 4px; padding: 4px; }
+  .colL { border-right: 1px solid rgba(122,160,138,0.18); }
+  .colR { border-left: 1px solid rgba(122,160,138,0.18); }
+  .panel {
+    position: relative;
+    border: 1px solid rgba(122,160,138,0.22);
+    background: rgba(18,22,20,0.72);
+    overflow: hidden;
+  }
+  .panel > .cap {
+    font-size: 6px; letter-spacing: 1.4px; color: #6d8577;
+    padding: 2px 4px; border-bottom: 1px solid rgba(122,160,138,0.14);
+    background: rgba(122,160,138,0.045);
+    display: flex; justify-content: space-between;
+  }
+  .cap .idx { color: #9b5a33; }
+  .stack { display: flex; flex-direction: column; gap: 4px; }
+  .thumbwrap { position: relative; }
+  .thumbwrap .tlab {
+    position: absolute; left: 2px; bottom: 1px; font-size: 6px;
+    letter-spacing: 1px; color: #a8bdaf; text-shadow: 0 0 3px #000;
+  }
+  .thumbwrap .ttime {
+    position: absolute; right: 2px; top: 1px; font-size: 6px;
+    color: #8c5433; text-shadow: 0 0 3px #000;
+  }
+  .hero { position: relative; }
+  .hero canvas { display: block; }
+  .heroframe {
+    position: absolute; inset: 0; pointer-events: none;
+    border: 1px solid rgba(122,160,138,0.26);
+  }
+  .corner { position:absolute; width:16px; height:16px; border-color:#7aa08a; }
+  .c1 { top:4px; left:4px; border-left:1px solid; border-top:1px solid; }
+  .c2 { top:4px; right:4px; border-right:1px solid; border-top:1px solid; }
+  .c3 { bottom:4px; left:4px; border-left:1px solid; border-bottom:1px solid; }
+  .c4 { bottom:4px; right:4px; border-right:1px solid; border-bottom:1px solid; }
+  .herotag {
+    position:absolute; left:8px; top:8px; font-size:7px; letter-spacing:2px;
+    color:#93ab9b; text-shadow:0 0 4px #000;
+  }
+  .herotag2 {
+    position:absolute; right:8px; top:8px; font-size:7px; letter-spacing:1.4px;
+    color:#b3643a; text-shadow:0 0 4px #000; text-align:right;
+  }
+  .herofoot {
+    position:absolute; left:8px; bottom:6px; right:8px;
+    display:flex; justify-content:space-between;
+    font-size:7px; letter-spacing:1.2px; color:#7e9487; text-shadow:0 0 4px #000;
+  }
+  .mono { font-size: 6px; line-height: 8px; letter-spacing: 0.4px; color: #56695d; padding: 2px 3px; white-space: pre; }
+  .mono b { color: #93ab9b; font-weight: normal; }
+  .mono i { color: #a55e30; font-style: normal; }
+
+  /* ---- BOTTOM ---- */
+  .tel {
+    position: relative; z-index: 10;
+    border-top: 1px solid rgba(122,160,138,0.30);
+    background: linear-gradient(0deg, #0a0d0b 0%, #0e1210 100%);
+    display: grid; grid-template-columns: 236px 214px 214px 1fr;
+    gap: 4px; padding: 4px;
+  }
+  .barrow { display:flex; align-items:flex-end; gap:2px; height: 100%; padding: 2px 3px; }
+  .barrow .b { width: 4px; background:#5f8d72; }
+</style>
+</head>
+<body>
+<div class="dashboard scanlines" id="dash">
+  <canvas class="paper" id="paper" width="300" height="300"></canvas>
+  <div class="bandgrid"></div>
+
+  <!-- ================= TOP HUD ================= -->
+  <div class="hud">
+    <div class="cell" style="width:190px">
+      <div class="k">Station / Instrument</div>
+      <div class="v bone">OBSV&nbsp;NOTICING&nbsp;&mdash;&nbsp;<span id="hudInstr">PLATE&nbsp;IV</span></div>
+    </div>
+    <div class="cell" style="width:132px">
+      <div class="k">Observer Index</div>
+      <div class="v" id="hudObs">OBS-000 / 000</div>
+    </div>
+    <div class="cell" style="width:126px">
+      <div class="k">Complexity (derived)</div>
+      <div class="v rust" id="hudCx">0.000</div>
+    </div>
+    <div class="cell" style="width:120px">
+      <div class="k">Movement</div>
+      <div class="v" id="hudMove">A &mdash; HELD</div>
+    </div>
+    <div class="cell" style="width:112px">
+      <div class="k">Plate Time</div>
+      <div class="v" id="hudTime">00:00.0</div>
+    </div>
+    <div class="cell" style="flex:1">
+      <div class="k">Bench Status</div>
+      <div class="v"><span class="dot" id="hudDot"></span><span id="hudStat">RECORDING</span></div>
+    </div>
+  </div>
+
+  <!-- ================= MIDDLE ================= -->
+  <div class="mid">
+    <!-- LEFT STRIP -->
+    <div class="col colL">
+      <div class="panel thumbwrap">
+        <div class="cap"><span>PLATE I</span><span class="idx">01</span></div>
+        <canvas id="th0" width="106" height="62"></canvas>
+        <div class="tlab">BARE FIELD</div>
+        <div class="ttime" id="tt0">00.0</div>
+      </div>
+      <div class="panel thumbwrap">
+        <div class="cap"><span>PLATE II</span><span class="idx">02</span></div>
+        <canvas id="th1" width="106" height="62"></canvas>
+        <div class="tlab">FIRST MARK</div>
+        <div class="ttime" id="tt1">00.0</div>
+      </div>
+      <div class="panel thumbwrap">
+        <div class="cap"><span>PLATE III</span><span class="idx">03</span></div>
+        <canvas id="th2" width="106" height="62"></canvas>
+        <div class="tlab">RECURSION</div>
+        <div class="ttime" id="tt2">00.0</div>
+      </div>
+      <div class="panel thumbwrap">
+        <div class="cap"><span>PLATE IV</span><span class="idx">04</span></div>
+        <canvas id="th3" width="106" height="62"></canvas>
+        <div class="tlab">RETURN&rsquo;</div>
+        <div class="ttime" id="tt3">00.0</div>
+      </div>
+      <div class="panel" style="flex:1">
+        <div class="cap"><span>ATTENTION BAND</span><span class="idx">HZ</span></div>
+        <canvas id="miniA" width="106" height="52"></canvas>
+        <div class="mono" id="codeL">&nbsp;</div>
+      </div>
+    </div>
+
+    <!-- HERO -->
+    <div class="hero" style="padding:4px">
+      <canvas id="hero" width="620" height="738"></canvas>
+      <div class="heroframe"></div>
+      <div class="corner c1"></div><div class="corner c2"></div>
+      <div class="corner c3"></div><div class="corner c4"></div>
+      <div class="herotag">PLATE&nbsp;CHAMBER&nbsp;&mdash;&nbsp;DIAGONAL&nbsp;TRANSIT</div>
+      <div class="herotag2" id="heroTag2">OCCLUDER&nbsp;01&nbsp;CLEAR</div>
+      <div class="herofoot">
+        <span id="heroFootL">CARRIAGE&nbsp;X 0.000&nbsp;&nbsp;Y 0.000</span>
+        <span id="heroFootR">HALFTONE&nbsp;24&nbsp;LPI</span>
+      </div>
+    </div>
+
+    <!-- RIGHT PANELS -->
+    <div class="col colR">
+      <div class="panel">
+        <div class="cap"><span>CROSS-SECTION</span><span class="idx">A-A</span></div>
+        <canvas id="xsec" width="138" height="96"></canvas>
+      </div>
+      <div class="panel">
+        <div class="cap"><span>OBSERVER RING</span><span class="idx">360</span></div>
+        <canvas id="ring" width="138" height="112"></canvas>
+      </div>
+      <div class="panel">
+        <div class="cap"><span>REGISTER CARD</span><span class="idx">R-7</span></div>
+        <div class="mono" id="card">&nbsp;</div>
+      </div>
+      <div class="panel" style="flex:1">
+        <div class="cap"><span>LEDGER STREAM</span><span class="idx">HEX</span></div>
+        <div class="mono" id="hexdump">&nbsp;</div>
+      </div>
+      <div class="panel" style="height:34px">
+        <div class="barrow" id="barrow"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= BOTTOM TELEMETRY ================= -->
+  <div class="tel">
+    <div class="panel">
+      <div class="cap"><span>NOTICING FLUX</span><span class="idx">CH-1</span></div>
+      <canvas id="chart1" width="234" height="84"></canvas>
+    </div>
+    <div class="panel">
+      <div class="cap"><span>MARK DENSITY</span><span class="idx">CH-2</span></div>
+      <canvas id="chart2" width="212" height="84"></canvas>
+    </div>
+    <div class="panel">
+      <div class="cap"><span>FOLD SPECTRUM</span><span class="idx">CH-3</span></div>
+      <canvas id="chart3" width="212" height="84"></canvas>
+    </div>
+    <div class="panel">
+      <div class="cap"><span>PHASE SCORE</span><span class="idx">A/B/C/A&rsquo;</span></div>
+      <canvas id="chart4" width="212" height="84"></canvas>
+    </div>
+  </div>
+
+  <div class="scanbar" id="scanbar"></div>
+  <div class="vignette"></div>
+</div>
+
+<script>
+// DURATION: 48
+//
+// OBSERVATORY OF THE NOTICING
+// Subject: a paper carriage crossing a lit chamber corner-to-corner, passing
+// behind a standing plate (occluder). Complexity is not in the field; it is
+// manufactured by the act of marking it.
+//
+// Movements (seconds):
+//   A       0 -> 12   held tension, bare field, carriage at rest upper-left
+//   B      12 -> 26   decisive burst: transit + first marks
+//   C      26 -> 38   recursion, the mark reads itself
+//   A'     38 -> 48   recognizable return, materially changed, closes at frame 0
+
+const DURATION = 48;
+let lastManualRender = -Infinity;
+
+/* ------------------------- deterministic RNG ------------------------- */
+const SEED = 11362390;
+function mulberry(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hash1(n) {
+  const s = Math.sin(n * 127.1 + SEED * 0.000001) * 43758.5453;
+  return s - Math.floor(s);
+}
+const rnd = mulberry(SEED);
+
+/* ------------------------------ palette ------------------------------ */
+const CHAR   = '#0b0d0c';
+const CHAR2  = '#141816';
+const BONE   = '#e6e1d2';
+const BONE_D = '#b9b5a6';
+const OXID   = '#5f8d72';
+const OXID_D = '#35553f';
+const OXID_L = '#8fc0a0';
+const RUST   = '#b5622f';
+
+/* ------------------------------ easing ------------------------------- */
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const smooth = t => t * t * (3 - 2 * t);
+function segU(t, a, b) { return clamp((t - a) / (b - a), 0, 1); }
+// held tension -> decisive burst: mostly flat, then a fast committed move
+function burst(t) { const u = clamp(t, 0, 1); return smooth(smooth(u)); }
+
+/* --------------------------- phase geometry -------------------------- */
+// named boundaries in seconds
+const MARK_A = 0, MARK_B = 12, MARK_C = 26, MARK_AP = 38, MARK_END = 48;
+
+function movementOf(ts) {
+  if (ts < MARK_B)  return { name: 'A', label: 'A — HELD',     u: segU(ts, MARK_A, MARK_B) };
+  if (ts < MARK_C)  return { name: 'B', label: 'B — TRANSIT',  u: segU(ts, MARK_B, MARK_C) };
+  if (ts < MARK_AP) return { name: 'C', label: 'C — RECURSE',  u: segU(ts, MARK_C, MARK_AP) };
+  return { name: "A'", label: "A' — RETURN", u: segU(ts, MARK_AP, MARK_END) };
+}
+
+// Carriage travels upper-left -> lower-right during B, drifts in C,
+// and returns to exactly the frame-0 station by t = DURATION.
+function carriagePos(ts) {
+  const m = movementOf(ts);
+  const P0 = { x: 0.16, y: 0.14 };
+  const P1 = { x: 0.84, y: 0.86 };
+  if (m.name === 'A') {
+    const b = Math.sin(m.u * Math.PI * 2) * 0.006;
+    return { x: P0.x + b, y: P0.y + b * 0.5, t: 0 };
+  }
+  if (m.name === 'B') {
+    const e = burst(m.u);
+    return { x: P0.x + (P1.x - P0.x) * e, y: P0.y + (P1.y - P0.y) * e, t: e };
+  }
+  if (m.name === 'C') {
+    // held near the far corner, two small decisive nudges
+    const n = burst(segU(m.u, 0.30, 0.44)) * 0.05 - burst(segU(m.u, 0.70, 0.84)) * 0.03;
+    return { x: P1.x - n, y: P1.y - n * 1.4, t: 1 };
+  }
+  // A': the long diagonal walked back, arriving exactly at P0
+  const e = burst(m.u);
+  return { x: P1.x + (P0.x - P1.x) * e, y: P1.y + (P0.y - P1.y) * e, t: 1 - e };
+}
+
+/* ---------------------- cached static paper grain -------------------- */
+const paperCv = document.getElementById('paper');
+const paperCx = paperCv.getContext('2d');
+(function bakePaper() {
+  const w = paperCv.width, h = paperCv.height;
+  const img = paperCx.createImageData(w, h);
+  const d = img.data;
+  for (let i = 0; i < w * h; i++) {
+    const n = rnd();
+    const v = n < 0.5 ? 0 : Math.floor(28 + n * 46);
+    d[i * 4] = v; d[i * 4 + 1] = v + 2; d[i * 4 + 2] = v; d[i * 4 + 3] = 255;
+  }
+  paperCx.putImageData(img, 0, 0);
+})();
+
+/* --------------------- cached halftone dot tile ---------------------- */
+const HT = document.createElement('canvas');
+HT.width = 8; HT.height = 8;
+(function bakeHalftone() {
+  const c = HT.getContext('2d');
+  c.fillStyle = 'rgba(230,225,210,0.34)';
+  c.beginPath(); c.arc(4, 4, 1.15, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.arc(0, 0, 0.7, 0, Math.PI * 2); c.fill();
+  c.beginPath(); c.arc(8, 8, 0.7, 0, Math.PI * 2); c.fill();
+})();
+
+/* ----------------------- cached seeded ink marks --------------------- */
+// The "marks" the observer makes on the field. Fixed geometry, revealed
+// progressively — never regenerated per frame.
+const MARKS = [];
+(function seedMarks() {
+  for (let i = 0; i < 46; i++) {
+    const a = rnd();
+    const along = 0.04 + a * 0.94;              // position along the diagonal
+    const off = (rnd() - 0.5) * 0.30;           // perpendicular offset
+    MARKS.push({
+      along, off,
+      len: 10 + rnd() * 34,
+      ang: (rnd() - 0.5) * 1.5,
+      w: 0.6 + rnd() * 1.5,
+      rust: rnd() < 0.13,
+      born: 0.06 + rnd() * 0.9
+    });
+  }
+})();
+
+// Seeded static specks of the chamber floor (baked once into an offscreen).
+const FLOOR = document.createElement('canvas');
+FLOOR.width = 620; FLOOR.height = 738;
+(function bakeFloor() {
+  const c = FLOOR.getContext('2d');
+  c.clearRect(0, 0, 620, 738);
+  for (let i = 0; i < 620; i++) {
+    const x = rnd() * 620, y = rnd() * 738;
+    const v = 0.03 + rnd() * 0.09;
+    c.fillStyle = 'rgba(143,192,160,' + v.toFixed(3) + ')';
+    c.fillRect(x, y, 1, 1);
+  }
+  // faint plate ruling
+  c.strokeStyle = 'rgba(95,141,114,0.07)';
+  c.lineWidth = 1;
+  for (let y = 40; y < 738; y += 40) {
+    c.beginPath(); c.moveTo(0, y + 0.5); c.lineTo(620, y + 0.5); c.stroke();
+  }
+  for (let x = 40; x < 620; x += 40) {
+    c.beginPath(); c.moveTo(x + 0.5, 0); c.lineTo(x + 0.5, 738); c.stroke();
+  }
+})();
+
+/* ================================ HERO ================================ */
+const heroCv = document.getElementById('hero');
+const heroCx = heroCv.getContext('2d');
+const HW = heroCv.width, HH = heroCv.height;
+
+function halftoneRegion(cx, x, y, w, h, alpha) {
+  if (alpha <= 0.004) return;
+  cx.save();
+  cx.globalAlpha = alpha;
+  const pat = cx.createPattern(HT, 'repeat');
+  cx.fillStyle = pat;
+  cx.fillRect(x, y, w, h);
+  cx.restore();
+}
+
+// The standing plate the carriage passes behind.
+function drawOccluder(cx, phase, mv) {
+  const px = HW * 0.53, py = HH * 0.30;
+  const pw = 150, ph = 330;
+  const lean = Math.sin(phase * Math.PI * 2) * 0.012;
+
+  cx.save();
+  cx.translate(px, py);
+  cx.rotate(lean);
+
+  // slab body — large low-saturation region, deliberately flat
+  cx.fillStyle = '#171b19';
+  cx.fillRect(0, 0, pw, ph);
+  halftoneRegion(cx, 0, 0, pw, ph, 0.20 + 0.10 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 2)));
+
+  // lit edge facing the carriage lamp
+  cx.fillStyle = 'rgba(230,225,210,0.16)';
+  cx.fillRect(0, 0, 3, ph);
+  cx.fillStyle = 'rgba(95,141,114,0.30)';
+  cx.fillRect(pw - 2, 0, 2, ph);
+
+  // etched register lines on the plate face
+  cx.strokeStyle = 'rgba(143,192,160,0.16)';
+  cx.lineWidth = 1;
+  for (let i = 1; i < 11; i++) {
+    const y = (ph / 11) * i;
+    cx.beginPath();
+    cx.moveTo(8, y + 0.5);
+    cx.lineTo(8 + (i % 3 === 0 ? pw - 22 : 26), y + 0.5);
+    cx.stroke();
+  }
+  // a single rust fastener, off-center
+  cx.fillStyle = RUST;
+  cx.globalAlpha = 0.55 + 0.4 * (0.5 + 0.5 * Math.sin(phase * Math.PI * 6));
+  cx.beginPath(); cx.arc(pw - 18, ph * 0.22, 2.6, 0, Math.PI * 2); cx.fill();
+  cx.globalAlpha = 1;
+
+  cx.restore();
+  return { x: px, y: py, w: pw, h: ph };
+}
+
+function drawMarks(cx, ts, ax, ay, bx, by) {
+  const mv = movementOf(ts);
+  // reveal fraction across the whole loop
+  let reveal;
+  if (mv.name === 'A') reveal = 0.04 * mv.u;
+  else if (mv.name === 'B') reveal = 0.04 + 0.62 * burst(mv.u);
+  else if (mv.name === 'C') reveal = 0.66 + 0.34 * smooth(mv.u);
+  else reveal = 1 - smooth(mv.u); // A' unmarks the field back to bare
+
+  for (let i = 0; i < MARKS.length; i++) {
+    const m = MARKS[i];
+    if (m.born > reveal) continue;
+    const a = clamp((reveal - m.born) * 5, 0, 1);
+    const x = ax + (bx - ax) * m.along + (by - ay) * m.off * 0.28;
+    const y = ay + (by - ay) * m.along - (bx - ax) * m.off * 0.28;
+    cx.save();
+    cx.translate(x, y);
+    cx.rotate(m.ang);
+    cx.globalAlpha = 0.20 + 0.62 * a;
+    cx.strokeStyle = m.rust ? RUST : OXID_L;
+    cx.lineWidth = m.w;
+    cx.beginPath();
+    cx.moveTo(-m.len / 2, 0);
+    cx.lineTo(m.len / 2, 0);
+    cx.stroke();
+    // recursion: in movement C each mark grows a small reading of itself
+    if (mv.name === 'C' || mv.name === "A'") {
+      const r = mv.name === 'C' ? smooth(mv.u) : 1 - smooth(mv.u);
+      cx.globalAlpha = 0.16 + 0.34 * a * r;
+      cx.lineWidth = m.w * 0.6;
+      cx.beginPath();
+      cx.moveTo(-m.len / 4, -3 - 5 * r);
+      cx.lineTo(m.len / 4, -3 - 5 * r);
+      cx.stroke();
+    }
+    cx.restore();
+  }
+}
+
+function drawCarriage(cx, x, y, ts, phase) {
+  const mv = movementOf(ts);
+  const beat = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2 * 9);
+  cx.save();
+  cx.translate(x, y);
+
+  // lamp pool cast on the floor — the only warm region
+  const g = cx.createRadialGradient(0, 0, 2, 0, 0, 84);
+  g.addColorStop(0, 'rgba(230,225,210,0.30)');
+  g.addColorStop(0.42, 'rgba(143,192,160,0.10)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = g;
+  cx.beginPath(); cx.arc(0, 0, 84, 0, Math.PI * 2); cx.fill();
+
+  // carriage body: a small folded paper sled, bone plate over dark chassis
+  cx.rotate(0.52 + Math.sin(phase * Math.PI * 2) * 0.05);
+  cx.fillStyle = '#0e1210';
+  cx.fillRect(-19, -11, 38, 22);
+  cx.fillStyle = BONE;
+  cx.globalAlpha = 0.88;
+  cx.beginPath();
+  cx.moveTo(-17, -9); cx.lineTo(17, -6); cx.lineTo(13, 9); cx.lineTo(-15, 7);
+  cx.closePath(); cx.fill();
+  cx.globalAlpha = 1;
+  cx.strokeStyle = OXID_D;
+  cx.lineWidth = 1;
+  cx.strokeRect(-19.5, -11.5, 39, 23);
+
+  // nib: one rust accent, brightest when the carriage commits
+  cx.fillStyle = RUST;
+  cx.globalAlpha = mv.name === 'B' ? 0.55 + 0.45 * beat : 0.30 + 0.20 * beat;
+  cx.beginPath();
+  cx.moveTo(17, -6); cx.lineTo(27, 2); cx.lineTo(15, 4);
+  cx.closePath(); cx.fill();
+  cx.globalAlpha = 1;
+  cx.restore();
+}
+
+function drawHero(ts, phase, tau) {
+  const cx = heroCx;
+  const mv = movementOf(ts);
+
+  cx.fillStyle = CHAR;
+  cx.fillRect(0, 0, HW, HH);
+  cx.drawImage(FLOOR, 0, 0);
+
+  // chamber corner light — a broad, quiet wash on the diagonal
+  const wash = cx.createLinearGradient(0, 0, HW, HH);
+  wash.addColorStop(0, 'rgba(24,31,27,0.9)');
+  wash.addColorStop(0.5, 'rgba(15,19,17,0.4)');
+  wash.addColorStop(1, 'rgba(22,28,25,0.9)');
+  cx.fillStyle = wash;
+  cx.fillRect(0, 0, HW, HH);
+
+  // the diagonal procession line (the route, faintly ruled)
+  const AX = HW * 0.16, AY = HH * 0.14, BX = HW * 0.84, BY = HH * 0.86;
+  cx.save();
+  cx.setLineDash([5, 7]);
+  cx.strokeStyle = 'rgba(95,141,114,0.22)';
+  cx.lineWidth = 1;
+  cx.beginPath(); cx.moveTo(AX, AY); cx.lineTo(BX, BY); cx.stroke();
+  cx.restore();
+
+  // stations at both ends
+  [[AX, AY, 'I'], [BX, BY, 'IV']].forEach(function (s) {
+    cx.strokeStyle = 'rgba(143,192,160,0.35)';
+    cx.lineWidth = 1;
+    cx.strokeRect(s[0] - 13.5, s[1] - 13.5, 27, 27);
+    cx.fillStyle = 'rgba(143,192,160,0.55)';
+    cx.font = '8px "Courier New", monospace';
+    cx.fillText(s[2], s[0] - 20, s[1] - 18);
+  });
+
+  drawMarks(cx, ts, AX, AY, BX, BY);
+
+  const p = carriagePos(ts);
+  const cxp = p.x * HW, cyp = p.y * HH;
+
+  const plate = drawOccluder(cx, phase, mv);
+  const behind = cxp > plate.x - 22 && cxp < plate.x + plate.w + 22 &&
+                 cyp > plate.y - 26 && cyp < plate.y + plate.h + 26;
+
+  if (behind) {
+    // carriage is occluded: draw it first, then re-lay the plate over it
+    const buf = cx.getImageData(0, 0, 1, 1); // touch: keeps ordering explicit
+    void buf;
+    cx.save();
+    cx.globalAlpha = 0.30;
+    drawCarriage(cx, cxp, cyp, ts, phase);
+    cx.restore();
+    drawOccluder(cx, phase, mv);
+    // rim of light leaking around the slab edge
+    cx.save();
+    cx.globalAlpha = 0.5;
+    cx.fillStyle = 'rgba(230,225,210,0.20)';
+    cx.fillRect(plate.x - 2, plate.y, 2, plate.h);
+    cx.restore();
+  } else {
+    drawCarriage(cx, cxp, cyp, ts, phase);
+  }
+
+  // measurement bracket that follows the carriage — clarity, not mystique
+  cx.save();
+  cx.strokeStyle = 'rgba(143,192,160,0.34)';
+  cx.lineWidth = 1;
+  cx.beginPath();
+  cx.moveTo(cxp - 34, cyp - 34); cx.lineTo(cxp - 34, cyp - 24);
+  cx.moveTo(cxp - 34, cyp - 34); cx.lineTo(cxp - 24, cyp - 34);
+  cx.moveTo(cxp + 34, cyp + 34); cx.lineTo(cxp + 34, cyp + 24);
+  cx.moveTo(cxp + 34, cyp + 34); cx.lineTo(cxp + 24, cyp + 34);
+  cx.stroke();
+  cx.fillStyle = 'rgba(181,98,47,0.75)';
+  cx.font = '7px "Courier New", monospace';
+  cx.fillText((p.t * 100).toFixed(1) + '%', cxp + 40, cyp - 28);
+  cx.restore();
+
+  // stable halftone band anchored to the frame, not to motion
+  halftoneRegion(cx, 0, HH * 0.62, HW, HH * 0.38, 0.10 + 0.05 * (0.5 + 0.5 * Math.sin(tau)));
+
+  // top-left ledger block: measured, unhurried
+  cx.fillStyle = 'rgba(95,141,114,0.40)';
+  cx.font = '7px "Courier New", monospace';
+  const lines = [
+    'FIELD CLEAN UNTIL MARKED',
+    'MARKS ' + Math.round(MARKS.length * clamp(mv.name === "A'" ? 1 - smooth(mv.u) : 1, 0, 1)) + ' / ' + MARKS.length,
+    'OCCLUSION ' + (behind ? 'TRUE ' : 'FALSE')
+  ];
+  for (let i = 0; i < lines.length; i++) cx.fillText(lines[i], 14, 34 + i * 10);
+}
+
+/* ============================ THUMBNAILS ============================== */
+const THUMBS = [0, 1, 2, 3].map(i => document.getElementById('th' + i).getContext('2d'));
+const TT = [0, 1, 2, 3].map(i => document.getElementById('tt' + i));
+const THUMB_T = [4, 18, 32, 44];
+
+function drawThumb(cx, ts, phase, idx, active) {
+  const W = 106, H = 62;
+  cx.fillStyle = CHAR2;
+  cx.fillRect(0, 0, W, H);
+  cx.strokeStyle = 'rgba(95,141,114,0.18)';
+  cx.lineWidth = 1;
+  for (let y = 10; y < H; y += 10) { cx.beginPath(); cx.moveTo(0, y + .5); cx.lineTo(W, y + .5); cx.stroke(); }
+
+  const ax = W * 0.16, ay = H * 0.16, bx = W * 0.84, by = H * 0.84;
+  cx.save();
+  cx.setLineDash([2, 3]);
+  cx.strokeStyle = 'rgba(95,141,114,0.3)';
+  cx.beginPath(); cx.moveTo(ax, ay); cx.lineTo(bx, by); cx.stroke();
+  cx.restore();
+
+  // slab
+  cx.fillStyle = '#1b201d';
+  cx.fillRect(W * 0.53, H * 0.28, 24, 30);
+
+  // marks state frozen at this plate's own time
+  const mv = movementOf(ts);
+  let reveal;
+  if (mv.name === 'A') reveal = 0.04 * mv.u;
+  else if (mv.name === 'B') reveal = 0.04 + 0.62 * burst(mv.u);
+  else if (mv.name === 'C') reveal = 0.66 + 0.34 * smooth(mv.u);
+  else reveal = 1 - smooth(mv.u);
+  for (let i = 0; i < MARKS.length; i += 2) {
+    const m = MARKS[i];
+    if (m.born > reveal) continue;
+    const x = ax + (bx - ax) * m.along + (by - ay) * m.off * 0.28;
+    const y = ay + (by - ay) * m.along - (bx - ax) * m.off * 0.28;
+    cx.strokeStyle = m.rust ? 'rgba(181,98,47,0.7)' : 'rgba(143,192,160,0.6)';
+    cx.lineWidth = 1;
+    cx.beginPath(); cx.moveTo(x - 3, y); cx.lineTo(x + 3, y); cx.stroke();
+  }
+
+  const p = carriagePos(ts);
+  cx.fillStyle = BONE;
+  cx.fillRect(p.x * W - 3, p.y * H - 2, 6, 4);
+
+  if (active) {
+    cx.strokeStyle = RUST;
+    cx.lineWidth = 1;
+    cx.strokeRect(0.5, 0.5, W - 1, H - 1);
+  }
+}
+
+/* ============================ MINI GRAPH ============================== */
+const miniCx = document.getElementById('miniA').getContext('2d');
+function drawMini(phase, tau) {
+  const W = 106, H = 52;
+  miniCx.fillStyle = CHAR2;
+  miniCx.fillRect(0, 0, W, H);
+  miniCx.strokeStyle = 'rgba(95,141,114,0.14)';
+  for (let x = 0; x < W; x += 12) { miniCx.beginPath(); miniCx.moveTo(x + .5, 0); miniCx.lineTo(x + .5, H); miniCx.stroke(); }
+
+  miniCx.strokeStyle = OXID;
+  miniCx.lineWidth = 1;
+  miniCx.beginPath();
+  for (let x = 0; x <= W; x++) {
+    const u = x / W;
+    const v = Math.sin(u * 9 + tau) * 0.4 + Math.sin(u * 23 - tau * 1.7) * 0.22 + Math.sin(u * 3 + tau * 0.5) * 0.3;
+    const y = H / 2 - v * (H / 2 - 4);
+    if (x === 0) miniCx.moveTo(x, y); else miniCx.lineTo(x, y);
+  }
+  miniCx.stroke();
+
+  miniCx.strokeStyle = 'rgba(181,98,47,0.7)';
+  miniCx.beginPath();
+  const mx = phase * W;
+  miniCx.moveTo(mx, 0); miniCx.lineTo(mx, H);
+  miniCx.stroke();
+}
+
+/* =========================== CROSS SECTION ============================ */
+const xsecCx = document.getElementById('xsec').getContext('2d');
+function drawXsec(ts, phase, tau) {
+  const W = 138, H = 96;
+  xsecCx.fillStyle = CHAR2;
+  xsecCx.fillRect(0, 0, W, H);
+  const p = carriagePos(ts);
+
+  // chamber walls seen end-on
+  xsecCx.strokeStyle = 'rgba(95,141,114,0.35)';
+  xsecCx.lineWidth = 1;
+  xsecCx.strokeRect(12.5, 14.5, W - 25, H - 30);
+
+  // stratified layers — bone over oxidized green
+  for (let i = 0; i < 6; i++) {
+    const y = 20 + i * 9;
+    const w = (W - 30) * (0.35 + 0.6 * Math.abs(Math.sin(i * 0.9 + tau * 0.6)));
+    xsecCx.fillStyle = i === 2 ? 'rgba(181,98,47,0.45)' : 'rgba(95,141,114,' + (0.14 + i * 0.05).toFixed(2) + ')';
+    xsecCx.fillRect(15, y, w, 6);
+  }
+
+  // depth marker tracking the carriage
+  const my = 16 + p.y * (H - 34);
+  xsecCx.strokeStyle = BONE_D;
+  xsecCx.beginPath();
+  xsecCx.moveTo(8, my); xsecCx.lineTo(W - 8, my);
+  xsecCx.stroke();
+  xsecCx.fillStyle = BONE;
+  xsecCx.fillRect(W - 12, my - 2, 5, 4);
+
+  xsecCx.fillStyle = 'rgba(143,192,160,0.6)';
+  xsecCx.font = '6px "Courier New", monospace';
+  xsecCx.fillText('DEPTH ' + (p.y * 42).toFixed(1) + 'MM', 15, H - 5);
+}
+
+/* =========================== OBSERVER RING ============================ */
+const ringCx = document.getElementById('ring').getContext('2d');
+function drawRing(ts, phase, tau) {
+  const W = 138, H = 112, cx0 = W / 2, cy0 = H / 2 + 2, R = 40;
+  ringCx.fillStyle = CHAR2;
+  ringCx.fillRect(0, 0, W, H);
+
+  ringCx.strokeStyle = 'rgba(95,141,114,0.28)';
+  ringCx.lineWidth = 1;
+  ringCx.beginPath(); ringCx.arc(cx0, cy0, R, 0, Math.PI * 2); ringCx.stroke();
+  ringCx.beginPath(); ringCx.arc(cx0, cy0, R * 0.62, 0, Math.PI * 2); ringCx.stroke();
+
+  // 36 observers: each one that "notices" brightens; the sum is the complexity
+  const mv = movementOf(ts);
+  const active = mv.name === 'A' ? 0.10 : mv.name === 'B' ? 0.10 + 0.7 * burst(mv.u)
+               : mv.name === 'C' ? 0.8 + 0.2 * Math.sin(mv.u * Math.PI) : 0.9 - 0.8 * smooth(mv.u);
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2 - Math.PI / 2;
+    const on = hash1(i * 3.7) < active;
+    const r = R * (on ? 1 : 0.86);
+    ringCx.fillStyle = on ? (i % 9 === 0 ? RUST : OXID_L) : 'rgba(95,141,114,0.22)';
+    ringCx.beginPath();
+    ringCx.arc(cx0 + Math.cos(a) * r, cy0 + Math.sin(a) * r, on ? 2.2 : 1.2, 0, Math.PI * 2);
+    ringCx.fill();
+  }
+
+  // sweep hand
+  const sa = tau - Math.PI / 2;
+  ringCx.strokeStyle = 'rgba(230,225,210,0.55)';
+  ringCx.beginPath();
+  ringCx.moveTo(cx0, cy0);
+  ringCx.lineTo(cx0 + Math.cos(sa) * R, cy0 + Math.sin(sa) * R);
+  ringCx.stroke();
+
+  ringCx.fillStyle = BONE;
+  ringCx.font = '9px "Courier New", monospace';
+  ringCx.fillText((active * 100).toFixed(0).padStart(2, '0') + '%', cx0 - 11, cy0 + 3);
+}
+
+/* ============================== CHARTS ================================ */
+function chartCtx(id) { return document.getElementById(id).getContext('2d'); }
+const c1 = chartCtx('chart1'), c2 = chartCtx('chart2'), c3 = chartCtx('chart3'), c4 = chartCtx('chart4');
+
+function chartFrame(cx, W, H) {
+  cx.fillStyle = CHAR2;
+  cx.fillRect(0, 0, W, H);
+  cx.strokeStyle = 'rgba(95,141,114,0.12)';
+  cx.lineWidth = 1;
+  for (let x = 0; x < W; x += 16) { cx.beginPath(); cx.moveTo(x + .5, 0); cx.lineTo(x + .5, H); cx.stroke(); }
+  for (let y = 0; y < H; y += 14) { cx.beginPath(); cx.moveTo(0, y + .5); cx.lineTo(W, y + .5); cx.stroke(); }
+}
+
+// absolute-time trace: value at screen x is the signal at (phase - offset)
+function trace(cx, W, H, phase, color, width, fn) {
+  cx.strokeStyle = color;
+  cx.lineWidth = width;
+  cx.beginPath();
+  for (let x = 0; x <= W; x++) {
+    const back = (1 - x / W) * 0.30;
+    const p = ((phase - back) % 1 + 1) % 1;
+    const y = H - 3 - fn(p) * (H - 8);
+    if (x === 0) cx.moveTo(x, y); else cx.lineTo(x, y);
+  }
+  cx.stroke();
+}
+
+function noticingFlux(p) {
+  const ts = p * DURATION;
+  const mv = movementOf(ts);
+  const base = mv.name === 'A' ? 0.12 : mv.name === 'B' ? 0.14 + 0.7 * burst(mv.u)
+             : mv.name === 'C' ? 0.78 + 0.12 * Math.sin(mv.u * Math.PI * 3) : 0.85 - 0.72 * smooth(mv.u);
+  return clamp(base + Math.sin(p * Math.PI * 2 * 17) * 0.035, 0, 1);
+}
+function markDensity(p) {
+  const ts = p * DURATION;
+  const mv = movementOf(ts);
+  const r = mv.name === 'A' ? 0.04 * mv.u : mv.name === 'B' ? 0.04 + 0.62 * burst(mv.u)
+          : mv.name === 'C' ? 0.66 + 0.34 * smooth(mv.u) : 1 - smooth(mv.u);
+  return clamp(r * 0.9 + 0.05, 0, 1);
+}
+function foldSignal(p, k) {
+  return clamp(0.5 + 0.34 * Math.sin(p * Math.PI * 2 * k + k) * Math.cos(p * Math.PI * 2 * 2), 0, 1);
+}
+
+function drawCharts(ts, phase, tau) {
+  // CH-1 noticing flux
+  chartFrame(c1, 234, 84);
+  trace(c1, 234, 84, phase, 'rgba(95,141,114,0.35)', 1, p => noticingFlux(p) * 0.92);
+  trace(c1, 234, 84, phase, OXID_L, 1.4, noticingFlux);
+  trace(c1, 234, 84, phase, 'rgba(181,98,47,0.8)', 1, p => clamp(noticingFlux(p) * 0.55 + 0.1, 0, 1));
+  c1.fillStyle = 'rgba(230,225,210,0.7)';
+  c1.font = '7px "Courier New", monospace';
+  c1.fillText('NF ' + noticingFlux(phase).toFixed(3), 4, 10);
+
+  // CH-2 mark density as stepped bars
+  chartFrame(c2, 212, 84);
+  for (let i = 0; i < 40; i++) {
+    const back = (1 - i / 40) * 0.30;
+    const p = ((phase - back) % 1 + 1) % 1;
+    const v = markDensity(p);
+    const h = v * 70;
+    c2.fillStyle = i % 7 === 0 ? 'rgba(181,98,47,0.8)' : 'rgba(95,141,114,' + (0.28 + v * 0.5).toFixed(2) + ')';
+    c2.fillRect(4 + i * 5.1, 80 - h, 3.6, h);
+  }
+  c2.fillStyle = 'rgba(230,225,210,0.7)';
+  c2.font = '7px "Courier New", monospace';
+  c2.fillText('MD ' + (markDensity(phase) * 100).toFixed(1) + '%', 4, 10);
+
+  // CH-3 fold spectrum — stacked bands
+  chartFrame(c3, 212, 84);
+  for (let k = 1; k <= 5; k++) {
+    trace(c3, 212, 84, phase, k === 3 ? 'rgba(181,98,47,0.75)' : 'rgba(143,192,160,' + (0.18 + k * 0.1).toFixed(2) + ')', 1,
+      p => foldSignal(p, k) * (0.20 + k * 0.14));
+  }
+  c3.fillStyle = 'rgba(230,225,210,0.7)';
+  c3.font = '7px "Courier New", monospace';
+  c3.fillText('FS 5-BAND', 4, 10);
+
+  // CH-4 phase score — the four movements as a bar with a playhead
+  chartFrame(c4, 212, 84);
+  const bounds = [MARK_A, MARK_B, MARK_C, MARK_AP, MARK_END];
+  const names = ['A', 'B', 'C', "A'"];
+  for (let i = 0; i < 4; i++) {
+    const x0 = 4 + (bounds[i] / DURATION) * 204;
+    const x1 = 4 + (bounds[i + 1] / DURATION) * 204;
+    const cur = ts >= bounds[i] && ts < bounds[i + 1];
+    c4.fillStyle = cur ? (i === 1 ? 'rgba(181,98,47,0.55)' : 'rgba(143,192,160,0.42)') : 'rgba(95,141,114,0.14)';
+    c4.fillRect(x0, 26, x1 - x0 - 2, 22);
+    c4.fillStyle = cur ? BONE : 'rgba(143,192,160,0.5)';
+    c4.font = '8px "Courier New", monospace';
+    c4.fillText(names[i], x0 + 4, 41);
+    c4.fillStyle = 'rgba(95,141,114,0.5)';
+    c4.font = '6px "Courier New", monospace';
+    c4.fillText(bounds[i].toFixed(0) + 'S', x0 + 2, 58);
+  }
+  const ph = 4 + phase * 204;
+  c4.strokeStyle = BONE;
+  c4.lineWidth = 1;
+  c4.beginPath(); c4.moveTo(ph, 20); c4.lineTo(ph, 64); c4.stroke();
+  c4.fillStyle = 'rgba(230,225,210,0.7)';
+  c4.font = '7px "Courier New", monospace';
+  c4.fillText('T ' + ts.toFixed(2) + 'S / ' + DURATION + 'S', 4, 12);
+  c4.fillStyle = 'rgba(181,98,47,0.8)';
+  c4.fillText('SEAM LOCKED', 132, 12);
+}
+
+/* ============================ TEXT BLOCKS ============================= */
+const HEXCH = '0123456789ABCDEF';
+function hexLine(row, phase) {
+  const drift = Math.floor(phase * 64);
+  let s = ((row * 16 + drift * 16) & 0xffff).toString(16).toUpperCase().padStart(4, '0') + ' ';
+  for (let i = 0; i < 6; i++) {
+    const n = Math.floor(hash1(row * 13.1 + i * 7.3 + drift * 0.37) * 256);
+    s += HEXCH[n >> 4] + HEXCH[n & 15] + ' ';
+  }
+  return s;
+}
+
+const hexEl = document.getElementById('hexdump');
+const cardEl = document.getElementById('card');
+const codeLEl = document.getElementById('codeL');
+
+function drawText(ts, phase) {
+  const mv = movementOf(ts);
+  let h = '';
+  for (let r = 0; r < 14; r++) h += hexLine(r, phase) + '\n';
+  hexEl.textContent = h;
+
+  const p = carriagePos(ts);
+  cardEl.innerHTML =
+    'CLASS <b>OBSERVED-FIELD</b>\n' +
+    'ROUTE <b>I &rarr; IV DIAG</b>\n' +
+    'MOVE  <i>' + mv.name + '</i> u=' + mv.u.toFixed(3) + '\n' +
+    'X     <b>' + p.x.toFixed(4) + '</b>\n' +
+    'Y     <b>' + p.y.toFixed(4) + '</b>\n' +
+    'MARKS <b>' + Math.round(markDensity(phase) * MARKS.length) + '</b>\n' +
+    'INK   <i>OXID / RUST</i>\n' +
+    'SEED  <b>11362390</b>\n' +
+    'LOOP  <b>' + DURATION + '.000S</b>';
+
+  let cl = '';
+  for (let r = 0; r < 6; r++) {
+    const a = Math.floor(hash1(r * 5.1 + Math.floor(phase * 48) * 0.21) * 4096).toString(16).toUpperCase().padStart(3, '0');
+    cl += 'F' + r + ':' + a + ' ' + (noticingFlux(((phase + r * 0.07) % 1)) * 9.99).toFixed(2) + '\n';
+  }
+  codeLEl.textContent = cl;
+}
+
+/* ============================== BAR ROW =============================== */
+const barrow = document.getElementById('barrow');
+const BARS = [];
+(function buildBars() {
+  for (let i = 0; i < 26; i++) {
+    const d = document.createElement('div');
+    d.className = 'b';
+    barrow.appendChild(d);
+    BARS.push(d);
+  }
+})();
+function drawBars(phase, tau) {
+  for (let i = 0; i < BARS.length; i++) {
+    const v = 0.15 + 0.85 * Math.abs(Math.sin(i * 0.5 + tau * 1.6) * Math.cos(i * 0.21 + tau * 0.6));
+    BARS[i].style.height = (v * 24).toFixed(1) + 'px';
+    BARS[i].style.background = (i % 8 === 0) ? RUST : (v > 0.7 ? OXID_L : OXID_D);
+  }
+}
+
+/* ============================== HUD ==================================== */
+const hudObs = document.getElementById('hudObs');
+const hudCx_ = document.getElementById('hudCx');
+const hudMove = document.getElementById('hudMove');
+const hudTime = document.getElementById('hudTime');
+const hudStat = document.getElementById('hudStat');
+const hudDot = document.getElementById('hudDot');
+const hudInstr = document.getElementById('hudInstr');
+const scanbar = document.getElementById('scanbar');
+const heroTag2 = document.getElementById('heroTag2');
+const heroFootL = document.getElementById('heroFootL');
+const heroFootR = document.getElementById('heroFootR');
+
+function drawHud(ts, phase, tau) {
+  const mv = movementOf(ts);
+  const noticed = Math.round(markDensity(phase) * MARKS.length);
+  hudObs.textContent = 'OBS-' + String(noticed).padStart(3, '0') + ' / ' + MARKS.length;
+  hudCx_.textContent = noticingFlux(phase).toFixed(3);
+  hudMove.textContent = mv.label;
+  const tt = ts % DURATION;
+  hudTime.textContent = String(Math.floor(tt / 60)).padStart(2, '0') + ':' +
+                        String(Math.floor(tt % 60)).padStart(2, '0') + '.' +
+                        String(Math.floor((tt % 1) * 10));
+  hudStat.textContent = mv.name === 'B' ? 'MARKING' : mv.name === 'C' ? 'READING ITSELF'
+                      : mv.name === "A'" ? 'UNMARKING' : 'WATCHING';
+  hudDot.style.opacity = String(0.30 + 0.70 * (0.5 + 0.5 * Math.sin(tau * 11)));
+  hudInstr.textContent = 'PLATE ' + ['I', 'II', 'III', 'IV'][Math.min(3, Math.floor(phase * 4))];
+  scanbar.style.transform = 'translateY(' + (phase * 990 - 90).toFixed(1) + 'px)';
+
+  const p = carriagePos(ts);
+  heroFootL.textContent = 'CARRIAGE X ' + p.x.toFixed(3) + '  Y ' + p.y.toFixed(3);
+  heroFootR.textContent = 'HALFTONE 24 LPI  /  ' + (0.5 + 0.5 * Math.sin(tau)).toFixed(2);
+  const behindNow = p.x > 0.50 && p.x < 0.79 && p.y > 0.27 && p.y < 0.76;
+  heroTag2.textContent = behindNow ? 'OCCLUDER 01 ENGAGED' : 'OCCLUDER 01 CLEAR';
+  heroTag2.style.color = behindNow ? '#e6e1d2' : '#b3643a';
+}
+
+/* ============================ RENDER LOOP ============================= */
+function renderScene(timeSeconds) {
+  const tsWrapped = (((timeSeconds % DURATION) + DURATION) % DURATION);
+  const phase = tsWrapped / DURATION;
+  const tau = phase * Math.PI * 2;
+
+  drawHero(tsWrapped, phase, tau);
+  for (let i = 0; i < 4; i++) {
+    const tt = (THUMB_T[i] + tsWrapped * 0.25) % DURATION;
+    drawThumb(THUMBS[i], tt, phase, i, Math.floor(phase * 4) === i);
+    TT[i].textContent = tt.toFixed(1);
+  }
+  drawMini(phase, tau);
+  drawXsec(tsWrapped, phase, tau);
+  drawRing(tsWrapped, phase, tau);
+  drawCharts(tsWrapped, phase, tau);
+  drawText(tsWrapped, phase);
+  drawBars(phase, tau);
+  drawHud(tsWrapped, phase, tau);
+}
+
+window.renderFrame = function (timeSeconds) {
+  lastManualRender = performance.now();
+  renderScene(timeSeconds);
+  return null;
+};
+
+let start = performance.now();
+function rafLoop(ts) {
+  if (ts - lastManualRender > 100) renderScene((ts - start) / 1000);
+  requestAnimationFrame(rafLoop);
+}
+requestAnimationFrame(rafLoop);
+
+renderScene(0);
+window.ready = true;
+</script>
+
+        <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+        <div id="audio-controls"><button id="audio-toggle">▶ Play</button></div>
+<script id="clawed-strudel-bootstrap" type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 48\\n// FORM: A 0-3 | A2 3-6 | B 6-8 | A3 8-10.5 | A4 10.5-12 (12 cycles @ 4s/cycle = 48s)\\n// TONAL CENTER: D natural minor (D E F G A Bb C), fixed D pedal throughout\\n// MOTIF: D4 F4 A4 C5 A4 — D4 held beats 1-2, F4 on 3, A4 on 3.5, C5 on 4, A4 on 4.5; entire following cycle is rest (one statement per two cycles)\\n// HARMONIC PLAN: A = Dm(add9) [D F A E] unison | A2 = Dm7 [D F A C] with pad layer 2 detuned ~7c sharp | B = F/D [F A C] 1.5 cyc then Bbmaj7/D [Bb D F A] half cyc, widest opening | A3 = Dm7 over D, upper voices E5-D5-C5 stepwise, detune retuned to unison | A4 = Dm(add9) exactly as cycle 0\\n// PHRASE RULE: shared 4-beat console cell — CR78 rim tick on every beat, weightier tick on the 'and' of 2, deliberate rest at 4.5 where the log line lands; at every boundary the D pedal keeps sounding and the pad tail bleeds across, and at most two dimensions change (upper-voice seating by stepwise C/E motion, plus one of detune / register / tick density). Motif contour, D pedal and per-beat tick never break.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// ── VOICE 1 — console tick / rhythmic engine ────────────────────────────────\\n// CR78 rim on every beat (bearing readout), weightier tick on the 'and' of 2,\\n// rest at 4.5. Low wooden knock (dark LinnDrum tom) at cycles 3, 6 and 8 only.\\n$: stack(\\n  s(\\\"rim*4\\\").bank(\\\"RolandCR78\\\")\\n    .gain(\\\"\u003c0.27 0.27 0.27 0.30 0.31 0.31 0.33 0.33 0.30 0.28 0.26 0.22>\\\")\\n    .lpf(\\\"\u003c2200 2200 2200 2600 2800 2800 3200 3000 2600 2400 2200 1800>\\\")\\n    .room(0.34).size(0.6).pan(0.42).orbit(0),\\n  s(\\\"~ [~ rim] ~ ~\\\").bank(\\\"RolandCR78\\\")\\n    .gain(\\\"\u003c0.20 0.20 0.20 0.23 0.24 0.24 0.26 0.26 0.23 0.21 0.19 0.14>\\\")\\n    .lpf(1800).room(0.4).pan(0.58).orbit(0),\\n  s(\\\"\u003c~ ~ ~ lt ~ ~ lt ~ lt ~ ~ ~>\\\").bank(\\\"LinnDrum\\\")\\n    .gain(0.30).lpf(120).room(0.55).size(0.8).pan(0.5).orbit(0)\\n).slow(1)\\n\\n// ── VOICE 2 — sub-bass pedal ────────────────────────────────────────────────\\n// Never leaves D. Every re-seating happens above it; identical first/last cycle.\\n$: note(\\\"\u003cd1 d1 d1 d1 d1 d1 [d1 d2] d1 d1 d1 d1 d1>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(0.6).release(3)\\n  .lpf(\\\"\u003c150 150 150 160 165 165 190 180 165 155 150 145>\\\")\\n  .gain(0.22).room(0.3).size(0.7).orbit(1)\\n\\n// ── VOICE 3 — harmonic body / the beating pad ───────────────────────────────\\n// Two detuned saw layers. Layer 2 goes ~7-12 cents sharp through A2/B — the\\n// score's one-line telling of SUM > 1.00 — and retunes to unison in A3/A4.\\n$: note(\\\"\u003c[d3,f3,a3,e4] [d3,f3,a3,e4] [d3,f3,a3,e4] [d3,f3,a3,c4] [d3,f3,a3,c4] [d3,f3,a3,c4] [d3,f3,a3,c4] [d3,f3,bb3,d4] [d3,f3,a3,e5] [d3,f3,a3,d5] [d3,f3,a3,c5] [d3,f3,a3,e4]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .layer(\\n    x => x.detune(0).gain(0.062).pan(0.36),\\n    x => x.detune(\\\"\u003c0 0 0 7 9 9 12 12 6 3 0 0>\\\").gain(0.058).pan(0.64)\\n  )\\n  .attack(0.5).release(3.5)\\n  .lpf(\\\"\u003c760 760 780 820 860 860 1050 980 880 820 780 740>\\\")\\n  .room(0.72).size(0.85).orbit(2)\\n\\n// ── VOICE 4 — motif lead ────────────────────────────────────────────────────\\n// D4 F4 A4 C5 A4 — one statement per two cycles, the rest cycle left silent.\\n// B (cyc 6) states it up a third, augmented to one note per beat. A3 thins to\\n// its first three notes (cyc 8), full cell at 10, head alone at 11.\\n$: note(\\\"\u003c[d4@2 f4 [a4 c5] [a4 ~]] ~ [d4@2 f4 [a4 c5] [a4 ~]] ~ [d4@2 f4 [a4 c5] [a4 ~]] ~ [f4 a4 c5 [e5 c5]] ~ [d4@2 f4 [a4 ~]] ~ [d4@2 f4 [a4 c5] [a4 ~]] [d4@4]>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(0.14).release(1.6)\\n  .lpf(\\\"\u003c1500 1500 1500 1600 1700 1700 2300 2000 1700 1600 1500 1300>\\\")\\n  .gain(\\\"\u003c0.15 0.15 0.15 0.155 0.16 0.16 0.175 0.16 0.15 0.15 0.15 0.13>\\\")\\n  .delay(0.28).delaytime(0.375).delayfeedback(0.26)\\n  .room(0.6).size(0.8).pan(0.48).orbit(3)\\n\\n// ── VOICE 5 — verdict chime (one-shot event lane) ───────────────────────────\\n// A5 → D6. Sounds exactly once, at cycle 7 — the BOTH verdict — and is\\n// withheld for all eleven other cycles. Only material above E5 in the piece.\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ [a5 d6 ~ ~] ~ ~ ~ ~>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(0.05).release(2.5)\\n  .gain(0.14)\\n  .lpf(3600)\\n  .room(0.8).size(0.9).pan(0.5).orbit(4)\",\"bpm\":60,\"durationSec\":48,\"renderDurationSec\":48,\"cps\":0.25,\"cycles\":12,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

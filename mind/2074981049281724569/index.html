@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const c=document.createElement('canvas'),ctx=c.getContext('2d');c.width=c.height=900;
+let s=808;const r=()=>(s=(s*9301+49297)%233280,s/233280);
+const dur=60,rot=2,parts=300;
+window.initToneJsEngine=async()=>{
+const H=m=>Math.max(0,(Math.random()*m*2-m)/1000);
+const lim=new Tone.Limiter({threshold:-2}).toDestination();
+const hum=new Tone.Filter(180,'lowpass').connect(lim);
+const n=new Tone.Noise('brown').connect(new Tone.Gain(0.03).connect(hum));
+n.start();const o1=new Tone.Oscillator(58,'sine').connect(lim),o2=new Tone.Oscillator(120,'sine').connect(lim);
+o1.volume.value=o2.volume.value=-35;o1.start();o2.start();
+const kG=new Tone.Gain(0.4).connect(new Tone.Filter(2400,'highpass').connect(lim));
+const kN=new Tone.NoiseSynth({noise:{type:'white'},envelope:{attack:0.001,decay:0.015,sustain:0,release:0.005}}).connect(kG);
+const kB=new Tone.MetalSynth({frequency:1600,envelope:{attack:0.001,decay:0.01,release:0.005}}).connect(kG);
+new Tone.Loop(t=>{if(Math.random()>0.2)return;kN.triggerAttackRelease(0.01,t+H(15),0.5);
+kB.frequency.setValueAtTime(1500+Math.random()*400,t+H(15));kB.triggerAttackRelease('32n',t+H(15),0.4);},'16n').start(0);
+const pG=new Tone.Gain(0.2).connect(lim);const pS=new Tone.Synth({oscillator:{type:'sine'},envelope:{attack:0.005,decay:0.05,sustain:0,release:0.1}}).connect(pG);
+new Tone.Loop(t=>{if(Math.random()>0.3)return;let f=1800+Math.random()*800;pS.triggerAttackRelease(f,0.05,t+H(20),0.2);},'1n').start(0);
+window.toneJsInstruments={n,o1,o2,kN,kB,pS};};
+const paths=Array.from({length:3},(_,i)=>({id:i,pts:[]}));
+window.renderFrame=t=>{
+const p=t/dur,a=p*Math.PI*2*rot;ctx.fillStyle='rgba(0,0,0,0.08)';ctx.fillRect(0,0,900,900);
+ctx.globalCompositeOperation='lighter';
+const cols=['#00f0ff','#ff4d00','#c080ff'];
+for(let i=0;i<3;i++){
+const ang=a+i*(Math.PI*2/3),d=400*(1-Math.abs(Math.sin(a*0.5))),
+x=450+Math.cos(ang)*d,y=450+Math.sin(ang)*d,
+g=d<40?(Math.random()-0.5)*15:0;
+ctx.beginPath();ctx.arc(x+g,y+g,4+i,0,7);ctx.fillStyle=cols[i];ctx.fill();
+for(let j=0;j<15;j++){
+const op=1-j/15,sz=(15-j)*0.8;
+ctx.fillStyle=cols[i]+Math.floor(op*255).toString(16).padStart(2,'0');
+ctx.beginPath();ctx.arc(x+g-Math.cos(ang)*j*5,y+g-Math.sin(ang)*j*5,sz,0,7);ctx.fill();
+}
+}
+if(400*(1-Math.abs(Math.sin(a*0.5)))<30){
+ctx.beginPath();ctx.arc(450,450,40+(Math.random()*10),0,7);
+ctx.fillStyle='#ffffff';ctx.fill();
+ctx.shadowBlur=30;ctx.shadowColor='#fff';
+}else{ctx.shadowBlur=0;}
+ctx.globalCompositeOperation='source-over';
+return c.toDataURL();
+};
+window.ready=true;
+
+
+
+
+document.body.appendChild(c);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
