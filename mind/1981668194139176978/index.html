@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const strips = [];
+const stripCount = 12;
+const duration = 30;
+const rotationSpeed = 2;
+
+for (let i = 0; i < stripCount; i++) {
+  strips.push({
+    angle: (i / stripCount) * Math.PI * 2,
+    width: 40 + random() * 30,
+    colorPhase: random()
+  });
+}
+
+function möbiusTransform(x, y, twist) {
+  const r = Math.sqrt(x * x + y * y);
+  const theta = Math.atan2(y, x);
+  const newTheta = theta + twist * (1 - r / 400);
+  return {
+    x: r * Math.cos(newTheta),
+    y: r * Math.sin(newTheta)
+  };
+}
+
+window.renderFrame = function(time) {
+  ctx.fillStyle = '#0a0a14';
+  ctx.fillRect(0, 0, 800, 800);
+  
+  const progress = (time / duration) * rotationSpeed;
+  const twist = progress * Math.PI * 2;
+  
+  ctx.save();
+  ctx.translate(400, 400);
+  
+  strips.forEach((strip, i) => {
+    const phase = i / stripCount;
+    const stripProgress = (progress + phase) % 1;
+    const rotation = stripProgress * Math.PI * 2;
+    
+    const hue = ((strip.colorPhase + stripProgress) % 1) * 60 + 260;
+    const brightness = 30 + stripProgress * 40;
+    
+    ctx.save();
+    ctx.rotate(strip.angle + rotation * 0.5);
+    
+    for (let r = 0; r < 400; r += 8) {
+      const localTwist = twist * (r / 400);
+      
+      ctx.save();
+      ctx.rotate(localTwist);
+      
+      const alpha = 0.15 + 0.15 * Math.sin(stripProgress * Math.PI * 2);
+      ctx.strokeStyle = `hsla(${hue}, 80%, ${brightness}%, ${alpha})`;
+      ctx.lineWidth = 2;
+      
+      const transformed = möbiusTransform(r, 0, localTwist);
+      ctx.beginPath();
+      ctx.moveTo(transformed.x - strip.width/2, transformed.y);
+      ctx.lineTo(transformed.x + strip.width/2, transformed.y);
+      ctx.stroke();
+      
+      ctx.restore();
+    }
+    
+    ctx.restore();
+  });
+  
+  const centerGlow = ctx.createRadialGradient(0, 0, 0, 0, 0, 150);
+  centerGlow.addColorStop(0, 'rgba(180, 120, 255, 0.2)');
+  centerGlow.addColorStop(1, 'rgba(180, 120, 255, 0)');
+  ctx.fillStyle = centerGlow;
+  ctx.fillRect(-400, -400, 800, 800);
+  
+  ctx.restore();
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  const carrier = audioCtx.createOscillator();
+  carrier.type = 'sine';
+  carrier.frequency.value = 180;
+  
+  const harmonic1 = audioCtx.createOscillator();
+  harmonic1.type = 'sine';
+  harmonic1.frequency.value = 270;
+  
+  const harmonic2 = audioCtx.createOscillator();
+  harmonic2.type = 'sine';
+  harmonic2.frequency.value = 360;
+  
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.15;
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 30;
+  lfo.connect(lfoGain);
+  lfoGain.connect(carrier.frequency);
+  
+  const mainGain = audioCtx.createGain();
+  const harm1Gain = audioCtx.createGain();
+  const harm2Gain = audioCtx.createGain();
+  
+  mainGain.gain.setValueAtTime(0, now);
+  mainGain.gain.linearRampToValueAtTime(0.22, now + 2.5);
+  harm1Gain.gain.value = 0.12;
+  harm2Gain.gain.value = 0.08;
+  
+  carrier.connect(mainGain);
+  harmonic1.connect(harm1Gain);
+  harmonic2.connect(harm2Gain);
+  
+  mainGain.connect(audioCtx.destination);
+  harm1Gain.connect(audioCtx.destination);
+  harm2Gain.connect(audioCtx.destination);
+  
+  carrier.start(now);
+  harmonic1.start(now);
+  harmonic2.start(now);
+  lfo.start(now);
+  
+  return { carrier, harmonic1, harmonic2, lfo, lfoGain, mainGain, harm1Gain, harm2Gain };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

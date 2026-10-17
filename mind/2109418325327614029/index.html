@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 48
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+
+const DUR = 48, W = 5 * Math.PI, TAU = Math.PI * 2;
+const INK = '#0d0b0a', PAPER = '#efe5cf', GOLD = '#ffd27a';
+
+let seed = 206754;
+const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+// ---------- renderer / scene ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.style.margin = '0';
+document.body.style.background = '#0a0908';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0a0908');
+scene.fog = new THREE.FogExp2(0x0a0908, 0.055);
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(34, 1, 0.05, 60);
+
+// ---------- the strip: 12 poses of one rotary gallop ----------
+// The band is 0.368 tall around a 4.951 circumference, so 4096 x 304 keeps the
+// paper's pixels square. Each cat is drawn facing -x on the canvas; the strip
+// texture is mirrored (repeat.x = -1) so the numerals read correctly from inside
+// the drum, which turns every cat toward +theta, the direction of rotation.
+// Drawing k lands at local angle -(k + 0.5) * 30deg, so a +30deg step moves
+// drawing k+1 into the seat drawing k just left: the gallop plays forwards at
+// lock and, in the chase, the cats run head-first around the drum.
+const SW = 4096, SH = 304, CELL = SW / 12, GROUND = 228;
+const FAR_INK = '#2c2724';
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const flexAt = (s, peak) => Math.pow(Math.max(0, Math.cos(TAU * (s - peak))), 0.8);
+const dir = (a) => [Math.sin(a), Math.cos(a)]; // 0 = straight down, + = forward
+
+function chain(root, segs) {
+  const pts = [root];
+  let p = root;
+  for (const [len, ang] of segs) {
+    const d = dir(ang);
+    p = [p[0] + d[0] * len, p[1] + d[1] * len];
+    pts.push(p);
+  }
+  return pts;
+}
+
+function foreLeg(root, s) {
+  const sw = (12 + 48 * Math.cos(TAU * (s - 0.02))) * Math.PI / 180;
+  const fl = flexAt(s, 0.64), e = clamp01(sw / 1.05);
+  const a1 = sw - 0.28 * (1 - e) + 0.35 * fl;
+  const a2 = sw + 0.12 * (1 - e) - 1.95 * fl;
+  const a3 = a2 + 1.15 * (1 - fl) - 0.7 * fl;
+  return chain(root, [[33, a1], [29, a2], [10, a3]]);
+}
+
+function hindLeg(root, s) {
+  const sw = (-8 - 50 * Math.cos(TAU * (s - 0.04))) * Math.PI / 180;
+  const fl = flexAt(s, 0.3), e = clamp01(-sw / 1.05);
+  const b1 = sw + 0.42 * (1 - e) + 0.25 * fl;
+  const b2 = sw - 0.55 * (1 - e) - 0.65 * fl;
+  const b3 = sw + 0.15 * (1 - e) + 0.75 * fl;
+  return chain(root, [[34, b1], [31, b2], [21, b3], [10, b3 + 1.15]]);
+}
+
+function gallopPose(s) {
+  const p = s * TAU, f = Math.cos(p);
+  const hl = 54 + 6 * f;                       // half spine: long in extended flight
+  const arch = 10 - 9 * f;                     // back bows up when gathered
+  const pitch = 0.09 * Math.sin(p - 0.5);      // nose dips on fore landing, rump on hind
+  const cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const rot = (x, y) => [x * cp - y * sp, x * sp + y * cp];
+  const spine = (t) => rot((t - 0.5) * 2 * hl, -arch * Math.sin(t * Math.PI));
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const lerp = (v, t) => { const i = Math.min(v.length - 2, Math.floor(t * (v.length - 1))); const u = t * (v.length - 1) - i; return v[i] + (v[i + 1] - v[i]) * (u * u * (3 - 2 * u)); };
+  const TOP = [21, 17, 15, 18, 20], BELLY = [21, 16, 14, 22, 25];
+  const top = [], bot = [];
+  for (let i = 0; i <= 18; i++) {
+    const t = i / 18, c = spine(t);
+    top.push(add(c, rot(0, -lerp(TOP, t))));
+    bot.push(add(c, rot(0, lerp(BELLY, t))));
+  }
+  const rump = add(spine(0), rot(-3, 1)), chest = add(spine(1), rot(3, 6));
+  const neck = add(spine(1), rot(6, -8));
+  const head = [neck[0] + 25 - 2 * f, neck[1] - 13 + 2 * f];
+  const foreRoot = add(spine(0.86), rot(2, 12)), hindRoot = add(spine(0.08), rot(-1, 8));
+  const legs = {
+    farFore: foreLeg(add(foreRoot, [-5, -2]), (s + 0.94) % 1),
+    farHind: hindLeg(add(hindRoot, [-4, -2]), (s + 0.94) % 1),
+    fore: foreLeg(foreRoot, s),
+    hind: hindLeg(hindRoot, s)
+  };
+  const tail = [];
+  let tp = add(spine(0), rot(-14, -12)), ta = Math.PI + 0.5 + 0.1 * f;
+  tail.push(tp);
+  for (let i = 0; i < 7; i++) {
+    ta += 0.16 * Math.sin(p - 1.4 - i * 0.6) - 0.05;
+    tp = [tp[0] + Math.cos(ta) * 11.5, tp[1] + Math.sin(ta) * 11.5];
+    tail.push(tp);
+  }
+  const all = [...top, ...bot, ...Object.values(legs).flat(), ...tail,
+    [head[0] + 30, head[1]], [head[0], head[1] - 32], [rump[0] - 20, rump[1]]];
+  const lowPaw = Math.max(...Object.values(legs).map(l => l[l.length - 1][1]));
+  const clearance = 15 * Math.pow(Math.max(0, Math.cos(2 * p)), 1.5);
+  return { top, bot, rump, chest, neck, head, legs, tail, all, lift: lowPaw + clearance, f };
+}
+
+function strokeLimb(g, pts, w, col) {
+  g.strokeStyle = col; g.fillStyle = col; g.lineCap = 'round'; g.lineJoin = 'round';
+  for (let i = 0; i < pts.length - 1; i++) {
+    g.lineWidth = w * (1 - i * 0.17);
+    g.beginPath(); g.moveTo(pts[i][0], pts[i][1]); g.lineTo(pts[i + 1][0], pts[i + 1][1]); g.stroke();
+  }
+  const q = pts[pts.length - 1];
+  g.beginPath(); g.arc(q[0], q[1], w * 0.42, 0, TAU); g.fill();
+}
+
+function drawCat(g, ge, cx, pose, sc, ox) {
+  const y0 = GROUND - pose.lift * sc;
+  for (const [ctx, isMap] of [[g, true], [ge, false]]) {
+    ctx.save();
+    ctx.translate(cx, y0); ctx.scale(-sc, sc); ctx.translate(-ox, 0);
+    if (isMap) {
+      strokeLimb(ctx, pose.legs.farHind, 11, FAR_INK);
+      strokeLimb(ctx, pose.legs.farFore, 9.5, FAR_INK);
+      ctx.fillStyle = INK;
+      ctx.beginPath(); ctx.moveTo(...pose.top[0]);
+      for (const q of pose.top) ctx.lineTo(q[0], q[1]);
+      for (let i = pose.bot.length - 1; i >= 0; i--) ctx.lineTo(pose.bot[i][0], pose.bot[i][1]);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.arc(pose.rump[0], pose.rump[1], 21, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(pose.chest[0], pose.chest[1], 19, 21, 0.2, 0, TAU); ctx.fill();
+      const h = pose.head, n = pose.neck;
+      ctx.beginPath(); ctx.moveTo(n[0] - 10, n[1] - 12); ctx.lineTo(h[0] - 4, h[1] - 13);
+      ctx.lineTo(h[0] + 2, h[1] + 12); ctx.lineTo(n[0] + 8, n[1] + 24); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(h[0], h[1], 17, 14.5, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(h[0] + 13, h[1] + 4, 9.5, 7.5, 0.15, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(h[0] - 12, h[1] - 7); ctx.lineTo(h[0] - 9, h[1] - 31); ctx.lineTo(h[0] + 1, h[1] - 12); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(h[0] + 1, h[1] - 12); ctx.lineTo(h[0] + 8, h[1] - 30); ctx.lineTo(h[0] + 13, h[1] - 7); ctx.fill();
+      ctx.strokeStyle = INK; ctx.lineCap = 'round';
+      for (let i = 0; i < pose.tail.length - 1; i++) {
+        ctx.lineWidth = 13 - i * 1.3;
+        ctx.beginPath(); ctx.moveTo(...pose.tail[i]); ctx.lineTo(...pose.tail[i + 1]); ctx.stroke();
+      }
+      strokeLimb(ctx, pose.legs.hind, 12.5, INK);
+      strokeLimb(ctx, pose.legs.fore, 10.5, INK);
+    }
+    ctx.fillStyle = GOLD;
+    ctx.beginPath(); ctx.ellipse(pose.head[0] + 6, pose.head[1] - 3, 3.6, 2.4, -0.2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function paintStrip() {
+  const c = document.createElement('canvas'); c.width = SW; c.height = SH;
+  const e = document.createElement('canvas'); e.width = SW; e.height = SH;
+  const g = c.getContext('2d'), ge = e.getContext('2d');
+  g.fillStyle = PAPER; g.fillRect(0, 0, SW, SH);
+  ge.fillStyle = '#000'; ge.fillRect(0, 0, SW, SH);
+  for (let i = 0; i < 7000; i++) {          // fibre noise, baked once
+    const x = rnd() * SW, y = rnd() * SH, l = 2 + rnd() * 12;
+    g.strokeStyle = rnd() > 0.5 ? 'rgba(120,100,70,0.06)' : 'rgba(255,250,240,0.08)';
+    g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + l, y + (rnd() - 0.5) * 3); g.stroke();
+  }
+  g.fillStyle = 'rgba(96,70,44,0.5)';
+  g.fillRect(0, GROUND + 1, SW, 2);          // sepia baseline
+  g.fillRect(0, 9, SW, 1.5);                 // printed top rule
+  const poses = [];
+  for (let k = 0; k < 12; k++) poses.push(gallopPose(k / 12));
+  let x0 = Infinity, x1 = -Infinity, h = 0;
+  for (const p of poses) for (const q of p.all) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); h = Math.max(h, p.lift - q[1]); }
+  const sc = Math.min(CELL * 0.88 / (x1 - x0), (GROUND - 24) / h);
+  const ox = (x0 + x1) / 2;
+  for (let k = 0; k < 12; k++) {
+    const cx = k * CELL + CELL / 2;
+    drawCat(g, ge, cx, poses[k], sc, ox);
+    g.fillStyle = 'rgba(70,58,44,0.6)'; g.font = '300 30px Georgia, serif'; g.textAlign = 'center';
+    g.fillText(String(k + 1), cx, GROUND + 44);
+    g.fillStyle = 'rgba(96,70,44,0.35)'; g.fillRect(k * CELL, GROUND - 5, 1.5, 16);
+  }
+  return [c, e];
+}
+
+const [stripCanvas, sparkCanvas] = paintStrip();
+const stripTex = new THREE.CanvasTexture(stripCanvas);
+stripTex.colorSpace = THREE.SRGBColorSpace;
+stripTex.anisotropy = 8;
+const sparkTex = new THREE.CanvasTexture(sparkCanvas);
+sparkTex.colorSpace = THREE.SRGBColorSpace;
+for (const tx of [stripTex, sparkTex]) { tx.wrapS = THREE.RepeatWrapping; tx.repeat.x = -1; tx.offset.x = 1; }
+
+// ---------- the zoetrope ----------
+const R = 0.8, HSLIT = 0.3, HSTRIP = 0.4;
+const drum = new THREE.Group();
+scene.add(drum);
+
+const tin = new THREE.MeshStandardMaterial({ color: 0x24423a, roughness: 0.38, metalness: 0.12, envMapIntensity: 0.5, side: THREE.DoubleSide });
+const gilt = new THREE.MeshStandardMaterial({ color: 0xc8a457, roughness: 0.34, metalness: 0.85, envMapIntensity: 0.55 });
+
+// 12 curved wall panels between the slits (upper band)
+const slitW = 6 * Math.PI / 180, panelW = TAU / 12 - slitW;
+for (let k = 0; k < 12; k++) {
+  const start = k * TAU / 12 + slitW * 0.5;
+  const panel = new THREE.Mesh(new THREE.CylinderGeometry(R, R, HSLIT, 14, 1, true, start, panelW), tin);
+  panel.position.y = 0.075 + HSLIT * 0.5;
+  panel.castShadow = true; panel.receiveShadow = true;
+  drum.add(panel);
+}
+// gilt top lip + two pinstripes (12-fold symmetric: full rings)
+const lip = new THREE.Mesh(new THREE.TorusGeometry(R + 0.004, 0.016, 8, 72), gilt);
+lip.position.y = 0.075 + HSLIT; lip.rotation.x = Math.PI / 2; drum.add(lip);
+for (const y of [0.055, -0.3]) {
+  const ps = new THREE.Mesh(new THREE.TorusGeometry(R + 0.002, 0.005, 6, 72), gilt);
+  ps.position.y = y; ps.rotation.x = Math.PI / 2; drum.add(ps);
+}
+// lower outer shell
+const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, HSTRIP, 72, 1, true), tin);
+shell.position.y = 0.075 - HSTRIP * 0.5; shell.castShadow = true; drum.add(shell);
+// paper strip, facing inward
+const strip = new THREE.Mesh(
+  new THREE.CylinderGeometry(R - 0.012, R - 0.012, HSTRIP * 0.92, 160, 1, true),
+  new THREE.MeshStandardMaterial({
+    map: stripTex, emissiveMap: sparkTex, emissive: 0xffffff, emissiveIntensity: 2.6,
+    roughness: 0.92, metalness: 0, envMapIntensity: 0.06, side: THREE.BackSide
+  })
+);
+strip.position.y = 0.075 - HSTRIP * 0.5; strip.receiveShadow = true; drum.add(strip);
+// drum floor
+const floorD = new THREE.Mesh(new THREE.CircleGeometry(R - 0.012, 64),
+  new THREE.MeshStandardMaterial({ color: 0x15120f, roughness: 0.95, envMapIntensity: 0.05 }));
+floorD.rotation.x = -Math.PI / 2; floorD.position.y = 0.075 - HSTRIP + 0.01;
+floorD.receiveShadow = true; drum.add(floorD);
+
+// static brass spindle + foot (never turns)
+const lathePts = [];
+for (let i = 0; i <= 24; i++) {
+  const t = i / 24, y = -0.33 - t * 0.5;
+  lathePts.push(new THREE.Vector2(0.035 + Math.pow(t, 3.4) * 0.3 + Math.sin(t * 9) * 0.012, y));
+}
+const spindle = new THREE.Mesh(new THREE.LatheGeometry(lathePts, 48),
+  new THREE.MeshStandardMaterial({ color: 0x8a6a33, roughness: 0.32, metalness: 0.85, envMapIntensity: 0.5 }));
+spindle.castShadow = true; scene.add(spindle);
+
+// walnut table
+const table = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.18, 48),
+  new THREE.MeshStandardMaterial({ color: 0x4a2e1c, roughness: 0.58, metalness: 0.08, envMapIntensity: 0.12 }));
+table.position.y = -0.92; table.receiveShadow = true; scene.add(table);
+
+// ---------- light ----------
+scene.add(new THREE.AmbientLight(0xffe0b0, 0.11));
+const lamp = new THREE.SpotLight(0xffdcb4, 64, 10, 0.5, 0.62, 2);
+lamp.position.set(1.1, 3.1, 0.35);
+lamp.target.position.set(-0.35, -0.25, 0);
+lamp.castShadow = true;
+lamp.shadow.mapSize.set(2048, 2048); lamp.shadow.bias = -0.0004;
+lamp.shadow.camera.near = 0.6; lamp.shadow.camera.far = 9;
+scene.add(lamp); scene.add(lamp.target);
+const fill = new THREE.DirectionalLight(0x9fb4c2, 0.75);
+fill.position.set(4, 1.4, 0.6); scene.add(fill);
+const rim = new THREE.PointLight(0xffd27a, 2.4, 3.4);
+rim.position.set(-1.6, -0.1, -1.5); scene.add(rim);
+
+// ---------- dust ----------
+const DN = 150, dpos = new Float32Array(DN * 3), dseed = [];
+for (let i = 0; i < DN; i++) {
+  dseed.push({ r: 0.3 + rnd() * 1.5, a: rnd() * TAU, y: rnd(), ph: rnd() * TAU, c: 1 + Math.floor(rnd() * 2) });
+}
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dpos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
+  color: 0xffd9a0, size: 0.012, transparent: true, opacity: 0.4,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+}));
+scene.add(dust);
+
+// ---------- post ----------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.36, 0.45, 0.9));
+const grain = new ShaderPass({
+  uniforms: { tDiffuse: { value: null }, uPhase: { value: 0 } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uPhase; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p,vec2(41.3,289.1)))*43758.5453); }
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 q = vUv + vec2(cos(uPhase*6.2831), sin(uPhase*6.2831))*0.37;
+      c.rgb += (h(q*vec2(900.,900.))-0.5)*0.045;
+      float d = length(vUv-0.5);
+      c.rgb *= smoothstep(0.92,0.33,d)*0.42+0.58;
+      gl_FragColor = c;
+    }`
+});
+composer.addPass(grain);
+
+// ---------- theta(t): the strobe is real ----------
+const ss = (x) => x * x * x * (x * (6 * x - 15) + 10); // smootherstep integrand already folded below
+function theta(t) {
+  if (t < 6.4) return 0;
+  if (t < 16.0) { const x = (t - 6.4) / 9.6; return W * 9.6 * (Math.pow(x, 6) - 3 * Math.pow(x, 5) + 2.5 * Math.pow(x, 4)); }
+  if (t < 28.8) return 24 * Math.PI + W * (t - 16.0);
+  if (t < 35.2) { const u = t - 28.8; return 88 * Math.PI + W * (u + 0.125 * (u / 2 - (6.4 / (4 * Math.PI)) * Math.sin(TAU * u / 6.4))); }
+  if (t < 38.4) return 122 * Math.PI + W * (t - 35.2);
+  const x = (t - 38.4) / 9.6;
+  return 138 * Math.PI + W * 9.6 * (x - (Math.pow(x, 6) - 3 * Math.pow(x, 5) + 2.5 * Math.pow(x, 4)));
+}
+
+// ---------- camera: one slow breath, no circling ----------
+// One continuous move. It opens close on the frozen drawings (four cats across
+// the far wall), draws back to the whole drum while it spins up so the turning
+// is legible, pushes back in through the lock, and holds close with a slight
+// sway, ending on the exact opening pose so frame 1440 equals frame 0.
+const CAM_A = new THREE.Vector3(3.06, 2.17, 0.21), AIM_A = new THREE.Vector3(0, -0.04, 0);
+const CAM_B = new THREE.Vector3(1.45, 0.92, 0.1), AIM_B = new THREE.Vector3(-0.75, -0.13, 0);
+const camAim = new THREE.Vector3();
+const smooth = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+function placeCam(t) {
+  let e;
+  if (t < 12) e = 1 - smooth(0, 12, t);          // close -> whole drum
+  else if (t < 24) e = smooth(12, 24, t);        // whole drum -> close, through the lock at 16 s
+  else e = 1 + 0.05 * Math.pow(Math.sin(Math.PI * (t - 24) / 24), 2);
+  camera.position.lerpVectors(CAM_A, CAM_B, e);
+  camera.lookAt(camAim.lerpVectors(AIM_A, AIM_B, e));
+}
+
+window.renderFrame = (t) => {
+  const tt = ((t % DUR) + DUR) % DUR, ph = tt / DUR;
+  drum.rotation.y = theta(tt) % TAU;
+
+  for (let i = 0; i < DN; i++) {
+    const s = dseed[i], a = s.a + Math.sin(ph * TAU + s.ph) * 0.3;
+    dpos[i * 3] = Math.cos(a) * s.r;
+    dpos[i * 3 + 1] = -0.35 + s.y * 2.3 + Math.sin(ph * TAU * s.c + s.ph) * 0.1;
+    dpos[i * 3 + 2] = Math.sin(a) * s.r;
+  }
+  dustGeo.attributes.position.needsUpdate = true;
+
+  grain.uniforms.uPhase.value = ph;
+  placeCam(tt);
+  composer.render();
+};
+
+let f = 0;
+(function loop() { window.renderFrame(f / 30); f = (f + 1) % 1440; requestAnimationFrame(loop); })();
+window.ready = true;
+
+
+
+
+
+
+
+window.audioDuration = 48;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 75\\n// DURATION: 48\\n// FORM: A 0-2 (STILL) | B 2-5 (SPIN-UP) | C 5-9 (LOCK) | D 9-11 (CHASE) | E 11-12 (RELOCK) | F 12-15 (SPIN-DOWN) — 15 cycles x 3.2s = 48s\\n// TONAL CENTER: G Dorian (G minor with natural 6 — G Bb C D F), tonal center G, no leading tone\\n// MOTIF: G5 Bb5 C6 D6 Bb5 — one 4-beat cycle of eighths: G5(beat1 quarter) Bb5(beat2 quarter) rest(beat3 downbeat) C6(beat3 second eighth) D6(beat4) Bb5(beat4 second eighth); thinned to G5 Bb5 rest D6 in A, and to G5 F5 rest G5 in the last cycle\\n// HARMONIC PLAN: A = bare G pedal, no third, no bass | B = same G pedal plus the detuned G3 sine pair narrowing 6Hz>3Hz>1Hz to unison on the cycle-5 downbeat | C = Gm7, plucked G2 on beat 1 with a Bb2 echo on the last eighth | D = C major (cycle 9, bass G2>C3) then Bb major (cycle 10, bass Bb2>F2) | E = home Gm7, G2 on beats 1 and 3 | F = Gm7 held, voices subtracting only, no modulation\\n// PHRASE RULE: one wooden tick on the beat grid that only ever changes subdivision (quarters c2, eighths c3, sixteenths c4-c12, eighths c13, quarters c14) with an eighth-note four-footfall gallop (low thud + higher tap per eighth = one 0.4s drawn stride) from the lock to the top of cycle 13; at every seam exactly one voice is added, removed or re-subdivided, and the music-box lead carries across unbroken\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n$: note(\\\"\u003c[g5 bb5 ~ d6] [g5 bb5 ~ d6] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 bb5] [bb5 ~ ~ c6 d6 bb5 g5 ~] [c6 d6 bb5 g5 ~ bb5 ~ ~] [g5 ~ bb5 ~ ~ c6 d6 bb5] [g5 ~ bb5 ~ ~ c6 d6 ~] [g5 ~ bb5 ~ ~ ~ d6 ~] [g5 f5 ~ g5]>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(0.002).decay(0.17).sustain(0).release(0.07)\\n  .lpf(4200).lpq(2)\\n  .pan(0.46)\\n  .room(0.34).roomsize(1.6)\\n  .gain(\\\"\u003c0.38 0.4 0.44 0.46 0.48 0.52 0.56 0.6 0.58 0.56 0.54 0.5 0.46 0.42 0.38>\\\")\\n\\n$: note(\\\"\u003c~ ~ ~ ~ ~ [g2 ~ ~ ~ ~ ~ ~ bb2] [g2 ~ ~ ~ ~ ~ ~ bb2] [g2 ~ ~ ~ ~ ~ ~ bb2] [g2 ~ ~ ~ ~ ~ ~ bb2] [g2 ~ c3 ~] [bb2 ~ f2 ~] [g2 ~ g2 ~] [g2 ~ ~ ~ ~ ~ ~ bb2] [g2 ~ ~ ~] [g2 ~ ~ ~]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .attack(0.004).decay(0.32).sustain(0).release(0.14)\\n  .lpf(430).lpq(1.5)\\n  .pan(0.5)\\n  .room(0.14).roomsize(1.4)\\n  .gain(\\\"\u003c0 0 0 0 0 0.82 0.76 0.76 0.74 0.74 0.74 0.7 0.6 0.44 0.3>\\\")\\n\\n$: stack(\\n  s(\\\"\u003c~ ~ rim*4 rim*8 rim*16 rim*16 rim*16 rim*16 rim*16 rim*16 rim*16 rim*16 rim*16 rim*8 rim*4>\\\")\\n    .bank(\\\"RolandTR808\\\")\\n    .hpf(850)\\n    .pan(0.34)\\n    .room(0.1)\\n    .gain(\\\"\u003c0 0 0.3 0.26 0.22 0.2 0.2 0.2 0.2 0.22 0.22 0.2 0.2 0.24 0.28>\\\"),\\n  s(\\\"\u003c~ ~ ~ ~ ~ [lt ht]*8 [lt ht]*8 [lt ht]*8 [lt ht]*8 [lt ht]*8 [lt ht]*8 [lt ht]*8 [lt ht]*8 ~ ~>\\\")\\n    .bank(\\\"RolandTR808\\\")\\n    .lpf(1900)\\n    .pan(\\\"\u003c0.58 0.42>\\\")\\n    .room(0.12).roomsize(1.2)\\n    .gain(\\\"\u003c0 0 0 0 0 0.5 0.5 0.52 0.52 0.56 0.56 0.5 0.4 0 0>\\\")\\n)\\n\\n$: stack(\\n  freq(\\\"\u003c~ ~ 196 196 196 196 ~ ~ ~ ~ ~ ~ ~ ~ ~>\\\"),\\n  freq(\\\"\u003c~ ~ 202 199 197 196 ~ ~ ~ ~ ~ ~ ~ ~ ~>\\\")\\n).s(\\\"sine\\\")\\n  .attack(0.9).decay(0.1).sustain(1).release(1.0)\\n  .lpf(1100)\\n  .pan(0.5)\\n  .room(0.2).roomsize(1.4)\\n  .gain(\\\"\u003c0 0 0.19 0.2 0.22 0.11 0 0 0 0 0 0 0 0 0>\\\")\",\"bpm\":75,\"durationSec\":48,\"renderDurationSec\":51,\"cps\":0.3125,\"cycles\":15,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 40
+'use strict';
+// ============================================================
+// hand-drawn canvas core
+// Everything a film needs except the film itself: palettes and colour
+// maths, four surface finishes (ink, riso, screen, pencil), the marks,
+// lattices, reveals, camera, timeline, score plumbing and the player.
+//
+// A film is an HTML file that loads this script, then defines puppets,
+// scenes and a timeline and calls defineFilm({...}). See film-template.html.
+//
+// Sections: CONFIG · COLOUR · PALETTES · RANDOM & EASING · GEOMETRY ·
+// MARKS · FINISHES · LATTICES & PARTICLES · MOTIFS · REVEALS & COMPOSITION ·
+// STYLE SHEETS · TIMELINE & RUNTIME
+// ============================================================
+
+// ===================== CONFIG =====================
+// Logical frame: the short side is always 1080 units, the long side follows the aspect ratio.
+// Scenes draw in logical units. S scales them to the output width chosen at render time.
+const SHORT = 1080;
+let W = 1080, H = 1080, S = 1, CX = 540, CY = 540, OUT_W = 1080, OUT_H = 1080;
+const _layers = [];   // every layer() canvas, resized when the format changes
+function setFormat({ ar = '1:1', width } = {}) {
+  const [a, b] = String(ar).split(/[:x\/]/).map(Number); const r = (a > 0 && b > 0) ? a / b : 1;
+  if (r >= 1) { H = SHORT; W = Math.round(SHORT * r); } else { W = SHORT; H = Math.round(SHORT / r); }
+  S = width ? width / W : 1; OUT_H = 2 * Math.round(H * S / 2); S = OUT_H / H; OUT_W = 2 * Math.round(W * S / 2);
+  CX = W / 2; CY = H / 2;
+  for (const L of _layers) { L.o.width = Math.round(L.w * S); L.o.height = Math.round(L.h * S); }   // layers made at file scope follow the format
+  return { W, H, S, OUT_W, OUT_H };
+}
+{ const q = new URLSearchParams(location.search); if (q.has('ar') || q.has('w')) setFormat({ ar: q.get('ar') || '1:1', width: +q.get('w') || undefined }); }
+const FPS_DRAW = 12, FPS_OUT = 24;          // drawn on twos, packed to 24 fps
+const TAU = Math.PI * 2;
+const HAND_FONT = '"Bradley Hand", "Segoe Script", "Chalkboard", "Comic Sans MS", cursive';
+
+// ===================== COLOUR =====================
+// All helpers take and return CSS colours. Hex in, hex out, except alpha().
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function parseColor(c) {
+  if (c[0] === '#') { let h = c.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const m = c.match(/[\d.]+/g).map(Number); return [m[0], m[1], m[2]];
+}
+const toHex = ([r, g, b]) => '#' + [r, g, b].map(v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0')).join('');
+function mix(a, b, t) { const A = parseColor(a), B = parseColor(b); return toHex(A.map((v, i) => lerp(v, B[i], t))); }
+const tint = (c, t) => mix(c, '#ffffff', t);       // towards white
+const shade = (c, t) => mix(c, '#000000', t);      // towards black
+function alpha(c, a) { const [r, g, b] = parseColor(c); return `rgba(${r},${g},${b},${a})`; }
+function rgbToHsl([r, g, b]) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, s, l]; }
+function hslToRgb([h, s, l]) { h = ((h % 360) + 360) % 360 / 360; const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = t => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255]; }
+const hsl = c => rgbToHsl(parseColor(c));
+const withHsl = (c, fn) => toHex(hslToRgb(fn(hsl(c))));
+const rotateHue = (c, deg) => withHsl(c, ([h, s, l]) => [h + deg, s, l]);
+const saturate = (c, k) => withHsl(c, ([h, s, l]) => [h, clamp(s * k, 0, 1), l]);
+const lighten = (c, d) => withHsl(c, ([h, s, l]) => [h, s, clamp(l + d, 0, 1)]);
+// ramp: n steps from a light tint through the colour to a dark shade
+function ramp(c, n = 5) { return Array.from({ length: n }, (_, i) => { const t = i / (n - 1); return t < .5 ? tint(c, (.5 - t) * 1.4) : shade(c, (t - .5) * 1.4); }); }
+function harmony(base) { return { complement: rotateHue(base, 180), triad: [rotateHue(base, 120), rotateHue(base, 240)], analog: [rotateHue(base, -30), rotateHue(base, 30)], split: [rotateHue(base, 150), rotateHue(base, 210)] }; }
+
+// ===================== PALETTES =====================
+// Every palette has the same keys, so a scene written for one runs on any other.
+//   paper      background of daylight shots        night     background of dark / blueprint shots
+//   paperBand  faint light bands on paper (or null) chalk     light line on night, chalkDim its quiet version
+//   ink        dark outline and text               guide     construction-line colour
+//   fills[]    3..6 flat fills for subjects        shade     hatch / dot colour laid over fills
+//   light      highlight hatch on fills            blush     second shade (warm shadow, cheeks, sunsets)
+//   accents[]  4 loud colours for scribble outlines, wakes, sparks
+//   inks[]     2..4 print inks for riso plates and dot screens (the finish's "colour separations")
+//   finish     default surface finish: 'ink' | 'riso' | 'screen' | 'pencil' | 'flat'
+const PALETTES = {
+  // the fruit-fly film: warm paper, brown inks, four riso accents
+  paperInk: {
+    paper: '#f3e6cf', paperBand: 'rgba(255,238,200,.65)', ink: '#1e1630', night: '#0b0d1f', chalk: '#e8ecff', chalkDim: '#8d97c9', guide: 'rgba(70,100,255,.55)',
+    fills: ['#e79256', '#c99a5a', '#b8864e', '#d9b078'], shade: '#3a2214', light: '#fff1d6', blush: '#c8473f',
+    accents: ['#ff2bd6', '#28f0e0', '#ffe22b', '#5cff5c'], inks: ['#1e1630', '#c8473f', '#2b5fb8'], finish: 'ink',
+  },
+  // the flipbook: cream stock, fluorescent riso inks, halftone dots, dark purple night
+  risoPop: {
+    paper: '#f0ece2', paperBand: null, ink: '#22366b', night: '#2a2050', chalk: '#f3ebb1', chalkDim: '#8f86c8', guide: 'rgba(34,54,107,.5)',
+    fills: ['#ff48b0', '#0078bf', '#ffe800', '#00a95c', '#ff6c2f', '#765ba7'], shade: '#22366b', light: '#fff9c8', blush: '#ff48b0',
+    accents: ['#ff48b0', '#0078bf', '#ffe800', '#00a95c'], inks: ['#0078bf', '#ff48b0', '#ffe800', '#22366b'], finish: 'riso',
+  },
+  // the paper boat: sea blues, cream sky, one orange desk, flat shapes under a regular dot screen
+  screenSea: {
+    paper: '#e8e6db', paperBand: null, ink: '#1f1e2d', night: '#1a1c2e', chalk: '#e8e6db', chalkDim: '#8a93a6', guide: 'rgba(10,80,131,.5)',
+    fills: ['#0a5083', '#518e9d', '#becacc', '#e4a05c', '#91906a', '#e8c84a', '#c8473f', '#051630'], shade: '#051630', light: '#f4f2e8', blush: '#e4a05c',
+    accents: ['#c8473f', '#e8c84a', '#518e9d', '#f0a0b0'], inks: ['#0a5083', '#051630', '#e8c84a'], finish: 'screen',
+  },
+  // the personal website: near-monochrome cream and charcoal, pale pink and sage sections, thin graphite lines
+  pencilMinimal: {
+    paper: '#f4efe4', paperBand: null, ink: '#201f1b', night: '#27251f', chalk: '#d9d2c2', chalkDim: '#7d786c', guide: 'rgba(32,31,27,.35)',
+    fills: ['#e8d6cc', '#e0e2d0', '#dad2c5', '#f4efe4'], shade: '#5e5a50', light: '#ffffff', blush: '#c9a9a0',
+    accents: ['#8a8a55', '#b0483a', '#7e8aa0', '#c9a15a'], inks: ['#201f1b', '#8a8a55'], finish: 'pencil',
+  },
+  // chalk on navy only: for films that live entirely in the blueprint world
+  blueprintNight: {
+    paper: '#0b0d1f', paperBand: null, ink: '#e8ecff', night: '#0b0d1f', chalk: '#e8ecff', chalkDim: '#8d97c9', guide: 'rgba(150,170,255,.7)',
+    fills: ['#1a2040', '#22306a', '#2c3a80', '#141a33'], shade: '#8d97c9', light: '#ffffff', blush: '#7fe7ff',
+    accents: ['#7fe7ff', '#ff6fd8', '#ffe22b', '#5fe08a'], inks: ['#e8ecff', '#7fe7ff'], finish: 'ink',
+  },
+};
+// makePalette: fill missing keys from a base, so a film can say makePalette({fills: [...], finish: 'riso'})
+function makePalette(part = {}, base = 'paperInk') { const b = typeof base === 'string' ? PALETTES[base] : base; return { ...b, ...part }; }
+// derivePalette: shift a whole palette (hue in degrees, saturation factor, lightness delta); paper and ink stay unless overridden
+function derivePalette(pal, { hue = 0, sat = 1, light = 0, paper, ink, finish, night } = {}) {
+  const f = c => lighten(saturate(rotateHue(c, hue), sat), light);
+  return { ...pal, paper: paper || pal.paper, ink: ink || pal.ink, night: night || pal.night, finish: finish || pal.finish,
+    fills: pal.fills.map(f), accents: pal.accents.map(f), inks: pal.inks.map(f), shade: f(pal.shade), blush: f(pal.blush), light: pal.light };
+}
+// duotone: two inks on paper, the way the flipbook goes magenta + blue for a beat
+function duotone(inkA, inkB, paper = '#f0ece2', finish = 'riso') {
+  return makePalette({ paper, ink: inkA, night: shade(inkA, .6), chalk: paper, chalkDim: mix(inkA, paper, .5), guide: alpha(inkA, .5),
+    fills: [inkA, inkB, mix(inkA, inkB, .5), tint(inkA, .5), tint(inkB, .5)], shade: inkA, light: paper, blush: inkB, accents: [inkB, inkA, tint(inkB, .4), tint(inkA, .4)], inks: [inkA, inkB], finish });
+}
+let PAL = { ...PALETTES.paperInk };
+function usePalette(p) { PAL = typeof p === 'string' ? { ...PALETTES[p] } : { ...p }; return PAL; }
+
+// ===================== RANDOM & EASING =====================
+// Everything is seeded. Math.random is banned in films: it makes textures boil.
+function rng(seed) { let a = (seed * 1000003) >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const easeIO = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeIn = t => t * t * t;
+const sm = (a, b, t, e = easeIO) => e(clamp((t - a) / (b - a), 0, 1));   // 0..1 between times a and b
+const flicker = (i, period = 2) => Math.floor(i / period) % 2 === 0;    // alternate two renders
+const pulse = (i, every, hold = 1) => (i % every) < hold;                 // true for `hold` drawn frames every `every`
+
+// ===================== GEOMETRY =====================
+// Fill with a Path2D, outline with a jittered polyline: the two must not coincide.
+function ellPts(cx, cy, rx, ry, rot = 0, n = 44) { const p = []; for (let i = 0; i < n; i++) { const a = i / n * TAU, x = rx * Math.cos(a), y = ry * Math.sin(a); p.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]); } return p; }
+function ellPath(cx, cy, rx, ry, rot = 0) { const p = new Path2D(); p.ellipse(cx, cy, rx, ry, rot, 0, TAU); return p; }
+function circPath(cx, cy, r) { return ellPath(cx, cy, r, r); }
+function rectPath(x, y, w, h) { const p = new Path2D(); p.rect(x, y, w, h); return p; }
+function roundRectPath(x, y, w, h, r) { const p = new Path2D(); p.roundRect(x, y, w, h, r); return p; }
+function polyPath(pts, close = true) { const p = new Path2D(); pts.forEach((q, i) => i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1])); if (close) p.closePath(); return p; }
+function pathLength(pts, close) { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (close) L += Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]); return L; }
+function bez(p0, p1, p2, p3, t) { const u = 1 - t; return [u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]; }
+function layer(w, h) { const full = w === undefined; w = w ?? W; h = h ?? H; const o = document.createElement('canvas'); o.width = Math.round(w * S); o.height = Math.round(h * S); if (full) _layers.push({ o, get w() { return W; }, get h() { return H; } }); else _layers.push({ o, w, h }); return o; }   // output pixels, logical size w x h
+function cam(c, x, y, zoom, rot = 0) { c.setTransform(S, 0, 0, S, 0, 0); c.translate(W / 2, H / 2); c.scale(zoom, zoom); c.rotate(rot); c.translate(-x, -y); }
+const resetT = c => c.setTransform(S, 0, 0, S, 0, 0);   // identity in logical units
+const blit = (c, src) => { c.save(); resetT(c); c.drawImage(src, 0, 0, W, H); c.restore(); };   // draw a layer full-frame
+
+// ===================== MARKS =====================
+// wob: polyline with seeded jitter (amp 1..3 px). Use for every visible outline.
+function wob(c, pts, amp, seed, close = false) { const r = rng(seed); c.beginPath(); pts.forEach((p, i) => { const x = p[0] + (r() - .5) * amp, y = p[1] + (r() - .5) * amp; i ? c.lineTo(x, y) : c.moveTo(x, y); }); if (close) c.closePath(); c.stroke(); }
+// crayon: a wob stroke with a grainy edge (three passes, the flipbook's ripple line)
+function crayon(c, pts, color, width, seed, close = false) { c.save(); c.strokeStyle = color; c.lineCap = 'round'; c.lineJoin = 'round'; for (let k = 0; k < 3; k++) { c.globalAlpha = k ? .35 : .85; c.lineWidth = width * (k ? .7 : 1); wob(c, pts, 2.5 + k * 1.5, seed + k * 7, close); } c.restore(); }
+// hatch: short parallel strokes clipped to `path`. box=[x,y,w,h] bounds the path in the same coords. One stroke() per layer.
+function hatch(c, path, box, o = {}) {
+  const { angle = .9, gap = 7, len = 14, jitter = 6, color = PAL.ink, alpha: al = .35, width = 1.2, seed = 1 } = o; const r = rng(seed);
+  c.save(); c.clip(path); c.strokeStyle = color; c.globalAlpha = al; c.lineWidth = width; c.lineCap = 'round';
+  const [bx, by, bw, bh] = box, cx = bx + bw / 2, cy = by + bh / 2, R = Math.hypot(bw, bh) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  c.beginPath();
+  for (let v = -R; v <= R; v += gap) for (let u = -R; u <= R; u += len * 1.7) { const uu = u + (r() - .5) * jitter * 2, L = len * (.6 + r() * .8);
+    const x0 = cx + ca * uu - sa * v + (r() - .5) * jitter * .6, y0 = cy + sa * uu + ca * v + (r() - .5) * jitter * .6; c.moveTo(x0, y0); c.lineTo(x0 + ca * L, y0 + sa * L); }
+  c.stroke(); c.restore();
+}
+// grain: n speckles clipped to path
+function grain(c, path, box, n, color, al, seed, size = 1.8) { const r = rng(seed); c.save(); c.clip(path); c.fillStyle = color; c.globalAlpha = al; for (let i = 0; i < n; i++) c.fillRect(box[0] + r() * box[2], box[1] + r() * box[3], size * (.4 + r()), size * (.4 + r())); c.restore(); }
+// scribble: the same outline in accent colours, each copy shifted, turned and scaled a little (riso misregistration). One or two parts per frame.
+function scribble(c, path, cx, cy, o = {}) { const { colors = PAL.accents, amp = 5, alpha: al = .55, width = 1.1, seed = 3 } = o; const r = rng(seed); c.save(); c.globalAlpha = al; c.lineWidth = width;
+  for (const col of colors) { c.strokeStyle = col; c.save(); c.translate(cx + (r() - .5) * amp * 2, cy + (r() - .5) * amp * 2); c.rotate((r() - .5) * .08); c.scale(1 + (r() - .5) * .08, 1 + (r() - .5) * .08); c.translate(-cx, -cy); c.stroke(path); c.restore(); } c.restore(); }
+function cross(c, x, y, s) { c.beginPath(); c.moveTo(x - s, y); c.lineTo(x + s, y); c.moveTo(x, y - s); c.lineTo(x, y + s); c.stroke(); }
+// construction: thin guide lines with ticks, a circle and a few crosses around (cx,cy)
+function construction(c, cx, cy, R, seed, color = PAL.guide, al = 1) { const r = rng(seed); c.save(); c.globalAlpha = al; c.strokeStyle = color; c.lineWidth = .9;
+  for (let i = 0; i < 3; i++) { const a = r() * Math.PI, L = R * (1.3 + r() * 1.2); c.beginPath(); c.moveTo(cx - Math.cos(a) * L, cy - Math.sin(a) * L); c.lineTo(cx + Math.cos(a) * L, cy + Math.sin(a) * L); c.stroke();
+    for (let k = -3; k <= 3; k++) { const u = k * L / 4, x = cx + Math.cos(a) * u, y = cy + Math.sin(a) * u; c.beginPath(); c.moveTo(x - Math.sin(a) * 5, y + Math.cos(a) * 5); c.lineTo(x + Math.sin(a) * 5, y - Math.cos(a) * 5); c.stroke(); } }
+  c.beginPath(); c.arc(cx, cy, R * 1.12, 0, TAU); c.stroke(); for (let i = 0; i < 5; i++) cross(c, cx + (r() - .5) * R * 3, cy + (r() - .5) * R * 3, 6); c.restore(); }
+// squiggleText: illegible handwriting as rows of little arches (letters, notes, walls of text)
+function squiggleText(c, x, y, w, lines, o = {}) { const { color = PAL.ink, seed = 1, lineH = 16, amp = 4, width = 1.3, gap = .4 } = o; const r = rng(seed); c.save(); c.strokeStyle = color; c.lineWidth = width; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (let l = 0; l < lines; l++) { let px = x; const py = y + l * lineH, end = x + w * (l === lines - 1 ? .35 + r() * .5 : .9 + r() * .1);
+    while (px < end) { const wl = 14 + r() * 40, f = .6 + r() * .6; c.beginPath(); c.moveTo(px, py); for (let u = 2; u <= wl; u += 2) c.lineTo(px + u, py - Math.abs(Math.sin(u * f + r() * .3)) * amp * (.5 + r() * .8)); c.stroke(); px += wl + amp * 2 * gap + r() * 8; } }
+  c.restore(); }
+// handText: real letters in a handwriting face, two inks misregistered. Fonts differ per machine: check the render.
+function handText(c, text, x, y, o = {}) { const { size = 64, ink = PAL.ink, ink2 = PAL.accents[0], offset = 3, align = 'left' } = o; c.save(); c.font = `${size}px ${HAND_FONT}`; c.textAlign = align; c.textBaseline = 'alphabetic';
+  if (ink2) { c.fillStyle = ink2; c.globalAlpha = .85; c.fillText(text, x + offset, y + offset * .6); } c.fillStyle = ink; c.globalAlpha = 1; c.fillText(text, x, y); c.restore(); }
+
+// ===================== FINISHES =====================
+// A finish is how a flat fill gets its texture. surface() is the one call a puppet or a scene makes;
+// it reads PAL.finish unless told otherwise, so the same drawing changes finish with the palette.
+//   ink     hatching along the form plus grain           (fruit-fly film)
+//   riso    rotated halftone dot screen, a little jitter (flipbook)
+//   screen  regular dot screen, straight grid            (paper boat)
+//   pencil  sparse thin graphite lines and a few dots    (website)
+//   flat    nothing
+function surface(c, path, box, o = {}) {
+  const f = o.finish || PAL.finish, color = o.color || PAL.shade, seed = o.seed || 1, density = o.density ?? .5;
+  if (f === 'ink') { hatch(c, path, box, { angle: o.angle ?? 1.2, gap: o.gap ?? 4.5, len: o.len ?? 9, jitter: 3, color, alpha: o.alpha ?? .35, width: o.width ?? 1, seed }); grain(c, path, box, o.grain ?? 140, color, .35, seed + 1, 1.4); }
+  else if (f === 'riso') dotScreen(c, path, box, { cell: o.cell ?? 7, color, density, angle: o.angle ?? .26, jitter: .35, seed, alpha: o.alpha ?? .9 });
+  else if (f === 'screen') dotScreen(c, path, box, { cell: o.cell ?? 6, color, density, angle: o.angle ?? 0, jitter: .06, seed, alpha: o.alpha ?? .9 });
+  else if (f === 'pencil') { hatch(c, path, box, { angle: o.angle ?? 1.1, gap: o.gap ?? 9, len: o.len ?? 30, jitter: 4, color, alpha: o.alpha ?? .22, width: .7, seed }); grain(c, path, box, o.grain ?? 40, color, .3, seed + 1, 1.2); }
+}
+// dotScreen: halftone dots clipped to a path. density is 0..1 or a function (x,y)=>0..1 for gradients.
+function dotScreen(c, path, box, o = {}) {
+  const { cell = 7, color = PAL.shade, density = .5, angle = 0, jitter = 0, seed = 1, alpha: al = 1, square = false } = o; const r = rng(seed), dens = typeof density === 'function' ? density : () => density;
+  c.save(); c.clip(path); c.fillStyle = color; c.globalAlpha = al;
+  const [bx, by, bw, bh] = box, cx = bx + bw / 2, cy = by + bh / 2, R = Math.hypot(bw, bh) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  c.beginPath();
+  for (let v = -R; v <= R; v += cell) for (let u = -R; u <= R; u += cell) { const x = cx + ca * u - sa * v + (r() - .5) * jitter * cell, y = cy + sa * u + ca * v + (r() - .5) * jitter * cell;
+    const d = clamp(dens(x, y), 0, 1); if (d <= 0) continue; const rad = cell * .62 * Math.sqrt(d); if (square) c.rect(x - rad, y - rad, rad * 2, rad * 2); else { c.moveTo(x + rad, y); c.arc(x, y, rad, 0, TAU); } }
+  c.fill(); c.restore();
+}
+// plate + printPlate: real colour separations. Draw each ink's coverage in black on a white plate, then print
+// the plates in order with multiply blending. Overlaps mix like ink on paper. This is the flipbook's whole look.
+function plate() { const L = layer(); const g = L.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); return L; }
+const _cov = document.createElement('canvas');
+function printPlate(c, src, o = {}) {
+  const { cell = 7, ink = PAL.inks[0], angle = .26, jitter = .2, seed = 1, gain = 1, maxCov = .78, blend = 'multiply', al = .95 } = o; const r = rng(seed);
+  const sw = Math.ceil(W / cell), sh = Math.ceil(H / cell); _cov.width = sw; _cov.height = sh; const g = _cov.getContext('2d'); g.drawImage(src, 0, 0, sw, sh); const d = g.getImageData(0, 0, sw, sh).data;
+  c.save(); resetT(c); c.globalCompositeOperation = blend; c.globalAlpha = al; c.fillStyle = ink; c.beginPath();
+  const R = Math.hypot(W, H) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  for (let v = -R; v <= R; v += cell) for (let u = -R; u <= R; u += cell) { const x = W / 2 + ca * u - sa * v + (r() - .5) * jitter * cell, y = H / 2 + sa * u + ca * v + (r() - .5) * jitter * cell;
+    if (x < 0 || y < 0 || x >= W || y >= H) continue; const k = ((y / cell | 0) * sw + (x / cell | 0)) * 4; const cov = clamp((1 - (d[k] * .299 + d[k + 1] * .587 + d[k + 2] * .114) / 255) * gain, 0, maxCov);
+    if (cov < .03) continue; const rad = cell * .62 * Math.sqrt(cov); c.moveTo(x + rad, y); c.arc(x, y, rad, 0, TAU); }
+  c.fill(); c.restore();
+}
+// paper: fills the frame with paper colour, optional light bands, and stock grain. Resets the transform.
+function paper(c, base = PAL.paper, band = PAL.paperBand, seed = 5) { resetT(c); c.fillStyle = base; c.fillRect(0, 0, W, H);
+  if (band) { c.save(); c.translate(W / 2, H / 2); c.rotate(-Math.PI / 4); c.fillStyle = band; for (let i = -6; i <= 6; i++) c.fillRect(-1200, i * 160 - 40, 2400, 80); c.restore(); }
+  grain(c, rectPath(0, 0, W, H), [0, 0, W, H], 1400, shade(base, .5), .06, seed, 1.6); }
+// night: dark background with star speckle
+function night(c, base = PAL.night, seed = 5) { resetT(c); c.fillStyle = base; c.fillRect(0, 0, W, H); grain(c, rectPath(0, 0, W, H), [0, 0, W, H], 400, '#ffffff', .5, seed, 1.6); }
+
+// ===================== LATTICES & PARTICLES =====================
+function hexPath(x, y, s) { const p = new Path2D(); for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i + Math.PI / 6; i ? p.lineTo(x + s * Math.cos(a), y + s * Math.sin(a)) : p.moveTo(x + s * Math.cos(a), y + s * Math.sin(a)); } p.closePath(); return p; }
+function hexCells(box, s, fn) { const w = Math.sqrt(3) * s, h = 1.5 * s, [bx, by, bw, bh] = box; let row = 0; for (let y = by - s; y < by + bh + s; y += h, row++) { const o = (row % 2) ? w / 2 : 0; for (let x = bx - w + o; x < bx + bw + w; x += w) fn(x, y); } }
+function hexLattice(c, box, s, color, al, width = .8) { c.save(); c.strokeStyle = color; c.globalAlpha = al; c.lineWidth = width; hexCells(box, s, (x, y) => c.stroke(hexPath(x, y, s))); c.restore(); }
+// aster: a nucleus or spark with rays; g scales ray length (animate 0..1 to ignite)
+function aster(c, x, y, r, n, color, seed, g = 1, core = PAL.night, rim = PAL.chalk) { const rr = rng(seed); c.save(); c.strokeStyle = color; c.lineWidth = 1.4; c.globalAlpha = .9;
+  for (let i = 0; i < n; i++) { const a = i / n * TAU + (rr() - .5) * .3, r0 = r * 1.6, r1 = r * (2.6 + rr() * 1.6) * g; c.beginPath(); c.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); c.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); c.stroke(); }
+  c.fillStyle = core; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.strokeStyle = rim; c.lineWidth = 1.6; c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + r * .2, y - r * .2, r * .35, 0, TAU); c.fill(); c.restore(); }
+// dotBurst: fireworks made of dots on rays (the website's dark section)
+function dotBurst(c, x, y, R, rays, color, seed, g = 1) { const r = rng(seed); c.save(); c.fillStyle = color; for (let k = 0; k < rays; k++) { const a = k / rays * TAU + (r() - .5) * .2, n = 6 + (r() * 6 | 0); for (let j = 1; j <= n; j++) { const d = R * g * j / n * (.9 + r() * .2); c.globalAlpha = .9 - j / n * .6; c.beginPath(); c.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1.2 + r() * 1.4, 0, TAU); c.fill(); } } c.restore(); }
+function speedLines(c, x, y, dir, seed, n = 7, al = .6, color = PAL.ink) { const r = rng(seed); c.save(); c.strokeStyle = color; c.globalAlpha = al; c.lineCap = 'round';
+  for (let i = 0; i < n; i++) { const side = (r() - .5) * 70, back = 30 + r() * 40, L = 60 + r() * 120, px = -Math.sin(dir), py = Math.cos(dir), x0 = x - Math.cos(dir) * back + px * side, y0 = y - Math.sin(dir) * back + py * side;
+    c.lineWidth = .8 + r() * 1.8; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 - Math.cos(dir) * L, y0 - Math.sin(dir) * L); c.stroke(); } c.restore(); }
+function loops(c, x, y, dir, seed, al = .6, cols = PAL.accents) { const r = rng(seed); c.save(); c.translate(x, y); c.rotate(dir); c.globalAlpha = al; c.lineWidth = 1.2;
+  cols.forEach((col, k) => { c.strokeStyle = col; c.beginPath(); const A = 14 + r() * 16, w = .12 + r() * .1, ph = r() * TAU; for (let u = 0; u <= 220; u += 4) { const yy = Math.sin(u * w + ph) * A + (k - 2) * 6, xx = -u - Math.cos(u * w * 1.7 + ph) * 8; u ? c.lineTo(xx, yy) : c.moveTo(xx, yy); } c.stroke(); }); c.restore(); }
+
+// ===================== MOTIFS =====================
+// The recurring devices of the reference films, ready to place.
+// seedDot: the anchor dot that sits in every frame of the flipbook, two inks slightly off
+function seedDot(c, x, y, r = 9, ink = PAL.ink, ink2 = PAL.accents[0]) { c.save(); if (ink2) { c.fillStyle = ink2; c.globalAlpha = .8; c.beginPath(); c.arc(x + r * .3, y + r * .2, r, 0, TAU); c.fill(); } c.fillStyle = ink; c.globalAlpha = 1; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore(); }
+// ripples: concentric crayon rings; pass the radii you want (animate them outward, drop the ones past the frame)
+function ripples(c, cx, cy, radii, color, seed, width = 4) { radii.forEach((r, i) => crayon(c, ellPts(cx, cy, r, r, 0, Math.max(40, Math.round(r / 6))), color, width, seed + i, true)); }
+function dashedRing(c, cx, cy, r, color, seed, dash = [14, 10], width = 1.5) { c.save(); c.setLineDash(dash); c.lineDashOffset = rng(seed)() * 40; c.strokeStyle = color; c.lineWidth = width; wob(c, ellPts(cx, cy, r, r, 0, 90), 1.5, seed, true); c.restore(); }
+// dottedArc: the website's rings, drawn as dots along a circle
+function dottedArc(c, cx, cy, r, color, seed, step = 9, size = 1.1) { const rr = rng(seed); c.save(); c.fillStyle = color; const n = Math.round(TAU * r / step); for (let k = 0; k < n; k++) { if (rr() < .12) continue; const a = k / n * TAU; c.beginPath(); c.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, size, 0, TAU); c.fill(); } c.restore(); }
+// plant: a pressed-flower drawing, recursive branches with leaf clusters at the tips
+function plant(c, x, y, len, depth, seed, o = {}) { const { stem = PAL.ink, leaf = PAL.accents[0], flower = PAL.accents[1], angle = -Math.PI / 2, width = 1.3 } = o; const r = rng(seed); c.save();
+  (function branch(x, y, len, a, d, w) { const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len; c.strokeStyle = stem; c.lineWidth = w; wob(c, [[x, y], [(x + x2) / 2 + (r() - .5) * len * .2, (y + y2) / 2 + (r() - .5) * len * .2], [x2, y2]], 1, seed + d * 13 + (r() * 100 | 0));
+    if (d <= 0) { c.fillStyle = leaf; c.globalAlpha = .7; for (let k = 0; k < 5; k++) { const la = a + (r() - .5) * 2.2; c.beginPath(); c.ellipse(x2 + Math.cos(la) * 6, y2 + Math.sin(la) * 6, 7, 3, la, 0, TAU); c.fill(); } c.globalAlpha = 1;
+      if (r() < .4) { c.strokeStyle = flower; c.lineWidth = .9; for (let k = 0; k < 6; k++) { const fa = k / 6 * TAU; c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 + Math.cos(fa) * 8, y2 + Math.sin(fa) * 8); c.stroke(); } } return; }
+    const n = 2 + (r() < .5 ? 1 : 0); for (let k = 0; k < n; k++) branch(x2, y2, len * (.55 + r() * .25), a + (r() - .5) * 1.4, d - 1, w * .75); })(x, y, len, angle, depth, width); c.restore(); }
+// tornEdge: a Path2D covering the frame below a torn paper line at height y
+function tornEdge(y, o = {}) { const { amp = 9, seed = 1, freq = 60 } = o; const r = rng(seed); const p = new Path2D(); p.moveTo(-10, H + 10); p.lineTo(-10, y); for (let x = -10; x <= W + 10; x += freq / 5) p.lineTo(x, y + (r() - .5) * amp * 2 + Math.sin(x / freq) * amp * .6); p.lineTo(W + 10, H + 10); p.closePath(); return p; }
+// section: a new paper colour from a torn edge downward, with a soft shadow under the tear
+function section(c, y, color, seed = 1) { resetT(c); const p = tornEdge(y, { seed }); c.save(); c.fillStyle = 'rgba(0,0,0,.10)'; c.translate(0, 3); c.fill(p); c.restore(); c.fillStyle = color; c.fill(p); grain(c, p, [0, y, W, H - y], 600, shade(color, .5), .06, seed + 1, 1.6); }
+// stickyNote: a paper square with a drawing callback inside
+function stickyNote(c, x, y, s, seed, draw) { c.save(); c.translate(x, y); c.rotate((rng(seed)() - .5) * .12); c.fillStyle = 'rgba(0,0,0,.08)'; c.fillRect(4, 5, s, s); c.fillStyle = tint(PAL.paper, .5); c.fillRect(0, 0, s, s); c.strokeStyle = alpha(PAL.ink, .25); c.lineWidth = 1; c.strokeRect(.5, .5, s - 1, s - 1); if (draw) draw(c, s); c.restore(); }
+// thread: a thin line wandering down the frame (the website's spine)
+function thread(c, x, seed, color = PAL.accents[0], width = 1.2) { const r = rng(seed); const pts = []; let px = x; for (let y = -10; y <= H + 10; y += 24) { px += (r() - .5) * 26; pts.push([px, y]); } c.save(); c.strokeStyle = color; c.lineWidth = width; c.globalAlpha = .8; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); c.restore(); }
+// signOff: the two-word signature with two ink dots, as in every reference film
+function signOff(c, a, b, o = {}) { const { x = 540, y = 540, size = 60, ink = PAL.ink, ink2 = PAL.accents[0], progressA = 1, progressB = 1 } = o; const ta = a.slice(0, Math.round(a.length * progressA)), tb = b.slice(0, Math.round(b.length * progressB));
+  handText(c, ta, x, y - 12, { size, ink, ink2, align: 'center' }); if (tb) handText(c, tb, x, y + size * 1.1, { size: size * .75, ink, ink2, align: 'center' }); seedDot(c, x - 10, y + size * .35, 6, ink, null); seedDot(c, x + 10, y + size * .35, 6, ink2, null); }
+
+// ===================== REVEALS & COMPOSITION =====================
+function selfDraw(c, pts, progress, seed, amp = 1.5, close = false) { const L = pathLength(pts, close); c.save(); c.setLineDash([L * progress, L]); wob(c, pts, amp, seed, close); c.restore(); }
+// blot: reveal `src` inside a growing ink blot (screen coords) with a bristly fringe
+function blot(c, src, cx, cy, R, seed, fringe = PAL.night) { if (R <= 0) return; const r = rng(seed), path = new Path2D(); for (let i = 0; i < 72; i++) { const a = i / 72 * TAU, rr = R * (1 + (r() - .5) * .16), x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; i ? path.lineTo(x, y) : path.moveTo(x, y); } path.closePath();
+  c.save(); resetT(c); c.clip(path); c.drawImage(src, 0, 0, W, H); c.restore(); c.save(); resetT(c); c.strokeStyle = fringe; c.lineWidth = 1.6; c.globalAlpha = .9;
+  for (let i = 0; i < 420; i++) { const a = r() * TAU, rad = R * (1 + (r() - .5) * .14), L = 10 + r() * 38, x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); c.stroke(); } c.restore(); }
+// iris: draw fn inside a circle, rest untouched (or filled with `outside`)
+function iris(c, cx, cy, r, fn, outside) { c.save(); resetT(c); if (outside) { c.fillStyle = outside; c.fillRect(0, 0, W, H); } c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.clip(); fn(c); c.restore(); }
+// mosaic: redraw `src` as flat hex cells of size s (compound-eye POV). Clip to an iris first if you want one.
+function mosaic(c, src, s, box = [0, 0, W, H], tintCol = 'rgba(120,160,255,.10)') { const ow = src.width, oh = src.height, img = src.getContext('2d').getImageData(0, 0, ow, oh).data; c.save(); resetT(c);
+  hexCells(box, s, (x, y) => { const xi = clamp(Math.round(x * S), 0, ow - 1), yi = clamp(Math.round(y * S), 0, oh - 1), k = (yi * ow + xi) * 4; c.fillStyle = `rgb(${img[k] * .92 | 0},${img[k + 1] * .92 | 0},${img[k + 2] * .95 | 0})`; const hp = hexPath(x, y, s); c.fill(hp); c.strokeStyle = 'rgba(20,25,60,.55)'; c.lineWidth = 1; c.stroke(hp); });
+  if (tintCol) { c.fillStyle = tintCol; c.fillRect(box[0], box[1], box[2], box[3]); } c.restore(); }
+// montage: cards[] are scene functions; shows one per `per` seconds, hard cuts. Returns the index shown.
+function montage(c, cards, tau, per = .25, i = 0) { const k = Math.min(cards.length - 1, Math.floor(tau / per)); cards[k](c, tau - k * per, i); return k; }
+// badges: every card as a round stamp on concentric dashed rings (the flipbook's gallery). Cards render once and are cached.
+const _badge = new Map();
+function badges(c, cards, o = {}) { const { cx = 540, cy = 540, r0 = 40, gap = 118, size = 52, ring = PAL.ink, seed = 1, progress = 1, count = cards.length, scale = 1 } = o;
+  cards.forEach(fn => { if (_badge.has(fn)) return; const L = layer(); fn(L.getContext('2d'), 0, 0); const s = layer(256, 256); s.getContext('2d').drawImage(L, 0, 0, 256, 256); _badge.set(fn, s); });
+  c.save(); resetT(c); c.translate(cx, cy); c.scale(scale, scale); c.translate(-cx, -cy); let placed = 0, k = 1; while (placed < count && k < 8) { const R = r0 + k * gap, n = Math.min(count - placed, Math.max(5, Math.round(TAU * R / (size * 2.5)))); dashedRing(c, cx, cy, R, ring, seed + k);
+    for (let j = 0; j < n; j++) { const a = j / n * TAU + k * .5, x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R, s = size * progress; if (s > 1) { c.save(); c.beginPath(); c.arc(x, y, s, 0, TAU); c.clip(); c.drawImage(_badge.get(cards[placed]), x - s, y - s, s * 2, s * 2); c.restore(); c.strokeStyle = ring; c.lineWidth = 3; c.beginPath(); c.arc(x, y, s, 0, TAU); c.stroke(); } placed++; } k++; }
+  c.restore(); }
+// flash: one near-white drawn frame
+function flash(c, color = tint(PAL.paper, .6)) { resetT(c); c.fillStyle = color; c.fillRect(0, 0, W, H); }
+
+// ===================== STYLE SHEETS =====================
+// styleSheet: every mark in the current palette and finish, labelled. Render it before drawing anything else.
+function styleSheet(c, tau = 0, i = 0) { paper(c); c.font = '16px ui-monospace, Menlo, monospace';
+  const cell = (col, row, label, fn) => { const x = 40 + col * 260, y = 40 + row * 260; c.save(); c.translate(x, y); fn(); c.restore(); c.fillStyle = PAL.ink; c.fillText(label, x, y + 236); };
+  const eb = [20, 20, 200, 160], ell = () => ellPath(120, 100, 100, 78);
+  cell(0, 0, 'surface: ' + PAL.finish, () => { c.fillStyle = PAL.fills[0]; c.fill(ell()); surface(c, ell(), eb, { seed: 2 }); c.strokeStyle = PAL.ink; c.lineWidth = 2.4; wob(c, ellPts(120, 100, 100, 78), 2.2, 1, true); });
+  cell(1, 0, 'ink', () => { c.fillStyle = PAL.fills[1]; c.fill(ell()); surface(c, ell(), eb, { finish: 'ink', seed: 3 }); });
+  cell(2, 0, 'riso', () => { c.fillStyle = PAL.fills[2 % PAL.fills.length]; c.fill(ell()); surface(c, ell(), eb, { finish: 'riso', seed: 4 }); });
+  cell(3, 0, 'screen / pencil', () => { const l = ellPath(70, 100, 60, 78), r = ellPath(175, 100, 60, 78); c.fillStyle = PAL.fills[0]; c.fill(l); surface(c, l, [10, 20, 120, 160], { finish: 'screen', seed: 5 }); c.fillStyle = PAL.fills[3 % PAL.fills.length]; c.fill(r); surface(c, r, [115, 20, 120, 160], { finish: 'pencil', seed: 6 }); });
+  cell(0, 1, 'scribble, construction', () => { const p = ellPath(120, 100, 80, 60); c.fillStyle = PAL.fills[1]; c.fill(p); c.strokeStyle = PAL.ink; c.lineWidth = 2; wob(c, ellPts(120, 100, 80, 60), 2, 7, true); scribble(c, p, 120, 100, { seed: 8, amp: 6 }); construction(c, 120, 100, 70, 9); });
+  cell(1, 1, 'dotScreen gradient', () => { const p = rectPath(20, 20, 200, 160); c.fillStyle = PAL.fills[0]; c.fill(p); dotScreen(c, p, eb, { cell: 7, color: PAL.shade, density: (x, y) => (x - 20) / 200, angle: .26, jitter: .3, seed: 10 }); });
+  cell(2, 1, 'ripples, seedDot', () => { ripples(c, 120, 100, [30, 60, 90], PAL.accents[0], 11, 3.5); ripples(c, 120, 100, [45, 75], PAL.accents[1], 12, 3); seedDot(c, 120, 100, 8); });
+  cell(3, 1, 'hexLattice, aster', () => { hexLattice(c, eb, 14, PAL.chalkDim, .9, 1); aster(c, 120, 100, 7, 14, PAL.accents[1], 13, 1); });
+  cell(0, 2, 'squiggleText', () => { squiggleText(c, 20, 40, 200, 7, { seed: 14, lineH: 20 }); });
+  cell(1, 2, 'plant, thread', () => { thread(c, 30, 15, PAL.accents[0]); plant(c, 130, 200, 60, 4, 16, { leaf: PAL.accents[3 % PAL.accents.length], flower: PAL.accents[1] }); });
+  cell(2, 2, 'dotBurst, dottedArc', () => { c.fillStyle = PAL.night; c.fillRect(20, 20, 200, 160); dotBurst(c, 120, 100, 70, 14, PAL.accents[2 % PAL.accents.length], 17); dottedArc(c, 120, 100, 30, PAL.chalk, 18); dottedArc(c, 120, 100, 55, PAL.chalk, 19); });
+  cell(3, 2, 'speedLines, loops', () => { speedLines(c, 180, 100, 0, 20, 9, .7); loops(c, 180, 100, 0, 21, .8); seedDot(c, 180, 100, 10, PAL.ink, null); });
+  cell(0, 3, 'selfDraw ' + sm(0, 2, tau).toFixed(2), () => { c.strokeStyle = PAL.ink; c.lineWidth = 2.5; selfDraw(c, ellPts(120, 100, 100, 78, 0, 80), sm(0, 2, tau), 22, 1.5, true); });
+  cell(1, 3, 'stickyNote, section', () => { c.save(); c.beginPath(); c.rect(20, 20, 200, 160); c.clip(); c.translate(-400, -500); c.scale(.5, .5); section(c, 1100, PAL.fills[0], 23); c.restore(); stickyNote(c, 120, 60, 70, 24, (c, s) => { c.strokeStyle = PAL.ink; c.lineWidth = 1; c.beginPath(); for (let a = 0; a < 20; a += .2) c.lineTo(s / 2 + Math.cos(a) * a * 1.4, s / 2 + Math.sin(a) * a * 1.4); c.stroke(); }); });
+  cell(2, 3, 'handText (font varies)', () => { handText(c, 'hand text', 20, 110, { size: 50 }); handText(c, 'two inks', 30, 170, { size: 38 }); });
+  cell(3, 3, 'palette', () => { const sw = [PAL.paper, PAL.ink, PAL.night, PAL.chalk, ...PAL.fills, PAL.shade, PAL.light, PAL.blush, ...PAL.accents, ...PAL.inks]; sw.forEach((col, k) => { c.fillStyle = col; c.fillRect(20 + (k % 6) * 34, 20 + Math.floor(k / 6) * 34, 30, 30); }); });
+}
+// paletteSheet: the palette with tint/shade ramps and the harmony of the first fill
+function paletteSheet(c) { paper(c); c.font = '18px ui-monospace, Menlo, monospace'; const rows = [['paper', [PAL.paper]], ['ink', [PAL.ink]], ['night', [PAL.night]], ['chalk', [PAL.chalk, PAL.chalkDim]], ['fills', PAL.fills], ['shade/light/blush', [PAL.shade, PAL.light, PAL.blush]], ['accents', PAL.accents], ['inks', PAL.inks]];
+  rows.forEach(([name, cols], r) => { c.fillStyle = PAL.ink; c.fillText(name, 40, 70 + r * 100); cols.forEach((col, k) => { ramp(col, 5).forEach((v, j) => { c.fillStyle = v; c.fillRect(260 + k * 130 + j * 22, 40 + r * 100, 20, 50); }); }); });
+  const h = harmony(PAL.fills[0]); c.fillStyle = PAL.ink; c.fillText('harmony of fills[0]: complement, triad, analog, split', 40, 900); [h.complement, ...h.triad, ...h.analog, ...h.split].forEach((col, k) => { c.fillStyle = col; c.fillRect(40 + k * 60, 920, 50, 50); }); }
+
+// ===================== TIMELINE & RUNTIME =====================
+// defineFilm({ palette, timeline, score }) wires the player, the export buttons and the render hooks.
+//   palette   name or object; optional (defaults to the current PAL)
+//   timeline  [{ name, dur, fn(c, tau, i) }]   tau = seconds into the scene, i = global drawn frame
+//   score     (ac, t0, dest) => schedules notes; optional
+let FILM = null, ctx = null, cv = null;
+//   format    { ar: '16:9', width: 1920 }; the query string ?ar=9:16&w=1080 overrides it at render time
+function defineFilm({ palette, timeline, score, format = {} }) {
+  const qs = new URLSearchParams(location.search);
+  setFormat({ ar: qs.get('ar') || format.ar || '1:1', width: +qs.get('w') || format.width || undefined });
+  if (palette) usePalette(palette);
+  cv = document.getElementById('c'); if (!cv) { cv = document.createElement('canvas'); cv.id = 'c'; document.body.prepend(cv); } cv.width = OUT_W; cv.height = OUT_H; ctx = cv.getContext('2d');
+  const DUR = timeline.reduce((a, s) => a + s.dur, 0), NDRAW = Math.round(DUR * FPS_DRAW);
+  FILM = { timeline, score, DUR, NDRAW };
+  window.__drawFrame = i => { cur = -1; show(i); }; window.__NDRAW = NDRAW; window.__FILM = FILM;
+  window.__size = { w: OUT_W, h: OUT_H, W, H, S };
+  window.__frame = i => { cur = -1; show(i); return cv.toDataURL('image/png'); };            // exact pixels, no screenshot
+  window.__grid = (n = 24, cellW = 240) => gridSheet(n, cellW).toDataURL('image/jpeg', .9);  // n evenly spaced frames
+  if (qs.has('bare')) { document.body.style.cssText = 'margin:0;padding:0;background:#000'; cv.style.cssText = `width:${OUT_W}px;height:${OUT_H}px;display:block`; document.querySelectorAll('.bar').forEach(b => b.hidden = true); }
+  else buildPlayer();
+  if (qs.has('grid')) { const img = new Image(); img.src = window.__grid(+qs.get('grid') || 24, 240); img.style.cssText = 'max-width:96vw'; cv.hidden = true; cv.after(img); }
+  else show(qs.has('frame') ? +qs.get('frame') : 0);
+  window.__ready = true;
+}
+// gridSheet: n evenly spaced drawn frames tiled 6 across, labelled with index and time. The first thing to look at.
+function gridSheet(n = 24, cellW = 240) {
+  const cols = 6, rows = Math.ceil(n / cols), cellH = Math.round(cellW * OUT_H / OUT_W), pad = 18, sheet = document.createElement('canvas');
+  sheet.width = cols * cellW; sheet.height = rows * (cellH + pad); const g = sheet.getContext('2d'); g.fillStyle = '#141414'; g.fillRect(0, 0, sheet.width, sheet.height);
+  g.font = '12px ui-monospace, Menlo, monospace'; g.fillStyle = '#e6e6e6';
+  for (let k = 0; k < n; k++) { const i = Math.round(k * (FILM.NDRAW - 1) / Math.max(1, n - 1)); cur = -1; show(i);
+    const x = (k % cols) * cellW, y = Math.floor(k / cols) * (cellH + pad); g.drawImage(cv, x, y, cellW, cellH); g.fillText(`${String(i).padStart(3, '0')}  ${(i / FPS_DRAW).toFixed(2)}s`, x + 4, y + cellH + 13); }
+  cur = -1; return sheet;
+}
+function drawFrame(i) { const { timeline } = FILM; const t = i / FPS_DRAW; let acc = 0;
+  for (let k = 0; k < timeline.length; k++) { const s = timeline[k]; if (t < acc + s.dur || k === timeline.length - 1) { resetT(ctx); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; s.fn(ctx, t - acc, i); resetT(ctx); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; return s.name; } acc += s.dur; } }
+let cur = -1, playing = false, start = 0, sound = false, ac = null, ui = {};
+function show(i) { if (i === cur) return; cur = i; const name = drawFrame(i); if (ui.scrub) { ui.scrub.value = i; ui.info.textContent = `draw ${String(i).padStart(3, '0')}/${FILM.NDRAW}  t=${(i / FPS_DRAW).toFixed(2)}s  ${name}  ${W}x${H}@${OUT_W}px`; } }
+function loop() { if (!playing) return; const t = ((performance.now() - start) / 1000) % FILM.DUR; show(Math.floor(t * FPS_DRAW)); requestAnimationFrame(loop); }
+function buildPlayer() {
+  const bar = document.createElement('div'); bar.className = 'bar'; bar.innerHTML = '<button id="play">play</button><button id="snd">sound: off</button><input id="scrub" type="range" min="0" max="0" value="0"><span id="info"></span><button id="exp">export PNG frames</button><button id="wav">export score.wav</button><span id="msg"></span>';
+  cv.after(bar); ui = { scrub: bar.querySelector('#scrub'), info: bar.querySelector('#info'), msg: bar.querySelector('#msg') }; ui.scrub.max = FILM.NDRAW - 1;
+  const play = bar.querySelector('#play'); play.onclick = () => { playing = !playing; play.textContent = playing ? 'pause' : 'play'; if (playing) { start = performance.now(); if (sound && FILM.score) { ac = ac || new AudioContext(); ac.resume(); FILM.score(ac, ac.currentTime + .05, ac.destination); } loop(); } };
+  bar.querySelector('#snd').onclick = e => { sound = !sound; e.target.textContent = 'sound: ' + (sound ? 'on' : 'off'); };
+  ui.scrub.oninput = () => { playing = false; play.textContent = 'play'; show(+ui.scrub.value); };
+  bar.querySelector('#exp').onclick = async () => { if (!window.showDirectoryPicker) { ui.msg.textContent = 'no File System Access API here: use render.mjs'; return; } const dir = await showDirectoryPicker({ mode: 'readwrite' }); playing = false;
+    for (let i = 0; i < FILM.NDRAW; i++) { cur = -1; show(i); const blob = await new Promise(res => cv.toBlob(res, 'image/png')); const fh = await dir.getFileHandle(String(i).padStart(4, '0') + '.png', { create: true }); const w = await fh.createWritable(); await w.write(blob); await w.close(); ui.msg.textContent = `exported ${i + 1}/${FILM.NDRAW}`; }
+    ui.msg.textContent = `done. ffmpeg -framerate ${FPS_DRAW} -i %04d.png -r ${FPS_OUT} -pix_fmt yuv420p -crf 18 out.mp4`; };
+  bar.querySelector('#wav').onclick = async () => { if (!FILM.score) { ui.msg.textContent = 'no score defined'; return; } const sr = 48000, oac = new OfflineAudioContext(2, Math.ceil(sr * FILM.DUR), sr); FILM.score(oac, 0, oac.destination); const buf = await oac.startRendering();
+    const n = buf.length, out = new DataView(new ArrayBuffer(44 + n * 4)), ws = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true); out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); ws(36, 'data'); out.setUint32(40, n * 4, true);
+    const L = buf.getChannelData(0), R = buf.getChannelData(1); let o = 44; for (let i = 0; i < n; i++) { out.setInt16(o, clamp(L[i], -1, 1) * 32767, true); out.setInt16(o + 2, clamp(R[i], -1, 1) * 32767, true); o += 4; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], { type: 'audio/wav' })); a.download = 'score.wav'; a.click(); ui.msg.textContent = 'score.wav: ffmpeg -i out.mp4 -i score.wav -c:v copy -c:a aac -shortest final.mp4'; };
+}
+// note: one enveloped oscillator, the building block of every score
+function note(ac, master, f, t0, t, d, type = 'triangle', g = .25) { const o = ac.createOscillator(), e = ac.createGain(); o.type = type; o.frequency.value = f; e.gain.setValueAtTime(0, t0 + t); e.gain.linearRampToValueAtTime(g, t0 + t + .02); e.gain.exponentialRampToValueAtTime(.0008, t0 + t + d); o.connect(e); e.connect(master); o.start(t0 + t); o.stop(t0 + t + d + .05); }
+function noiseBurst(ac, master, t0, t, d, g = .3, seed = 1) { const sr = ac.sampleRate, buf = ac.createBuffer(1, Math.ceil(sr * d), sr), ch = buf.getChannelData(0), r = rng(seed); for (let i = 0; i < ch.length; i++) ch[i] = (r() * 2 - 1) * Math.pow(1 - i / ch.length, 2); const s = ac.createBufferSource(); s.buffer = buf; const e = ac.createGain(); e.gain.value = g; s.connect(e); e.connect(master); s.start(t0 + t); }
+const pentHz = (o, s, base = 220) => base * Math.pow(2, o + [0, 2, 4, 7, 9][s % 5] / 12);
+
+
+// ---- format pin (repo-owned) ----
+setFormat({ ar: '1:1', width: 1080 });
+const __coreDefineFilm = defineFilm;
+defineFilm = (config = {}) => {
+  const painted = _layers.splice(0);
+  const film = __coreDefineFilm({ ...config, format: { ar: '1:1', width: 1080 } });
+  _layers.push(...painted);
+  return film;
+};
+
+
+// ---- film probe (repo-owned) ----
+const __filmUsable = () => window.__ready === true && window.__FILM && window.__FILM.DUR > 0;
+
+// ---- film (model-authored, isolated) ----
+try {
+(() => {
+// BPM 84 · beat 0.714s · bar 2.857s · anchor: the node in the halo's break (G1: x 430, y 197) · G1: the creature on the left third · G2: the variant on the right third
+// t       dur    beats  scene     look        camera     what changes
+// 0.000   5.714  8      study     graphite    locked     the lot-crosser fully drawn on frame 0, breathing on a 4s sine, a weight shift on twos; floor line, smudge, four guide strokes
+// 5.714   5.714  8      build     graphite    locked     G1 matched pixel-for-pixel: guides in over a beat, chalk skeleton held four beats, graphite fades on top, the node lights last
+// 11.429  2.857  4      flank     graphite    push-in    the ribbed sac at 2.6→3.1×: cross-contour rings, pore lattice, the bleached seam plate, one chalk edge
+// 14.286  5.714  8      step      graphite    locked     leg 3 lifts on beat 1 and sets on beat 3; a held bar; leg 1 lifts on beat 5 and sets on beat 7 — one leg in the air at a time
+// 20.000  2.143  3      foot      graphite    drift      macro 3.4→3.15× on the front needle foot touching the floor line, the smudge under it
+// 22.143  2.143  3      halo      graphite    locked 2.5× the broken ring: held, then a decisive +.22 turn on beat 1, half of it given back on beat 2. the node never moves
+// 24.286  4.286  6      turn      graphite    locked     second pose at G1: the hip drops 44 over one beat and holds, knees pop, the ring turned away
+// 28.571  2.857  4      variant   graphite    locked     G2, right third, smaller: same grammar, a bleached blade instead of a ring, no filaments, a fourth quill
+// 31.429  2.857  4      detail    graphite    locked     three callouts across the upper sheet — the ring, a needle foot, the node on its pore patch — chalk ticks drawing in on beats
+// 34.286  5.714  8      label     graphite    locked     the study again, the specimen label lettered in over four beats, then given back over the last beat — hands into frame 0
+// MISTAKES: the legs are 2.5× the sac and end in needle points, never pads or hooves · the knees bend away from the walk (digitigrade), never forward, and no two at the same height ·
+// MISTAKES: the head is a broken ring with a gap on the right, never a face — no eyes anywhere, the node does the regarding · the filaments droop from the ring, they are not arms ·
+// MISTAKES: the only saturated colour on the sheet is the one node · chalk is broken dashes on upper-left edges only, never a solid rim, never on the lower right
+
+const STOCKS = { khaki: '#a09d89', umber: '#6e5847', mauve: '#4a3f41', slate: '#4f5661' };
+const GLOWS = { none: null, verdigris: '#22c78a', ember: '#ff7a2a', cyan: '#39d5ff' };
+function tonedPalette(stock, glow) {
+  const paper = STOCKS[stock], g = '#1b1917', k = '#efe8d9';
+  return makePalette({
+    paper, paperBand: null, ink: g, night: shade(paper, .5), chalk: k, chalkDim: mix(paper, k, .45), guide: alpha(k, .28),
+    fills: [mix(paper, g, .16), mix(paper, g, .34), mix(paper, g, .55), mix(paper, k, .28)],
+    shade: g, light: k, blush: mix(paper, g, .72),
+    accents: [GLOWS[glow] || mix(paper, k, .6), k, g, mix(paper, k, .5)], inks: [g, k], finish: 'ink'
+  }, 'pencilMinimal');
+}
+usePalette(tonedPalette('khaki', 'cyan'));
+
+// ---- the grid: 84bpm, 56 beats, 14 bars, 40.000s ----
+const BPM = 84, BEAT = 60 / BPM, beats = n => n * BEAT, FR = 1 / 12;
+const outBack = t => 1 + 2.7 * Math.pow(t - 1, 3) + 1.7 * Math.pow(t - 1, 2);
+const outExpo = t => (t >= 1 ? 1 : 1 - Math.pow(2, -10 * t));
+const hit = (tau, at, frames = 3, e = outBack) => tau < at ? 0 : e(clamp((tau - at) / (frames * FR) + 1 / frames, 0, 1));
+
+// ---- placement: G1 in the left third (edge-weighted), G2 on the right for the variant. Both stand on the one floor line ----
+const LEG = 296;
+const G1 = { x: CX - W * .13, y: CY + H * .035, s: 1.17 };
+const G2 = { x: CX + W * .17, y: CY + H * .108, s: .92 };
+const place = (c, P) => { c.translate(P.x, P.y); c.scale(P.s, P.s); };
+const placeG1 = c => place(c, G1);
+const NODE = { x: G1.x + 26 * G1.s, y: G1.y - 326 * G1.s };
+
+// ---- graphite marks: tubes, cross-contour rings, chalk rims ----
+// curve: n points along a quadratic from a through control k to b
+const curve = (a, k, b, n = 10) => Array.from({ length: n }, (_, i) => { const t = i / (n - 1), u = 1 - t; return [u * u * a[0] + 2 * u * t * k[0] + t * t * b[0], u * u * a[1] + 2 * u * t * k[1] + t * t * b[1]]; });
+// tube: a tapered limb around a polyline; w(u) is the half-width at u∈[0,1]. Returns the fill path and both edges.
+function tube(pts, w) {
+  const n = pts.length, L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(n - 1, i + 1)], dx = b[0] - a[0], dy = b[1] - a[1], m = Math.hypot(dx, dy) || 1, nx = -dy / m, ny = dx / m, r = w(i / (n - 1));
+    L.push([pts[i][0] + nx * r, pts[i][1] + ny * r]); R.push([pts[i][0] - nx * r, pts[i][1] - ny * r]);
+  }
+  return { path: polyPath([...L, ...R.slice().reverse()]), left: L, right: R, spine: pts, w };
+}
+// contour: rings wrapped around a tube every `gap` px of spine — the cross-contour hatching this look is made of.
+function contour(c, T, o = {}) {
+  const { gap = 9, color = PAL.ink, alpha: al = .5, width = 1, seed = 1, bulge = .3, span = [-1, 1] } = o, r = rng(seed), n = T.spine.length;
+  c.save(); c.strokeStyle = color; c.globalAlpha = al; c.lineWidth = width; c.lineCap = 'round';
+  let acc = 0;
+  for (let i = 1; i < n; i++) {
+    const a = T.spine[i - 1], b = T.spine[i], seg = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, dx = (b[0] - a[0]) / seg, dy = (b[1] - a[1]) / seg;
+    while (acc <= seg) {
+      const u = acc / seg, x = lerp(a[0], b[0], u), y = lerp(a[1], b[1], u), w = T.w((i - 1 + u) / (n - 1)), j = (r() - .5) * 1.5;
+      const p0 = [x - dy * w * span[0], y + dx * w * span[0]], p1 = [x - dy * w * span[1], y + dx * w * span[1]];
+      c.beginPath(); c.moveTo(p0[0], p0[1]); c.quadraticCurveTo((p0[0] + p1[0]) / 2 + dx * w * bulge * 2 + j, (p0[1] + p1[1]) / 2 + dy * w * bulge * 2 + j, p1[0], p1[1]); c.stroke();
+      acc += gap * (.75 + r() * .5);
+    }
+    acc -= seg;
+  }
+  c.restore();
+}
+// graphiteTube: mid-tone fill, full rings, shadow-half rings, heavy graphite edge lower-right, chalk dashes on the lit upper-left edge
+function graphiteTube(c, T, seed, o = {}) {
+  const { fill = PAL.fills[1], gap = 9, rim = .8, weight = 2.2, bulge = .3 } = o;
+  c.fillStyle = fill; c.fill(T.path);
+  contour(c, T, { gap, alpha: .18, width: .8, seed, span: [-1, 1], bulge });
+  contour(c, T, { gap: gap * .6, alpha: .42, width: .9, seed: seed + 1, span: [.05, 1], bulge });
+  c.strokeStyle = PAL.ink; c.lineWidth = weight; wob(c, T.right, 1.4, seed + 2);
+  c.lineWidth = weight * .6; wob(c, T.left, 1.2, seed + 3);
+  const r = rng(seed + 5); c.save(); c.setLineDash([10 + r() * 22, 5 + r() * 12]); c.lineDashOffset = r() * 30;             // chalk: broken dashes, never a solid line
+  c.strokeStyle = alpha(PAL.light, rim); c.lineWidth = 1.3; wob(c, T.left.map(p => [p[0] - 1.5, p[1] - 1.5]).slice(0, Math.ceil(T.left.length * .85)), 1, seed + 4); c.restore();
+}
+// ik: knee for a two-bone leg from hip h to foot f, bend direction dir = ±1
+function ik(h, f, l1, l2, dir) {
+  const dx = f[0] - h[0], dy = f[1] - h[1], d = clamp(Math.hypot(dx, dy), Math.abs(l1 - l2) + 1, l1 + l2 - 1), a = Math.acos((l1 * l1 + d * d - l2 * l2) / (2 * l1 * d)), base = Math.atan2(dy, dx) + a * dir;
+  return [h[0] + Math.cos(base) * l1, h[1] + Math.sin(base) * l1];
+}
+// part: one tube, either finished in graphite or reduced to its chalk skeleton for the build shot
+function part(c, T, ink, seed, o = {}) {
+  if (ink) { graphiteTube(c, T, seed, o); return; }
+  c.strokeStyle = PAL.chalk; c.lineWidth = o.weight ? o.weight * .8 : 1.8;
+  wob(c, T.left, 1.3, seed + 6); wob(c, T.right, 1.3, seed + 7);
+}
+
+// ---- the lot-crosser. LOCAL coords, origin at the hip, up = -y. Needle feet land on y ≈ LEG ----
+const Z4 = [0, 0, 0, 0];
+const LEGS = [                                                                       // no two alike: bone ratio, spread and bend all differ
+  { foot: [-150, LEG - 4], bones: [LEG * .78, LEG * .72], dir: 1 },
+  { foot: [-52, LEG + 8], bones: [LEG * .72, LEG * .68], dir: 1 },
+  { foot: [58, LEG - 10], bones: [LEG * .62, LEG * .76], dir: -1 },
+  { foot: [166, LEG + 4], bones: [LEG * .74, LEG * .64], dir: -1 }
+];
+const HIPS = [[-26, -84], [2, -58], [34, -52], [62, -34]];                            // hips sit inside the sac so the stilts grow out of the mass
+const QUILLS = [[[66, -96], [128, -104], [156, -152]], [[40, -142], [104, -168], [128, -224]], [[12, -180], [56, -224], [74, -262]]];
+const FILA = [[[-118, -288], [-176, -238], [-158, -166]], [[-104, -262], [-186, -196], [-214, -118]], [[-86, -246], [-140, -180], [-120, -132]]];
+
+function drawNode(c, x, y, lit) {
+  if (lit > 0) for (let k = 3; k >= 1; k--) { c.fillStyle = alpha(PAL.accents[0], .12 * lit); c.beginPath(); c.arc(x, y, 7 + k * 6, 0, TAU); c.fill(); }
+  c.fillStyle = lit > 0 ? PAL.accents[0] : PAL.chalk; c.beginPath(); c.arc(x, y, 7, 0, TAU); c.fill();
+  c.fillStyle = PAL.light; c.beginPath(); c.arc(x - 2.2, y - 2.2, 1.9, 0, TAU); c.fill();
+}
+function drawHalo(c, cx, cy, rot, ink, seed, s = 1) {                                 // the broken ring: two arcs, two different gaps, never closed
+  for (const [r0, a0, a1, wgt, fi, sd] of [[92, .58, 5.52, 9, 3, 0], [62, 3.28, 7.58, 6, 2, 9]]) {
+    const pts = Array.from({ length: 22 }, (_, j) => { const a = rot + a0 + (a1 - a0) * j / 21; return [cx + Math.cos(a) * r0 * s, cy + Math.sin(a) * r0 * .86 * s]; });
+    part(c, tube(pts, u => wgt * s * (.55 + .45 * Math.sin(u * Math.PI))), ink, seed + sd, { fill: PAL.fills[fi], gap: 7 * s, weight: 2 });
+  }
+}
+// pose: { breathe 0..1, sway px, crouch px, halo rad, lit 0..1, off[4] per-foot travel, air[4] per-foot lift }
+function drawCreature(c, mode, pose, seed, form = 'halo') {
+  const ink = mode !== 'blueprint', r = rng(seed), off = pose.off || Z4, air = pose.air || Z4;
+  const hipY = -pose.breathe * 4 + (pose.crouch || 0), sx = pose.sway, lit = ink ? (pose.lit === undefined ? 1 : pose.lit) : 0;
+  c.save(); c.lineJoin = 'round'; c.lineCap = 'round';
+  for (let k = 0; k < 4; k++) {                                                       // 1. four stilts, far pair first and deeper in tone
+    const { foot: f0, bones, dir } = LEGS[k], h = [HIPS[k][0] + sx, HIPS[k][1] + hipY], f = [f0[0] + off[k], f0[1] - air[k]];
+    const knee = ik(h, f, bones[0], bones[1], dir), bow = dir * -8;
+    const spine = [...curve(h, [(h[0] + knee[0]) / 2 + bow, (h[1] + knee[1]) / 2], knee, 6), ...curve(knee, [(knee[0] + f[0]) / 2 - bow, (knee[1] + f[1]) / 2], f, 7).slice(1)];
+    const T = tube(spine, u => lerp(13, 1.1, Math.pow(u, .8)) + 5.5 * Math.exp(-Math.pow((u - .455) / .055, 2)));   // needle tip, a knob where the knee shows
+    part(c, T, ink, seed + 10 + k * 4, { fill: PAL.fills[k < 2 ? 2 : 1], gap: k < 2 ? 12 : 10, weight: k < 2 ? 1.8 : 2.5, bulge: .14 });
+    if (ink && k !== 1) { c.strokeStyle = PAL.ink; c.lineWidth = 1.2; wob(c, [[knee[0] + dir * 4, knee[1] + 3], [knee[0] + dir * 15, knee[1] + 22 + k * 4]], 1, seed + 70 + k); }   // a spur behind three of the knees
+  }
+  const tail = tube(curve([64 + sx, -26 + hipY], [148 + sx, -8 + hipY], [176 + sx, 104 + hipY], 9), u => lerp(11, 1.2, Math.pow(u, .7)));   // 2. counterweight spar, drawn before the sac covers its root
+  part(c, tail, ink, seed + 30, { fill: PAL.fills[2], gap: 9, weight: 1.9, bulge: .16 });
+  QUILLS.forEach((q, j) => {                                                          // 3. dorsal quills off the back, roots hidden by the sac
+    const T = tube(curve([q[0][0] + sx, q[0][1] + hipY], [q[1][0] + sx, q[1][1] + hipY], [q[2][0] + sx, q[2][1] + hipY], 7), u => lerp(8, 1.2, u));
+    part(c, T, ink, seed + 36 + j * 3, { fill: PAL.fills[2], gap: 7, weight: 1.7, bulge: .16 });
+  });
+  const neck = tube(curve([-44 + sx, -178 + hipY], [-24 + sx, -244 + hipY], [-58 + sx, -296 + hipY], 8), u => lerp(17, 11, u));   // 4. neck, under the sac
+  part(c, neck, ink, seed + 46, { fill: PAL.fills[2], gap: 8 });
+  const body = tube(curve([66 + sx, -38 + hipY], [16 + sx, -150 + hipY], [-52 + sx, -196 + hipY], 12), u => lerp(50, 26, u) + 16 * Math.sin(u * Math.PI));   // 5. the hunched ribbed sac: heavier at the hip, tilted up-left
+  part(c, body, ink, seed + 20, { fill: PAL.fills[1], gap: 8, weight: 2.8 });
+  if (ink) {
+    c.save(); c.clip(body.path);                                                      // pores: a hex lattice held inside the shadow half of the flank
+    hexCells([sx + 4, hipY - 168, 104, 128], 6, (x, y) => { if (r() < .5) { c.strokeStyle = alpha(PAL.ink, .5); c.lineWidth = .7; c.stroke(hexPath(x, y, 3.8)); } });
+    c.restore();
+    const seam = tube(curve([34 + sx, -72 + hipY], [0 + sx, -130 + hipY], [-30 + sx, -172 + hipY], 8), u => lerp(14, 6, u));   // the bleached plate seam along the lit flank
+    graphiteTube(c, seam, seed + 52, { fill: PAL.fills[3], gap: 8, weight: 1.4, rim: .5 });
+  }
+  const hx = -58 + sx, hy = -320 + hipY;                                              // 6. the head is a structure: a broken ring, or a blade on the variant
+  if (form === 'blade') {
+    part(c, tube(curve([hx + 2, hy + 36], [hx + 46, hy - 42], [hx - 18, hy - 104], 10), u => 5 + 26 * Math.pow(Math.sin(u * Math.PI), 1.3)), ink, seed + 80, { fill: PAL.fills[3], gap: 7, weight: 2.2 });
+    drawNode(c, hx + 28, hy - 26, lit);
+  } else {
+    FILA.forEach((q, j) => {                                                          // filaments drooping off the ring's lower left, needle tipped
+      const T = tube(curve([q[0][0] + sx, q[0][1] + hipY], [q[1][0] + sx, q[1][1] + hipY], [q[2][0] + sx, q[2][1] + hipY], 8), u => lerp(7, 1.1, Math.pow(u, .85)));
+      part(c, T, ink, seed + 84 + j * 3, { fill: PAL.fills[2], gap: 8, weight: 1.6, bulge: .16 });
+    });
+    drawHalo(c, hx, hy, pose.halo, ink, seed + 94);
+    drawNode(c, hx + 84, hy - 6, lit);                                                // 7. the one colour on the sheet, seated in the ring's break
+  }
+  c.restore();
+}
+
+// ---- the sheet: bare khaki stock, one floor line, a scribbled smudge, four guide strokes on the empty right. Nothing else ----
+function drawSheet(c, P, seed, guides = 1) {
+  paper(c);
+  const r = rng(seed), fy = G1.y + LEG * G1.s + 6;
+  c.save(); c.strokeStyle = PAL.guide; c.lineWidth = .9; c.globalAlpha = guides;
+  wob(c, [[W * .06, fy + 5], [W * .94, fy - 4]], 2, seed + 1);
+  for (let k = 0; k < 4; k++) { const x = W * (.38 + r() * .34), y = H * (.08 + r() * .32), L = W * (.1 + r() * .16), a = (r() - .5) * .5; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); c.stroke(); }
+  c.restore();
+  const sh = ellPath(P.x + W * .04 * P.s, fy + 9, W * .23 * P.s, H * .042), box = [P.x - W * .3, fy - H * .06, W * .7, H * .12];
+  hatch(c, sh, box, { angle: .05, gap: 5, len: 46, jitter: 14, color: PAL.light, alpha: .13, width: 1.6, seed: seed + 2 });
+  hatch(c, sh, box, { angle: -.1, gap: 7, len: 34, jitter: 12, color: PAL.ink, alpha: .08, width: 1.2, seed: seed + 3 });
+}
+const SHEET = layer(), SHEET2 = layer();
+drawSheet(SHEET.getContext('2d'), G1, 40);
+drawSheet(SHEET2.getContext('2d'), G2, 40);
+
+// ---- poses: on twos from the global drawn frame. 4s breath and 8s ring-drift both close on the 40s loop ----
+const idle = (i, crouch = 0) => ({ breathe: .5 + .5 * Math.sin(i / 12 * TAU / 4), sway: pulse(i, 20, 6) ? 3 : 0, crouch, halo: Math.sin(i / 12 * TAU / 8) * .06 });
+const stepPose = (i, t) => {
+  const p = idle(i), a = clamp((t - beats(1)) / beats(2), 0, 1), b = clamp((t - beats(5)) / beats(2), 0, 1);
+  p.off = [0, 42 * outExpo(b), 46 * outExpo(a), 0];                                   // the travelled foot stays where it was set down
+  p.air = [0, Math.sin(b * Math.PI) * 64, Math.sin(a * Math.PI) * 64, 0];             // one leg in the air at a time, ever
+  p.sway += 2 * (outExpo(a) + outExpo(b));
+  return p;
+};
+const tick = (c, x, y, w2, p, seed) => { if (p <= 0) return; c.strokeStyle = alpha(PAL.chalk, .6); c.lineWidth = 1.4; wob(c, Array.from({ length: 6 }, (_, j) => [x - w2 + 2 * w2 * p * (j / 5), y]), 1.2, seed); };
+
+// ---- scenes: (c, tau, i) ----
+function sceneStudy(c, tau, i) {
+  const t = clamp(tau, 0, beats(8));
+  blit(c, SHEET);
+  c.save(); placeG1(c); drawCreature(c, 'ink', idle(i), 44); c.restore();
+  const ring = hit(t, beats(3), 8, outExpo);                                          // one chalk ring off the node on beat 3, then gone
+  if (ring > 0 && ring < 1) { c.strokeStyle = alpha(PAL.light, .5 * (1 - ring)); c.lineWidth = 1.2; wob(c, ellPts(NODE.x, NODE.y, 26 + ring * 74, 24 + ring * 66, 0, 56), 1.5, 47, true); }
+}
+function sceneBuild(c, tau, i) {
+  const t = clamp(tau, 0, beats(8)), g = sm(0, beats(1), t), pose = idle(i);
+  pose.lit = sm(beats(6), beats(7), t);                                               // the node lights last, over a beat
+  drawSheet(c, G1, 40, g);
+  c.save(); placeG1(c);
+  construction(c, -10, -120, 250, 43, PAL.guide, g * .85);
+  if (t < beats(5)) drawCreature(c, 'blueprint', pose, 44);                           // chalk skeleton held four beats
+  if (t >= beats(4)) { c.globalAlpha = sm(beats(4), beats(5), t); drawCreature(c, 'ink', pose, 44); c.globalAlpha = 1; }
+  c.restore();
+  if (t < beats(5)) { const o = 1 - sm(beats(4), beats(5), t); c.strokeStyle = alpha(PAL.chalk, .55 * o); c.lineWidth = 1; for (let k = 0; k < 3; k++) cross(c, G1.x + (k - 1) * W * .2, H * .13, 7); }
+}
+function sceneFlank(c, tau, i) {
+  const t = clamp(tau, 0, beats(4));
+  blit(c, SHEET);
+  cam(c, G1.x + 12, G1.y - 118 * G1.s, lerp(2.6, 3.1, sm(0, beats(4), t, easeIO)));
+  place(c, G1); drawCreature(c, 'ink', idle(i), 44);
+  resetT(c);
+  c.strokeStyle = alpha(PAL.light, .4); c.lineWidth = 1; wob(c, ellPts(CX, CY, W * .2, W * .19, 0, 56), 1.6, 48, true);
+}
+function sceneStep(c, tau, i) {
+  const t = clamp(tau, 0, beats(8));
+  blit(c, SHEET);
+  c.save(); placeG1(c); drawCreature(c, 'ink', stepPose(i, t), 44); c.restore();
+}
+function sceneFoot(c, tau, i) {
+  const t = clamp(tau, 0, beats(3));
+  blit(c, SHEET);
+  cam(c, G1.x + 166 * G1.s, G1.y + 286 * G1.s, lerp(3.4, 3.15, sm(0, beats(3), t, easeIO)));
+  place(c, G1); drawCreature(c, 'ink', idle(i), 44);
+  resetT(c);
+}
+function sceneHalo(c, tau, i) {
+  const t = clamp(tau, 0, beats(3)), p = idle(i);
+  p.halo += .22 * hit(t, beats(1), 4, outExpo) - .16 * hit(t, beats(2), 4, outExpo);   // held, then two decisive turns
+  blit(c, SHEET);
+  cam(c, G1.x - 58 * G1.s, G1.y - 326 * G1.s, 2.5);
+  place(c, G1); drawCreature(c, 'ink', p, 44);
+  resetT(c);
+}
+function sceneTurn(c, tau, i) {
+  const t = clamp(tau, 0, beats(6)), p = idle(i, 44 * sm(beats(1), beats(2), t, easeIO));
+  p.halo -= .5 * sm(beats(1), beats(2), t, easeIO);                                    // the ring turns away as the weight drops
+  blit(c, SHEET);
+  c.save(); placeG1(c); drawCreature(c, 'ink', p, 44); c.restore();
+}
+function sceneVariant(c, tau, i) {
+  const t = clamp(tau, 0, beats(4)), p = idle(i);
+  p.off = [-14, 8, -6, 18];                                                            // same grammar, different stance and a blade for a head
+  blit(c, SHEET2);
+  c.save(); place(c, G2); drawCreature(c, 'ink', p, 118, 'blade'); c.restore();
+  const m = hit(t, beats(2), 6, outExpo);
+  if (m > 0 && m < 1) { c.strokeStyle = alpha(PAL.light, .45 * (1 - m)); c.lineWidth = 1.1; wob(c, ellPts(G2.x + 4, G2.y - 300 * G2.s, 30 + m * 60, 28 + m * 54, 0, 48), 1.5, 121, true); }
+}
+function sceneDetail(c, tau, i) {
+  const t = clamp(tau, 0, beats(4)), r = rng(206), br = .5 + .5 * Math.sin(i / 12 * TAU / 4);
+  blit(c, SHEET);
+  c.save(); c.translate(W * .24, H * .3); c.scale(.62, .62); drawHalo(c, 0, 0, .28 + br * .04, true, 130); drawNode(c, 84, -6, 1); c.restore();
+  c.save(); c.translate(W * .5, H * .3); c.scale(.92, .92);                             // one needle foot and the floor it meets
+  const F = tube(curve([-46, -128], [10, -34], [-2, 78], 9), u => lerp(11, 1.1, Math.pow(u, .8)) + 4 * Math.exp(-Math.pow((u - .18) / .09, 2)));
+  graphiteTube(c, F, 140, { fill: PAL.fills[1], gap: 9, weight: 2.4, bulge: .16 });
+  c.strokeStyle = PAL.guide; c.lineWidth = .9; wob(c, [[-70, 84], [78, 80]], 1.6, 143); c.restore();
+  c.save(); c.translate(W * .76, H * .3); c.scale(1.2, 1.2);                            // the node on its patch of pores
+  hexCells([-34, -34, 68, 68], 7, (x, y) => { if (r() < .55) { c.strokeStyle = alpha(PAL.ink, .38); c.lineWidth = .7; c.stroke(hexPath(x, y, 4.2)); } });
+  drawNode(c, 0, 0, 1); c.restore();
+  [[W * .24, 150], [W * .5, 152], [W * .76, 154]].forEach((q, j) => tick(c, q[0], H * .43, W * .06, sm(beats(j), beats(j + 1), t), q[1]));
+}
+function sceneLabel(c, tau, i) {
+  const t = clamp(tau, 0, beats(8)), fade = 1 - sm(beats(7), beats(8), t);              // the label is given back over the last beat: the final frame is frame 0
+  blit(c, SHEET);
+  c.save(); placeG1(c); drawCreature(c, 'ink', idle(i), 44); c.restore();
+  signOff(c, 'lot-crosser', 'specimen ix', { x: CX + W * .2, y: H * .18, size: 40, ink: alpha(PAL.chalk, fade), ink2: alpha(PAL.ink, fade * .8), progressA: sm(0, beats(2), t), progressB: sm(beats(2), beats(4), t) });
+}
+
+const TIMELINE = [
+  { name: 'study', dur: beats(8), fn: sceneStudy },
+  { name: 'build', dur: beats(8), fn: sceneBuild },
+  { name: 'flank', dur: beats(4), fn: sceneFlank },
+  { name: 'step', dur: beats(8), fn: sceneStep },
+  { name: 'foot', dur: beats(3), fn: sceneFoot },
+  { name: 'halo', dur: beats(3), fn: sceneHalo },
+  { name: 'turn', dur: beats(6), fn: sceneTurn },
+  { name: 'variant', dur: beats(4), fn: sceneVariant },
+  { name: 'detail', dur: beats(4), fn: sceneDetail },
+  { name: 'label', dur: beats(8), fn: sceneLabel }
+];
+defineFilm({ timeline: TIMELINE });
+})();
+} catch (err) { console.error('✏️ hand-drawn film threw: ' + (err && err.message)); }
+// Nothing playable registered — draw the repo's own film rather than a blank video.
+if (!__filmUsable()) {
+(() => {
+
+usePalette('paperInk');
+
+function sceneOpen(c, tau) {
+  paper(c);
+  const disc = circPath(CX, CY + 40, 300);
+  c.fillStyle = PAL.fills[0];
+  c.fill(disc);
+  surface(c, disc, [CX - 300, CY - 260, 600, 600], { seed: 11 });
+  c.strokeStyle = PAL.ink;
+  c.lineWidth = 3;
+  selfDraw(c, ellPts(CX, CY + 40, 300, 300, 0, 96), sm(0, 2.4, tau), 12, 2, true);
+  construction(c, CX, CY + 40, 240, 13);
+  seedDot(c, CX, CY + 40, 11);
+}
+
+function sceneRipple(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY, lerp(1, 1.12, sm(0, 3, tau)));
+  const r = lerp(60, 420, sm(0, 3, tau));
+  ripples(c, CX, CY, [r * 0.4, r * 0.7, r], PAL.accents[1], 21, 3.5);
+  dottedArc(c, CX, CY, r * 0.85, PAL.ink, 22);
+  if (pulse(i, 10, 2)) dotBurst(c, CX, CY, r * 0.5, 12, PAL.accents[0], 23);
+  seedDot(c, CX, CY, 9);
+}
+
+function sceneClose(c, tau) {
+  night(c);
+  hexLattice(c, [0, 0, W, H], 26, PAL.chalkDim, 0.35, 0.9);
+  c.strokeStyle = PAL.chalk;
+  c.lineWidth = 2;
+  wob(c, ellPts(CX, CY, 260, 260, 0, 96), 2, 31, true);
+  aster(c, CX, CY, 9, 16, PAL.accents[1], 32, 1);
+  if (tau > 1.2) signOff(c, 'the void', 'kept the page');
+}
+
+const TIMELINE = [
+  { name: 'open', dur: 4.0, fn: sceneOpen },
+  { name: 'ripple', dur: 3.0, fn: sceneRipple },
+  { name: 'close', dur: 3.0, fn: sceneClose }
+];
+defineFilm({ timeline: TIMELINE });
+
+})();
+}
+
+// ---- harness bridge (repo-owned) ----
+if (!__filmUsable()) throw new Error('hand-drawn film registered no playable timeline');
+document.querySelectorAll('.bar').forEach(el => el.remove());
+const canvas = document.getElementById('c');
+canvas.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain';
+
+const __filmDuration = window.__FILM.DUR;
+let __previewStart = performance.now();
+let __previewRaf = 0;
+let __previewIndex = -1;
+const __previewStep = () => {
+  // A film that throws inside a scene must surface once, not 60 times a second.
+  // Stopping here costs only the preview; window.renderFrame still reports the
+  // throw to the renderer on the capture path.
+  try {
+    const t = ((performance.now() - __previewStart) / 1000) % __filmDuration;
+    // The film is drawn on twos (12fps). __drawFrame forces a repaint, so
+    // calling it every rAF tick would redraw the same frame five times over.
+    const i = Math.min(window.__NDRAW - 1, Math.floor(t * FPS_DRAW));
+    if (i !== __previewIndex) {
+      __previewIndex = i;
+      window.__drawFrame(i);
+    }
+  } catch (err) {
+    __previewRaf = 0;
+    throw err;
+  }
+  __previewRaf = requestAnimationFrame(__previewStep);
+};
+__previewRaf = requestAnimationFrame(__previewStep);
+
+// The renderer drives the clock; a film shorter than the post loops instead of
+// freezing on its last drawn frame.
+window.renderFrame = (time) => {
+  if (__previewRaf) { cancelAnimationFrame(__previewRaf); __previewRaf = 0; }
+  const seconds = Number(time);
+  const wrapped = Number.isFinite(seconds)
+    ? ((seconds % __filmDuration) + __filmDuration) % __filmDuration
+    : 0;
+  return window.__frame(Math.min(window.__NDRAW - 1, Math.floor(wrapped * FPS_DRAW)));
+};
+window.ready = true;
+
+
+
+
+document.body.appendChild(canvas);
+
+
+window.audioDuration = 40;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 40\\n// FORM: A 0-2 (held opening) | A' 2-4.5 (build, cross-contour rings) | B 4.5-6.5 (macro insert, the green node) | C 6.5-8 (the single step) | A'' 8-10 (specimen label, return to bare frame)\\n// TONAL CENTER: B natural minor\\n// MOTIF: B3 D4 E4 F#4 (+ G5 node) — quarter on 1 (B3), rest on 2, two eighths on 3 and 3.5 (D4, E4), quarter on 4 (F#4) held over the barline; G5 replaces the beat-4 note only on marked statements\\n// HARMONIC PLAN: A = Bm(add9) over B pedal | A' = Bm(add9) then Em11 over the same B pedal from 3.5 | B = Gmaj9, bass B falls to G (F# and B common tones) | C = F#7sus4 → F#m over F# pedal, unresolved | A'' = Bm(add9), identical cycle-0 voicing, F# bass stepping back to B\\n// PHRASE RULE: One four-strike halftime cell throughout — 808 kick on 1, CR78 rim on the 'and' of 2 and on 4, ghost tick displaced to 4.5; cell thins to kick-alone in B, returns whole in C. At every boundary the pad holds B or F# across the barline and no more than two of {harmony, motif form, percussion density} change; pad and hall tail always ring into the next section before its first kick.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// voice 1 — percussive engine: the four-strike cell, counted rings around a limb\\n$: s(`\u003c\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ ~] [~ ~ ~ ~] [~ ~]\\n[bd ~ ~ ~] [~ ~] [~ ~ ~ ~] [~ ~]\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ rim] [~ ~ ~ ~] [~ [rim ~]]\\n[bd ~ ~ ~] [~ ~] [~ ~ ~ ~] [~ ~]\\n[~ ~ ~ ~] [~ ~] [~ ~ ~ ~] [~ ~]\\n>`)\\n  .bank(\\\"\u003cRolandTR808 RolandTR808 RolandTR808 RolandTR808 RolandTR808 RolandTR808 RolandCR78 RolandCR78 RolandTR808 RolandTR808>\\\")\\n  .gain(\\\"\u003c0.3 0.3 0.31 0.31 0.26 0.26 0.34 0.34 0.24 0.2>\\\")\\n  .lpf(2600)\\n  .room(0.42)\\n  .size(0.7)\\n  .orbit(0)\\n\\n// voice 2 — sub-bass foundation: one pedal tone, moving only twice\\n$: note(\\\"\u003cb1 b1 b1 b1 [b1@2 g1@2] g1 f#1 f#1 b1 b1>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(0.4)\\n  .decay(0.3)\\n  .sustain(0.85)\\n  .release(3)\\n  .lpf(175)\\n  .gain(0.22)\\n  .room(0.35)\\n  .size(0.8)\\n  .orbit(1)\\n\\n// voice 3 — harmonic body: toned-paper mid-grey, only inner voices step\\n$: note(`\u003c\\n[b3,f#4,c#5,d5]\\n[b3,f#4,c#5,d5]\\n[b3,f#4,c#5,d5]\\n[b3,f#4,c#5,e5]\\n[b3,e4,f#4,d5]\\n[b3,d4,f#4,a4]\\n[b3,d4,f#4,a4]\\n[b3,c#4,e4,f#4]\\n[b3,f#4,c#5,d5]\\n[b3,f#4,c#5,d5]\\n>`)\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-4 3 -3 4>/8\\\")\\n  .attack(0.6)\\n  .decay(0.5)\\n  .sustain(0.7)\\n  .release(3.5)\\n  .lpf(\\\"\u003c900 900 1000 1150 1250 1200 1100 1050 950 880>\\\")\\n  .gain(0.11)\\n  .room(0.72)\\n  .size(0.85)\\n  .pan(\\\"\u003c0.42 0.58>\\\")\\n  .orbit(2)\\n\\n// voice 4 — motif lead: the four-legged gait, and the one green node at G5\\n$: note(`\u003c\\n[b3 ~ [d4 e4] f#4]\\n[b3 ~ [d4 e4] f#4]\\n[b3 ~ [d4 e4] f#4]\\n[b3 ~ [d4 e4] g5]\\n[f#4@2 e4@2]\\n[d4@2 [b3,g5]@2]\\n[b3 ~ [d4 e4] f#4]\\n[[b3 d4 e4 f#4] ~ ~ ~]\\n[b3 ~ d4 ~]\\n[g5@2 ~ ~]\\n>`)\\n  .s(\\\"triangle\\\")\\n  .attack(0.12)\\n  .decay(0.4)\\n  .sustain(0.55)\\n  .release(2.2)\\n  .lpf(2200)\\n  .gain(0.16)\\n  .delay(0.35)\\n  .delaytime(0.375)\\n  .delayfeedback(0.28)\\n  .room(0.5)\\n  .size(0.8)\\n  .orbit(3)\",\"bpm\":60,\"durationSec\":40,\"renderDurationSec\":43,\"cps\":0.25,\"cycles\":10,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

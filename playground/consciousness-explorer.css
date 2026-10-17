@@ -1,0 +1,104 @@
+/* consciousness-explorer.css - experiment-specific styles only */
+
+/* Explorer-specific stage styling */
+.explorer-stage {
+    min-height: 600px;
+    background: rgba(0, 0, 0, 0.4);
+    border-color: rgba(0, 255, 128, 0.2);
+    box-shadow: none;
+}
+
+/* Experiment cards */
+.experiment-card {
+    background: rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(0, 255, 128, 0.3);
+    border-radius: 6px;
+    padding: 1rem;
+    min-width: 250px;
+    max-width: 350px;
+    pointer-events: auto;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: absolute;
+}
+
+.experiment-card:hover {
+    border-color: var(--phosphor-green);
+    box-shadow: 0 0 20px rgba(0, 255, 128, 0.3);
+    transform: scale(1.05);
+}
+
+.experiment-card h3 {
+    color: var(--phosphor-green);
+    font-size: 1rem;
+    margin: 0 0 0.5rem 0;
+    font-family: 'Courier New', monospace;
+}
+
+.experiment-card .layer-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: rgba(0, 255, 128, 0.15);
+    border: 1px solid rgba(0, 255, 128, 0.3);
+    border-radius: 3px;
+    font-size: 0.7rem;
+    color: var(--phosphor-green);
+    margin-bottom: 0.5rem;
+}
+
+.experiment-card p {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* SVG layer nodes */
+.layer-node {
+    fill: rgba(0, 255, 128, 0.2);
+    stroke: rgba(0, 255, 128, 0.6);
+    stroke-width: 2;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.layer-node:hover {
+    fill: rgba(0, 255, 128, 0.4);
+    stroke: var(--phosphor-green);
+    filter: drop-shadow(0 0 8px rgba(0, 255, 128, 0.6));
+}
+
+.layer-label {
+    fill: var(--phosphor-green);
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    text-anchor: middle;
+    pointer-events: none;
+}
+
+/* Connection lines animation */
+.connection-line {
+    stroke: rgba(0, 255, 128, 0.3);
+    stroke-width: 1;
+    stroke-dasharray: 5, 5;
+    animation: dash 20s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -100;
+    }
+}
+
+/* Mobile responsiveness - explorer-specific */
+@media (max-width: 768px) {
+    .explorer-stage {
+        min-height: 400px;
+    }
+
+    .experiment-card {
+        min-width: 200px;
+        max-width: 280px;
+        padding: 0.75rem;
+    }
+}

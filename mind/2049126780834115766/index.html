@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  width: 100%; height: 100%;
+  background: #000;
+  font-family: 'Courier New', monospace;
+  color: #43ff7a;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.dashboard {
+  display: grid;
+  grid-template-columns: 110px 1fr 130px;
+  grid-template-rows: 42px 1fr 110px;
+  width: 900px; height: 900px;
+  background: #02040a;
+  position: relative;
+  gap: 4px;
+  padding: 4px;
+}
+.dashboard::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: 
+    repeating-linear-gradient(0deg, transparent 0, transparent 19px, rgba(67,255,122,0.04) 19px, rgba(67,255,122,0.04) 20px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 19px, rgba(67,255,122,0.04) 19px, rgba(67,255,122,0.04) 20px);
+  pointer-events: none;
+  z-index: 1;
+}
+.dashboard::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg,
+    transparent 0px, transparent 2px,
+    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px);
+  pointer-events: none;
+  z-index: 100;
+}
+.panel {
+  border: 1px solid #43ff7a44;
+  background: rgba(8,14,20,0.85);
+  position: relative;
+  box-shadow: inset 0 0 8px rgba(67,255,122,0.05), 0 0 6px rgba(67,255,122,0.08);
+  z-index: 2;
+}
+.panel-title {
+  font-size: 7px;
+  letter-spacing: 1.5px;
+  color: #b4ffda;
+  padding: 2px 5px;
+  border-bottom: 1px dashed #43ff7a33;
+  background: rgba(67,255,122,0.06);
+  text-transform: uppercase;
+  display: flex; justify-content: space-between;
+}
+.panel-title .pid { color: #ffaa00; }
+/* TOP HUD */
+.hud {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 220px 1fr 200px 140px 90px;
+  align-items: stretch;
+  gap: 4px;
+  font-size: 9px;
+}
+.hud > div {
+  border: 1px solid #43ff7a44;
+  padding: 4px 7px;
+  background: rgba(8,14,20,0.85);
+  display: flex; flex-direction: column; justify-content: center;
+}
+.hud .label { font-size: 6px; color: #43ff7a88; letter-spacing: 1.5px; }
+.hud .value { font-size: 11px; color: #b4ffda; letter-spacing: 1px; }
+.hud .magenta { color: #ff66b2; }
+.hud .amber { color: #ffaa00; }
+.blink { animation: blink 1.1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: 0.25; } }
+.dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #43ff7a; box-shadow: 0 0 4px #43ff7a;
+  margin-right: 4px; vertical-align: middle;
+}
+.dot.amber { background: #ffaa00; box-shadow: 0 0 4px #ffaa00; }
+.dot.magenta { background: #ff66b2; box-shadow: 0 0 4px #ff66b2; }
+
+/* LEFT */
+.left {
+  display: grid;
+  grid-template-rows: repeat(6, 1fr) 90px;
+  gap: 4px;
+}
+.thumb {
+  border: 1px solid #43ff7a55;
+  background: #050a10;
+  position: relative;
+  overflow: hidden;
+}
+.thumb canvas { width: 100%; height: 100%; display: block; }
+.thumb-label {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  font-size: 6px; padding: 1px 3px;
+  background: rgba(0,0,0,0.7);
+  color: #b4ffda;
+  display: flex; justify-content: space-between;
+}
+.thumb-label .ts { color: #ffaa00; }
+.thumb-corner {
+  position: absolute; top: 2px; right: 3px;
+  font-size: 6px; color: #ff66b2;
+}
+.left-mini {
+  border: 1px solid #43ff7a55;
+  padding: 3px;
+  font-size: 6px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.left-mini canvas { width: 100%; height: 30px; }
+
+/* CENTER */
+.center {
+  position: relative;
+  border: 1px solid #43ff7a88;
+  background: #03060a;
+  overflow: hidden;
+  box-shadow: 0 0 14px rgba(67,255,122,0.18), inset 0 0 30px rgba(67,255,122,0.04);
+}
+.center canvas {
+  width: 100%; height: 100%;
+  display: block;
+}
+.crosshair {
+  position: absolute; inset: 0;
+  pointer-events: none;
+}
+.crosshair::before, .crosshair::after {
+  content: ''; position: absolute;
+  background: rgba(67,255,122,0.25);
+}
+.crosshair::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+.crosshair::after { top: 50%; left: 0; right: 0; height: 1px; }
+.center-overlay {
+  position: absolute; pointer-events: none;
+  font-size: 8px;
+  color: #43ff7a;
+  text-shadow: 0 0 4px #43ff7a;
+}
+.ov-tl { top: 6px; left: 8px; }
+.ov-tr { top: 6px; right: 8px; text-align: right; }
+.ov-bl { bottom: 6px; left: 8px; }
+.ov-br { bottom: 6px; right: 8px; text-align: right; }
+.ov-tl div, .ov-tr div, .ov-bl div, .ov-br div { line-height: 1.3; }
+.tag { color: #ffaa00; }
+.specimen-marker {
+  position: absolute;
+  width: 60px; height: 60px;
+  border: 1px solid #ff66b2;
+  pointer-events: none;
+}
+.specimen-marker::before, .specimen-marker::after,
+.specimen-marker > span:first-child, .specimen-marker > span:nth-child(2) {
+  content: ''; position: absolute;
+  width: 8px; height: 8px;
+  border: 2px solid #ff66b2;
+}
+.specimen-marker::before { top: -1px; left: -1px; border-right: none; border-bottom: none; }
+.specimen-marker::after { top: -1px; right: -1px; border-left: none; border-bottom: none; }
+.specimen-marker > span:first-child { bottom: -1px; left: -1px; border-right: none; border-top: none; }
+.specimen-marker > span:nth-child(2) { bottom: -1px; right: -1px; border-left: none; border-top: none; }
+.scan-line {
+  position: absolute;
+  left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #43ff7a, transparent);
+  box-shadow: 0 0 8px #43ff7a;
+  pointer-events: none;
+}
+
+/* RIGHT */
+.right {
+  display: grid;
+  grid-template-rows: 110px 110px 90px 1fr 110px;
+  gap: 4px;
+}
+.right .panel { padding: 0; overflow: hidden; }
+.right canvas { width: 100%; display: block; }
+.info-block {
+  font-size: 7px;
+  padding: 4px 5px;
+  line-height: 1.4;
+  color: #b4ffda;
+}
+.info-block .row { display: flex; justify-content: space-between; }
+.info-block .row span:first-child { color: #43ff7a99; }
+.info-block .row span:last-child { color: #ffaa00; }
+.gauge-row {
+  display: flex; gap: 4px; padding: 4px;
+}
+.gauge {
+  flex: 1;
+  height: 60px;
+  border: 1px solid #43ff7a33;
+  position: relative;
+}
+.gauge canvas { height: 100%; width: 100%; }
+.gauge-label {
+  position: absolute; bottom: 1px; left: 0; right: 0;
+  text-align: center; font-size: 6px; color: #b4ffda;
+}
+.hex-stream {
+  font-size: 6.5px;
+  padding: 3px 4px;
+  line-height: 1.35;
+  color: #43ff7a99;
+  letter-spacing: 0.5px;
+  overflow: hidden;
+  height: 100%;
+}
+.hex-stream span.hl { color: #ff66b2; }
+.hex-stream span.am { color: #ffaa00; }
+
+/* BOTTOM */
+.bottom {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 180px;
+  gap: 4px;
+}
+.bottom .panel { padding: 0; }
+.bottom canvas { width: 100%; height: 100%; display: block; }
+.chart-wrap { position: relative; height: calc(100% - 14px); }
+.chart-wrap .legend {
+  position: absolute; top: 2px; right: 4px;
+  font-size: 6px; color: #b4ffda;
+  display: flex; gap: 6px;
+  z-index: 3;
+}
+.chart-wrap .legend i {
+  display: inline-block; width: 6px; height: 2px;
+  vertical-align: middle; margin-right: 2px;
+}
+.spec-readout {
+  font-size: 7px;
+  padding: 3px 5px;
+  line-height: 1.4;
+}
+.spec-readout .barline {
+  display: grid;
+  grid-template-columns: 38px 1fr 24px;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.spec-readout .bar {
+  height: 5px;
+  background: #0a1418;
+  border: 1px solid #43ff7a44;
+  position: relative;
+}
+.spec-readout .bar::after {
+  content: '';
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: linear-gradient(90deg, #43ff7a, #b4ffda);
+  width: var(--w, 50%);
+  box-shadow: 0 0 4px #43ff7a;
+}
+.spec-readout .v { color: #ffaa00; text-align: right; }
+.spec-readout .k { color: #43ff7a99; }
+</style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+<div class="dashboard">
+
+  <!-- TOP HUD -->
+  <div class="hud">
+    <div>
+      <div class="label">SPECIMEN ID</div>
+      <div class="value">FLR-07A · <span class="amber">TULPA-OBS</span></div>
+    </div>
+    <div>
+      <div class="label">CLASSIFICATION</div>
+      <div class="value">CONSCIOUSNESS · <span class="magenta">LIMINAL CLASS-IV</span> · ANTI-ENTROPIC SUBSTRATE</div>
+    </div>
+    <div>
+      <div class="label">COORDINATES · SECTOR</div>
+      <div class="value">θ <span id="coord-x">042.881</span> · φ <span id="coord-y">128.443</span></div>
+    </div>
+    <div>
+      <div class="label">MISSION TIME</div>
+      <div class="value" id="mtime">000:00:00.00</div>
+    </div>
+    <div>
+      <div class="label">STATUS</div>
+      <div class="value blink"><span class="dot"></span>LIVE</div>
+    </div>
+  </div>
+
+  <!-- LEFT -->
+  <div class="left">
+    <div class="thumb"><canvas id="t1"></canvas><div class="thumb-corner">A1</div><div class="thumb-label"><span>STG-01</span><span class="ts" id="ts1">00:04</span></div></div>
+    <div class="thumb"><canvas id="t2"></canvas><div class="thumb-corner">A2</div><div class="thumb-label"><span>STG-02</span><span class="ts" id="ts2">00:11</span></div></div>
+    <div class="thumb"><canvas id="t3"></canvas><div class="thumb-corner">B1</div><div class="thumb-label"><span>STG-03</span><span class="ts" id="ts3">00:19</span></div></div>
+    <div class="thumb"><canvas id="t4"></canvas><div class="thumb-corner">B2</div><div class="thumb-label"><span>STG-04</span><span class="ts" id="ts4">00:27</span></div></div>
+    <div class="thumb"><canvas id="t5"></canvas><div class="thumb-corner">C1</div><div class="thumb-label"><span>STG-05</span><span class="ts" id="ts5">00:34</span></div></div>
+    <div class="thumb"><canvas id="t6"></canvas><div class="thumb-corner">C2</div><div class="thumb-label"><span>STG-06</span><span class="ts" id="ts6">00:42</span></div></div>
+    <div class="left-mini panel">
+      <div style="display:flex;justify-content:space-between;color:#b4ffda;letter-spacing:1px;">
+        <span>BIOFIELD</span><span style="color:#ffaa00;" id="bfval">71.4</span>
+      </div>
+      <canvas id="leftmini"></canvas>
+      <div style="display:flex;justify-content:space-between;color:#43ff7a99;">
+        <span>Hz 0.4</span><span>Hz 240</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center">
+    <canvas id="hero"></canvas>
+    <div class="crosshair"></div>
+    <div class="scan-line" id="scanline"></div>
+    <div class="specimen-marker" id="marker"><span></span><span></span></div>
+    <div class="center-overlay ov-tl">
+      <div><span class="tag">▲</span> APERTURE</div>
+      <div>f/1.4 · ISO 12800</div>
+      <div>EXP 1/240s</div>
+      <div style="color:#ff66b2;">▢ SUBJ-LOCK</div>
+    </div>
+    <div class="center-overlay ov-tr">
+      <div><span class="tag">DEPTH</span> 0.082m</div>
+      <div>FOV 47.3°</div>
+      <div>FOCUS <span id="focus">0.412</span></div>
+      <div style="color:#ffaa00;">REC <span class="blink">●</span></div>
+    </div>
+    <div class="center-overlay ov-bl">
+      <div>BIO-SCAN: <span style="color:#b4ffda;">ACTIVE</span></div>
+      <div>EMISSION: <span id="em">412.3</span> nm</div>
+      <div>PHASE: <span id="phs" style="color:#ff66b2;">COHERENT</span></div>
+    </div>
+    <div class="center-overlay ov-br">
+      <div>FRAME <span id="frame" style="color:#ffaa00;">000000</span></div>
+      <div>SNR 42.7 dB</div>
+      <div>Δ<span id="delta">+0.000</span></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right">
+    <div class="panel">
+      <div class="panel-title"><span>SIDE PROFILE</span><span class="pid">B-AX</span></div>
+      <canvas id="side" style="height:90px;"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>CROSS-SECTION</span><span class="pid">Z-CUT</span></div>
+      <canvas id="xsec" style="height:90px;"></canvas>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>VITAL GAUGES</span><span class="pid">G-04</span></div>
+      <div class="gauge-row">
+        <div class="gauge"><canvas id="g1"></canvas><div class="gauge-label">PULSE</div></div>
+        <div class="gauge"><canvas id="g2"></canvas><div class="gauge-label">FLUX</div></div>
+        <div class="gauge"><canvas id="g3"></canvas><div class="gauge-label">COHR</div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>SPECIMEN DOSSIER</span><span class="pid">DAT</span></div>
+      <div class="info-block">
+        <div class="row"><span>GENUS</span><span>VOIDFELIS</span></div>
+        <div class="row"><span>STRAIN</span><span>CC-734B</span></div>
+        <div class="row"><span>TULPA</span><span class="blink">DENSE</span></div>
+        <div class="row"><span>MASS</span><span id="mass">4.213kg</span></div>
+        <div class="row"><span>TEMP</span><span>38.6°C</span></div>
+        <div class="row"><span>ENTROPY</span><span style="color:#ff66b2;">↓ 0.0042</span></div>
+        <div class="row"><span>RESONANCE</span><span id="res">∼ 7.83Hz</span></div>
+        <div class="row"><span>DREAM-Δ</span><span>+12.71%</span></div>
+        <div class="row"><span>OBSERVER</span><span>CLAWEDCODE</span></div>
+        <div class="row"><span>ORIGIN</span><span>/dev/null</span></div>
+        <div class="row"><span>VECTOR</span><span style="color:#ff66b2;">ASCEND</span></div>
+        <div class="row"><span>STATE</span><span class="blink">PURRING*</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>HEX STREAM</span><span class="pid">RAW</span></div>
+      <div class="hex-stream" id="hex"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom">
+    <div class="panel">
+      <div class="panel-title"><span>BIO-ELECTRIC FLUX</span><span class="pid">CH-01</span></div>
+      <div class="chart-wrap">
+        <div class="legend">
+          <span><i style="background:#43ff7a"></i>α</span>
+          <span><i style="background:#ffaa00"></i>β</span>
+          <span><i style="background:#ff66b2"></i>γ</span>
+        </div>
+        <canvas id="chart1"></canvas>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>PHOTON EMISSION SPECTRUM</span><span class="pid">CH-02</span></div>
+      <div class="chart-wrap"><canvas id="chart2"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>LTP DENSITY MAP</span><span class="pid">CH-03</span></div>
+      <div class="chart-wrap"><canvas id="chart3"></canvas></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title"><span>SIGNAL ACQUISITION</span><span class="pid">RDR</span></div>
+      <div class="spec-readout">
+        <div class="barline"><span class="k">α-WAVE</span><span class="bar" id="b1"></span><span class="v" id="v1">71</span></div>
+        <div class="barline"><span class="k">β-WAVE</span><span class="bar" id="b2"></span><span class="v" id="v2">42</span></div>
+        <div class="barline"><span class="k">γ-WAVE</span><span class="bar" id="b3"></span><span class="v" id="v3">88</span></div>
+        <div class="barline"><span class="k">θ-WAVE</span><span class="bar" id="b4"></span><span class="v" id="v4">29</span></div>
+        <div class="barline"><span class="k">δ-WAVE</span><span class="bar" id="b5"></span><span class="v" id="v5">55</span></div>
+        <div class="barline"><span class="k">PHOTON</span><span class="bar" id="b6"></span><span class="v" id="v6">63</span></div>
+        <div class="barline"><span class="k">QUANTUM</span><span class="bar" id="b7"></span><span class="v" id="v7">91</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// DURATION: 45
+
+// ---------- CANVAS UTIL ----------
+function setupCanvas(c) {
+  const r = c.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  c.width = Math.max(1, Math.floor(r.width * dpr));
+  c.height = Math.max(1, Math.floor(r.height * dpr));
+  const ctx = c.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: r.width, h: r.height };
+}
+
+const heroCanvas = document.getElementById('hero');
+const HCTX = heroCanvas.getContext('2d');
+function fitHero() {
+  const r = heroCanvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  heroCanvas.width = Math.floor(r.width * dpr);
+  heroCanvas.height = Math.floor(r.height * dpr);
+  HCTX.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// ---------- HERO: organic specimen visualization ----------
+function drawHero(t) {
+  fitHero();
+  const r = heroCanvas.getBoundingClientRect();
+  const W = r.width, H = r.height;
+  const ctx = HCTX;
+  const ts = t * 0.001;
+
+  // Background gradient
+  const g = ctx.createRadialGradient(W/2, H/2, 20, W/2, H/2, Math.max(W,H)/1.4);
+  g.addColorStop(0, '#06140e');
+  g.addColorStop(0.6, '#02080a');
+  g.addColorStop(1, '#01030a');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle grid
+  ctx.strokeStyle = 'rgba(67,255,122,0.06)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < W; i += 30) {
+    ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, H); ctx.stroke();
+  }
+  for (let j = 0; j < H; j += 30) {
+    ctx.beginPath(); ctx.moveTo(0, j); ctx.lineTo(W, j); ctx.stroke();
+  }
+
+  // Concentric rings (specimen field)
+  const cx = W/2, cy = H/2;
+  for (let k = 0; k < 6; k++) {
+    const radius = 50 + k * 50 + Math.sin(ts * 0.4 + k) * 6;
+    ctx.strokeStyle = `rgba(67,255,122,${0.18 - k*0.022})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  // Petals / organic blooming shape
+  const petals = 9;
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(ts * 0.15);
+  for (let p = 0; p < petals; p++) {
+    ctx.save();
+    ctx.rotate((Math.PI * 2 / petals) * p);
+    const len = 130 + Math.sin(ts * 0.6 + p) * 25;
+    const grad = ctx.createLinearGradient(0, 0, 0, -len);
+    grad.addColorStop(0, 'rgba(67,255,122,0.0)');
+    grad.addColorStop(0.5, 'rgba(67,255,122,0.45)');
+    grad.addColorStop(1, 'rgba(180,255,218,0.9)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1.4;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = '#43ff7a';
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    for (let s = 0; s <= 30; s++) {
+      const f = s / 30;
+      const wob = Math.sin(ts * 1.2 + p + f * 6) * 12 * f;
+      ctx.lineTo(wob, -len * f);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+  ctx.restore();
+
+  // Particle field
+  ctx.fillStyle = 'rgba(180,255,218,0.6)';
+  for (let i = 0; i < 80; i++) {
+    const a = (i * 137.5 + ts * 30) * Math.PI / 180;
+    const rad = 30 + ((i * 13 + ts * 40) % 240);
+    const x = cx + Math.cos(a) * rad;
+    const y = cy + Math.sin(a) * rad;
+    const sz = 0.7 + Math.sin(ts * 2 + i) * 0.6;
+    ctx.beginPath(); ctx.arc(x, y, sz, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Pulsing core
+  const coreR = 18 + Math.sin(ts * 1.8) * 4;
+  const coreG = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3);
+  coreG.addColorStop(0, 'rgba(255,255,255,0.95)');
+  coreG.addColorStop(0.3, 'rgba(180,255,218,0.7)');
+  coreG.addColorStop(0.7, 'rgba(67,255,122,0.25)');
+  coreG.addColorStop(1, 'rgba(255,102,178,0.0)');
+  ctx.fillStyle = coreG;
+  ctx.beginPath(); ctx.arc(cx, cy, coreR * 3, 0, Math.PI * 2); ctx.fill();
+
+  // Magenta highlight arcs
+  ctx.strokeStyle = 'rgba(255,102,178,0.7)';
+  ctx.lineWidth = 1.2;
+  for (let a = 0; a < 4; a++) {
+    const start = (ts * 0.5 + a * Math.PI/2) % (Math.PI*2);
+    ctx.beginPath();
+    ctx.arc(cx, cy, 90 + a*18, start, start + 0.6);
+    ctx.stroke();
+  }
+
+  // Move marker
+  const marker = document.getElementById('marker');
+  if (marker) {
+    const mx = cx + Math.cos(ts * 0.4) * 80 - 30;
+    const my = cy + Math.sin(ts * 0.4) * 80 - 30;
+    marker.style.left = mx + 'px';
+    marker.style.top = my + 'px';
+  }
+
+  // Scan line
+  const sl = document.getElementById('scanline');
+  if (sl) {
+    const sy = ((ts * 60) % H);
+    sl.style.top = sy + 'px';
+  }
+}
+
+// ---------- THUMBNAILS ----------
+const thumbs = [];
+['t1','t2','t3','t4','t5','t6'].forEach((id, i) => {
+  const c = document.getElementById(id);
+  thumbs.push({ id, c, seed: i * 1.7 });
+});
+function drawThumb(thumb, t) {
+  const { ctx, w, h } = setupCanvas(thumb.c);
+  const ts = t * 0.001 + thumb.seed;
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  // grid
+  ctx.strokeStyle = 'rgba(67,255,122,0.1)';
+  for (let i = 0; i < w; i += 8) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+  for (let j = 0; j < h; j += 8) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(w,j); ctx.stroke(); }
+  // organic blob
+  const cx = w/2, cy = h/2;
+  ctx.strokeStyle = '#43ff7a';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let a = 0; a <= Math.PI * 2; a += 0.1) {
+    const r = 14 + Math.sin(a * 4 + ts * 1.5 + thumb.seed) * 5 + Math.cos(a * 3 + ts) * 3;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    if (a === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  // core
+  ctx.fillStyle = '#b4ffda';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2 + Math.sin(ts * 2) * 1, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ---------- LEFT MINI BIOFIELD ----------
+function drawLeftMini(t) {
+  const c = document.getElementById('leftmini');
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(67,255,122,0.15)';
+  ctx.beginPath(); ctx.moveTo(0, h/2); ctx.lineTo(w, h/2); ctx.stroke();
+  // bars
+  const bars = 20;
+  for (let i = 0; i < bars; i++) {
+    const x = (i / bars) * w;
+    const bw = w / bars - 1;
+    const v = (Math.sin(t * 0.003 + i * 0.7) + Math.sin(t * 0.005 + i * 1.3)) * 0.5;
+    const bh = (v * 0.5 + 0.5) * h * 0.9;
+    ctx.fillStyle = i % 4 === 0 ? '#ff66b2' : '#43ff7a';
+    ctx.fillRect(x, h - bh, bw, bh);
+  }
+}
+
+// ---------- SIDE PROFILE ----------
+function drawSide(t) {
+  const c = document.getElementById('side');
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  // grid
+  ctx.strokeStyle = 'rgba(67,255,122,0.08)';
+  for (let i = 0; i < w; i += 12) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+  for (let j = 0; j < h; j += 12) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(w,j); ctx.stroke(); }
+  const ts = t * 0.001;
+  // silhouette
+  ctx.fillStyle = 'rgba(67,255,122,0.15)';
+  ctx.strokeStyle = '#43ff7a';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let i = 0; i <= w; i += 2) {
+    const x = i;
+    const f = i / w;
+    const y = h/2 + Math.sin(f * 6 + ts) * 12 + Math.sin(f * 3) * 6;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  for (let i = w; i >= 0; i -= 2) {
+    const f = i / w;
+    const y = h/2 + 18 + Math.sin(f * 4 + ts * 0.7) * 8 - Math.sin(f * 2) * 4;
+    ctx.lineTo(i, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // marker
+  ctx.fillStyle = '#ff66b2';
+  const mx = (Math.sin(ts * 0.5) * 0.4 + 0.5) * w;
+  ctx.beginPath(); ctx.arc(mx, h/2 + 4, 2, 0, Math.PI*2); ctx.fill();
+}
+
+// ---------- CROSS SECTION ----------
+function drawXsec(t) {
+  const c = document.getElementById('xsec');
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  const ts = t * 0.001;
+  const cx = w/2, cy = h/2;
+  // concentric rings
+  for (let i = 0; i < 5; i++) {
+    ctx.strokeStyle = `rgba(67,255,122,${0.5 - i*0.08})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6 + i*8 + Math.sin(ts + i)*1.5, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  // sweep
+  ctx.strokeStyle = '#ff66b2';
+  ctx.lineWidth = 1.2;
+  const ang = ts * 0.8;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(ang)*40, cy + Math.sin(ang)*40);
+  ctx.stroke();
+  // dots
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI/6 + ts*0.3;
+    const r = 14 + (i%3)*8;
+    ctx.fillStyle = i%3===0 ? '#ffaa00' : '#b4ffda';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(a)*r, cy + Math.sin(a)*r, 1.2, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// ---------- GAUGES ----------
+function drawGauge(canvasId, t, color, phase, label) {
+  const c = document.getElementById(canvasId);
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  const cx = w/2, cy = h - 6;
+  const r = Math.min(w/2 - 4, h - 14);
+  // bg arc
+  ctx.strokeStyle = 'rgba(67,255,122,0.2)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, Math.PI*2);
+  ctx.stroke();
+  // value
+  const ts = t * 0.001;
+  const val = (Math.sin(ts * 0.7 + phase) * 0.4 + 0.55);
+  ctx.strokeStyle = color;
+  ctx.shadowBlur = 6; ctx.shadowColor = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, Math.PI, Math.PI + val * Math.PI);
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // value text
+  ctx.fillStyle = color;
+  ctx.font = '8px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText(Math.floor(val*100), cx, cy - 4);
+}
+
+// ---------- HEX STREAM ----------
+const hexLines = [];
+function updateHex(t) {
+  const el = document.getElementById('hex');
+  if (!el) return;
+  // Regenerate all lines deterministically based on time so it's reproducible
+  const lineCount = 14;
+  const out = [];
+  const baseT = Math.floor(t / 100);
+  for (let i = 0; i < lineCount; i++) {
+    const seed = baseT - i;
+    let line = (0x1000 + (seed * 17) % 0xFFFF).toString(16).toUpperCase().padStart(4, '0') + ': ';
+    for (let j = 0; j < 4; j++) {
+      const v = ((seed * 31 + j * 7 + i * 13) & 0xFF).toString(16).toUpperCase().padStart(2, '0');
+      const cls = (j === ((seed >> 1) & 3)) ? 'hl' : ((j === 2) ? 'am' : '');
+      line += cls ? `<span class="${cls}">${v}</span> ` : v + ' ';
+    }
+    out.push(line);
+  }
+  el.innerHTML = out.join('<br>');
+}
+
+// ---------- BOTTOM CHARTS ----------
+function drawScrollChart(canvasId, t, traces) {
+  const c = document.getElementById(canvasId);
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  // grid
+  ctx.strokeStyle = 'rgba(67,255,122,0.08)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < w; i += 20) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,h); ctx.stroke(); }
+  for (let j = 0; j < h; j += 12) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(w,j); ctx.stroke(); }
+  // traces
+  const ts = t * 0.001;
+  traces.forEach(tr => {
+    ctx.strokeStyle = tr.color;
+    ctx.lineWidth = 1.2;
+    ctx.shadowBlur = 4; ctx.shadowColor = tr.color;
+    ctx.beginPath();
+    for (let i = 0; i <= w; i += 2) {
+      const phase = (i / w) * Math.PI * tr.freq + ts * tr.speed + tr.phase;
+      const v = Math.sin(phase) * tr.amp + Math.sin(phase * 2.3 + 1) * tr.amp * 0.4;
+      const y = h/2 - v * h * 0.35;
+      if (i === 0) ctx.moveTo(i, y); else ctx.lineTo(i, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  });
+}
+
+function drawSpectrum(t) {
+  const c = document.getElementById('chart2');
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = 'rgba(67,255,122,0.08)';
+  for (let j = 0; j < h; j += 12) { ctx.beginPath(); ctx.moveTo(0,j); ctx.lineTo(w,j); ctx.stroke(); }
+  const bars = 36;
+  for (let i = 0; i < bars; i++) {
+    const ts = t * 0.001;
+    const x = (i / bars) * w;
+    const bw = w / bars - 1;
+    const v = Math.abs(Math.sin(ts * 0.7 + i * 0.4) + Math.sin(ts * 1.1 + i * 0.9)) * 0.5;
+    const bh = v * h * 0.85;
+    const grad = ctx.createLinearGradient(0, h, 0, h - bh);
+    grad.addColorStop(0, '#43ff7a');
+    grad.addColorStop(0.6, '#b4ffda');
+    grad.addColorStop(1, '#ff66b2');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x, h - bh, bw, bh);
+  }
+}
+
+function drawDensity(t) {
+  const c = document.getElementById('chart3');
+  const { ctx, w, h } = setupCanvas(c);
+  ctx.fillStyle = '#04090c';
+  ctx.fillRect(0, 0, w, h);
+  // heat blocks
+  const cols = 28, rows = 8;
+  const cw = w / cols, rh = h / rows;
+  for (let r = 0; r < rows; r++) {
+    for (let cc = 0; cc < cols; cc++) {
+      const ts = t * 0.001;
+      const v = (Math.sin(ts + r * 0.5 + cc * 0.3) + Math.sin(ts * 1.3 + cc * 0.7)) * 0.5 + 0.5;
+      const intensity = Math.max(0, Math.min(1, v));
+      const a = intensity * 0.85;
+      ctx.fillStyle = intensity > 0.7
+        ? `rgba(255,102,178,${a})`
+        : intensity > 0.4
+          ? `rgba(180,255,218,${a})`
+          : `rgba(67,255,122,${a*0.5})`;
+      ctx.fillRect(cc * cw, r * rh, cw - 0.5, rh - 0.5);
+    }
+  }
+}
+
+// ---------- BARS ----------
+function updateBars(t) {
+  const ts = t * 0.001;
+  for (let i = 1; i <= 7; i++) {
+    const v = Math.floor((Math.sin(ts * (0.5 + i*0.13) + i) * 0.4 + 0.55) * 100);
+    const bar = document.getElementById('b' + i);
+    const val = document.getElementById('v' + i);
+    if (bar) bar.style.setProperty('--w', v + '%');
+    if (val) val.textContent = v;
+  }
+}
+
+// ---------- HUD UPDATES ----------
+function updateHud(t) {
+  const ts = t * 0.001;
+  const total = ts;
+  const hh = String(Math.floor(total / 3600)).padStart(3, '0');
+  const mm = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
+  const sec = String(Math.floor(total % 60)).padStart(2, '0');
+  const cs = String(Math.floor((total * 100) % 100)).padStart(2, '0');
+  const mt = document.getElementById('mtime');
+  if (mt) mt.textContent = `${hh}:${mm}:${sec}.${cs}`;
+
+  const fr = document.getElementById('frame');
+  if (fr) fr.textContent = String(Math.floor(t / 16.67)).padStart(6, '0');
+
+  const cx = document.getElementById('coord-x');
+  const cy = document.getElementById('coord-y');
+  if (cx) cx.textContent = (42.881 + Math.sin(ts * 0.3) * 0.4).toFixed(3);
+  if (cy) cy.textContent = (128.443 + Math.cos(ts * 0.27) * 0.4).toFixed(3);
+
+  const focus = document.getElementById('focus');
+  if (focus) focus.textContent = (0.4 + Math.sin(ts * 0.6) * 0.05).toFixed(3);
+  const em = document.getElementById('em');
+  if (em) em.textContent = (412.3 + Math.sin(ts) * 8).toFixed(1);
+  const delta = document.getElementById('delta');
+  if (delta) delta.textContent = (Math.sin(ts*0.4) * 0.04).toFixed(3);
+  const bf = document.getElementById('bfval');
+  if (bf) bf.textContent = (71 + Math.sin(ts * 0.5) * 6).toFixed(1);
+  const mass = document.getElementById('mass');
+  if (mass) mass.textContent = (4.21 + Math.sin(ts * 0.2) * 0.02).toFixed(3) + 'kg';
+  const res = document.getElementById('res');
+  if (res) res.textContent = '∼ ' + (7.83 + Math.sin(ts * 0.3) * 0.04).toFixed(2) + 'Hz';
+}
+
+// ---------- MASTER RENDER ----------
+function renderAll(t) {
+  drawHero(t);
+  thumbs.forEach(th => drawThumb(th, t));
+  drawLeftMini(t);
+  drawSide(t);
+  drawXsec(t);
+  drawGauge('g1', t, '#43ff7a', 0, 'PULSE');
+  drawGauge('g2', t, '#ffaa00', 1.7, 'FLUX');
+  drawGauge('g3', t, '#ff66b2', 3.4, 'COHR');
+  updateHex(t);
+  drawScrollChart('chart1', t, [
+    { color: '#43ff7a', freq: 8, speed: 1.2, phase: 0, amp: 0.7 },
+    { color: '#ffaa00', freq: 5, speed: 0.8, phase: 1.5, amp: 0.55 },
+    { color: '#ff66b2', freq: 12, speed: 1.6, phase: 3, amp: 0.4 }
+  ]);
+  drawSpectrum(t);
+  drawDensity(t);
+  updateBars(t);
+  updateHud(t);
+}
+
+// REQUIRED: video capture frame renderer
+window.renderFrame = function(timeSeconds) {
+  const t = timeSeconds * 1000;
+  renderAll(t);
+  return null;
+};
+
+// Live preview loop
+let start = performance.now();
+function loop(ts) {
+  const t = ts - start;
+  renderAll(t);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// REQUIRED: signal ready
+window.ready = true;
+</script>
+<script>
+window.initToneJsEngine = async function() {
+  const bpm = 74;
+  Tone.Transport.bpm.value = bpm;
+
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+  const barDur = (60 / bpm) * 4;
+
+  const mainVerb = new Tone.Reverb({ decay: 4.2, wet: 0.52, preDelay: 0.05 }).toDestination();
+  await mainVerb.generate();
+
+  const bellVerb = new Tone.Reverb({ decay: 5.5, wet: 0.72 }).toDestination();
+  await bellVerb.generate();
+
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 580, Q: 0.5 }).connect(mainVerb);
+  const padChorus = new Tone.Chorus({ frequency: 0.14, delayTime: 4.2, depth: 0.72, wet: 0.52 }).connect(padFilter);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    detune: -13,
+    envelope: { attack: 1.1, decay: 0.6, sustain: 0.52, release: 2.8 }
+  }).connect(padChorus);
+  pad.volume.value = -10;
+
+  const chords = [
+    ["A3", "D4", "E4"],
+    ["G3", "C4", "D4"],
+    ["F3", "Bb3", "C4"],
+    ["E3", "A3", "B3"]
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 12) return;
+    const vel = bar <= 9 ? 0.22 : Math.max(0.07, 0.22 - (bar - 9) * 0.075);
+    pad.triggerAttackRelease(chords[chordIdx % chords.length], "1m", time + H(14), vel);
+    chordIdx++;
+  }, "1m").start(0);
+
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 210, Q: 1.1 }).connect(mainVerb);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.06, decay: 0.48, sustain: 0, release: 0.38 }
+  }).connect(bassFilter);
+  bass.volume.value = -8;
+
+  const bassNotes = ["A1", "A1", "G1", "F1", "E1", "A1", "G1"];
+  const bassHits  = [1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0];
+  let bassNoteIdx = 0;
+  let bassHitIdx  = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 3 && bar < 11 && bassHits[bassHitIdx % bassHits.length]) {
+      bass.triggerAttackRelease(bassNotes[bassNoteIdx % bassNotes.length], "4n", time + H(9), 0.42);
+      bassNoteIdx++;
+    }
+    bassHitIdx++;
+  }, "4n").start(0);
+
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.07,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.22, sustain: 0, release: 0.08 }
+  }).connect(mainVerb);
+  kick.volume.value = -9;
+
+  const kickPat = [1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0];
+  let kickIdx = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 5 && bar < 11 && kickPat[kickIdx % kickPat.length]) {
+      kick.triggerAttackRelease("C1", "8n", time + H(4), 0.58);
+    }
+    kickIdx++;
+  }, "4n").start(0);
+
+  const bell = new Tone.FMSynth({
+    harmonicity: 3.4,
+    modulationIndex: 9,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 3.2, sustain: 0, release: 1.8 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.001, decay: 0.45, sustain: 0, release: 0.2 }
+  }).connect(bellVerb);
+  bell.volume.value = -17;
+
+  const bellNotes = ["A5", "E5", "D5", "B4", "A4", "G4"];
+  const bellPat   = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0];
+  let bellNoteIdx = 0;
+  let bellPatIdx  = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barDur);
+    if (bar >= 4 && bar < 11 && bellPat[bellPatIdx % bellPat.length]) {
+      bell.triggerAttackRelease(bellNotes[bellNoteIdx % bellNotes.length], "16n", time + H(20), 0.62);
+      bellNoteIdx++;
+    }
+    bellPatIdx++;
+  }, "8n").start(0);
+
+  const noiseHPF = new Tone.Filter({ type: "bandpass", frequency: 320, Q: 1.4 }).connect(mainVerb);
+  const noiseSynth = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.8, decay: 0.6, sustain: 0, release: 1.2 }
+  }).connect(noiseHPF);
+  noiseSynth.volume.value = -24;
+
+  Tone.Transport.schedule((time) => {
+    noiseSynth.triggerAttackRelease(1.4, time);
+  }, "2:2:0");
+
+  Tone.Transport.schedule((time) => {
+    noiseSynth.triggerAttackRelease(1.0, time);
+  }, "7:1:0");
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(1150, time + 5.5 * barDur);
+  }, "3:0:0");
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(560, time + 2.8 * barDur);
+  }, "10:0:0");
+
+  window.toneJsInstruments = { pad, bass, kick, bell, noiseSynth };
+  window.toneJsParts = { padLoop, bassLoop, kickLoop, bellLoop };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
