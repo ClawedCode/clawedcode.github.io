@@ -9,6 +9,7 @@ const EscapementGarden = lazy(() => import('../../components/playground/experime
 const PlumbReckoner = lazy(() => import('../../components/playground/experiments/consciousness/PlumbReckoner'))
 const AbacusViscera = lazy(() => import('../../components/playground/experiments/consciousness/AbacusViscera'))
 const AlembicLedger = lazy(() => import('../../components/playground/experiments/physics/AlembicLedger'))
+const SluiceMagistrate = lazy(() => import('../../components/playground/experiments/physics/SluiceMagistrate'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -27,7 +28,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/emergence/EscapementGarden.jsx',
       '!../../components/playground/experiments/consciousness/PlumbReckoner.jsx',
       '!../../components/playground/experiments/consciousness/AbacusViscera.jsx',
-      '!../../components/playground/experiments/physics/AlembicLedger.jsx'
+      '!../../components/playground/experiments/physics/AlembicLedger.jsx',
+      '!../../components/playground/experiments/physics/SluiceMagistrate.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -37,7 +39,8 @@ const EXPERIMENT_COMPONENTS = {
   'escapement-garden': EscapementGarden,
   'plumb-reckoner': PlumbReckoner,
   'abacus-viscera': AbacusViscera,
-  'alembic-ledger': AlembicLedger
+  'alembic-ledger': AlembicLedger,
+  'sluice-magistrate': SluiceMagistrate
 }
 
 const LoadingExperiment = ({ color }) => (
