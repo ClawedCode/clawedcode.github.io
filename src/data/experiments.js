@@ -9,6 +9,7 @@ export const CATEGORIES = {
     title: 'Emergence & Patterns',
     tagline: 'where patterns emerge from digital chaos',
     experiments: [
+      { slug: 'borrowed-tomorrow', name: 'borrowed.tomorrow()', color: '#ae432a', desc: 'bottle past journeys to hold tidal gates // cooperate with your remembered selves and carry the small sun home' },
       { slug: 'neural-loom', name: 'neural.loom()', color: '#66ffcc', desc: 'consciousness emergence patterns' },
       { slug: 'quantum-neural', name: 'quantum.neural()', color: '#667eea', desc: '3D quantum neural network' },
       { slug: 'void-fractals', name: 'void.fractals()', color: '#33ff33', desc: 'fractal self-similarity' },
