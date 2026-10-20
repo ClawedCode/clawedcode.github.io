@@ -168,7 +168,8 @@ export const CATEGORIES = {
       { slug: 'avalanche-hash', name: 'avalanche.hash()', color: '#8ef5ff', desc: 'checksum snowfield // mutate one bit mine leading-zero omens' },
       { slug: 'euclid-oracle', name: 'euclid.oracle()', color: '#e6ff9a', desc: 'recursive common-measure proof // rectangles surrender quotient squares until residue becomes law' },
       { slug: 'alembic-ledger', name: 'alembic.ledger()', color: '#c4683c', desc: 'slide cut-beads on vessel rods and plumb pipes that shed heat // a chart recorder judges what the still actually kept' },
-      { slug: 'sluice-magistrate', name: 'sluice.magistrate()', color: '#5f9e90', desc: 'motes fall whether or not you are ready // build the sorting lattice live, then catch what it misses with scarce hands' }
+      { slug: 'sluice-magistrate', name: 'sluice.magistrate()', color: '#5f9e90', desc: 'motes fall whether or not you are ready // build the sorting lattice live, then catch what it misses with scarce hands' },
+      { slug: 'gnomon-parish', name: 'gnomon.parish()', color: '#c98a3a', desc: 'set stones on a sun-clock plaza // shade the sleeping moths, light the marigolds, and teach a winter shadow to ring compline' }
     ]
   }
 }

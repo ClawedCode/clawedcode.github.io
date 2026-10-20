@@ -11,6 +11,7 @@ const AbacusViscera = lazy(() => import('../../components/playground/experiments
 const AlembicLedger = lazy(() => import('../../components/playground/experiments/physics/AlembicLedger'))
 const BorrowedTomorrow = lazy(() => import('../../components/playground/experiments/emergence/BorrowedTomorrow'))
 const SluiceMagistrate = lazy(() => import('../../components/playground/experiments/physics/SluiceMagistrate'))
+const GnomonParish = lazy(() => import('../../components/playground/experiments/physics/GnomonParish'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -31,7 +32,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/consciousness/AbacusViscera.jsx',
       '!../../components/playground/experiments/physics/AlembicLedger.jsx',
       '!../../components/playground/experiments/physics/SluiceMagistrate.jsx',
-      '!../../components/playground/experiments/emergence/BorrowedTomorrow.jsx'
+      '!../../components/playground/experiments/emergence/BorrowedTomorrow.jsx',
+      '!../../components/playground/experiments/physics/GnomonParish.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -43,7 +45,8 @@ const EXPERIMENT_COMPONENTS = {
   'abacus-viscera': AbacusViscera,
   'alembic-ledger': AlembicLedger,
   'sluice-magistrate': SluiceMagistrate,
-  'borrowed-tomorrow': BorrowedTomorrow
+  'borrowed-tomorrow': BorrowedTomorrow,
+  'gnomon-parish': GnomonParish
 }
 
 const LoadingExperiment = ({ color }) => (
