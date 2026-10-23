@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+let seed = 73841;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05060a);
+scene.fog = new THREE.FogExp2(0x05060a, 0.07);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0, 5);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.85;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.35, 0.5, 0.55));
+
+const geo = new THREE.IcosahedronGeometry(1.4, 64);
+
+const uniforms = {
+  uTime:        { value: 0 },
+  uBass:        { value: 0 },
+  uMid:         { value: 0 },
+  uTreble:      { value: 0 },
+  uPointer:     { value: new THREE.Vector2(0, 0) },
+  uColorA:      { value: new THREE.Color(0x0a1a4a) },
+  uColorB:      { value: new THREE.Color(0x4a9bbf) },
+  uColorC:      { value: new THREE.Color(0xb89878) },
+  uDisplaceAmp: { value: 0.32 },
+  uDisplaceFrq: { value: 1.7 },
+  uFresnelPow:  { value: 2.8 },
+  uIridShift:   { value: 0.6 }
+};
+
+const vertexShader = `
+uniform float uTime;
+uniform float uBass;
+uniform float uMid;
+uniform vec2  uPointer;
+uniform float uDisplaceAmp;
+uniform float uDisplaceFrq;
+
+varying vec3 vNormal;
+varying vec3 vWorldPos;
+varying vec3 vViewDir;
+varying float vDisplace;
+
+vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+float snoise(vec3 v) {
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i  = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(
+            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+          + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+          + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ *ns.x + ns.yyyy;
+  vec4 y = y_ *ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+
+float fbm(vec3 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 5; i++) {
+    v += a * snoise(p);
+    p *= 2.02;
+    a *= 0.5;
+  }
+  return v;
+}
+
+float displaceFn(vec3 p, float beat) {
+  vec3 noisePos = p * uDisplaceFrq + vec3(uPointer * 1.5, uTime * 0.22);
+  float n = fbm(noisePos);
+  return n * uDisplaceAmp * beat;
+}
+
+void main() {
+  vec3 p = position;
+  float beat = 1.0 + uBass * 0.55;
+  float disp = displaceFn(p, beat);
+  disp += sin(p.x * 18.0 + uTime * 2.7) * 0.014 * uMid;
+
+  vec3 displaced = p + normal * disp;
+
+  float eps = 0.012;
+  vec3 t1 = normalize(p + vec3(eps, 0.0, 0.0)) * length(p);
+  vec3 t2 = normalize(p + vec3(0.0, eps, 0.0)) * length(p);
+  vec3 d1 = t1 + normalize(t1) * displaceFn(t1, beat);
+  vec3 d2 = t2 + normalize(t2) * displaceFn(t2, beat);
+  vec3 newNormal = normalize(cross(d1 - displaced, d2 - displaced));
+
+  vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
+  vWorldPos = worldPos.xyz;
+  vNormal   = normalize(mat3(modelMatrix) * newNormal);
+  vViewDir  = normalize(cameraPosition - vWorldPos);
+  vDisplace = disp;
+
+  gl_Position = projectionMatrix * viewMatrix * worldPos;
+}
+`;
+
+const fragmentShader = `
+uniform float uTime;
+uniform float uTreble;
+uniform vec3  uColorA;
+uniform vec3  uColorB;
+uniform vec3  uColorC;
+uniform float uFresnelPow;
+uniform float uIridShift;
+
+varying vec3 vNormal;
+varying vec3 vViewDir;
+varying float vDisplace;
+
+void main() {
+  vec3 N = normalize(vNormal);
+  vec3 V = normalize(vViewDir);
+  float fres = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), uFresnelPow);
+  float t = fract(dot(N, V) * uIridShift + vDisplace * 1.4 + uTime * 0.05);
+  vec3 irid = mix(uColorA, uColorB, smoothstep(0.0, 0.5, t));
+  irid      = mix(irid,    uColorC, smoothstep(0.5, 1.0, t));
+  float sparkle = uTreble * pow(fres, 4.0) * 0.45;
+  vec3 color = irid * (0.28 + fres * 0.65) + sparkle;
+  gl_FragColor = vec4(color, 1.0);
+}
+`;
+
+const mat = new THREE.ShaderMaterial({ uniforms, vertexShader, fragmentShader, side: THREE.FrontSide });
+const hero = new THREE.Mesh(geo, mat);
+scene.add(hero);
+
+const dustGeo = new THREE.BufferGeometry();
+const dustPos = new Float32Array(220 * 3);
+for (let i = 0; i < 220; i++) {
+  dustPos[i*3]   = (random() - 0.5) * 14;
+  dustPos[i*3+1] = (random() - 0.5) * 10;
+  dustPos[i*3+2] = (random() - 0.5) * 14;
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({
+  size: 0.022, color: 0xb89878, transparent: true, opacity: 0.35,
+  blending: THREE.AdditiveBlending, depthWrite: false
+}));
+scene.add(dust);
+
+const rim = new THREE.PointLight(0x4a9bbf, 1.1, 22);
+rim.position.set(-3, 2, -4);
+scene.add(rim);
+
+const ambient = new THREE.AmbientLight(0x0a1a4a, 0.15);
+scene.add(ambient);
+
+let analyser = null;
+
+function sampleBand(values, lo, hi) {
+  let sum = 0;
+  for (let i = lo; i < hi; i++) sum += Math.max(0, (values[i] + 100) / 100);
+  return Math.min(1, sum / (hi - lo));
+}
+
+function updatePointer(time) {
+  uniforms.uPointer.value.set(
+    Math.sin(time * 0.21) * 0.7 + Math.sin(time * 0.07) * 0.3,
+    Math.cos(time * 0.17) * 0.6 + Math.sin(time * 0.11) * 0.4
+  );
+}
+
+function updateAudio() {
+  if (!analyser && window.toneAnalyser) analyser = window.toneAnalyser;
+  if (!analyser) {
+    const t = uniforms.uTime.value;
+    uniforms.uBass.value   = 0.32 + 0.28 * Math.sin(t * 0.55);
+    uniforms.uMid.value    = 0.30 + 0.30 * Math.sin(t * 1.3 + 1.7);
+    uniforms.uTreble.value = 0.28 + 0.28 * Math.sin(t * 2.7 + 3.3);
+    return;
+  }
+  const v = analyser.getValue();
+  uniforms.uBass.value   = sampleBand(v, 0, 6);
+  uniforms.uMid.value    = sampleBand(v, 6, 24);
+  uniforms.uTreble.value = sampleBand(v, 24, 64);
+}
+
+function updateCamera(time, duration) {
+  const progress = (time % duration) / duration;
+  const angle = progress * Math.PI * 2;
+  const r = 5.0 - 0.55 * Math.sin(progress * Math.PI);
+  camera.position.x = Math.cos(angle) * r;
+  camera.position.z = Math.sin(angle) * r;
+  camera.position.y = 0.4 * Math.sin(progress * Math.PI * 2);
+  camera.lookAt(0, 0, 0);
+}
+
+let t0 = null;
+let isReady = false;
+function animate(now) {
+  if (t0 === null) t0 = now;
+  const time = (now - t0) / 1000;
+  uniforms.uTime.value = time;
+
+  updatePointer(time);
+  updateAudio();
+  updateCamera(time, 60);
+
+  hero.rotation.y = time * 0.08;
+  hero.rotation.x = Math.sin(time * 0.13) * 0.15;
+  dust.rotation.y = time * 0.015;
+
+  composer.render();
+
+  if (!isReady) {
+    window.ready = true;
+    isReady = true;
+  }
+
+  requestAnimationFrame(animate);
+}
+
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  const bpm = 64;
+  Tone.Transport.bpm.value = bpm;
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  const masterReverb = new Tone.Reverb({ decay: 6.5, wet: 0.42 }).toDestination();
+  await masterReverb.generate();
+
+  const masterComp = new Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.01, release: 0.2 }).connect(masterReverb);
+
+  // === SUB PULSE (heartbeat) ===
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 220, Q: 0.7 }).connect(masterComp);
+  const sub = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 0.7, sustain: 0, release: 0.4 }
+  }).connect(subFilter);
+  sub.volume.value = -4;
+
+  const subLoop = new Tone.Loop((time) => {
+    sub.triggerAttackRelease("A1", "2n", time + H(4), 0.85);
+  }, "2n").start(0);
+
+  // === DEEP PAD (deep navy bed) ===
+  const padHPF = new Tone.Filter({ type: "highpass", frequency: 120 }).connect(masterComp);
+  const padChorus = new Tone.Chorus({ frequency: 0.18, delayTime: 4.5, depth: 0.6, wet: 0.5 }).connect(padHPF);
+  padChorus.start();
+  const padDelay = new Tone.FeedbackDelay({ delayTime: "2n", feedback: 0.35, wet: 0.25 }).connect(padChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -6,
+    envelope: { attack: 2.4, decay: 1.0, sustain: 0.7, release: 4.0 }
+  }).connect(padDelay);
+  pad.volume.value = -14;
+
+  const chordA = ["A2", "E3", "G3", "B3"];
+  const chordB = ["F2", "C3", "F3", "A3"];
+  const chordC = ["D2", "A2", "D3", "F3"];
+  const padChords = [chordA, chordB, chordC, chordA];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const v = bar < 2 ? 0.18 : bar > 14 ? 0.18 : 0.28;
+    pad.triggerAttackRelease(padChords[chordIdx % padChords.length], "1m", time + H(15), v);
+    chordIdx++;
+  }, "1m").start(0);
+
+  // === SHIMMER BELL (warm peach iridescence) ===
+  const bellReverb = new Tone.Reverb({ decay: 8, wet: 0.6 }).connect(masterComp);
+  await bellReverb.generate();
+  const bellHPF = new Tone.Filter({ type: "highpass", frequency: 600 }).connect(bellReverb);
+  const bellDelay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.45, wet: 0.4 }).connect(bellHPF);
+  const bell = new Tone.FMSynth({
+    harmonicity: 3.5,
+    modulationIndex: 9,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 1.8, sustain: 0, release: 2.0 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.01, decay: 0.6, sustain: 0, release: 0.5 }
+  }).connect(bellDelay);
+  bell.volume.value = -16;
+
+  const bellNotes = ["E5", "A5", "B5", "G5", "E6", "D6", "B5", "A5"];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar < 2 || bar > 14) { bellStep++; return; }
+    if (Math.random() < 0.45) {
+      const n = bellNotes[bellStep % bellNotes.length];
+      bell.triggerAttackRelease(n, "4n", time + H(12), 0.4 + Math.random() * 0.2);
+    }
+    bellStep++;
+  }, "4n").start(0);
+
+  // === CYAN GLINT (treble sparkle) ===
+  const glintReverb = new Tone.Reverb({ decay: 4, wet: 0.55 }).connect(masterComp);
+  await glintReverb.generate();
+  const glint = new Tone.MetalSynth({
+    frequency: 720,
+    envelope: { attack: 0.001, decay: 0.5, release: 0.3 },
+    harmonicity: 4.1,
+    modulationIndex: 18,
+    resonance: 5200
+  }).connect(glintReverb);
+  glint.volume.value = -28;
+
+  const glintLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar <= 13 && Math.random() < 0.18) {
+      glint.triggerAttackRelease("16n", time + H(10), 0.18 + Math.random() * 0.12);
+    }
+  }, "8n").start(0);
+
+  // === BREATH NOISE (warm air around the orb) ===
+  const breathHPF = new Tone.Filter({ type: "bandpass", frequency: 800, Q: 0.5 }).connect(masterComp);
+  const breath = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 1.8, decay: 0.5, sustain: 0.2, release: 2.0 }
+  }).connect(breathHPF);
+  breath.volume.value = -32;
+
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 3 && bar <= 13) {
+      breath.triggerAttackRelease(3.5, time + H(15));
+    }
+  }, "2m").start(0);
+
+  // Filter sweep arc — opens then closes for seamless loop
+  Tone.Transport.schedule((time) => {
+    padHPF.frequency.linearRampToValueAtTime(280, time + 6 * (60 / bpm) * 4);
+  }, "2:0:0");
+  Tone.Transport.schedule((time) => {
+    padHPF.frequency.linearRampToValueAtTime(120, time + 4 * (60 / bpm) * 4);
+  }, "12:0:0");
+
+  window.toneJsInstruments = { sub, pad, bell, glint, breath };
+  window.toneJsParts = { subLoop, padLoop, bellLoop, glintLoop, breathLoop };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

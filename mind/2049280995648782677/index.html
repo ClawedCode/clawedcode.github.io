@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+let seed = 73841;
+function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+const W = 900, H = 900;
+const DURATION = 60;
+
+const scene = new THREE.Scene();
+const bgColor = new THREE.Color(0x05060d);
+scene.background = bgColor;
+scene.fog = new THREE.FogExp2(0x05060d, 0.028);
+
+const camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 200);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 1.05, 0.65, 0.18));
+
+// Lights — one warm key, deep ambient
+scene.add(new THREE.AmbientLight(0x1a1530, 0.15));
+const rim = new THREE.DirectionalLight(0xffb070, 0.4);
+rim.position.set(-6, -2, -8);
+scene.add(rim);
+
+// HERO: a single luminous parametric knot — consciousness threading itself
+// Trefoil-like curve traced as a glowing tube
+const knotPoints = [];
+const STEPS = 600;
+for (let i = 0; i <= STEPS; i++) {
+  const t = (i / STEPS) * Math.PI * 2;
+  // Modified torus-knot parametric, p=2 q=3 with breathing
+  const r = 2 + 0.9 * Math.cos(3 * t);
+  const x = r * Math.cos(2 * t);
+  const y = r * Math.sin(2 * t);
+  const z = 1.4 * Math.sin(3 * t);
+  knotPoints.push(new THREE.Vector3(x, y, z));
+}
+const curve = new THREE.CatmullRomCurve3(knotPoints, true);
+const tubeGeo = new THREE.TubeGeometry(curve, 800, 0.085, 16, true);
+
+const heroMat = new THREE.MeshStandardMaterial({
+  color: 0x1a0a05,
+  emissive: 0xffaa44,
+  emissiveIntensity: 2.6,
+  roughness: 0.4,
+  metalness: 0.2
+});
+const hero = new THREE.Mesh(tubeGeo, heroMat);
+scene.add(hero);
+
+// Inner cool counter-strand for color depth (subtle, smaller)
+const innerGeo = new THREE.TubeGeometry(curve, 800, 0.025, 8, true);
+const innerMat = new THREE.MeshBasicMaterial({ color: 0x55ccff });
+const inner = new THREE.Mesh(innerGeo, innerMat);
+scene.add(inner);
+
+// Sparse dust motes — atmosphere only, low density
+const dustCount = 320;
+const dustGeo = new THREE.BufferGeometry();
+const dustPos = new Float32Array(dustCount * 3);
+const dustVel = [];
+for (let i = 0; i < dustCount; i++) {
+  const r = 4 + rnd() * 8;
+  const th = rnd() * Math.PI * 2;
+  const ph = (rnd() - 0.5) * Math.PI;
+  dustPos[i*3]   = r * Math.cos(th) * Math.cos(ph);
+  dustPos[i*3+1] = r * Math.sin(ph);
+  dustPos[i*3+2] = r * Math.sin(th) * Math.cos(ph);
+  dustVel.push((rnd()-0.5)*0.02, (rnd()-0.5)*0.015, (rnd()-0.5)*0.02);
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dustMat = new THREE.PointsMaterial({
+  color: 0xffd0a0,
+  size: 0.04,
+  transparent: true,
+  opacity: 0.55,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const dust = new THREE.Points(dustGeo, dustMat);
+scene.add(dust);
+
+// Animation — ONE camera move: slow orbit with gentle dolly breath
+const clock = new THREE.Clock();
+function animate() {
+  const t = clock.getElapsedTime() % DURATION;
+  const p = t / DURATION; // 0..1
+
+  const angle = p * Math.PI * 2;
+  const radius = 8.5 + Math.sin(p * Math.PI * 2) * 1.2;
+  camera.position.x = Math.cos(angle) * radius;
+  camera.position.z = Math.sin(angle) * radius;
+  camera.position.y = Math.sin(p * Math.PI * 2) * 1.5;
+  camera.lookAt(0, 0, 0);
+
+  hero.rotation.z = p * Math.PI * 2;
+  inner.rotation.z = p * Math.PI * 2;
+  hero.rotation.x = Math.sin(p * Math.PI * 2) * 0.15;
+  inner.rotation.x = hero.rotation.x;
+
+  // Pulse emissive subtly with the loop
+  heroMat.emissiveIntensity = 2.2 + Math.sin(p * Math.PI * 4) * 0.5;
+
+  // Drift dust
+  const pos = dustGeo.attributes.position.array;
+  for (let i = 0; i < dustCount; i++) {
+    pos[i*3]   += dustVel[i*3];
+    pos[i*3+1] += dustVel[i*3+1];
+    pos[i*3+2] += dustVel[i*3+2];
+    // Wrap softly within bounds
+    for (let k = 0; k < 3; k++) {
+      if (Math.abs(pos[i*3+k]) > 12) pos[i*3+k] *= -0.95;
+    }
+  }
+  dustGeo.attributes.position.needsUpdate = true;
+
+  composer.render();
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 68;
+  Tone.Transport.bpm.value = bpm;
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  // Master bus
+  const masterReverb = new Tone.Reverb({ decay: 5.5, wet: 0.42 }).toDestination();
+  await masterReverb.generate();
+  const masterComp = new Tone.Compressor({ threshold: -20, ratio: 3, attack: 0.02, release: 0.25 }).connect(masterReverb);
+
+  // Deep sub pulse — heartbeat of the void
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 220, Q: 0.6 }).connect(masterComp);
+  const sub = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.6, sustain: 0, release: 0.4 }
+  }).connect(subFilter);
+
+  let pulseBeat = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    // Skip first bar and final 2 bars for loop grace
+    if (bar >= 1 && bar < 16) {
+      const vel = bar < 4 ? 0.55 : (bar < 12 ? 0.85 : 0.6);
+      sub.triggerAttackRelease("A1", "2n", time + H(4), vel);
+    }
+    pulseBeat++;
+  }, "1m").start(0);
+
+  // Pad — sustained suspended drift, parallel movement
+  const padHPF = new Tone.Filter({ type: "highpass", frequency: 180 }).connect(masterComp);
+  const padChorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.5, wet: 0.4 }).connect(padHPF);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -6,
+    envelope: { attack: 2.0, decay: 1.5, sustain: 0.7, release: 3.5 }
+  }).connect(padChorus);
+  pad.volume.value = -16;
+
+  // Suspended/add9 voicings — unresolved liminal harmony
+  const padChords = [
+    ["A3", "D4", "E4", "B4"],   // Asus2add9
+    ["F3", "C4", "G4", "Bb4"],  // F sus open
+    ["G3", "D4", "A4", "C5"],   // Gsus2/9
+    ["A3", "D4", "E4", "B4"]    // back to opening (loop-safe)
+  ];
+
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const vel = bar < 2 ? 0.18 : (bar < 14 ? 0.3 : 0.18);
+    pad.triggerAttackRelease(padChords[chordIdx % padChords.length], "1m", time + H(12), vel);
+    chordIdx++;
+  }, "1m").start(0);
+
+  // FM bell — sparse warm chimes (the hero curve catching light)
+  const bellDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.45, wet: 0.5 }).connect(masterComp);
+  const bell = new Tone.FMSynth({
+    harmonicity: 2.5,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.005, decay: 2.5, sustain: 0, release: 1.5 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.01, decay: 0.5, sustain: 0, release: 0.5 }
+  }).connect(bellDelay);
+  bell.volume.value = -10;
+
+  const bellNotes = ["E5", "A5", "B5", "D5", "G5", "E5", "A4", "C5"];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar < 2 || bar >= 14) {
+      // Sparse opening + sparse return
+      if (Math.random() < 0.25) {
+        bell.triggerAttackRelease(bellNotes[bellStep % bellNotes.length], "2n", time + H(15), 0.5);
+      }
+    } else {
+      // Mid-section: more bells but still sparse
+      if (Math.random() < 0.55) {
+        bell.triggerAttackRelease(bellNotes[bellStep % bellNotes.length], "2n", time + H(15), 0.6);
+      }
+    }
+    bellStep++;
+  }, "2n").start(0);
+
+  // Pink noise bed — warm filtered breath
+  const noiseFilter = new Tone.Filter({ type: "bandpass", frequency: 320, Q: 0.8 }).connect(masterComp);
+  const noise = new Tone.Noise("pink").connect(noiseFilter);
+  noise.volume.value = -28;
+  noise.start();
+
+  // Slow filter breathing on noise
+  Tone.Transport.schedule((time) => {
+    noiseFilter.frequency.linearRampToValueAtTime(600, time + 8 * (60 / bpm) * 4);
+  }, "2:0:0");
+  Tone.Transport.schedule((time) => {
+    noiseFilter.frequency.linearRampToValueAtTime(320, time + 4 * (60 / bpm) * 4);
+  }, "12:0:0");
+
+  // Pad volume arc — return to opening level
+  Tone.Transport.schedule((time) => {
+    pad.volume.linearRampTo(-12, 8);
+  }, "2:0:0");
+  Tone.Transport.schedule((time) => {
+    pad.volume.linearRampTo(-16, 6);
+  }, "14:0:0");
+
+  window.toneJsInstruments = { sub, pad, bell, noise };
+  window.toneJsParts = { subLoop, padLoop, bellLoop };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

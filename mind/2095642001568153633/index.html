@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas'),ctx=canvas.getContext('2d',{alpha:false}),outputCanvas=document.createElement('canvas'),outCtx=outputCanvas.getContext('2d'),P=['#171923','#252a38','#394455','#566879','#71858d','#9b7d72','#60483f','#b59a9f','#d89b62','#f2bd72','#ffe0a0','#0b0c11'];
+canvas.width=canvas.height=100;outputCanvas.width=outputCanvas.height=900;ctx.imageSmoothingEnabled=outCtx.imageSmoothingEnabled=false;
+let sd=6690848;const R=()=>((sd=sd*1664525+1013904223>>>0)/4294967296),D=Array.from({length:38},()=>[12+R()*76,43+R()*43,R()*6.28,R()]),F=(c,x,y,w,h)=>(ctx.fillStyle=c,ctx.fillRect(x|0,y|0,w|0,h|0)),Q=x=>x*x*(3-2*x),M=(a,b,t)=>a+(b-a)*t,C=(x,y,r,c)=>{for(let j=-r;j<=r;j++)for(let i=-r;i<=r;i++)i*i+j*j<=r*r&&F(c,x+i,y+j,1,1)},S=(x,y,w,h,c)=>{for(let j=0;j<h;j++){let k=Math.floor(j*.22);F(c,x-k,y+j,w+k*2,1)}},B=(x,y,w,h,c,d)=>{for(let j=0;j<h;j+=2)F(c,x+((j/2+d)%2),y+j,w-1,1)},cat=(x,y,m,a)=>{let k=Math.floor(Math.sin(a)*1.5),z=P[11];if(m===0){C(x,y-3,4,z);F(z,x-5,y-6,2,3);F(z,x+3,y-6,2,3);F(z,x-7,y,14,5);F(z,x-5,y+4,10,2);F(z,x+6,y+1,2,2);F(z,x+8,y+2+k,4,2);F(z,x+11,y+1+k,2,2)}else{C(x,y-7,4,z);F(z,x-5,y-11,2,4);F(z,x+3,y-11,2,4);F(z,x-4,y-3,8,9);F(z,x-5,y+5,3,3);F(z,x+2,y+5,3,3);F(z,x+4,y,2,2);F(z,x+6,y+1,2,2);F(z,x+7,y+3+k,2,2);F(P[9],x-2,y-8,1,1);F(P[9],x+2,y-8,1,1)}},ray=(u)=>{if(u<=.15)return;let q,x,w,y0,y1;if(u<.45){q=Q((u-.15)/.3);x=M(80,57,q);w=M(3,22,q);y0=52;y1=M(60,88,q)}else if(u<.8){q=Q((u-.45)/.35);x=M(57,17,q);w=M(22,30,q);y0=M(52,45,q);y1=M(88,76,q)}else{q=Q((u-.8)/.2);x=M(17,9,q);w=M(30,13,q);y0=M(45,17,q);y1=M(76,38,q)}for(let y=y0|0;y<y1;y++){let v=(y-y0)/(y1-y0),l=x+v*5,r=x+w+v*9,e=u>.8?1-q:1;F(e>.35?P[9]:P[8],l,y,Math.max(1,(r-l)*e),1);if((y&3)===0&&e>.55)F(P[10],l+2,y,Math.max(1,(r-l)*.18),1)}};
+window.renderFrame=time=>{let u=((((time%55)+55)%55)/55),n=u<.15?u/.15:0,peak=Math.max(0,1-Math.abs(u-.66)/.16),fl=Math.floor(u*44),cw=Math.sin(u*Math.PI*8)*(.4+peak*1.3);F(P[1],0,0,100,100);F(P[2],6,6,88,34);B(7,7,86,31,P[2],1);F(P[6],6,39,88,3);F(P[1],6,42,88,52);for(let y=47;y<94;y+=9){F(P[2],7,y,86,1);for(let x=10+(y%3);x<92;x+=18)F(P[0],x,y,1,9)}F(P[5],8,36,28,5);F(P[6],10,40,24,18);F(P[5],12,42,20,3);F(P[0],11,55,3,8);F(P[0],30,55,3,8);F(P[6],42,29,13,3);F(P[5],44,32,9,17);F(P[1],46,34,5,12);F(P[4],70,9,20,26);F(P[0],68,7,24,30);F(P[4],71,10,18,24);F(P[1],79,10,2,24);F(P[1],71,21,18,2);F(P[3],71,10,18,24);F(P[4],72,11,7,10);F(P[4],81,11,7,10);F(P[2],72,23,7,10);F(P[2],81,23,7,10);F(P[7],65+cw,7,8,32);F(P[5],66+cw,8,5,30);F(P[7],87-cw,7,6,32);F(P[5],89-cw,8,3,30);F(P[5],72,39,18,14);for(let x=74;x<90;x+=4)F(P[3],x,41,2,9);F(P[0],71,51,20,2);F(P[6],16,27,10,10);F(P[5],18,24,6,5);F(P[3],20,17,2,8);F(P[4],15,16,5,3);F(P[4],21,14,5,3);F(P[3],12,19,6,3);if(u<.15){for(let y=45;y<90;y+=3){let x=67+Math.sin(y*.7+u*80)*2;F(P[4],x,y,10,1)}for(let i=0;i<9;i++){let x=12+i*9,v=Math.sin(i*8.1+u*55);v>.3&&F(P[4],x,12+(i*7)%20,1,1)}}ray(u);if(peak>0)D.forEach((d,i)=>{let x=d[0]+Math.sin(d[2]+u*18)*peak*2,y=d[1]-peak*(4+9*d[3])+Math.sin(d[2]*2+u*13),hot=((x+fl+i)%5|0)===0;peak>.18&&F(hot?P[10]:P[8],x,y,hot?2:1,1)});if(peak>.25){for(let i=0;i<7;i++){let x=14+i*2,y=15+(i%3)+Math.sin(u*22+i)*2;F(i%3?P[9]:P[10],x,y,2,2)}for(let i=0;i<8;i++)F(i%2?P[9]:P[10],68+((i*5+fl)%20),12+(i*7)%23,1,2)}let x=75,y=75,m=0;if(u<.24){x=79;y=72;m=1}else if(u<.45){let q=Q((u-.24)/.21);x=M(79,69,q);y=M(72,78,q)}else if(u<.59){let q=Q((u-.45)/.14);x=M(69,54,q);y=M(78,75,q)}else if(u<.72){let q=Q((u-.59)/.13);x=M(54,39,q);y=M(75,69,q)}else if(u<.84){let q=Q((u-.72)/.12);x=M(39,27,q);y=M(69,66,q)}else{x=29;y=72;m=1}cat(x|0,y|0,m,u*20);if(u>.82){let q=(u-.82)/.18;F(P[2],8,8,55,q*2);F(P[4],28,63,1+((Math.sin(u*40)+1)|0),1)}for(let i=0;i<24;i++){let x=9+(i*17)%83,y=44+(i*13)%48;if(((x+y+i)&7)<2&&!(u>.35&&u<.83))F(P[3],x,y,1,1)}F(P[0],0,0,100,5);F(P[0],0,95,100,5);F(P[0],0,0,5,100);F(P[0],95,0,5,100);outCtx.clearRect(0,0,900,900);outCtx.drawImage(canvas,0,0,900,900);return outputCanvas.toDataURL()};
+window.ready=true;
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 76\\n// DURATION: 60\\n// FORM: A cycles 0-4; A1 cycles 4-8; B cycles 8-13; C cycles 13-16; A2 cycles 16-19\\n// TONAL CENTER: C Dorian\\n// MOTIF: C4, Eb4, F4, G4, D4; C4 on beat 1, rest on beat 2, Eb4-F4 as eighth notes on beat 3, G4 held on beat 4, with D4 as a delayed pickup\\n// HARMONIC PLAN: A: C2 pedal with sparse C3-G3-Eb4; A1: Eb major over C pedal as C3-G3-Bb3-Eb4; B: alternating C minor 6 and F sus2 over C2-D2; C: F6 add9 resolving through Eb major add6; A2: return to C2 and sparse C3-G3-Eb4\\n// PHRASE RULE: soft contact on beat 1, silence on beat 2, paired short-long punctuation near beat 3, open beat 4; carry C or G across boundaries and change at most harmony plus brightness, or register plus density\\nsetcpm(19)\\n$: note(\\\"\u003cc2 c2 c2 c2 c2 c2 c2 c2 c2 c2 d2 d2 d2 c2 c2 c2 c2 c2 c2>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .attack(0.45)\\n  .release(1.4)\\n  .lpf(\\\"\u003c260 250 270 260 300 320 350 380 360 350 390 400 370 430 470 400 310 270 250>\\\")\\n  .gain(\\\"\u003c0.10 0.095 0.105 0.10 0.105 0.11 0.115 0.11 0.11 0.105 0.11 0.11 0.105 0.12 0.125 0.115 0.105 0.10 0.095>\\\")\\n  .room(0.12)\\n  .pan(\\\"\u003c0.48 0.51 0.49 0.52 0.48 0.51 0.49 0.52 0.48 0.50 0.52 0.49 0.51 0.47 0.53 0.50 0.49 0.51 0.50>\\\")\\n  .orbit(0)\\n$: note(\\\"\u003c[c4 ~ eb4 ~] ~ [c4 ~ [eb4 f4] ~] ~ [c4 ~ [eb4 f4] g4] [~ ~ ~ d4] [c4 ~ [eb4 f4] g4] [c4 ~ [~ eb4] [f4 g4]] [c4 ~ eb4 ~] ~ [~ ~ [f4 g4] ~] ~ ~ [[[c4 eb4 f4 g4],[c5 d5 g5 ~]] ~] ~ [g4 ~ c5 ~] [g4 ~ f4 eb4] [~ ~ ~ d4] ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(0.06)\\n  .release(0.55)\\n  .lpf(\\\"\u003c1150 1050 1250 1100 1550 1450 1700 1600 1500 1350 1750 1400 1200 2600 2200 1700 1250 1000 900>\\\")\\n  .gain(\\\"\u003c0.16 0.14 0.16 0.14 0.18 0.15 0.18 0.17 0.16 0.14 0.17 0.14 0.12 0.20 0.17 0.15 0.15 0.10 0.07>\\\")\\n  .room(\\\"\u003c0.20 0.18 0.20 0.18 0.23 0.22 0.24 0.23 0.21 0.20 0.22 0.20 0.19 0.30 0.28 0.24 0.20 0.17 0.14>\\\")\\n  .pan(\\\"\u003c0.46 0.46 0.47 0.47 0.48 0.49 0.50 0.51 0.52 0.52 0.54 0.54 0.55 0.58 0.54 0.51 0.48 0.46 0.45>\\\")\\n  .orbit(1)\\n$: note(\\\"\u003c[[c5 d5] ~ ~ ~] ~ ~ [c5 ~ [d5 ~] ~] ~ [[c5 d5] ~ ~ ~] ~ [c5 ~ ~ g5] ~ [[d5 g5] ~ ~ ~] ~ [c5 ~ [d5 ~] ~] ~ [[c5 d5] ~ g5 ~] ~ [g5 ~ [d5 ~] ~] ~ [d5 ~ ~ ~] ~>\\\")\\n  .s(\\\"square\\\")\\n  .attack(0.002)\\n  .release(0.045)\\n  .lpf(\\\"\u003c1500 1400 1450 1500 1700 1600 1800 1650 1750 1600 1850 1700 1900 1800 2300 1750 1550 1400 1250>\\\")\\n  .gain(\\\"\u003c0.045 0.04 0.04 0.045 0.05 0.045 0.052 0.045 0.05 0.04 0.052 0.04 0.048 0.045 0.06 0.045 0.04 0.032 0.025>\\\")\\n  .room(0.08)\\n  .pan(\\\"\u003c0.30 0.30 0.31 0.31 0.32 0.32 0.33 0.33 0.34 0.34 0.35 0.35 0.36 0.38 0.40 0.36 0.33 0.31 0.30>\\\")\\n  .orbit(2)\\n$: note(\\\"\u003c~ [g4 ~ ~ ~] ~ ~ [g4 ~ c5 ~] ~ [c5 ~ g4 ~] [g4 ~ ~ d5] ~ [g4 ~ ~ ~] ~ [c5 ~ g4 ~] ~ [g4 c5 d5 g5] [c5 d5 g5 d6] [g4 c5 ~ ~] ~ ~ ~>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .attack(0.32)\\n  .release(0.9)\\n  .hpf(700)\\n  .lpf(\\\"\u003c1100 1050 1100 1150 1450 1350 1600 1550 1400 1500 1450 1650 1500 2400 2900 2100 1200 900 800>\\\")\\n  .gain(\\\"\u003c0 0.018 0 0 0.027 0 0.032 0.028 0 0.025 0 0.03 0 0.052 0.06 0.038 0 0 0>\\\")\\n  .room(0.28)\\n  .pan(\\\"\u003c0.42 0.46 0.50 0.54 0.58 0.62 0.57 0.52 0.47 0.43 0.48 0.54 0.60 0.66 0.58 0.50 0.46 0.44 0.42>\\\")\\n  .orbit(3)\\n$: stack(\\n  note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ [g2,c3] [g2,c3] [g2,c3] [g2,c3] [g2,c3] [c3,g3] [c3,g3,a3] [c3,g3] [g2,c3] [g2,c3] [g2,c3]>\\\")\\n    .s(\\\"sine\\\")\\n    .attack(0.28)\\n    .release(1.1)\\n    .lpf(620)\\n    .gain(\\\"\u003c0 0 0 0 0 0 0 0 0.09 0.10 0.095 0.105 0.10 0.11 0.12 0.10 0.085 0.07 0.055>\\\"),\\n  note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ [d4 ~ c4 ~] ~ [f3 ~ eb3 ~] ~ [d4 ~ c4 ~] ~ ~ ~ ~ ~ ~>\\\")\\n    .s(\\\"triangle\\\")\\n    .attack(0.015)\\n    .release(0.24)\\n    .lpf(760)\\n    .gain(0.055)\\n)\\n  .room(0.14)\\n  .pan(\\\"\u003c0.55 0.55 0.55 0.55 0.55 0.55 0.55 0.55 0.61 0.60 0.54 0.53 0.47 0.48 0.50 0.49 0.46 0.45 0.44>\\\")\\n  .orbit(4)\",\"bpm\":76,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.31666666666666665,\"cycles\":19,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

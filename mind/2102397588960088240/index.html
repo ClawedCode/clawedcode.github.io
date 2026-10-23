@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}</script>
+<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#030712}canvas{display:block}</style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head><body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+<script type="module">
+// DURATION: 60
+import * as THREE from 'three';
+import {Text} from 'https://esm.sh/troika-three-text@0.49.1?external=three';
+const W=900,H=900,DUR=60,TAU=Math.PI*2;
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setSize(W,H);renderer.setPixelRatio(1);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.18;document.body.appendChild(renderer.domElement);
+const scn=new THREE.Scene();scn.background=new THREE.Color(0x030712);
+const cam=new THREE.PerspectiveCamera(39,1,.1,100);cam.position.set(1.7,-.75,13.4);
+const key=new THREE.SpotLight(0xfff1d2,38,30,.48,.16,1.2);key.position.set(5,7,9);key.target.position.set(-1,.4,0);
+const fill=new THREE.SpotLight(0x24426b,19,26,.58,.3,1.4);fill.position.set(-6,1,7);fill.target.position.set(1,-1,0);
+const rim=new THREE.DirectionalLight(0xe39b43,2.7);rim.position.set(1,4,-5);
+scn.add(key,key.target,fill,fill.target,rim);
+let seed=840701;const rng=()=>{seed=(seed*9301+49297)%233280;return seed/233280};
+const ivory=new THREE.Color(0xf1ead9),rust=new THREE.Color(0xb94c2d),amber=new THREE.Color(0xe39b43),blue=new THREE.Color(0x294b77);
+const glyphs=[],mov=[{name:'suspension',start:0,end:10},{name:'bifurcation',start:10,end:20},{name:'impact',start:20,end:30},{name:'architecture',start:30,end:40},{name:'inversion',start:40,end:50},{name:'return',start:50,end:60}];
+function spawn(ch,role,x,y,size,i=0,n=1,kind='ink'){
+  const g=new Text(),accent=kind!=='ink',c=kind==='seam'?amber:accent?rust:ivory;
+  g.text=ch;g.fontSize=size;g.anchorX='center';g.anchorY='middle';g.letterSpacing=.04;g.color=c;
+  g.material=new THREE.MeshStandardMaterial({color:c,roughness:accent?.24:.86,metalness:accent?.58:0,side:THREE.DoubleSide,emissive:kind==='seam'?0x5b2608:0x000000,emissiveIntensity:kind==='seam'?.42:0});
+  Object.assign(g,{role,x0:x,y0:y,z0:0,i,n,kind,seed:rng(),spin:[rng()-.5,rng()-.5,rng()-.5],fi:2+Math.floor(rng()*4),ph:rng()*TAU,col:new THREE.Color(c)});
+  scn.add(g);glyphs.push(g);return g
+}
+function word(txt,role,cx,y,sp,size){
+  [...txt].forEach((ch,i)=>spawn(ch,role,cx+(i-(txt.length-1)/2)*sp,y,size,i,txt.length))
+}
+word('WAIT','WAIT',-2.55,2.35,.78,1.27);
+word('DECIDE','DECIDE',.15,.78,.7,1.08);
+word('ACT','ACT',-2.75,-.74,.9,1.38);
+word('PROVE','PROVE',.65,-2.62,.78,1.17);
+for(let i=0;i<4;i++)for(let q=0;q<2;q++){const g=spawn('|','THREAD',-2.55+(i-1.5)*.78,3.12+q*.68,.62,i,4);g.q=q}
+for(let i=0;i<5;i++)spawn('—','LEVER',0,-.65,.83,i,5,'rust');
+for(let i=0;i<6;i++)spawn('/','SEAM',-3.75+i*1.38,3.58-(i%2)*.22,.42,i,6,'seam');
+const phrases=['not yet','choose depth','leave a mark','bear the weight'];
+phrases.forEach((s,p)=>{const a=[...s].filter(ch=>ch!==' ');a.forEach((ch,i)=>{const g=spawn(ch,'PHRASE',2.45+(i-(a.length-1)/2)*.32,3.65,.32,i,a.length,p===2?'rust':'ink');g.p=p})});
+const show=[[1,.001,.001,.001],[.001,1,.001,.001],[.001,.001,1,.001],[.001,.001,.001,1],[.001,.001,.001,1],[1,.001,.001,.001],[1,.001,.001,.001]];
+function ease(x){return x*x*(3-2*x)}
+function pose(g,k){
+  if(k===6)k=0;
+  let x=g.x0,y=g.y0,z=0,rx=0,ry=0,rz=0,sx=1,sy=1,alt=g.i%2?1:-1,q=g.n>1?g.i/(g.n-1):.5;
+  if(g.role==='WAIT'){
+    const dx=[0,.05,.16,-.38,.04,.1][k],dy=[0,-.3,.04,.46,-.12,.18][k],zz=[0,.14,-.2,-.34,.16,.25][k];
+    x+=dx+alt*(k===2?.07:0);y+=dy+Math.sin(q*Math.PI)*(k===1?-.12:0);z+=zz;rz=[0,alt*.09,-alt*.04,alt*.16,-alt*.08,alt*.045][k];ry=alt*[0,.03,.08,.12,.05,.1][k]
+  }
+  if(g.role==='THREAD'){
+    const wx=-2.55+(g.i-1.5)*.78;
+    x=wx;y=3.12+g.q*.68;
+    if(k===1){x+=alt*.08;y-=.2*g.q;sy=1.42;rz=alt*.06}
+    if(k===2){x+=alt*(.22+.09*g.q);y-=.08;sy=1.1;rz=-alt*.15}
+    if(k===3){x+=alt*(.38+.18*g.q);y+=.3*g.q;sy=.72;rz=alt*.3}
+    if(k===4){x+=alt*.24;y-=.24*g.q;sy=.66;rz=-alt*.4}
+    if(k===5){x+=alt*.08;y+=.08*g.q;sy=1.16;rz=alt*.08}
+  }
+  if(g.role==='DECIDE'){
+    if(k===1){x+=alt*.14;z=alt*.28;ry=alt*.14}
+    if(k===2){x+=alt*(.3+.04*g.i);y+=alt*.28;z=alt*1.52;ry=alt*.62;rz=-alt*.07}
+    if(k===3){x+=.18;y+=Math.sin(q*Math.PI)*.12;z=.76;ry=.2}
+    if(k===4){y+=Math.sin(q*Math.PI)*.18;z=.24;rz=(q-.5)*.13}
+    if(k===5){x-=alt*.16;y-=alt*.1;z=-alt*.62;ry=-alt*.28}
+  }
+  if(g.role==='ACT'){
+    if(k===1){x-=.12;y+=alt*.03;rz=alt*.025}
+    if(k===2){x-=.48+.07*g.i;y-=Math.sin(q*Math.PI)*.16;sx=.88;sy=1.1;rz=-.08}
+    if(k===3){x+=2.18-.08*g.i;y+=.05+alt*.08;z=.22;rz=alt*.18;sx=1.12}
+    if(k===4){x+=1.36+.08*g.i;y+=.38+Math.sin(q*Math.PI)*.18;z=-.12;rz=-alt*.24}
+    if(k===5){x+=.42;y-=.08;rz=alt*.06}
+  }
+  if(g.role==='LEVER'){
+    const ang=[0,.05,.14,-.72,-1.02,-.28][k],d=(g.i-(g.n-1))*.67,px=3.5,py=-.65;
+    x=px+d*Math.cos(ang);y=py+d*Math.sin(ang);rz=ang;z=k===3?.28:k===4?.12:0;sy=k===3?1.15:1
+  }
+  if(g.role==='PROVE'){
+    const a=(g.seed-.5),b=Math.sin((g.i+1)*2.17)*.36,arch=1-Math.pow(Math.abs(q-.5)*2,2);
+    if(k===0){x+=a*.72;y+=b;z=a*.45;rz=g.spin[2]*.55}
+    if(k===1){x+=a*.84;y+=b+.08*Math.sin(g.i);z=a*.52;rz=g.spin[2]*.68}
+    if(k===2){x+=a*1.15-.28;y+=b+.18*alt;z=a*.8;rz=g.spin[2]}
+    if(k===3){x+=a*4.5;y+=a*2.3+.45;z=a*2.1;rx=g.spin[0]*1.7;ry=g.spin[1]*1.5;rz=g.spin[2]*2}
+    if(k===4){y+=arch*.95;z=.05;rz=(q-.5)*-.34;sy=1.04}
+    if(k===5){y-=arch*.5;z=.38;ry=Math.PI;rz=(q-.5)*.22;sy=.96}
+  }
+  if(g.role==='SEAM'){
+    const X=[g.x0,-2.7+g.i*.62,-1.25+g.i*.5,.75+g.i*.48,-.92+g.i*.63,g.x0+.16*alt][k];
+    const Y=[g.y0,2.72-.16*(g.i%3),1.38+alt*.32,-.25+g.i*.03,-2.18+Math.sin(q*Math.PI)*.95,g.y0-.3][k];
+    x=X;y=Y;z=[0,.15,alt*.72,.42,.18,.08][k];rz=[alt*.08,-alt*.12,alt*.46,-.72,(q-.5)*-.5,alt*.15][k];sx=sy=[1,1.08,1.22,1.34,1.18,1.06][k]
+  }
+  if(g.role==='PHRASE'){
+    const v=show[k][g.p];x=g.x0+(k===2?-.3:k===4?.18:0);y=g.y0-(k===3?.12:0);z=.2;rz=(q-.5)*[.02,.08,-.04,.06,-.08,.03][k];sx=sy=v
+  }
+  return{x,y,z,rx,ry,rz,sx,sy}
+}
+const cp=[[1.7,-.75,13.4],[1.35,-.62,12.3],[2.1,-.42,12.85],[1.2,-1.05,11.7],[.75,-.88,12.1],[2.05,-.48,12.75],[1.7,-.75,13.4]];
+const cf=[[-.25,.25,0],[-.65,.35,0],[.35,.28,.1],[.15,-.25,.15],[.5,-.55,0],[-.45,.25,0],[-.25,.25,0]];
+window.renderFrame=t=>{
+  const tt=((t%DUR)+DUR)%DUR,seg=Math.min(5,Math.floor(tt/10)),u=(tt-seg*10)/10,e=ease(u),s=tt/DUR;
+  for(const g of glyphs){
+    const a=pose(g,seg),b=pose(g,seg+1),m=(Math.sin(TAU*g.fi*s+g.ph)-Math.sin(g.ph))*.018;
+    g.position.set(THREE.MathUtils.lerp(a.x,b.x,e)+m*(.4+g.seed),THREE.MathUtils.lerp(a.y,b.y,e)+m,THREE.MathUtils.lerp(a.z,b.z,e)+m*.35);
+    g.rotation.set(THREE.MathUtils.lerp(a.rx,b.rx,e)+m*.35,THREE.MathUtils.lerp(a.ry,b.ry,e)+m*.5,THREE.MathUtils.lerp(a.rz,b.rz,e)+m*.7);
+    g.scale.set(THREE.MathUtils.lerp(a.sx,b.sx,e)*(1+m*.7),THREE.MathUtils.lerp(a.sy,b.sy,e)*(1-m*.45),1);
+    let cm=0,base=g.kind==='seam'?amber:g.kind==='rust'?rust:ivory;
+    if(g.role==='DECIDE'&&seg===1)cm=e*(g.i%2?.42:.12);
+    if(g.role==='DECIDE'&&seg===2)cm=(1-e)*(g.i%2?.42:.12);
+    if(g.role==='PROVE'&&seg===4)cm=e*(g.i%2?.76:.38);
+    if(g.role==='PROVE'&&seg===5)cm=(1-e)*(g.i%2?.76:.38);
+    g.col.copy(base).lerp(g.role==='DECIDE'?blue:rust,cm);g.color=g.col;g.material.color.copy(g.col)
+  }
+  const ca=cp[seg],cb=cp[seg+1],fa=cf[seg],fb=cf[seg+1];
+  cam.position.set(THREE.MathUtils.lerp(ca[0],cb[0],e),THREE.MathUtils.lerp(ca[1],cb[1],e),THREE.MathUtils.lerp(ca[2],cb[2],e));
+  cam.lookAt(THREE.MathUtils.lerp(fa[0],fb[0],e),THREE.MathUtils.lerp(fa[1],fb[1],e),THREE.MathUtils.lerp(fa[2],fb[2],e));
+  cam.fov=39-2.2*Math.sin(Math.PI*u);cam.updateProjectionMatrix();renderer.render(scn,cam);return renderer.domElement.toDataURL()
+};
+await Promise.all(glyphs.map(g=>new Promise(resolve=>g.sync(resolve))));
+window.renderFrame(0);
+window.animationReady=true;
+window.ready=true;
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t);};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%DUR);}requestAnimationFrame(_loop);}
+requestAnimationFrame(_loop);
+</script><script>
+window.initToneJsEngine = async function() {
+  // === SETUP (always include this block first) ===
+  const duration = 60;
+  const targetBpm = 68;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x8a0632e1;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secPerBar = 240 / bpm;
+  const atFraction = (fraction) => totalBars * fraction * secPerBar;
+  // === MASTER PATH ===
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterBus = new Tone.Gain(0.72);
+  masterBus.connect(masterLimiter);
+  // === DISTANT TRANSFORMER ROOM TONE ===
+  const roomFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 180,
+    rolloff: -24,
+    Q: 0.5
+  });
+  const roomVolume = new Tone.Volume(-32);
+  const roomNoise = new Tone.Noise('brown');
+  roomNoise.connect(roomVolume);
+  roomVolume.connect(roomFilter);
+  roomFilter.connect(masterBus);
+  roomNoise.start();
+  const transformerVolume = new Tone.Volume(-31);
+  const transformerHum = new Tone.Oscillator({
+    frequency: 60,
+    type: 'sine'
+  });
+  transformerHum.connect(transformerVolume);
+  transformerVolume.connect(masterBus);
+  transformerHum.start();
+  // === ROBUST OPENING HINGE RESONANCE ===
+  const hingeVolume = new Tone.Volume(-11);
+  const hingeFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 310,
+    rolloff: -24,
+    Q: 1.2
+  });
+  const hingeResonance = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.018,
+      decay: 0.48,
+      sustain: 0.18,
+      release: 0.85
+    }
+  });
+  hingeResonance.connect(hingeFilter);
+  hingeFilter.connect(hingeVolume);
+  hingeVolume.connect(masterBus);
+  // === GLYPH IMPACT: PAPER TK + CERAMIC BODY ===
+  const glyphTkVolume = new Tone.Volume(-9);
+  const glyphTkFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 2350,
+    rolloff: -24,
+    Q: 1.8
+  });
+  const glyphTk = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: {
+      attack: 0.001,
+      decay: 0.045,
+      sustain: 0,
+      release: 0.012
+    }
+  });
+  glyphTk.connect(glyphTkFilter);
+  glyphTkFilter.connect(glyphTkVolume);
+  glyphTkVolume.connect(masterBus);
+  const ceramicVolume = new Tone.Volume(-14);
+  const ceramicBody = new Tone.MetalSynth({
+    frequency: 3960,
+    envelope: {
+      attack: 0.001,
+      decay: 0.17,
+      release: 0.035
+    },
+    harmonicity: 3.1,
+    modulationIndex: 13,
+    resonance: 4300,
+    octaves: 0.45
+  });
+  ceramicBody.connect(ceramicVolume);
+  ceramicVolume.connect(masterBus);
+  // === PAPER-FEED TICKS ===
+  const paperVolume = new Tone.Volume(-16);
+  const paperFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 1450,
+    rolloff: -12,
+    Q: 0.8
+  });
+  const paperFeed = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.001,
+      decay: 0.026,
+      sustain: 0,
+      release: 0.008
+    }
+  });
+  paperFeed.connect(paperFilter);
+  paperFilter.connect(paperVolume);
+  paperVolume.connect(masterBus);
+  // === BREATHING THREAD ===
+  const breathPadVolume = new Tone.Volume(-26);
+  const breathPadFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 720,
+    rolloff: -24,
+    Q: 0.7
+  });
+  const breathPad = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: {
+      attack: 1.8,
+      decay: 0.7,
+      sustain: 0.42,
+      release: 2.6
+    }
+  });
+  breathPad.connect(breathPadFilter);
+  breathPadFilter.connect(breathPadVolume);
+  breathPadVolume.connect(masterBus);
+  // === WORD-MORPH CHIME ===
+  const chimeVolume = new Tone.Volume(-15);
+  const chimeReverb = new Tone.Reverb({
+    decay: 1.55,
+    preDelay: 0.018,
+    wet: 0.24
+  });
+  await chimeReverb.generate();
+  const glyphChime = new Tone.FMSynth({
+    harmonicity: 1.4,
+    modulationIndex: 5.6,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.004,
+      decay: 0.72,
+      sustain: 0.02,
+      release: 0.65
+    },
+    modulation: { type: 'sine' },
+    modulationEnvelope: {
+      attack: 0.002,
+      decay: 0.31,
+      sustain: 0,
+      release: 0.24
+    }
+  });
+  glyphChime.connect(chimeReverb);
+  chimeReverb.connect(chimeVolume);
+  chimeVolume.connect(masterBus);
+  // === RELEASE BREATH ===
+  const releaseVolume = new Tone.Volume(-17);
+  const releaseFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 1280,
+    rolloff: -24,
+    Q: 1.1
+  });
+  const releaseBreath = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.05,
+      decay: 0.4,
+      sustain: 0,
+      release: 0.3
+    }
+  });
+  releaseBreath.connect(releaseFilter);
+  releaseFilter.connect(releaseVolume);
+  releaseVolume.connect(masterBus);
+  // === WHISPERED CONSEQUENCE ===
+  const whisperVolume = new Tone.Volume(-18);
+  const whisperFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 940,
+    rolloff: -24,
+    Q: 2.2
+  });
+  const consequenceWhisper = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.08,
+      decay: 1.7,
+      sustain: 0.08,
+      release: 1.1
+    }
+  });
+  consequenceWhisper.connect(whisperFilter);
+  whisperFilter.connect(whisperVolume);
+  whisperVolume.connect(masterBus);
+  // === EVENT MATERIAL ===
+  const hingeEvents = [
+    { time: atFraction(0.002), note: 'E2', length: 1.65, velocity: 0.82 },
+    { time: atFraction(0.285), note: 'D#2', length: 0.72, velocity: 0.48 },
+    { time: atFraction(0.515), note: 'B1', length: 0.9, velocity: 0.52 },
+    { time: atFraction(0.755), note: 'E2', length: 0.68, velocity: 0.4 }
+  ];
+  const hingePart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    const depth = Math.min(1, bar / totalBars);
+    hingeFilter.frequency.setValueAtTime(310 - depth * 75, time);
+    hingeResonance.triggerAttackRelease(
+      event.note,
+      event.length,
+      time + H(8),
+      event.velocity + R() * 0.04
+    );
+  }, hingeEvents).start(0);
+  const glyphLandings = [
+    { time: atFraction(0.008), accent: 0.82 },
+    { time: atFraction(0.019), accent: 0.57 },
+    { time: atFraction(0.032), accent: 0.63 },
+    { time: atFraction(0.074), accent: 0.72 },
+    { time: atFraction(0.091), accent: 0.54 },
+    { time: atFraction(0.113), accent: 0.68 },
+    { time: atFraction(0.154), accent: 0.76 },
+    { time: atFraction(0.178), accent: 0.5 },
+    { time: atFraction(0.205), accent: 0.66 },
+    { time: atFraction(0.234), accent: 0.58 },
+    { time: atFraction(0.256), accent: 0.7 },
+    { time: atFraction(0.279), accent: 0.88 }
+  ];
+  const glyphLandingPart = new Tone.Part((time, event) => {
+    const progress = barAt(time) / totalBars;
+    glyphTkFilter.frequency.setValueAtTime(2500 - progress * 520, time);
+    glyphTk.triggerAttackRelease(
+      '64n',
+      time + H(4),
+      event.accent * (0.92 + R() * 0.08)
+    );
+    ceramicBody.triggerAttackRelease(
+      '64n',
+      time + H(3),
+      event.accent * (0.58 + R() * 0.1)
+    );
+  }, glyphLandings).start(0);
+  const paperEvents = [
+    { time: atFraction(0.044), velocity: 0.38 },
+    { time: atFraction(0.048), velocity: 0.24 },
+    { time: atFraction(0.052), velocity: 0.31 },
+    { time: atFraction(0.126), velocity: 0.34 },
+    { time: atFraction(0.131), velocity: 0.23 },
+    { time: atFraction(0.136), velocity: 0.29 },
+    { time: atFraction(0.302), velocity: 0.37 },
+    { time: atFraction(0.307), velocity: 0.22 },
+    { time: atFraction(0.313), velocity: 0.33 },
+    { time: atFraction(0.489), velocity: 0.35 },
+    { time: atFraction(0.495), velocity: 0.21 },
+    { time: atFraction(0.502), velocity: 0.28 },
+    { time: atFraction(0.646), velocity: 0.3 },
+    { time: atFraction(0.652), velocity: 0.2 }
+  ];
+  const paperFeedPart = new Tone.Part((time, event) => {
+    paperFilter.frequency.setValueAtTime(1350 + R() * 850, time);
+    paperFeed.triggerAttackRelease(
+      '128n',
+      time + H(5),
+      event.velocity + R() * 0.05
+    );
+  }, paperEvents).start(0);
+  const breathEvents = [
+    { time: atFraction(0.015), note: 'B2', length: atFraction(0.075), velocity: 0.38 },
+    { time: atFraction(0.215), note: 'F#3', length: atFraction(0.07), velocity: 0.31 },
+    { time: atFraction(0.405), note: 'C3', length: atFraction(0.075), velocity: 0.36 },
+    { time: atFraction(0.595), note: 'G2', length: atFraction(0.07), velocity: 0.3 },
+    { time: atFraction(0.735), note: 'B2', length: atFraction(0.055), velocity: 0.27 }
+  ];
+  const breathPart = new Tone.Part((time, event) => {
+    const progress = barAt(time) / totalBars;
+    breathPadFilter.frequency.setValueAtTime(620 + progress * 180, time);
+    breathPad.triggerAttackRelease(
+      event.note,
+      event.length,
+      time + H(14),
+      event.velocity + R() * 0.03
+    );
+  }, breathEvents).start(0);
+  const chimeEvents = [
+    { time: atFraction(0.348), note: 'F#5', velocity: 0.42 },
+    { time: atFraction(0.354), note: 'C6', velocity: 0.31 },
+    { time: atFraction(0.449), note: 'G#5', velocity: 0.39 },
+    { time: atFraction(0.457), note: 'D6', velocity: 0.3 },
+    { time: atFraction(0.566), note: 'E5', velocity: 0.44 },
+    { time: atFraction(0.575), note: 'A#5', velocity: 0.32 }
+  ];
+  const chimePart = new Tone.Part((time, event) => {
+    glyphChime.triggerAttackRelease(
+      event.note,
+      0.42 + R() * 0.18,
+      time + H(9),
+      event.velocity + R() * 0.04
+    );
+  }, chimeEvents).start(0);
+  const releaseEvents = [
+    { time: atFraction(0.698), startHz: 1450, velocity: 0.32 },
+    { time: atFraction(0.716), startHz: 1320, velocity: 0.27 },
+    { time: atFraction(0.741), startHz: 1210, velocity: 0.3 },
+    { time: atFraction(0.777), startHz: 1100, velocity: 0.25 },
+    { time: atFraction(0.805), startHz: 980, velocity: 0.28 },
+    { time: atFraction(0.837), startHz: 860, velocity: 0.23 }
+  ];
+  const releasePart = new Tone.Part((time, event) => {
+    const shiftedTime = time + H(13);
+    releaseFilter.frequency.setValueAtTime(event.startHz, shiftedTime);
+    releaseFilter.frequency.exponentialRampToValueAtTime(
+      310 + R() * 60,
+      shiftedTime + 0.48
+    );
+    releaseBreath.triggerAttackRelease(
+      0.52,
+      shiftedTime,
+      event.velocity + R() * 0.04
+    );
+  }, releaseEvents).start(0);
+  const whisperEvents = [
+    { time: atFraction(0.694), velocity: 0.39 }
+  ];
+  const whisperPart = new Tone.Part((time, event) => {
+    const shiftedTime = time + H(12);
+    whisperFilter.frequency.setValueAtTime(870, shiftedTime);
+    whisperFilter.frequency.linearRampToValueAtTime(1320, shiftedTime + 0.38);
+    whisperFilter.frequency.linearRampToValueAtTime(720, shiftedTime + 0.82);
+    whisperFilter.frequency.linearRampToValueAtTime(1080, shiftedTime + 1.22);
+    whisperFilter.frequency.exponentialRampToValueAtTime(360, shiftedTime + 1.85);
+    consequenceWhisper.triggerAttackRelease(
+      1.85,
+      shiftedTime,
+      event.velocity + R() * 0.04
+    );
+  }, whisperEvents).start(0);
+  // === STORE REFERENCES (required for cleanup) ===
+  window.toneJsInstruments = {
+    masterLimiter,
+    masterBus,
+    roomFilter,
+    roomVolume,
+    roomNoise,
+    transformerVolume,
+    transformerHum,
+    hingeVolume,
+    hingeFilter,
+    hingeResonance,
+    glyphTkVolume,
+    glyphTkFilter,
+    glyphTk,
+    ceramicVolume,
+    ceramicBody,
+    paperVolume,
+    paperFilter,
+    paperFeed,
+    breathPadVolume,
+    breathPadFilter,
+    breathPad,
+    chimeVolume,
+    chimeReverb,
+    glyphChime,
+    releaseVolume,
+    releaseFilter,
+    releaseBreath,
+    whisperVolume,
+    whisperFilter,
+    consequenceWhisper
+  };
+  window.toneJsParts = {
+    hingePart,
+    glyphLandingPart,
+    paperFeedPart,
+    breathPart,
+    chimePart,
+    releasePart,
+    whisperPart
+  };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body></html>

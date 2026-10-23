@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body{width:900px;height:900px;margin:0;overflow:hidden;position:relative;background:#000;}
+  canvas#paper{position:absolute;inset:0;z-index:1;}
+  svg#diagram{position:absolute;inset:0;z-index:2;}
+  div#dim{position:absolute;inset:0;z-index:3;background:#030e18;opacity:0;pointer-events:none;}
+  .lbl{font-family:'Caveat',cursive;fill:#e0eef7;}
+  .ttl{font-family:'IM Fell English',serif;fill:#e0eef7;}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English&family=Caveat&display=swap" rel="stylesheet">
+</head><body>
+<canvas id="paper" width="900" height="900"></canvas>
+<svg id="diagram" width="900" height="900" viewBox="0 0 900 900"></svg>
+<div id="dim"></div>
+<script type="module">
+// DURATION: 60
+import rough from 'https://unpkg.com/roughjs@4.6.6/bundled/rough.esm.js';
+const W=900,H=900,DUR=60,C=20/7,NS='http://www.w3.org/2000/svg';
+const PAP='#0e3a52',INK='#e0eef7',SEC='#5d92b0',GOLD='#ffd680',DK='#07253a';
+const pc=document.getElementById('paper'),pctx=pc.getContext('2d');
+const svgEl=document.getElementById('diagram'),dimEl=document.getElementById('dim');
+const rc=rough.svg(svgEl);
+let rs=4434586%233280;const rng=()=>{rs=(rs*9301+49297)%233280;return rs/233280;};
+const $=i=>document.getElementById(i);
+const DEG=Math.PI/180,SD=Math.sin(-6.3*DEG),CD=Math.cos(-6.3*DEG),SP=Math.sin(40*DEG),CP=Math.cos(40*DEG);
+const MX=e=>198+105*e,MY=n=>735-105*n;
+const sunv=s=>{const h=15*(s-12)*DEG,sh=Math.sin(h),ch=Math.cos(h);return{E:-CD*sh,N:SD*CP-CD*ch*SP,U:SD*SP+CD*ch*CP};};
+const proj=s=>{const v=sunv(s);return v.U<=0.02?null:{kx:-v.E/v.U,ky:-v.N/v.U};};
+function clipD(p,d){const o=[];for(let i=0;i<p.length;i++){const A=p[i],B=p[(i+1)%p.length],a=d(A),b=d(B);if(a>=0)o.push(A);if((a>=0)!==(b>=0)){const u=a/(a-b);o.push([A[0]+u*(B[0]-A[0]),A[1]+u*(B[1]-A[1])]);}}return o;}
+const clipF=p=>[q=>q[0]-198,q=>702-q[0],q=>q[1]-294,q=>735-q[1]].reduce((a,f)=>a.length>2?clipD(a,f):[],p);
+const WQ=[[1.6,0.6],[2.9,0.6],[2.9,2.0],[1.6,2.0]];
+function light(s){const p=proj(s);if(!p)return{poly:[],bars:[],band:null};
+ const pr=([x,h])=>[MX(x+h*p.kx),MY(h*p.ky)];
+ const poly=clipF(WQ.map(pr));
+ const bars=[[[2.25,0.6],[2.25,2.0]],[[1.6,1.3],[2.9,1.3]]].map(g=>g.map(pr));
+ let band=null;const xw=p.kx>0?4.8:0;
+ if(Math.abs(p.kx)>1e-4){const ys=[];for(const[x,h]of WQ)if(h-(xw-x)/p.kx>=0)ys.push((xw-x)*p.ky/p.kx);
+  if(ys.length>1){const y0=Math.max(0,Math.min(...ys)),y1=Math.min(4.2,Math.max(...ys));if(y1>y0)band=[MX(xw),MY(y0),MY(y1)];}}
+ return{poly,bars,band};}
+function cent(p){let a=0,x=0,y=0;for(let i=0;i<p.length;i++){const A=p[i],B=p[(i+1)%p.length],c=A[0]*B[1]-B[0]*A[1];a+=c;x+=(A[0]+B[0])*c;y+=(A[1]+B[1])*c;}
+ return Math.abs(a)<1e-6?[450,600]:[x/(3*a),y/(3*a)];}
+const HRS=[8,9,10,11,12,13,14,15,16],NUM=['VIII','IX','X','XI','XII','I','II','III','IV'];
+const HPOLY=HRS.map(s=>light(s).poly),HST=HPOLY.map(cent);
+
+const base=document.createElement('canvas');base.width=W;base.height=H;const bx=base.getContext('2d');
+(function(){bx.fillStyle=PAP;bx.fillRect(0,0,W,H);
+ const im=bx.getImageData(0,0,W,H),dt=im.data;
+ for(let i=0;i<dt.length;i+=4){const n=(rng()-0.5)*15;dt[i]+=n;dt[i+1]+=n;dt[i+2]+=n;}
+ bx.putImageData(im,0,0);
+ bx.strokeStyle='rgba(224,238,247,0.045)';bx.lineWidth=1;
+ for(let x=0;x<=W;x+=30){bx.beginPath();bx.moveTo(x+0.5,0);bx.lineTo(x+0.5,H);bx.stroke();}
+ for(let y=0;y<=H;y+=30){bx.beginPath();bx.moveTo(0,y+0.5);bx.lineTo(W,y+0.5);bx.stroke();}
+ bx.strokeStyle='rgba(224,238,247,0.07)';bx.lineWidth=2;
+ for(let k=0;k<3;k++){const x0=170+k*290;bx.beginPath();bx.moveTo(x0,0);for(let y=0;y<=H;y+=24)bx.lineTo(x0+Math.sin(y*0.011+k*2)*8+(rng()-0.5)*3,y);bx.stroke();}
+ const vg=bx.createRadialGradient(450,450,200,450,450,650);vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,0.42)');bx.fillStyle=vg;bx.fillRect(0,0,W,H);
+ bx.globalCompositeOperation='destination-out';bx.beginPath();bx.rect(0,0,W,H);
+ const pts=[],st=18;
+ for(let x=14;x<W-14;x+=st)pts.push([x,13+(rng()-0.5)*10]);
+ for(let y=14;y<H-14;y+=st)pts.push([W-13+(rng()-0.5)*10,y]);
+ for(let x=W-14;x>14;x-=st)pts.push([x,H-13+(rng()-0.5)*10]);
+ for(let y=H-14;y>14;y-=st)pts.push([13+(rng()-0.5)*10,y]);
+ bx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)bx.lineTo(pts[i][0],pts[i][1]);
+ bx.closePath();bx.fill('evenodd');bx.globalCompositeOperation='source-over';})();
+
+svgEl.innerHTML='<defs><filter id="sb" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="4.5"/></filter><clipPath id="pcl"><polygon id="pclp" points=""/></clipPath></defs><g id="lt"><polygon id="pfl" fill="'+GOLD+'" fill-opacity="0" filter="url(#sb)" points=""/><polygon id="prm" fill="none" stroke="'+GOLD+'" stroke-width="1.6" stroke-opacity="0" points=""/><g clip-path="url(#pcl)"><line id="b1" stroke="'+DK+'" stroke-width="4" stroke-opacity="0"/><line id="b2" stroke="'+DK+'" stroke-width="4" stroke-opacity="0"/></g><line id="bnd" stroke="'+GOLD+'" stroke-width="6" stroke-linecap="round" stroke-opacity="0"/><line id="r1" stroke="'+GOLD+'" stroke-width="1" stroke-dasharray="7 9" stroke-opacity="0"/><line id="r2" stroke="'+GOLD+'" stroke-width="1" stroke-dasharray="7 9" stroke-opacity="0"/></g>';
+
+const strokes=[],labels=[];let sq=100;
+const pd=p=>'M'+p.map(q=>q[0].toFixed(1)+' '+q[1].toFixed(1)).join(' L');
+const O=o=>Object.assign({roughness:1.6,bowing:1.2,stroke:INK,strokeWidth:1.2,fill:'none',seed:++sq},o);
+const arc=(cx,cy,r,a0,a1,n)=>Array.from({length:n+1},(_,i)=>{const a=a0+(a1-a0)*i/n;return[cx+r*Math.cos(a),cy+r*Math.sin(a)];});
+function reg(g,at,du,par){(par||svgEl).appendChild(g);
+ [...g.querySelectorAll('path')].forEach((cp,i)=>{const fl=cp.getAttribute('fill');
+  if(fl&&fl!=='none'){cp.setAttribute('fill-opacity','0');strokes.push({el:cp,f:1,at:at+i*0.08,du});}
+  else{const L=cp.getTotalLength()||1;cp.setAttribute('stroke-dasharray',L);cp.setAttribute('stroke-dashoffset',L);strokes.push({el:cp,len:L,at:at+i*0.08,du});}});
+ return g;}
+const sk=(d,o,at,du,par)=>reg(rc.path(d,O(o||{})),at,du,par);
+const skE=(x,y,w,h,o,at,du,par)=>reg(rc.ellipse(x,y,w,h,O(o||{})),at,du,par);
+const skR=(x,y,w,h,o,at,du,par)=>reg(rc.rectangle(x,y,w,h,O(o||{})),at,du,par);
+const ld=(a,b,at)=>sk(pd([a,b]),{roughness:0.9,bowing:0.5,strokeWidth:0.9,stroke:SEC},at,0.6);
+function lb(tx,x,y,o,at,cps){const e=document.createElementNS(NS,'text');
+ e.setAttribute('x',x);e.setAttribute('y',y);e.setAttribute('class',o.c||'lbl');e.setAttribute('font-size',o.s||15);
+ if(o.f)e.style.fill=o.f;if(o.a)e.setAttribute('text-anchor',o.a);if(o.i)e.setAttribute('font-style','italic');
+ if(o.r)e.setAttribute('transform','rotate('+o.r+' '+x+' '+y+')');
+ svgEl.appendChild(e);labels.push({el:e,tx:tx,at:at,cps:cps||24});return e;}
+function dsh(a,b,dl,gp,o,at,du,par){const L=Math.hypot(b[0]-a[0],b[1]-a[1]),n=Math.max(1,Math.floor((L+gp)/(dl+gp)));
+ for(let k=0;k<n;k++){const u=k*(dl+gp)/L,v=Math.min(1,(k*(dl+gp)+dl)/L);
+  sk(pd([[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u],[a[0]+(b[0]-a[0])*v,a[1]+(b[1]-a[1])*v]]),Object.assign({roughness:0.6,bowing:0.3},o),at+du*k/n,0.3,par);}}
+
+sk('M24 24 L876 24 L876 876 L24 876 Z',{roughness:1.3,bowing:0.9,strokeWidth:1.7},1.2,1.9);
+sk('M34 34 L866 34 L866 866 L34 866 Z',{roughness:1.4,bowing:1,strokeWidth:0.9,stroke:SEC},1.7,1.7);
+[[34,34,1,1,2.4],[866,34,-1,1,2.7],[34,866,1,-1,3.0],[866,866,-1,-1,3.3]].forEach(([x,y,sx,sy,at])=>{
+ sk(pd(arc(0,0,1,0,1,12).map((_,i)=>{const a=i/12*Math.PI/2;return[x+sx*(10+34*Math.cos(a)),y+sy*(10+34*Math.sin(a))];})),{roughness:2,bowing:1.8,strokeWidth:1.1},at,1.2);
+ sk(pd([[x+sx*10,y+sy*46],[x+sx*24,y+sy*41],[x+sx*19,y+sy*28]]),{roughness:2,bowing:2,strokeWidth:1},at+0.3,0.9);
+ skE(x+sx*23,y+sy*23,10,10,{roughness:2,fill:SEC,fillStyle:'hachure',hachureGap:3},at+0.5,0.8);});
+sk('M196 56 L212 80 L196 104 L706 104 L690 80 L706 56 Z',{roughness:1.3,bowing:0.8,strokeWidth:1.5},2.0,1.7);
+sk('M206 62 L696 62',{roughness:1.1,strokeWidth:0.8,stroke:SEC},2.4,1.2);
+sk('M206 98 L696 98',{roughness:1.1,strokeWidth:0.8,stroke:SEC},2.6,1.2);
+lb('C',250,99,{c:'ttl',s:52,f:GOLD},3.0,0.9);
+lb('ARTA SOLIS DOMESTICI',288,92,{c:'ttl',s:30},3.4,15);
+lb("the sun's patch on my floor, surveyed hour by hour",450,130,{s:18,a:'middle'},5.0,26);
+lb('anno MMXXVI · ix octobris · lat. XL',450,152,{c:'ttl',s:13,i:1,a:'middle',f:SEC},6.2,20);
+lb('the light moves always. i move only on the hour.',450,177,{s:17,i:1,a:'middle',f:GOLD},47.0,22);
+
+const wl=(x1,y1,x2,y2,at)=>sk(pd([[x1,y1],[x2,y2]]),{roughness:1.4,bowing:0.8,strokeWidth:1.5},at,1.3);
+wl(190,286,710,286,2.6);wl(198,294,702,294,2.9);
+wl(190,286,190,743,3.0);wl(198,294,198,735,3.2);
+wl(710,286,710,743,3.1);wl(702,294,702,330.75,3.3);wl(702,420,702,735,3.4);
+wl(190,743,710,743,3.5);wl(198,735,366,735,3.6);wl(502.5,735,702,735,3.7);
+sk(pd([[366,735],[366,743]]),{roughness:1,strokeWidth:1.3},3.8,0.5);
+sk(pd([[502.5,735],[502.5,743]]),{roughness:1,strokeWidth:1.3},3.85,0.5);
+sk(pd([[366,739],[502.5,739]]),{roughness:1,bowing:0.5,strokeWidth:1.1,stroke:SEC},3.9,1.0);
+sk(pd([[434.3,734],[434.3,744]]),{roughness:1,strokeWidth:1.1},4.0,0.5);
+sk(pd(arc(702,330.75,89.25,Math.PI/2,Math.PI,14)),{roughness:1.1,bowing:0.6,strokeWidth:0.9,stroke:SEC},3.9,1.5);
+sk(pd([[702,330.75],[612.75,330.75]]),{roughness:1.2,strokeWidth:2},4.2,0.7);
+skR(371.25,714,126,15.75,{roughness:1.2,strokeWidth:1.1},4.4,1.2);
+for(let i=0;i<12;i++)sk(pd([[377+i*10.5,715.5],[377+i*10.5,728]]),{roughness:1,bowing:0.4,stroke:SEC,strokeWidth:0.9},4.6+i*0.06,0.5);
+for(let k=1;k<=20;k++){const y=735-21*k;sk(pd([[199,y],[701,y]]),{roughness:1.1,bowing:0.6,stroke:SEC,strokeWidth:0.7},4.8+k*0.12,1.0);}
+skR(229.5,294,252,36.75,{roughness:1.3,fill:SEC,fillStyle:'hachure',hachureAngle:-41,hachureGap:6,strokeWidth:1.2},5.2,2.0);
+for(let i=0;i<9;i++)sk(pd([[240+i*27,328],[251+i*27,311],[262+i*27,328]]),{roughness:1.5,bowing:1,strokeWidth:1},5.8+i*0.14,0.6);
+skR(224.25,393.75,84,95,{roughness:1.4,strokeWidth:1.2},6.4,1.4);
+skR(236,406,61,70,{roughness:1.6,fill:SEC,fillStyle:'zigzag',hachureGap:6,strokeWidth:0.9},6.7,1.5);
+sk(pd([[224.25,422],[236,422]]),{roughness:1.2,strokeWidth:1},6.9,0.4);
+sk(pd([[296.5,422],[308.25,422]]),{roughness:1.2,strokeWidth:1},6.95,0.4);
+skE(460.5,504,231,157.5,{roughness:1.5,bowing:1.3,strokeWidth:1.2},6.8,1.8);
+skE(460.5,504,206,133,{roughness:1.7,bowing:1.4,strokeWidth:0.8,stroke:SEC},7.1,1.6);
+for(let i=0;i<24;i++){const a=i/24*2*Math.PI,c=Math.cos(a),s2=Math.sin(a);
+ sk(pd([[460.5+115.5*c,504+78.75*s2],[460.5+125*c,504+87*s2]]),{roughness:1.2,bowing:0.5,stroke:SEC,strokeWidth:0.8},6.9+i*0.05,0.4);}
+skR(644.25,330.75,57.75,89.25,{roughness:1.2,fill:SEC,fillStyle:'cross-hatch',hachureGap:8,strokeWidth:1},7.4,1.9);
+skE(636,467,23,23,{roughness:1.5,strokeWidth:1.1},7.8,0.8);skE(660,467,23,23,{roughness:1.5,strokeWidth:1.1},7.9,0.8);
+skE(636,467,11,11,{roughness:1.8,stroke:SEC,strokeWidth:0.8},8.0,0.5);skE(660,467,11,11,{roughness:1.8,stroke:SEC,strokeWidth:0.8},8.05,0.5);
+sk('M652 686 L678 686 L675 705 L655 705 Z',{roughness:1.4,fill:SEC,fillStyle:'hachure',hachureGap:4,strokeWidth:1.1},8.1,1.2);
+[[-16,-14],[-9,-23],[0,-27],[9,-22],[16,-13]].forEach(([dx,dy],i)=>sk('M665 686 Q'+(665+dx*0.5)+' '+(686+dy*0.85)+' '+(665+dx)+' '+(686+dy),{roughness:1.8,bowing:2,strokeWidth:1},8.3+i*0.1,0.6));
+skE(303,338,17,12,{roughness:2.6,fill:SEC,fillStyle:'zigzag',hachureGap:3,strokeWidth:0.9},8.5,0.8);
+[[288,330],[318,332],[296,350]].forEach(([x,y],i)=>skE(x,y,4,4,{roughness:2,stroke:SEC,strokeWidth:0.7},8.7+i*0.08,0.3));
+dsh([434.3,714],[434.3,331],9,7,{stroke:SEC,strokeWidth:1},8.8,2.4);
+
+const cx=150,cy=800;
+skE(cx,cy,88,88,{roughness:1.3,strokeWidth:1.2},9.2,1.6);
+skE(cx,cy,62,62,{roughness:1.5,stroke:SEC,strokeWidth:0.9},9.5,1.2);
+sk(pd([[cx,cy-52],[cx+13,cy],[cx,cy+52],[cx-13,cy]])+' Z',{roughness:1.4,fill:SEC,fillStyle:'hachure',hachureGap:4,strokeWidth:1.1},9.7,1.6);
+sk(pd([[cx-52,cy],[cx,cy-11],[cx+52,cy],[cx,cy+11]])+' Z',{roughness:1.4,strokeWidth:1},9.9,1.4);
+sk(pd([[cx,cy-59],[cx-6,cy-47],[cx+6,cy-47]])+' Z',{roughness:1.6,fill:GOLD,fillStyle:'solid',stroke:GOLD},10.1,0.8);
+lb('SEPTENTRIO',cx,cy-58,{c:'ttl',s:10,a:'middle'},12.2,14);
+lb('MERIDIES',cx,cy+60,{c:'ttl',s:10,a:'middle'},12.4,14);
+lb('ORIENS',cx+56,cy+4,{c:'ttl',s:10},12.6,14);
+lb('OCCIDENS',cx-56,cy+4,{c:'ttl',s:10,a:'end'},12.8,14);
+sk(pd([[505,812],[820,812]]),{roughness:1,strokeWidth:1.4},9.8,1.2);
+for(let i=0;i<=3;i++)sk(pd([[505+105*i,803],[505+105*i,821]]),{roughness:1,strokeWidth:1.1},10.0+i*0.08,0.4);
+skR(505,803,105,9,{roughness:1,fill:INK,fillStyle:'solid',stroke:INK,strokeWidth:0.8},10.3,0.9);
+skR(715,803,105,9,{roughness:1,fill:INK,fillStyle:'solid',stroke:INK,strokeWidth:0.8},10.45,0.9);
+['0','I','II','III'].forEach((n,i)=>lb(n,505+105*i,836,{c:'ttl',s:11,a:'middle'},12.9+i*0.12,10));
+lb('SCALA · I METRUM',662,796,{c:'ttl',s:11,a:'middle',f:SEC},13.1,18);
+skR(736,512,100,66,{roughness:1.3,strokeWidth:1.1},10.0,1.3);
+skR(748,520,76,44,{roughness:1.4,strokeWidth:1.1},10.3,1.2);
+sk(pd([[786,520],[786,564]]),{roughness:1.1,strokeWidth:1},10.5,0.6);
+sk(pd([[748,542],[824,542]]),{roughness:1.1,strokeWidth:1,stroke:SEC},10.6,0.6);
+sk(pd([[742,571],[830,571]]),{roughness:1.2,strokeWidth:1.3},10.7,0.6);
+lb('FENESTRA · ELEVATIO',786,594,{c:'ttl',s:10,a:'middle',f:SEC},13.3,18);
+skR(712,318,154,152,{roughness:1.3,strokeWidth:1.2},10.2,1.4);
+sk(pd([[718,347],[860,347]]),{roughness:1,strokeWidth:0.8,stroke:SEC},10.5,0.8);
+lb('CLAVIS',789,341,{c:'ttl',s:17,a:'middle'},13.2,9);
+skR(720,363,22,13,{roughness:1,fill:GOLD,fillStyle:'solid',stroke:GOLD,strokeWidth:0.8},44.0,0.8);
+skR(720,391,22,13,{roughness:1.2,strokeWidth:1.1},45.0,0.8);
+dsh([720,422],[744,422],3,5,{stroke:SEC,strokeWidth:1.3},46.0,0.5);
+dsh([720,450],[744,450],9,6,{stroke:SEC,strokeWidth:1.1},47.0,0.5);
+lb('lux solis',752,376,{s:15},44.4,22);
+lb('hora',752,404,{s:15},45.4,22);
+lb('iter felis',752,432,{s:15},46.4,22);
+lb('meridiana',752,460,{s:15},47.4,22);
+const lva=[];for(let i=0;i<=24;i++){const u=i/24;lva.push([84+Math.sin(u*7.2)*34,690-262*u]);}
+sk(pd(lva),{roughness:1.9,bowing:1.6,strokeWidth:1.4},10.6,2.6);
+sk(pd(lva.map(([x,y],i)=>[x+14+Math.cos(i/24*7.2)*3,y+5])),{roughness:1.9,bowing:1.6,strokeWidth:1},10.9,2.6);
+[6,12,18].forEach((i,k)=>sk(pd([[lva[i][0]-4,lva[i][1]],[lva[i][0]-17,lva[i][1]-11],[lva[i][0]-3,lva[i][1]-13]])+' Z',{roughness:2,bowing:1.6,strokeWidth:1,stroke:SEC},11.4+k*0.2,0.7));
+skE(118,424,36,28,{roughness:1.7,strokeWidth:1.3},11.9,1.0);
+skE(126,418,7,7,{roughness:1.6,fill:INK,fillStyle:'solid',stroke:INK},12.2,0.4);
+sk('M134 432 Q152 436 164 420 Q172 408 166 396',{roughness:1.6,bowing:1.4,strokeWidth:1.3},12.3,1.0);
+sk('M130 440 Q150 446 162 428 Q172 414 160 398',{roughness:1.6,bowing:1.4,strokeWidth:1,stroke:SEC},12.5,1.0);
+for(let i=0;i<4;i++)sk(pd([[142+i*7,436-i*6],[146+i*7,444-i*6]]),{roughness:1.2,strokeWidth:0.8,stroke:SEC},12.7+i*0.07,0.3);
+[[172,386],[182,374],[168,366]].forEach(([x,y],i)=>skE(x,y,9-i*2,9-i*2,{roughness:2.2,stroke:SEC,strokeWidth:0.8},13.0+i*0.1,0.4));
+[[46,688],[84,692],[122,688]].forEach(([x,y],i)=>sk('M'+(x-18)+' '+y+' Q'+(x-9)+' '+(y-8)+' '+x+' '+y+' Q'+(x+9)+' '+(y+8)+' '+(x+18)+' '+y,{roughness:1.4,bowing:1,stroke:SEC,strokeWidth:1},10.4+i*0.15,0.6));
+for(let i=2;i<22;i+=2){const a=lva[i],b=lva[i+1],dx=b[0]-a[0],dy=b[1]-a[1],n=Math.hypot(dx,dy)||1;sk(pd([[a[0]+7,a[1]],[a[0]+7-6*dy/n,a[1]+6*dx/n]]),{roughness:1,bowing:0.4,stroke:SEC,strokeWidth:0.8},11.2+i*0.05,0.3);}
+sk('M162 400 L174 390 L178 396 L168 405 Z',{roughness:1.3,strokeWidth:1.1,fill:SEC,fillStyle:'hachure',hachureGap:3},12.9,0.6);
+lb('LEVIATHAN PULVEREUS',116,704,{c:'ttl',s:12,i:1,a:'middle'},11.8,20);
+lb('(it eats what the light finds)',116,722,{s:13,a:'middle',f:SEC},12.6,24);
+const sa=arc(434.3,735,95,0,Math.PI,22);
+for(let i=0;i<22;i+=2)sk(pd([sa[i],sa[i+1]]),{roughness:0.6,bowing:0.3,stroke:GOLD,strokeWidth:1},12.0+i*0.07,0.3);
+const gSun=document.createElementNS(NS,'g');svgEl.appendChild(gSun);gSun.setAttribute('opacity','0');
+skE(0,0,27,27,{roughness:1.3,stroke:GOLD,strokeWidth:1.4,fill:GOLD,fillStyle:'hachure',hachureGap:4},11.9,1.2,gSun);
+for(let i=0;i<8;i++){const a=i*Math.PI/4;sk(pd([[16.5*Math.cos(a),16.5*Math.sin(a)],[26*Math.cos(a),26*Math.sin(a)]]),{roughness:1,bowing:0.4,stroke:GOLD,strokeWidth:1.1},12.1+i*0.06,0.4,gSun);}
+
+lb('MONTES LIBRORUM',288,222,{c:'ttl',s:15,a:'middle'},7.6,20);
+lb('(the book mountains)',288,241,{s:13,a:'middle',f:SEC},8.4,24);
+ld([300,247],[336,299],7.5);
+lb('CUNICULUS PULVERIS',212,368,{c:'ttl',s:13},8.2,20);
+ld([300,357],[302,345],8.1);
+lb('SELLA VACUA',58,348,{c:'ttl',s:14},8.6,20);
+ld([172,352],[226,420],8.5);
+lb('INSULA TAPETIS',556,404,{c:'ttl',s:14},9.0,20);
+ld([560,410],[520,452],8.9);
+lb('FORNAX',296,728,{c:'ttl',s:14},9.4,20);
+ld([362,725],[376,722],9.3);
+lb('TERRA FRIGIDA',716,301,{c:'ttl',s:13},9.8,20);
+ld([714,307],[690,342],9.7);
+lb('FONS CROQUETTORUM',712,492,{c:'ttl',s:11},10.2,20);
+ld([714,487],[670,470],10.1);
+lb('SILVA MINIMA',716,717,{c:'ttl',s:13},10.6,20);
+ld([714,712],[680,700],10.5);
+lb('MARE TABULARUM',690,436,{c:'ttl',s:13,a:'end',f:SEC},11.0,20);
+lb('LINEA MERIDIANA',434,278,{c:'ttl',s:12,i:1,a:'middle',f:SEC},11.4,20);
+lb('FENESTRA MERIDIONALIS',566,770,{c:'ttl',s:13},7.0,22);
+ld([562,765],[505,744],6.9);
+
+const hAt=i=>(5+i)*C;
+HPOLY.forEach((p,i)=>{if(p.length<3)return;
+ sk(pd(p)+' Z',{roughness:1.5,bowing:1.1,strokeWidth:1.3},hAt(i),1.2);
+ lb(NUM[i],HST[i][0],Math.max(...p.map(q=>q[1]))+16,{c:'ttl',s:15,a:'middle'},hAt(i)+0.5,7);});
+HST.forEach((st,i)=>{skE(st[0],st[1],7,7,{roughness:1.6,stroke:SEC,strokeWidth:1.1,fill:SEC,fillStyle:'solid'},hAt(i)+0.1,0.5);
+ if(i>0)dsh(HST[i-1],st,4,7,{stroke:SEC,strokeWidth:1.3},hAt(i),0.4);});
+lb('ITER FELIS · VIII SALTVS',628,700,{c:'ttl',s:12,a:'end',f:SEC},44.0,18);
+
+const gCat=document.createElementNS(NS,'g');svgEl.appendChild(gCat);
+sk('M-15 1 C-17 -11 -4 -18 7 -13 C18 -8 19 7 7 13 C-4 18 -13 12 -15 1 Z',{roughness:1.4,bowing:1,strokeWidth:1.3,fill:DK,fillStyle:'solid'},5*C,1.0,gCat);
+skE(8,-4,19,18,{roughness:1.4,strokeWidth:1.2,fill:DK,fillStyle:'solid'},5*C+0.2,0.8,gCat);
+sk('M-15 3 C-24 8 -21 19 -7 20 C4 21 11 16 13 10',{roughness:1.6,bowing:1.4,strokeWidth:1.2},5*C+0.35,0.9,gCat);
+sk('M1 -11 L4 -20 L10 -13 Z',{roughness:1.5,strokeWidth:1.1,fill:DK,fillStyle:'solid'},5*C+0.5,0.5,gCat);
+sk('M12 -12 L18 -19 L19 -9 Z',{roughness:1.5,strokeWidth:1.1,fill:DK,fillStyle:'solid'},5*C+0.6,0.5,gCat);
+sk('M2 -5 Q5 -1 8 -5',{roughness:1,strokeWidth:0.9},5*C+0.85,0.4,gCat);
+sk('M12 -5 Q15 -1 18 -5',{roughness:1,strokeWidth:0.9},5*C+0.95,0.4,gCat);
+
+lb('V',715,691,{c:'ttl',s:15},40.3,7);
+ld([714,648],[699,665],40.4);
+lb('in pariete orientali',716,618,{c:'ttl',s:13,i:1},40.6,18);
+lb('the light climbed the',716,640,{s:16},41.4,24);
+lb('wall without me',716,660,{s:16},42.2,24);
+[[558.6,'IX',0],[478.8,'X',0],[372.8,'XI',0],[315.0,'XII',0],[515.5,'HODIE',1]].forEach(([y,n,g],i)=>{
+ sk(pd([[422,y],[446,y]]),{roughness:1,strokeWidth:1.2,stroke:g?GOLD:SEC},43.0+i*0.25,0.5);
+ lb(n,452,y+4,{c:'ttl',s:11,f:g?GOLD:SEC},43.6+i*0.35,8);});
+const GQ=[[366,609],[502.5,609],[502.5,314.9],[366,314.9]];
+GQ.forEach((a,i)=>dsh(a,GQ[(i+1)%4],9,8,{stroke:GOLD,strokeWidth:1.2},44.6+i*0.9,1.7));
+ld([514,252],[478,310],44.6);
+lb('XII DEC: it will reach the books.',520,243,{s:17},45.0,22);
+lb('locus reservatus',520,267,{c:'ttl',s:14,i:1,f:GOLD},48.2,16);
+skE(434,325,14,11,{roughness:1.5,stroke:GOLD,strokeWidth:1,fill:GOLD,fillStyle:'solid'},49.6,0.6);
+[[-9,-9],[-3,-12],[3,-12],[9,-9]].forEach(([dx,dy],i)=>skE(434+dx,325+dy,6,6,{roughness:1.5,stroke:GOLD,strokeWidth:0.9,fill:GOLD,fillStyle:'solid'},49.8+i*0.12,0.4));
+skE(812,776,17,14,{roughness:1.5,stroke:GOLD,strokeWidth:1.1,fill:GOLD,fillStyle:'solid'},56.6,0.7);
+[[-11,-11],[-4,-15],[4,-15],[11,-11]].forEach(([dx,dy],i)=>skE(812+dx,776+dy,7,7,{roughness:1.5,stroke:GOLD,strokeWidth:0.9,fill:GOLD,fillStyle:'solid'},56.9+i*0.14,0.4));
+lb('manu propria',812,746,{c:'ttl',s:12,i:1,a:'middle',f:GOLD},57.0,14);
+
+window.evts=HRS.map((h,i)=>({t:+hAt(i).toFixed(3),k:'hora',n:NUM[i]})).concat(
+ HST.slice(1).map((_,i)=>({t:+(hAt(i+1)).toFixed(3),k:'saltus',n:i+1})),
+ [{t:40,k:'paries'},{t:41.86,k:'occasus'},{t:49.6,k:'vestigium'},{t:58.5,k:'reset'}]);
+
+const pfl=$('pfl'),prm=$('prm'),pclp=$('pclp'),b1=$('b1'),b2=$('b2'),bnd=$('bnd'),r1=$('r1'),r2=$('r2');
+const setA=(el,k,v)=>{if(el['_'+k]!==v){el.setAttribute(k,v);el['_'+k]=v;}};
+function drawPaper(a,was){pctx.clearRect(0,0,W,H);if(a<=0)return;
+ pctx.globalAlpha=a;pctx.drawImage(base,0,0);pctx.globalAlpha=1;
+ for(const[p,al]of was){if(al<=0||p.length<3)continue;pctx.fillStyle='rgba(224,238,247,'+al.toFixed(4)+')';
+  pctx.beginPath();p.forEach((q,i)=>i?pctx.lineTo(q[0],q[1]):pctx.moveTo(q[0],q[1]));pctx.closePath();pctx.fill();}}
+
+window.renderFrame=(t)=>{
+ t=((t%DUR)+DUR)%DUR;
+ const wipe=t>58.4?Math.min(1,(t-58.4)/1.4):0,iw=1-wipe;
+ for(const s of strokes){let p;
+  if(wipe>0)p=iw;
+  else if(t<s.at)p=0;
+  else{const u=Math.min(1,(t-s.at)/s.du);p=1-(1-u)*(1-u);}
+  if(s.f)setA(s.el,'fill-opacity',p.toFixed(3));
+  else setA(s.el,'stroke-dashoffset',(s.len*(1-p)).toFixed(2));}
+ for(const l of labels){let n;
+  if(wipe>0)n=Math.floor(l.tx.length*iw);
+  else if(t<l.at)n=0;
+  else n=Math.min(l.tx.length,Math.floor((t-l.at)*l.cps));
+  const v=l.tx.slice(0,n);if(l.el._t!==v){l.el.textContent=v;l.el._t=v;}}
+ let s=3+t/C,la;
+ if(t<12.9)la=0;else if(t<5*C)la=(t-12.9)/(5*C-12.9);else la=s<17.4?1:(s<17.65?1-(s-17.4)/0.25:0);
+ if(t<5*C)s=8;
+ la*=iw;
+ if(la<0.002){la=0;s=8;}
+ const L=light(s),ps=L.poly.map(q=>q[0].toFixed(1)+','+q[1].toFixed(1)).join(' ');
+ setA(pfl,'points',ps);setA(prm,'points',ps);setA(pclp,'points',ps);
+ setA(pfl,'fill-opacity',(0.45*la).toFixed(3));setA(prm,'stroke-opacity',(0.95*la).toFixed(3));
+ [b1,b2].forEach((b,i)=>{const g=L.bars[i];if(g){setA(b,'x1',g[0][0].toFixed(1));setA(b,'y1',g[0][1].toFixed(1));setA(b,'x2',g[1][0].toFixed(1));setA(b,'y2',g[1][1].toFixed(1));}
+  setA(b,'stroke-opacity',(0.5*la).toFixed(3));});
+ if(L.band){setA(bnd,'x1',L.band[0].toFixed(1));setA(bnd,'x2',L.band[0].toFixed(1));setA(bnd,'y1',L.band[1].toFixed(1));setA(bnd,'y2',L.band[2].toFixed(1));}
+ setA(bnd,'stroke-opacity',(L.band?0.9*la:0).toFixed(3));
+ const v=sunv(s),nn=Math.hypot(v.E,v.N)||1,gx=434.3+95*v.E/nn,gy=735-95*v.N/nn;
+ setA(gSun,'transform','translate('+gx.toFixed(1)+' '+gy.toFixed(1)+')');
+ setA(gSun,'opacity',la.toFixed(3));
+ [r1,r2].forEach((r,i)=>{setA(r,'x1',gx.toFixed(1));setA(r,'y1',gy.toFixed(1));setA(r,'x2',i?'502.5':'366');setA(r,'y2','735');
+  setA(r,'stroke-opacity',(0.55*la).toFixed(3));});
+ let ci=Math.min(8,Math.max(0,Math.floor(t/C)-5)),cpz,cr=0;
+ if(wipe>0){const A=HST[8],B=HST[0];cpz=[A[0]+(B[0]-A[0])*wipe,A[1]+(B[1]-A[1])*wipe];}
+ else{const u0=ci>0?Math.min(1,Math.max(0,(t-(5+ci)*C)/0.45)):1,u=u0*u0*(3-2*u0),A=HST[Math.max(0,ci-1)],B=HST[ci];
+  cpz=[A[0]+(B[0]-A[0])*u,A[1]+(B[1]-A[1])*u-10*Math.sin(Math.PI*u)];cr=ci>0?6*Math.sin(Math.PI*u):0;}
+ setA(gCat,'transform','translate('+cpz[0].toFixed(1)+' '+cpz[1].toFixed(1)+') rotate('+cr.toFixed(2)+')');
+ drawPaper(1,HPOLY.map((p,i)=>{const st=(5+i)*C+1.2;return[p,wipe>0||t<st?0:Math.min(1,(t-st)/6)*0.06];}));
+ dimEl.style.opacity=((t<42.86?0:Math.min(1,(t-42.86)/3)*0.12)*iw).toFixed(3);
+ const k=Math.sin(Math.PI*t/DUR);
+ document.body.style.transform='scale('+(0.985+0.015*k).toFixed(4)+') rotate('+(0.4*k).toFixed(3)+'deg)';
+ return null;
+};
+window.renderFrame(0);
+window.ready=true;
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t);};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%60);}requestAnimationFrame(_loop);}
+requestAnimationFrame(_loop);
+</script>
+        <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+        <div id="audio-controls"><button id="audio-toggle">▶ Play</button></div>
+<script id="clawed-strudel-bootstrap" type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 84\\n// DURATION: 60\\n// FORM: A cycles 0-5; B cycles 5-9; C cycles 9-10; D cycles 10-14; E cycles 14-20; F cycles 20-21\\n// TONAL CENTER: Bb Ionian\\n// MOTIF: Bb4 C5 D5 F5 G5; one long-ringing struck note on each hour-cycle downbeat, rising to noon then falling\\n// HARMONIC PLAN: A dark Bb2/F3 pedal; B opening Bb2/F3 pedal; C brightest Bb2/F3 pedal; D closing Bb2/F3 pedal; E fading bare Bb2/F3 fifth; F dark resolved Bb2/F3 loop handoff\\n// PHRASE RULE: Four-beat hour cell with bell on beat 1, paired paws on beat 2, and three or four early quill strokes; sections overlap through bell tails while the pedal changes only in brightness\\nconst bellSine = '\u003c0 0 0 0 0 0.36 0.368 0.38 0.392 0.4 0.392 0.38 0.368 0.352 0.272 0 0 0.152 0 0 0>'\\nconst bellTri = '\u003c0 0 0 0 0 0.099 0.1012 0.1044 0.1078 0.11 0.1078 0.1044 0.1012 0.0968 0.0748 0 0 0.0418 0 0 0>'\\nconst roomSawA = '\u003c0.0354 0.038 0.0408 0.0448 0.049 0.0544 0.0598 0.064 0.068 0.072 0.068 0.0612 0.0544 0.0476 0.0394 0.0232 0.017 0.0136 0.0116 0.0102 0.0326>'\\nconst roomSawB = '\u003c0.0312 0.0336 0.036 0.0396 0.0432 0.048 0.0528 0.0564 0.06 0.0636 0.06 0.054 0.048 0.042 0.0348 0.0204 0.015 0.012 0.0102 0.009 0.0288>'\\nconst roomCutoff = '\u003c260 300 350 420 550 750 1000 1400 2000 2800 2000 1400 950 600 380 300 250 220 200 180 260>'\\n$: stack(\\n  note('\u003c~ ~ ~ ~ ~ bb4 c5 d5 f5 g5 f5 d5 c5 bb4 f4 ~ ~ bb5 ~ ~ ~>')\\n    .s('sine')\\n    .attack(0.004)\\n    .decay(1.7)\\n    .sustain(0)\\n    .release(2.2)\\n    .room(0.24)\\n    .gain(bellSine),\\n  note('\u003c~ ~ ~ ~ ~ bb4 c5 d5 f5 g5 f5 d5 c5 bb4 f4 ~ ~ bb5 ~ ~ ~>')\\n    .s('triangle')\\n    .attack(0.002)\\n    .decay(0.32)\\n    .sustain(0)\\n    .release(0.75)\\n    .hpf(700)\\n    .room(0.16)\\n    .gain(bellTri)\\n)\\n$: stack(\\n  note('[bb2,f3]')\\n    .s('sawtooth')\\n    .detune(-5)\\n    .attack(0.7)\\n    .decay(1.4)\\n    .sustain(0.72)\\n    .release(3.1)\\n    .gain(roomSawA),\\n  note('[bb2,f3]')\\n    .s('sawtooth')\\n    .detune(5)\\n    .attack(0.8)\\n    .decay(1.5)\\n    .sustain(0.68)\\n    .release(3.2)\\n    .gain(roomSawB)\\n).lpf(roomCutoff).lpq(0.4)\\n$: note('\u003c[bb6*6 ~] [bb6*5 ~] [bb6*6 ~] [bb6*5 ~] [bb6*4 ~] [bb6*4 ~] [bb6*3 ~] [bb6*4 ~] [bb6*3 ~] [bb6*4 ~] [bb6*3 ~] [bb6*4 ~] [bb6*3 ~] [bb6*4 ~] [bb6*3 ~] [bb6 ~ ~ ~] [~ bb6 ~ ~] [bb6 bb6 ~ ~] [~ bb6 ~ ~] [bb6 ~ ~ ~] ~>')\\n  .s('square')\\n  .attack(0.001)\\n  .decay(0.024)\\n  .sustain(0)\\n  .release(0.018)\\n  .hpf(1200)\\n  .lpf(6500)\\n  .gain(0.086)\\n$: note('\u003c~ ~ ~ ~ ~ ~ [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] [~ [bb1 bb1] ~ ~] ~ ~ ~ [~ [bb1 bb1] ~ ~] ~ ~ ~>')\\n  .s('sine')\\n  .attack(0.003)\\n  .decay(0.16)\\n  .sustain(0)\\n  .release(0.12)\\n  .penv(7)\\n  .pdecay(0.075)\\n  .lpf(520)\\n  .gain(0.26)\",\"bpm\":84,\"durationSec\":60,\"renderDurationSec\":60,\"cps\":0.35,\"cycles\":21,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body></html>

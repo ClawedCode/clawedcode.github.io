@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "// magicCircle — instrument / dense / orbit\n// dial for branches held unmerged\nprecision highp float;\n\nuniform float iTime;\nuniform vec2  iResolution;\n\n#define STACK_MAX 1\nconst float P_SCALE = 1.151156;\nconst float P_ROT = 115.0;\nconst float LOOP_DUR = 60.0;\nconst float P_WIDTHMUL = 1.120116;\nconst float P_LINEI = 1.475531;\nconst float P_GLOWAMOUNT = 0.392278;\nconst float P_GLOWRADIUS = 0.124685;\nconst float P_GLOWPOWER = 2.326051;\nconst float P_GLOWKNEE = 1.1891;\nconst float P_EXPOSURE = 1.42656;\nconst float P_GAMMA = 1.054691;\nconst float P_COLORMODE = 1.0;\nconst vec3 P_COLA = vec3(0.623529, 1.0, 0.941176);\nconst vec3 P_COLB = vec3(0.223529, 0.784314, 1.0);\nconst vec3 P_COLGLOW = vec3(0.054902, 0.560784, 0.847059);\nconst vec3 P_BGCOL = vec3(0.007843, 0.023529, 0.031373);\nconst float P_HUESHIFT = 0.0;\nconst float P_SAT = 0.967931;\nconst float P_MASKR = 1.297839;\nconst float P_MASKFEATHER = 0.195217;\nconst float P_RINGSON = 1.0;\nconst float P_RINGCOUNT = 5.0;\nconst float P_RINGR0 = 0.206238;\nconst float P_RINGGAP = 0.142824;\nconst float P_RINGW = 0.004912;\nconst float P_RINGTAPER = 0.0;\nconst float P_RINGOPACITY = 1.0;\nconst float P_RINGDASH = 1.0;\nconst float P_RINGALT = 0.0;\nconst float P_RINGDASHCOUNT = 43.0;\nconst float P_RINGDUTY = 0.28761;\nconst float P_RINGSPIN = 0.024353;\nconst float P_RINGH = -0.032881;\nconst float P_TICKSON = 1.0;\nconst float P_TICKCOUNT = 126.0;\nconst float P_TICKR = 0.683363;\nconst float P_TICKLEN = 0.068635;\nconst float P_TICKW = 0.005247;\nconst float P_TICKEVERY = 6.0;\nconst float P_TICKLONGMUL = 2.668927;\nconst float P_TICKLONGW = 1.498869;\nconst float P_TICKSPIN = 0.079786;\nconst float P_TICKOPACITY = 1.0;\nconst float P_TICKH = -0.032881;\nconst float P_PGAON = 1.0;\nconst float P_PGAN = 9.0;\nconst float P_PGAK = 2.0;\nconst float P_PGAR = 0.45056;\nconst float P_PGAW = 0.004509;\nconst float P_PGAPHASE = -6.0;\nconst float P_PGASPIN = -0.023271;\nconst float P_PGAOPACITY = 1.0;\nconst float P_PGAH = -0.098553;\nconst float P_PGBON = 0.0;\nconst float P_PGBN = 4.0;\nconst float P_PGBK = 2.0;\nconst float P_PGBR = 0.833935;\nconst float P_PGBW = 0.003307;\nconst float P_PGBPHASE = -142.0;\nconst float P_PGBSPIN = -0.10472;\nconst float P_PGBOPACITY = 0.606776;\nconst float P_PGBH = 0.120047;\nconst float P_STARON = 1.0;\nconst float P_STARN = 5.0;\nconst float P_STARM = 4.224525;\nconst float P_STARR = 0.191119;\nconst float P_STARW = 0.004989;\nconst float P_STARFILL = 0.0;\nconst float P_STARSPIN = 0.10472;\nconst float P_STAROPACITY = 0.61341;\nconst float P_STARH = -0.014189;\nconst float P_RUNESON = 1.0;\nconst float P_RUNECOUNT = 51.0;\nconst float P_RUNER = 0.890373;\nconst float P_RUNEBAND = 0.117129;\nconst float P_RUNESIZE = 0.786366;\nconst float P_RUNECOMPLEX = 2.0;\nconst float P_RUNESEED = 13.0;\nconst float P_RUNEW = 0.003097;\nconst float P_RUNESPINE = 0.0;\nconst float P_RUNEFRAME = 1.0;\nconst float P_RUNEDIVIDERS = 1.0;\nconst float P_RUNESPIN = 0.0;\nconst float P_RUNEOPACITY = 1.0;\nconst float P_RUNEH = 0.127874;\nconst float P_DOTSON = 0.0;\nconst float P_DOTCOUNT = 13.0;\nconst float P_DOTR = 0.300591;\nconst float P_DOTSIZE = 0.010212;\nconst float P_DOTHOLLOW = 1.0;\nconst float P_DOTW = 0.004905;\nconst float P_DOTSPIN = -0.024166;\nconst float P_DOTOPACITY = 1.0;\nconst float P_DOTH = -0.002116;\nconst float P_ARCSON = 1.0;\nconst float P_ARCCOUNT = 7.0;\nconst float P_ARCR = 0.99606;\nconst float P_ARCSPAN = 77.0;\nconst float P_ARCW = 0.004733;\nconst float P_ARCSPIN = -0.05984;\nconst float P_ARCOPACITY = 1.0;\nconst float P_ARCH = 0.025607;\nconst float P_SWEEPON = 1.0;\nconst float P_SWEEPR0 = 0.104201;\nconst float P_SWEEPR1 = 0.930373;\nconst float P_SWEEPSPIN = -0.10472;\nconst float P_SWEEPWIDTH = 0.062324;\nconst float P_SWEEPGAIN = 0.307849;\nconst float P_SWEEPH = 0.032359;\nconst float P_COREON = 1.0;\nconst float P_CORER = 0.220101;\nconst float P_COREI = 0.21043;\nconst float P_COREPULSE = 0.536437;\nconst float P_COREPULSESPEED = 1.533333;\nconst float P_COREDISK = 0.0;\nconst float P_COREDISKR = 0.057201;\nconst float P_COREH = 0.0685;\nconst float P_PARALLAX = 0.676415;\nconst float P_DEPTHSCALE = 0.816728;\nconst float P_HAZE = 0.244346;\nconst float P_DOF = 0.0;\nconst float P_FOCUS = 0.128551;\nconst float P_STACKGAP = 0.0;\nconst float P_STACKFADE = 0.778086;\nconst float P_STACKTWIST = -1.115191;\nconst float P_STACKSCALE = 0.923487;\nconst float P_TWIST = 0.0;\nconst float P_RIPPLEAMP = 0.0;\nconst float P_RIPPLEFREQ = 21.925853;\nconst float P_RIPPLESPEED = 1.361357;\nconst float P_WARPAMT = 0.0;\nconst float P_WARPSCALE = 2.011549;\nconst float P_WARPSPEED = 0.10472;\nconst float P_WARPORBIT = 0.770164;\nconst float P_KALEIDO = 1.0;\nconst float P_MIRROR = 1.0;\nconst float P_VIGNETTE = 0.675169;\nconst float P_SCANAMT = 0.0;\nconst float P_SCANFREQ = 626.0;\nconst float P_GRAIN = 0.025769;\nconst float P_DISSOLVEMODE = 0.0;\nconst float P_EDGEGLOW = 1.068484;\nconst float REVEAL_IN = 0.138672;\nconst float REVEAL_OUT = 0.094585;\nconst float CAM_TILT = 25.939578;\nconst float CAM_TILT_AMP = 13.367886;\nconst float CAM_TILT_HZ = 1.0;\nconst float CAM_YAW = 0.0;\nconst float CAM_YAW_AMP = 25.699285;\nconst float CAM_YAW_HZ = 1.0;\nconst float CAM_DIST = 2.909;\nconst float CAM_TANH = 0.414214;\n\n#define PI  3.141592653589793\n#define TAU 6.283185307179586\n#define DEG 0.017453292519943295\n\n/* PW = half the width of one pixel measured in field space. Every edge is\n   antialiased over +/-PW, which is why the circle stays crisp at any zoom or\n   tilt without multisampling. Set once per scene() call. */\nfloat PW;\n\n/* ACC.x = hard line coverage, ACC.y = soft glow energy.\n   Layers add into it; colour is applied once at the end. Keeping them apart\n   means glow can bloom past a line without smearing the line itself. */\nvec2 ACC;\n\n/* Per-layer depth state, set by setLayer() and read by emit(). */\nvec2  P_FLAT;\nvec3  EYE;\nfloat L_H;\nfloat L_ATT;\nfloat L_BLUR;\nfloat STACK_H, STACK_ROT, STACK_OP, STACK_SCL;\nfloat LOOP_T;      /* mod(iTime, LOOP_DUR) — every periodic term phases off this */\nfloat REVEAL;      /* 0..1 grow/collapse envelope */\n\n/* ===================== hashing & noise ===================== */\nfloat hash11(float p){ p = fract(p*0.1031); p *= p + 33.33; p *= p + p; return fract(p); }\nfloat hash21(vec2 p){\n  vec3 p3 = fract(vec3(p.xyx)*0.1031);\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.x + p3.y)*p3.z);\n}\nfloat vnoise(vec2 p){\n  vec2 i = floor(p), f = fract(p);\n  vec2 u = f*f*(3.0 - 2.0*f);\n  float a = hash21(i),               b = hash21(i+vec2(1.0,0.0));\n  float c = hash21(i+vec2(0.0,1.0)), d = hash21(i+vec2(1.0,1.0));\n  return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);\n}\nfloat fbm(vec2 p){\n  float s = 0.0, a = 0.5;\n  for(int i=0;i\u003c4;i++){\n    s += a*vnoise(p);\n    p *= 2.03;\n    p = vec2(p.x*0.8 - p.y*0.6, p.x*0.6 + p.y*0.8);\n    a *= 0.5;\n  }\n  return s;\n}\n\n/* ===================== signed distance fields ===================== */\n\nfloat sdSeg(vec2 p, vec2 a, vec2 b){\n  vec2 pa = p - a, ba = b - a;\n  float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0);\n  return length(pa - ba*h);\n}\n\n/* Exact star SDF (after Inigo Quilez). n points, m controls sharpness:\n   m -> 2 is a needle star, m -> n relaxes back to the polygon. */\nfloat sdStar(vec2 p, float r, float n, float m){\n  n = max(n,3.0); m = clamp(m, 2.0, n);\n  float an = PI/n, en = PI/m;\n  vec2 acs = vec2(cos(an), sin(an));\n  vec2 ecs = vec2(cos(en), sin(en));\n  float bn = mod(atan(p.x,p.y), 2.0*an) - an;\n  p = length(p)*vec2(cos(bn), abs(sin(bn)));\n  p -= r*acs;\n  p += ecs*clamp(-dot(p,ecs), 0.0, r*acs.y/ecs.y);\n  return length(p)*sign(p.x);\n}\n\n/* Polygram {n/k}: connect vertex i to vertex i+k around a circle of radius R.\n   k = 1 gives the plain polygon, k = 2 on 5 points gives the pentagram.\n   When gcd(n,k) > 1 the figure is compound — {6/2} is literally two overlaid\n   triangles, which is why the hexagram looks the way it does. */\nfloat sdPolygram(vec2 p, float R, float n, float k, float phase){\n  float best = 1e9;\n  for(int i=0;i\u003c24;i++){\n    float fi = float(i);\n    if(fi >= n) break;\n    float a0 = (fi      /n)*TAU + phase;\n    float a1 = ((fi + k)/n)*TAU + phase;\n    best = min(best, sdSeg(p, R*vec2(cos(a0),sin(a0)), R*vec2(cos(a1),sin(a1))));\n  }\n  return best;\n}\n\n/* Arc of aperture ap (half-angle), centred on +y, radius ra, thickness rb. */\nfloat sdArcSeg(vec2 q, float ap, float ra, float rb){\n  q.x = abs(q.x);\n  vec2 sc = vec2(sin(ap), cos(ap));\n  return ((sc.y*q.x > sc.x*q.y) ? length(q - sc*ra) : abs(length(q) - ra)) - rb;\n}\n\n/* ===================== ink deposition ===================== */\n\n/* Stroke a distance field. Two details worth stealing:\n   1. the half-width is floored at ~0.6 px so hairlines never vanish, and the\n      lost width is paid back as opacity — energy-preserving thin lines;\n   2. glow is a Cauchy-style falloff g/(|d|+g), cheap and infinitely wide. */\nvoid emit(float d, float halfW, float op){\n  op *= L_ATT*STACK_OP;\n  if(op \u003c= 0.0) return;\n  halfW = max(halfW*P_WIDTHMUL, 1e-5);\n  float w = max(halfW, PW*0.62);\n  /* Defocus widens the transition band. Spreading a fixed amount of ink over\n     a wider band must also dim it, hence the second factor — otherwise\n     out-of-focus layers read as thicker instead of blurrier. */\n  float e    = PW + L_BLUR;\n  float fade = (halfW/w)*(w/(w + L_BLUR));\n  ACC.x += (1.0 - smoothstep(w - e, w + e, abs(d)))*op*fade;\n  float g = P_GLOWRADIUS*0.08 + PW*2.0 + L_BLUR*1.5;\n  ACC.y += pow(g/(abs(d) + g), max(P_GLOWPOWER, 0.4))*op*fade;\n}\n\n/* Fill the interior of a field (d \u003c 0 inside). */\nvoid emitFill(float d, float op){\n  op *= L_ATT*STACK_OP;\n  if(op \u003c= 0.0) return;\n  float e = PW + L_BLUR;\n  ACC.x += (1.0 - smoothstep(-e, e, d))*op;\n  float g = P_GLOWRADIUS*0.08 + PW*2.0 + L_BLUR*1.5;\n  ACC.y += pow(g/(abs(d) + g), max(P_GLOWPOWER, 0.4))*op*0.6;\n}\n\n/* Angular dash mask. The antialiasing width is derived from PW/radius rather\n   than fwidth(atan(...)), which would explode along the -x seam. */\nfloat dashMask(float ang, float count, float duty, float radius){\n  float t = ang/TAU*count;\n  float e = max(PW/max(radius, 1e-3)*count/TAU, 1e-4);\n  float f = fract(t);\n  duty = clamp(duty, 0.02, 0.98);\n  return smoothstep(-e, e, f)*smoothstep(duty + e, duty - e, f);\n}\n\nfloat spin(float rate){ return LOOP_T*rate + P_ROT*DEG + STACK_ROT; }\n\n/* ===================== parallax ===================== */\n\n/* Where does the eye ray through this fragment cross the plane z = h?\n   The fragment sits at (q, 0); the eye at E. Solving\n        E + t*((q,0) - E) = (.,.,h)   =>   t = 1 - h/E.z\n   gives the exact hit point, so the offset is  -(h/E.z)*(q - E.xy).\n   Head-on this is a pure scale — near layers magnify, which is correct\n   perspective. Under tilt it becomes a lateral slide: real parallax. */\nvec2 dom(){\n  float h = L_H*P_PARALLAX;\n  if(abs(h) \u003c 1e-6 && abs(STACK_SCL - 1.0) \u003c 1e-6) return P_FLAT;\n  float ez = (EYE.z \u003c 0.0 ? -1.0 : 1.0)*max(abs(EYE.z), 0.08);\n  vec2 q = P_FLAT/STACK_SCL;\n  return q - (h/ez)*(q - EYE.xy);\n}\n\n/* Height in field units -> the depth cues that height implies. */\nvoid setLayer(float h){\n  L_H    = (h + STACK_H)*P_DEPTHSCALE;\n  /* Aerial perspective: distance costs contrast, proximity buys a little. */\n  L_ATT  = exp(-max(-L_H, 0.0)*P_HAZE*4.0)*(1.0 + max(L_H, 0.0)*P_HAZE*0.6);\n  L_BLUR = abs(L_H - P_FOCUS)*P_DOF*0.12;\n}\n\n/* ===================== layers ===================== */\n\nvoid layerRings(vec2 p){\n  if(P_RINGSON \u003c 0.5) return;\n  float r = length(p), ang = atan(p.y, p.x);\n  for(int i=0;i\u003c12;i++){\n    float fi = float(i);\n    if(fi >= P_RINGCOUNT) break;\n    float rad = P_RINGR0 + fi*P_RINGGAP;\n    if(rad \u003c= 0.0) continue;\n    float taper = mix(1.0, 1.0 - fi/max(P_RINGCOUNT - 1.0, 1.0)*0.8, P_RINGTAPER);\n    float m = P_RINGOPACITY;\n    if(P_RINGDASH > 0.5){\n      float dir = (P_RINGALT > 0.5 && mod(fi,2.0) \u003c 0.5) ? -1.0 : 1.0;\n      m *= dashMask(ang + spin(P_RINGSPIN*dir), max(floor(P_RINGDASHCOUNT),2.0), P_RINGDUTY, rad);\n    }\n    /* Inner rings sit closer to the eye of the spiral: fade the ones whose\n       dashes have shrunk below a pixel instead of letting them alias. */\n    if(P_RINGDASH > 0.5) m *= smoothstep(0.0, 1.0, clamp(rad*TAU/max(P_RINGDASHCOUNT,2.0)/max(PW*3.0,1e-5), 0.0, 1.0));\n    emit(r - rad, P_RINGW*0.5*taper, m);\n  }\n}\n\nvoid layerTicks(vec2 p){\n  if(P_TICKSON \u003c 0.5) return;\n  float n = max(floor(P_TICKCOUNT), 1.0);\n  float a = atan(p.y,p.x) - spin(P_TICKSPIN);\n  float sector = TAU/n;\n  float idx = floor(a/sector + 0.5);\n  float da  = a - idx*sector;\n  vec2  q   = length(p)*vec2(cos(da), sin(da));\n  float k   = mod(mod(idx, n), max(floor(P_TICKEVERY),1.0));\n  float lng = (k \u003c 0.5) ? 1.0 : 0.0;\n  float r1  = P_TICKR + P_TICKLEN*mix(1.0, P_TICKLONGMUL, lng);\n  float d   = sdSeg(q, vec2(P_TICKR, 0.0), vec2(r1, 0.0));\n  emit(d, P_TICKW*0.5*mix(1.0, P_TICKLONGW, lng), P_TICKOPACITY);\n}\n\nvoid layerPolygramA(vec2 p){\n  if(P_PGAON \u003c 0.5) return;\n  float d = sdPolygram(p, P_PGAR, max(floor(P_PGAN),3.0), max(floor(P_PGAK),1.0),\n                       spin(P_PGASPIN) + P_PGAPHASE*DEG);\n  emit(d, P_PGAW*0.5, P_PGAOPACITY);\n}\nvoid layerPolygramB(vec2 p){\n  if(P_PGBON \u003c 0.5) return;\n  float d = sdPolygram(p, P_PGBR, max(floor(P_PGBN),3.0), max(floor(P_PGBK),1.0),\n                       spin(P_PGBSPIN) + P_PGBPHASE*DEG);\n  emit(d, P_PGBW*0.5, P_PGBOPACITY);\n}\n\nvoid layerStar(vec2 p){\n  if(P_STARON \u003c 0.5) return;\n  float a = spin(P_STARSPIN);\n  vec2 q = vec2(cos(a)*p.x + sin(a)*p.y, -sin(a)*p.x + cos(a)*p.y);\n  float d = sdStar(q, P_STARR, floor(P_STARN), P_STARM);\n  if(P_STARFILL > 0.5) emitFill(d, P_STAROPACITY*0.5);\n  emit(d, P_STARW*0.5, P_STAROPACITY);\n}\n\n/* One stroke of a rune, chosen from a small grammar of lattice segments.\n   Real scripts are built from a handful of reusable strokes, so sampling a\n   grammar reads as writing; sampling free endpoints reads as scribble. */\nvoid strokeFromHash(float h, out vec2 A, out vec2 B){\n  float lv  = floor(hash11(h*47.31 + 3.7)*3.0) - 1.0;\n  float sgn = (hash11(h*13.9 + 7.1) \u003c 0.5) ? -1.0 : 1.0;\n  float t   = floor(h*8.0);\n  if      (t \u003c 1.0){ A = vec2(-1.0, lv);   B = vec2( 1.0, lv); }\n  else if (t \u003c 2.0){ A = vec2( 0.0, lv);   B = vec2( sgn, lv); }\n  else if (t \u003c 3.0){ A = vec2( sgn,-1.0);  B = vec2( sgn, 1.0); }\n  else if (t \u003c 4.0){ A = vec2(-sgn,-1.0);  B = vec2( sgn, 1.0); }\n  else if (t \u003c 5.0){ A = vec2(-sgn, lv);   B = vec2( 0.0, lv + (lv \u003c 1.0 ? 1.0 : -1.0)); }\n  else if (t \u003c 6.0){ A = vec2( 0.0,-1.0);  B = vec2( sgn, 0.0); }\n  else if (t \u003c 7.0){ A = vec2( 0.0, 0.0);  B = vec2( sgn, 1.0); }\n  else             { A = vec2(-sgn, 0.0);  B = vec2( sgn, lv); }\n}\n\nvoid layerRunes(vec2 p){\n  if(P_RUNESON \u003c 0.5) return;\n  float n  = max(floor(P_RUNECOUNT), 3.0);\n  float a  = atan(p.y,p.x) - spin(P_RUNESPIN);\n  float r  = length(p);\n  float rc = P_RUNER, bw = P_RUNEBAND;\n\n  if(P_RUNEFRAME > 0.5){\n    emit(r - (rc - bw*0.5), P_RUNEW*0.4, P_RUNEOPACITY);\n    emit(r - (rc + bw*0.5), P_RUNEW*0.4, P_RUNEOPACITY);\n  }\n\n  float sector = TAU/n;\n  float idx = floor(a/sector + 0.5);\n  float da  = a - idx*sector;\n\n  if(P_RUNEDIVIDERS > 0.5){\n    float db = a - (idx + 0.5)*sector;\n    vec2 qb = r*vec2(cos(db), sin(db));\n    emit(sdSeg(qb, vec2(rc - bw*0.5, 0.0), vec2(rc + bw*0.5, 0.0)), P_RUNEW*0.35, P_RUNEOPACITY*0.8);\n  }\n\n  /* Local glyph frame: y is radial (outward), x is tangential arc length.\n     One isotropic scale keeps letterforms from shearing near the band edges. */\n  float s = min(rc*sector*0.5, bw*0.5)*clamp(P_RUNESIZE, 0.05, 1.0);\n  if(s \u003c= 0.0) return;\n  vec2 g = vec2(r*sin(da), r*cos(da) - rc)/s;\n  if(dot(g,g) > 12.0) return;\n\n  float seed = mod(idx, n)*7.13 + P_RUNESEED*31.7;\n  float ns   = 1.0 + floor(hash11(seed)*max(P_RUNECOMPLEX,1.0));\n  float d = 1e9;\n  for(int i=0;i\u003c6;i++){\n    if(float(i) >= ns) break;\n    vec2 A,B; strokeFromHash(hash11(seed + float(i)*13.77), A, B);\n    d = min(d, sdSeg(g, A, B));\n  }\n  if(P_RUNESPINE > 0.5) d = min(d, sdSeg(g, vec2(0.0,-1.0), vec2(0.0,1.0)));\n  emit(d*s, P_RUNEW*0.5, P_RUNEOPACITY);\n}\n\nvoid layerDots(vec2 p){\n  if(P_DOTSON \u003c 0.5) return;\n  float n = max(floor(P_DOTCOUNT),1.0);\n  float a = atan(p.y,p.x) - spin(P_DOTSPIN);\n  float sector = TAU/n;\n  float da = a - floor(a/sector + 0.5)*sector;\n  vec2  q  = length(p)*vec2(cos(da), sin(da));\n  float d  = length(q - vec2(P_DOTR, 0.0)) - P_DOTSIZE;\n  if(P_DOTHOLLOW > 0.5) emit(d, P_DOTW*0.5, P_DOTOPACITY);\n  else                  emitFill(d, P_DOTOPACITY);\n}\n\nvoid layerArcs(vec2 p){\n  if(P_ARCSON \u003c 0.5) return;\n  float n = max(floor(P_ARCCOUNT),1.0);\n  float a = atan(p.y,p.x) - spin(P_ARCSPIN);\n  float sector = TAU/n;\n  float da = a - floor(a/sector + 0.5)*sector;\n  vec2  q  = length(p)*vec2(cos(da), sin(da));\n  float d  = sdArcSeg(vec2(q.y, q.x), min(P_ARCSPAN*0.5*DEG, sector*0.5), P_ARCR, P_ARCW*0.5);\n  emit(d, P_ARCW*0.5, P_ARCOPACITY);\n}\n\nvoid layerCore(vec2 p){\n  if(P_COREON \u003c 0.5) return;\n  float r = length(p);\n  float pulse = 1.0 + P_COREPULSE*sin(LOOP_T*P_COREPULSESPEED*TAU*0.25);\n  ACC.y += P_COREI*pulse*exp(-r/max(P_CORER,1e-3)*2.5)*L_ATT*STACK_OP;\n  if(P_COREDISK > 0.5) emitFill(r - P_COREDISKR*pulse, 1.0);\n}\n\n/* Rotating scanner beam. Not in the original — a video has no mouse, so the\n   circle needs one element that reads as being operated. Pure glow, so it\n   passes over the ink instead of drawing on top of it.\n\n   The angular profile is the *periodic* distance to the beam axis rather than\n   a fract() tail: a decaying tail wraps with a step discontinuity, and any\n   twist in the domain smears that step into a spiral seam across the plate. */\nvoid layerSweep(vec2 p){\n  if(P_SWEEPON \u003c 0.5) return;\n  float r = length(p);\n  if(r > P_SWEEPR1 || r \u003c P_SWEEPR0) return;\n  float a = atan(p.y,p.x) - LOOP_T*P_SWEEPSPIN;\n  float da = 0.5 - abs(fract(a/TAU) - 0.5);\n  float head = exp(-da/max(P_SWEEPWIDTH, 0.01));\n  float band = smoothstep(P_SWEEPR0, P_SWEEPR0 + 0.06, r)*smoothstep(P_SWEEPR1, P_SWEEPR1 - 0.18, r);\n  ACC.y += head*band*P_SWEEPGAIN*L_ATT*STACK_OP;\n}\n\n/* ===================== domain operators ===================== */\n\n/* Applied before the layers, so every layer inherits the same distortion.\n   The noise warp walks a closed circle in fbm space rather than drifting in a\n   straight line, so it returns to its own starting field at the loop seam. */\nvec2 warp(vec2 p){\n  float r = length(p), a = atan(p.y,p.x);\n  a += P_TWIST*r;\n  r += P_RIPPLEAMP*0.08*sin(r*P_RIPPLEFREQ - LOOP_T*P_RIPPLESPEED);\n  p = vec2(cos(a), sin(a))*r;\n  if(P_WARPAMT > 0.0){\n    float ph = LOOP_T*P_WARPSPEED;\n    vec2 orb = vec2(cos(ph), sin(ph))*P_WARPORBIT;\n    vec2 o = vec2(fbm(p*P_WARPSCALE + orb),\n                  fbm(p*P_WARPSCALE + vec2(5.2,1.3) - orb)) - 0.5;\n    p += o*P_WARPAMT*0.35;\n  }\n  return p;\n}\n\n/* Kaleidoscope: fold the angle into one sector. n-fold symmetry for the cost\n   of one sector — the classic reason magic circles are cheap to draw. */\nvec2 kaleido(vec2 p){\n  float n = floor(P_KALEIDO);\n  if(n \u003c 2.0) return p;\n  float s = TAU/n;\n  float a = mod(atan(p.y,p.x) + s*0.5, s) - s*0.5;\n  if(P_MIRROR > 0.5) a = abs(a);\n  return vec2(cos(a), sin(a))*length(p);\n}\n\n/* ===================== colour ===================== */\n\nvec3 hsv2rgb(vec3 c){\n  vec3 rgb = clamp(abs(mod(c.x*6.0 + vec3(0.0,4.0,2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);\n  return c.z*mix(vec3(1.0), rgb, c.y);\n}\nvec3 rgb2hsv(vec3 c){\n  vec4 K = vec4(0.0, -1.0/3.0, 2.0/3.0, -1.0);\n  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));\n  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));\n  float d = q.x - min(q.w, q.y), e = 1.0e-10;\n  return vec3(abs(q.z + (q.w - q.y)/(6.0*d + e)), d/(q.x + e), q.x);\n}\nvec3 grade(vec3 c){\n  vec3 h = rgb2hsv(c);\n  h.x = fract(h.x + P_HUESHIFT);\n  h.y = clamp(h.y*P_SAT, 0.0, 1.0);\n  return hsv2rgb(h);\n}\nvec3 palette(float r, float ang, float inten){\n  vec3 A = grade(P_COLA), B = grade(P_COLB);\n  float m = P_COLORMODE;\n  if(m \u003c 0.5) return A;\n  if(m \u003c 1.5) return mix(A, B, clamp(r/max(P_MASKR, 0.001), 0.0, 1.0));\n  if(m \u003c 2.5) return mix(B, A, clamp(inten, 0.0, 1.0));\n  if(m \u003c 3.5) return hsv2rgb(vec3(fract(ang/TAU + P_HUESHIFT), clamp(P_SAT*0.8,0.0,1.0), 1.0));\n  return hsv2rgb(vec3(fract(r*0.6 + LOOP_T/LOOP_DUR + P_HUESHIFT), clamp(P_SAT*0.8,0.0,1.0), 1.0));\n}\n\n/* Reveal / dissolve. Returns coverage and writes the burning edge.\n   REVEAL is the looping grow -> hold -> collapse envelope, so the plate is\n   empty at both ends of the loop and the video cuts cleanly. */\nfloat reveal(vec2 p, out float edge){\n  edge = 0.0;\n  if(P_DISSOLVEMODE \u003c 0.5) return 1.0;\n  float pr = clamp(REVEAL, 0.0, 1.0);\n  if(P_DISSOLVEMODE \u003c 1.5){\n    float r = length(p)/max(P_MASKR, 0.001);\n    edge = exp(-abs(r - pr)/0.035)*step(0.001, pr)*step(pr, 0.999);\n    return smoothstep(pr + 0.03, pr - 0.03, r);\n  }\n  if(P_DISSOLVEMODE \u003c 2.5){\n    float a = fract((atan(p.y,p.x) + PI)/TAU);\n    edge = exp(-abs(a - pr)/0.012)*step(0.001, pr)*step(pr, 0.999);\n    return smoothstep(pr, pr - 0.02, a);\n  }\n  if(P_DISSOLVEMODE \u003c 3.5){\n    float n = fbm(p*7.0);\n    edge = exp(-abs(pr - n)/0.05)*step(0.001, pr)*step(pr, 0.999);\n    return smoothstep(n - 0.05, n + 0.05, pr);\n  }\n  return pr;\n}\n\n/* ===================== the scene ===================== */\n\n/* One pass over every layer, each sampled at its own altitude. */\nvoid drawPlate(){\n  setLayer(P_RINGH); layerRings(dom());\n  setLayer(P_TICKH); layerTicks(dom());\n  setLayer(P_PGAH);  layerPolygramA(dom());\n  setLayer(P_PGBH);  layerPolygramB(dom());\n  setLayer(P_STARH); layerStar(dom());\n  setLayer(P_RUNEH); layerRunes(dom());\n  setLayer(P_DOTH);  layerDots(dom());\n  setLayer(P_ARCH);  layerArcs(dom());\n  setLayer(P_SWEEPH);layerSweep(dom());\n  setLayer(P_COREH); layerCore(dom());\n}\n\nvec3 scene(vec2 p0, float pw){\n  PW = pw;\n  ACC = vec2(0.0);\n\n  STACK_H = 0.0; STACK_ROT = 0.0; STACK_OP = 1.0; STACK_SCL = 1.0;\n  P_FLAT = kaleido(warp(p0));\n\n  /* Extrusion: redraw the whole plate at rising altitudes, each copy fainter,\n     twisted and scaled. Additive blending means order is irrelevant.\n     STACK_MAX is a #define, not a variable: GLSL ES unrolls this loop at\n     compile time, so a fixed bound would emit six plates worth of code even\n     when the circle only asked for one. */\n  for(int s=0;s\u003cSTACK_MAX;s++){\n    float fs = float(s);\n    STACK_H   = fs*P_STACKGAP;\n    STACK_ROT = fs*P_STACKTWIST*DEG;\n    STACK_OP  = pow(max(P_STACKFADE, 0.02), fs);\n    STACK_SCL = pow(max(P_STACKSCALE, 0.05), fs);\n    drawPlate();\n  }\n\n  /* Soft knee on the glow accumulator. ACC.y is a SUM over every mark on the\n     plate, so a dense circle's ambient floor scales with its mark count and\n     the whole disc hazes over before any single line is bright. The knee\n     saturates that floor while leaving isolated bright crossings room. */\n  ACC.y = ACC.y/(1.0 + ACC.y*P_GLOWKNEE);\n\n  float r = length(p0), ang = atan(p0.y, p0.x);\n\n  /* Doubles as the horizon guard: the plate is an infinite plane now, so the\n     far field past the disc has to go somewhere. */\n  float m = 1.0 - smoothstep(P_MASKR - P_MASKFEATHER - PW, P_MASKR + PW, r);\n  ACC *= m;\n\n  float edge;\n  ACC *= reveal(p0, edge);\n\n  vec3 cLine = palette(r, ang, ACC.x);\n  vec3 col = cLine*ACC.x*P_LINEI + grade(P_COLGLOW)*ACC.y*P_GLOWAMOUNT*0.30;\n  col += grade(P_COLGLOW)*edge*P_EDGEGLOW*m;\n  return col;\n}\n\n/* ===================== camera ===================== */\n\nmat3 rotX(float a){ float c=cos(a), s=sin(a); return mat3(1.0,0.0,0.0, 0.0,c,s, 0.0,-s,c); }\nmat3 rotY(float a){ float c=cos(a), s=sin(a); return mat3(c,0.0,-s, 0.0,1.0,0.0, s,0.0,c); }\n\n/* Intersect the camera ray through a screen point with the plate. Returns\n   false past the horizon, where the ray never comes down to z = 0. */\nbool platePoint(vec2 ndc, mat3 Rinv, vec3 E, out vec2 hit){\n  vec3 dirW = normalize(vec3(ndc.x*CAM_TANH, ndc.y*CAM_TANH, -1.0));\n  vec3 dirP = Rinv*dirW;\n  if(abs(dirP.z) \u003c 1e-5) return false;\n  float t = -E.z/dirP.z;\n  if(t \u003c= 0.0) return false;\n  hit = (E + t*dirP).xy/P_SCALE;\n  return true;\n}\n\nvoid main(){\n  LOOP_T = mod(iTime, LOOP_DUR);\n  float lt = LOOP_T/LOOP_DUR;\n  REVEAL = smoothstep(0.0, REVEAL_IN, lt)*(1.0 - smoothstep(1.0 - REVEAL_OUT, 1.0, lt));\n\n  float phase = lt*TAU;\n  float tilt = (CAM_TILT + CAM_TILT_AMP*sin(phase*CAM_TILT_HZ + 1.13))*DEG;\n  float yaw  = (CAM_YAW  + CAM_YAW_AMP *sin(phase*CAM_YAW_HZ))*DEG;\n  mat3 Rinv = rotY(-yaw)*rotX(tilt);\n  vec3 E = (Rinv*vec3(0.0, 0.0, CAM_DIST));\n\n  vec2 px = vec2(1.0/max(iResolution.y, 1.0));\n  vec2 ndc = (gl_FragCoord.xy - 0.5*iResolution.xy)*(2.0*px);\n\n  vec2 p, qx, qy;\n  vec3 col = vec3(0.0);\n  if(platePoint(ndc, Rinv, E, p)){\n    /* Exact pixel footprint in field space: intersect two neighbour rays and\n       measure. Replaces dFdx/dFdy, which need an extension the harness does\n       not enable — and unlike the derivative form this stays correct across\n       the whole grazing range. */\n    float pw = 0.004;\n    if(platePoint(ndc + vec2(2.0*px.x, 0.0), Rinv, E, qx) &&\n       platePoint(ndc + vec2(0.0, 2.0*px.y), Rinv, E, qy)){\n      pw = clamp(max(length(qx - p), length(qy - p))*0.5, 1e-5, 0.05);\n    }\n    EYE = E/P_SCALE;\n    col = scene(p, pw);\n  }\n\n  col = 1.0 - exp(-col*P_EXPOSURE);\n  col = pow(max(col, 0.0), vec3(1.0/max(P_GAMMA, 0.05)));\n\n  vec2 suv = gl_FragCoord.xy/iResolution.xy;\n  col *= mix(1.0, smoothstep(1.35, 0.25, length(suv - 0.5)*2.0), P_VIGNETTE);\n  col *= 1.0 - P_SCANAMT*0.5*(0.5 + 0.5*sin(suv.y*P_SCANFREQ*PI));\n  col += (hash21(gl_FragCoord.xy + fract(LOOP_T)*vec2(37.0,17.0)) - 0.5)*P_GRAIN;\n\n  vec3 bg = grade(P_BGCOL);\n  col = 1.0 - (1.0 - clamp(col,0.0,1.0))*(1.0 - bg);\n\n  gl_FragColor = vec4(col, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 68\\n// DURATION: 60\\n// FORM: A 0-4 | A' 4-7.5 | B 7.5-11 | C 11-14 | A'' 14-17 (17 cycles @ 3.529s = 60s)\\n// TONAL CENTER: F# natural minor\\n// MOTIF: F#4 C#5 B4 A4 E4 — rest on beat 1, F#4 late on the 'and' of 1 held into 2, C#5 on 3, B4-A4 slurred on the 'and' of 3 into 4, E4 ghosted on the last sixteenth\\n// HARMONIC PLAN: A = F#m(add9) pedal (no third in bass) | A' = F#m(add9) thru c6 then Dmaj9 under sustained F# | B = Dmaj9 → Bm11 → F#m(add9) at c10, bass walks D-C#-B-C#-F# | C = F#m(add9) over G# bass pedal with C natural against held C#5 | A'' = bass steps G#→F#, exact A voicing returns, C natural resolves to C#\\n// PHRASE RULE: 3+3+2 escapement dial (accents on ticks 1,4,7 of eight) over halftime kick, never re-grouped — sections subtract layers only; at each seam the pad's top ninth sustains across the barline, the sub-bass moves by step or holds, and the dial runs unbroken; at most two dimensions change per seam\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nsetcps(68/60/4)\\n\\n// --- VOICE 1: motif lead — the astrolabe's sighting arm ---\\n// always enters late, never on a downbeat; up-a-fifth reach then stepwise descent\\n$: note(`\u003c\\n  [~ f#4@3 ~] [~ ~ ~ ~]\\n  [~ f#4 ~ [c#5 ~]] [~ ~ [b4 a4] ~]\\n  [~ f#4@3 ~] [~ ~ ~ ~]\\n  [~ f#4 ~ [c#5 ~]] [~ ~ [b4 a4] e4]\\n  [~ f#4@2 c#5] [~ ~ [b4 a4] e4]\\n  [~ f#4@2 c#5] [~ ~ [b4 a4] e4]\\n  [~ f#4@2 c#5] [~ ~ [b4 a4] e4]\\n  [~ f#4@3 ~] [~ ~ c#5@2]\\n  [~ ~ b4@2] [~ ~ a4 e4]\\n  [~ f#4@3 ~] [~ ~ c#5@2]\\n  [~ ~ b4@2] [~ ~ [a4 e4] ~]\\n  [~ ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [~ ~ [c#4 d4] a4]\\n  [~ f#4 ~ [c#5 ~]] [~ ~ [b4 a4] e4]\\n  [~ f#4 ~ [c#5 ~]] [~ ~ [b4 a4] ~]\\n  [~ f#4@3 ~] [~ ~ c#5@2]\\n>`)\\n  .s(\\\"triangle\\\")\\n  .attack(0.25).release(2.5)\\n  .lpf(sine.range(1500, 2600).slow(11)).lpq(6)\\n  .gain(0.15)\\n  .room(0.75).roomsize(6)\\n  .delay(0.38).delaytime(0.25).delayfeedback(0.42)\\n  .pan(0.42)\\n  .orbit(1)\\n\\n// --- VOICE 2: sub-bass foundation — the gravity well ---\\n// current harmonic root, one octave, stepwise or pedal, never leaps\\n$: note(`\u003c\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n  [f#1 ~ c#2 ~] [f#1 ~ ~ ~]\\n  [f#1 ~ c#2 ~] [f#1 ~ ~ ~]\\n  [f#1 ~ c#2 ~] [f#1 ~ ~ ~]\\n  [d1 ~ ~ ~] [d1 ~ c#2 ~]\\n  [d1 ~ ~ ~] [c#2 ~ ~ ~]\\n  [b1 ~ ~ ~] [b1 ~ c#2 ~]\\n  [b1 ~ ~ ~] [c#2 ~ ~ ~]\\n  [f#1 ~ c#2 ~] [f#1 ~ ~ ~]\\n  [g#1 ~ ~ ~] [g#1 ~ ~ ~]\\n  [g#1 ~ ~ ~] [g#1 ~ ~ ~]\\n  [g#1 ~ ~ ~] [g#1 ~ ~ ~]\\n  [f#1 ~ ~ ~] [f#1 ~ c#2 ~]\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n  [f#1 ~ ~ ~] [f#1 ~ ~ ~]\\n>`)\\n  .s(\\\"sine\\\")\\n  .attack(0.35).release(1.8)\\n  .lpf(165)\\n  .gain(0.22)\\n  .room(0.22)\\n  .orbit(2)\\n\\n// --- VOICE 3: harmonic body — the concentric rings ---\\n// four-voice add9/11th voicings, ninth always the topmost tone\\n$: note(`\u003c\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [d3,a3,c#4,e4]\\n  [d3,a3,c#4,e4]\\n  [b2,f#3,a3,c#4]\\n  [b2,f#3,a3,c#4]\\n  [f#3,c#4,g#4,a4]\\n  [g#2,c4,f#3,c#5]\\n  [g#2,c4,f#3,c#5]\\n  [g#2,c4,f#3,c#5]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,g#4,a4]\\n  [f#3,c#4,a4]\\n>`)\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-7 7 -5 6>/4\\\")\\n  .attack(0.5).release(3.5)\\n  .lpf(\\\"\u003c820 900 780 960>/4\\\").lpq(4)\\n  .gain(0.11)\\n  .room(0.8).roomsize(7)\\n  .pan(0.58)\\n  .orbit(3)\\n\\n// --- VOICE 4: rhythmic engine — the escapement ---\\n// halftime kick + rim, 3+3+2 hat dial (ticks 1,4,7 accented), never re-grouped\\n$: s(`\u003c\\n  [~ ~ ~ ~]\\n  [~ ~ ~ ~]\\n  [hh ~ ~ hh] [~ ~ hh ~]\\n  [hh ~ ~ hh] [~ ~ hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [~ rim ~ rim] [~ ~ rim ~]\\n  [~ rim ~ rim] [~ ~ rim ~]\\n  [~ rim ~ rim] [~ ~ rim ~]\\n  [bd hh ~ hh] [~ rim hh ~]\\n  [bd hh ~ hh] [~ ~ hh ~]\\n  [bd ~ ~ hh] [~ ~ hh ~]\\n>`)\\n  .bank(\\\"RolandCR78\\\")\\n  .gain(\\\"\u003c0.34 0.2 0.16 0.3 0.18 0.16 0.3 0.18>\\\")\\n  .lpf(4600)\\n  .room(0.34)\\n  .orbit(0)\\n\\n// --- VOICE 5: dial chime — the runic tick scale ---\\n// only F# and C#, only at cycle boundaries, blooming not snapping\\n$: note(`\u003c\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [c#6 ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [c#6 ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [c#6 ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [c#6 ~ ~ ~] [~ ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [c#6 ~ ~ ~] [~ ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [c#6 ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [~ ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [~ ~ ~ ~]\\n  [c#6 ~ ~ ~] [~ ~ ~ ~]\\n  [f#5 ~ ~ ~] [~ ~ ~ ~]\\n  [c#6 ~ ~ ~] [~ ~ ~ ~]\\n>`)\\n  .s(\\\"sine\\\")\\n  .attack(0.005).release(0.5)\\n  .bpf(2400).bpq(8)\\n  .gain(0.09)\\n  .room(0.9).roomsize(8)\\n  .pan(\\\"\u003c0.28 0.72>\\\")\\n  .orbit(4)\",\"bpm\":68,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.2833333333333333,\"cycles\":17,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

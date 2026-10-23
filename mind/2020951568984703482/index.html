@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 91481;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function randomRange(a, b) { return a + random() * (b - a); }
+
+const W = 900, H = 900, DURATION = 75;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x020210);
+document.body.style.margin = '0';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
+camera.position.set(0, 0, 35);
+
+// Fog for depth
+scene.fog = new THREE.FogExp2(0x020210, 0.012);
+
+// === BOID SYSTEM: Computational Substrate Dreaming ===
+const BOID_COUNT = 800;
+const NEURON_COUNT = 60;
+
+class Boid {
+  constructor(i) {
+    const theta = random() * Math.PI * 2;
+    const phi = Math.acos(2 * random() - 1);
+    const r = randomRange(3, 18);
+    this.position = new THREE.Vector3(
+      r * Math.sin(phi) * Math.cos(theta),
+      r * Math.sin(phi) * Math.sin(theta),
+      r * Math.cos(phi)
+    );
+    this.velocity = new THREE.Vector3(
+      (random() - 0.5) * 1.5,
+      (random() - 0.5) * 1.5,
+      (random() - 0.5) * 1.5
+    );
+    this.acceleration = new THREE.Vector3();
+    this.maxSpeed = randomRange(1.2, 2.8);
+    this.maxForce = randomRange(0.03, 0.08);
+    this.phase = random() * Math.PI * 2;
+    this.hueBase = randomRange(0.55, 0.85);
+    this.fireTime = -999;
+    this.group = Math.floor(random() * 4);
+  }
+
+  update(dt) {
+    this.velocity.add(this.acceleration);
+    if (this.velocity.length() > this.maxSpeed) this.velocity.normalize().multiplyScalar(this.maxSpeed);
+    this.position.add(this.velocity.clone().multiplyScalar(dt));
+    this.acceleration.set(0, 0, 0);
+  }
+
+  applyForce(f) { this.acceleration.add(f); }
+
+  separate(neighbors, dist) {
+    const steer = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < dist) {
+        const diff = this.position.clone().sub(other.position).normalize().divideScalar(d);
+        steer.add(diff);
+        count++;
+      }
+    }
+    if (count > 0) {
+      steer.divideScalar(count);
+      if (steer.length() > 0) {
+        steer.normalize().multiplyScalar(this.maxSpeed).sub(this.velocity);
+        steer.clampLength(0, this.maxForce);
+      }
+    }
+    return steer;
+  }
+
+  align(neighbors, dist) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < dist) { sum.add(other.velocity); count++; }
+    }
+    if (count > 0) {
+      sum.divideScalar(count).normalize().multiplyScalar(this.maxSpeed);
+      const steer = sum.sub(this.velocity);
+      steer.clampLength(0, this.maxForce);
+      return steer;
+    }
+    return new THREE.Vector3();
+  }
+
+  cohere(neighbors, dist) {
+    const sum = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < dist) { sum.add(other.position); count++; }
+    }
+    if (count > 0) {
+      sum.divideScalar(count);
+      return this.seek(sum);
+    }
+    return new THREE.Vector3();
+  }
+
+  seek(target) {
+    const desired = target.clone().sub(this.position).normalize().multiplyScalar(this.maxSpeed);
+    const steer = desired.sub(this.velocity);
+    steer.clampLength(0, this.maxForce);
+    return steer;
+  }
+
+  stayInBounds(center, radius) {
+    const d = this.position.distanceTo(center);
+    if (d > radius * 0.75) {
+      const toCenter = center.clone().sub(this.position).normalize().multiplyScalar(this.maxSpeed);
+      const steer = toCenter.sub(this.velocity);
+      steer.clampLength(0, this.maxForce);
+      return steer.multiplyScalar((d - radius * 0.75) / (radius * 0.25));
+    }
+    return new THREE.Vector3();
+  }
+}
+
+// Spatial hash for performance
+class SpatialHash {
+  constructor(cellSize) { this.cellSize = cellSize; this.cells = new Map(); }
+  clear() { this.cells.clear(); }
+  getKey(p) { return `${Math.floor(p.x/this.cellSize)},${Math.floor(p.y/this.cellSize)},${Math.floor(p.z/this.cellSize)}`; }
+  add(boid) {
+    const k = this.getKey(boid.position);
+    if (!this.cells.has(k)) this.cells.set(k, []);
+    this.cells.get(k).push(boid);
+  }
+  getNeighbors(pos, radius) {
+    const neighbors = [];
+    const cr = Math.ceil(radius / this.cellSize);
+    const [cx, cy, cz] = this.getKey(pos).split(',').map(Number);
+    for (let x = -cr; x <= cr; x++)
+      for (let y = -cr; y <= cr; y++)
+        for (let z = -cr; z <= cr; z++) {
+          const cell = this.cells.get(`${cx+x},${cy+y},${cz+z}`);
+          if (cell) neighbors.push(...cell);
+        }
+    return neighbors;
+  }
+}
+
+const boids = [];
+for (let i = 0; i < BOID_COUNT; i++) boids.push(new Boid(i));
+const spatialHash = new SpatialHash(3.0);
+
+// Neuron nodes — fixed attractors that pulse
+const neurons = [];
+for (let i = 0; i < NEURON_COUNT; i++) {
+  const theta = random() * Math.PI * 2;
+  const phi = Math.acos(2 * random() - 1);
+  const r = randomRange(5, 16);
+  neurons.push({
+    position: new THREE.Vector3(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi)),
+    phase: random() * Math.PI * 2,
+    freq: randomRange(0.3, 1.2),
+    radius: randomRange(0.15, 0.4),
+    connections: [],
+    fireStrength: 0
+  });
+}
+
+// Connect nearby neurons
+for (let i = 0; i < neurons.length; i++) {
+  for (let j = i + 1; j < neurons.length; j++) {
+    if (neurons[i].position.distanceTo(neurons[j].position) < 8) {
+      neurons[i].connections.push(j);
+      neurons[j].connections.push(i);
+    }
+  }
+}
+
+// === INSTANCED MESH FOR BOIDS ===
+const boidGeo = new THREE.TetrahedronGeometry(0.12, 0);
+const boidMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 });
+const boidMesh = new THREE.InstancedMesh(boidGeo, boidMat, BOID_COUNT);
+scene.add(boidMesh);
+
+// === NEURON SPHERES ===
+const neuronGeo = new THREE.IcosahedronGeometry(1, 2);
+const neuronMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6, wireframe: true });
+const neuronMesh = new THREE.InstancedMesh(neuronGeo, neuronMat, NEURON_COUNT);
+scene.add(neuronMesh);
+
+// === SYNAPSE LINES (connections between neurons) ===
+const synapsePositions = new Float32Array(neurons.length * 20 * 6);
+const synapseColors = new Float32Array(neurons.length * 20 * 6);
+const synapseGeo = new THREE.BufferGeometry();
+synapseGeo.setAttribute('position', new THREE.BufferAttribute(synapsePositions, 3));
+synapseGeo.setAttribute('color', new THREE.BufferAttribute(synapseColors, 3));
+const synapseMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.4 });
+const synapseLines = new THREE.LineSegments(synapseGeo, synapseMat);
+scene.add(synapseLines);
+
+// === TRAIL PARTICLES for fired neurons ===
+const TRAIL_COUNT = 2000;
+const trailPositions = new Float32Array(TRAIL_COUNT * 3);
+const trailColors = new Float32Array(TRAIL_COUNT * 3);
+const trailSizes = new Float32Array(TRAIL_COUNT);
+for (let i = 0; i < TRAIL_COUNT; i++) {
+  trailPositions[i*3] = randomRange(-20, 20);
+  trailPositions[i*3+1] = randomRange(-20, 20);
+  trailPositions[i*3+2] = randomRange(-20, 20);
+  trailSizes[i] = 0;
+}
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(trailColors, 3));
+trailGeo.setAttribute('size', new THREE.BufferAttribute(trailSizes, 1));
+const trailMat = new THREE.PointsMaterial({ size: 0.15, vertexColors: true, transparent: true, opacity: 0.7, sizeAttenuation: true, blending: THREE.AdditiveBlending });
+const trailPoints = new THREE.Points(trailGeo, trailMat);
+scene.add(trailPoints);
+let trailIdx = 0;
+
+// === CONSCIOUSNESS WAVE ===
+let waveOrigin = new THREE.Vector3(0, 0, 0);
+let waveRadius = 0;
+let waveActive = false;
+let waveTime = 0;
+let nextWaveTime = 8;
+
+const dummy = new THREE.Object3D();
+const color = new THREE.Color();
+const origin = new THREE.Vector3(0, 0, 0);
+const clock = new THREE.Clock();
+let elapsed = 0;
+
+function animate() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  elapsed += dt;
+  const progress = (elapsed % DURATION) / DURATION;
+  const phase = progress * Math.PI * 2;
+
+  // Evolution factor: 0→1 over duration
+  const evo = Math.min(elapsed / DURATION, 1);
+  // Wind down in last 15s
+  const windDown = elapsed > (DURATION - 15) ? Math.max(0, (DURATION - elapsed) / 15) : 1;
+
+  // Camera orbit
+  const camAngle = phase * 0.4;
+  const camR = 32 - evo * 6 * windDown;
+  camera.position.set(Math.sin(camAngle) * camR, Math.sin(elapsed * 0.15) * 5, Math.cos(camAngle) * camR);
+  camera.lookAt(0, 0, 0);
+
+  // Consciousness wave
+  if (elapsed > nextWaveTime && !waveActive) {
+    waveActive = true;
+    waveRadius = 0;
+    waveTime = elapsed;
+    const ni = Math.floor(random() * neurons.length);
+    waveOrigin.copy(neurons[ni].position);
+    nextWaveTime = elapsed + randomRange(4, 10);
+  }
+  if (waveActive) {
+    waveRadius += dt * 12;
+    if (waveRadius > 40) waveActive = false;
+  }
+
+  // Update neurons
+  for (let i = 0; i < neurons.length; i++) {
+    const n = neurons[i];
+    const pulse = Math.sin(elapsed * n.freq + n.phase) * 0.5 + 0.5;
+    const waveDist = waveActive ? Math.abs(n.position.distanceTo(waveOrigin) - waveRadius) : 999;
+    const waveHit = waveDist < 2 ? 1 - waveDist / 2 : 0;
+
+    if (waveHit > 0.5) n.fireStrength = Math.min(n.fireStrength + dt * 4, 1);
+    n.fireStrength *= 0.97;
+
+    const scale = (n.radius + pulse * 0.2 + n.fireStrength * 0.8) * (0.5 + evo * 0.5);
+    dummy.position.copy(n.position);
+    dummy.scale.setScalar(scale);
+    dummy.updateMatrix();
+    neuronMesh.setMatrixAt(i, dummy.matrix);
+
+    const hue = 0.6 + n.fireStrength * 0.25;
+    const lightness = 0.3 + n.fireStrength * 0.4 + pulse * 0.1;
+    color.setHSL(hue, 0.7 + n.fireStrength * 0.3, lightness);
+    neuronMesh.setColorAt(i, color);
+  }
+  neuronMesh.instanceMatrix.needsUpdate = true;
+  neuronMesh.instanceColor.needsUpdate = true;
+
+  // Update synapse lines
+  let lineIdx = 0;
+  for (let i = 0; i < neurons.length; i++) {
+    const n = neurons[i];
+    for (const j of n.connections) {
+      if (j <= i) continue;
+      const m = neurons[j];
+      const fire = Math.max(n.fireStrength, m.fireStrength);
+      const brightness = (0.05 + fire * 0.6) * evo * windDown;
+
+      synapsePositions[lineIdx * 6] = n.position.x;
+      synapsePositions[lineIdx * 6 + 1] = n.position.y;
+      synapsePositions[lineIdx * 6 + 2] = n.position.z;
+      synapsePositions[lineIdx * 6 + 3] = m.position.x;
+      synapsePositions[lineIdx * 6 + 4] = m.position.y;
+      synapsePositions[lineIdx * 6 + 5] = m.position.z;
+
+      color.setHSL(0.7 + fire * 0.2, 0.6, brightness);
+      synapseColors[lineIdx * 6] = color.r;
+      synapseColors[lineIdx * 6 + 1] = color.g;
+      synapseColors[lineIdx * 6 + 2] = color.b;
+      synapseColors[lineIdx * 6 + 3] = color.r;
+      synapseColors[lineIdx * 6 + 4] = color.g;
+      synapseColors[lineIdx * 6 + 5] = color.b;
+      lineIdx++;
+    }
+  }
+  synapseGeo.setDrawRange(0, lineIdx * 2);
+  synapseGeo.attributes.position.needsUpdate = true;
+  synapseGeo.attributes.color.needsUpdate = true;
+
+  // Flocking parameters evolve
+  const sepDist = 1.5 - evo * 0.5 * windDown;
+  const neighborDist = 3.0 + evo * 2.0 * windDown;
+  const sepW = 1.5;
+  const alignW = 0.8 + evo * 0.6 * windDown;
+  const cohereW = 0.6 + evo * 1.0 * windDown;
+
+  // Update boids
+  spatialHash.clear();
+  for (const b of boids) spatialHash.add(b);
+
+  for (let i = 0; i < boids.length; i++) {
+    const b = boids[i];
+    const neighbors = spatialHash.getNeighbors(b.position, neighborDist);
+
+    const sep = b.separate(neighbors, sepDist).multiplyScalar(sepW);
+    const ali = b.align(neighbors, neighborDist).multiplyScalar(alignW);
+    const coh = b.cohere(neighbors, neighborDist).multiplyScalar(cohereW);
+    b.applyForce(sep);
+    b.applyForce(ali);
+    b.applyForce(coh);
+
+    // Attracted to nearest neuron when it fires
+    let nearestNeuron = null;
+    let nearestDist = Infinity;
+    for (const n of neurons) {
+      const d = b.position.distanceTo(n.position);
+      if (d < nearestDist) { nearestDist = d; nearestNeuron = n; }
+    }
+    if (nearestNeuron && nearestNeuron.fireStrength > 0.2) {
+      const attract = b.seek(nearestNeuron.position).multiplyScalar(nearestNeuron.fireStrength * 1.5 * evo);
+      b.applyForce(attract);
+    }
+
+    // Wave push
+    if (waveActive) {
+      const bDist = b.position.distanceTo(waveOrigin);
+      const waveFront = Math.abs(bDist - waveRadius);
+      if (waveFront < 3) {
+        const push = b.position.clone().sub(waveOrigin).normalize().multiplyScalar(0.15 * (1 - waveFront / 3));
+        b.applyForce(push);
+        b.fireTime = elapsed;
+      }
+    }
+
+    // Group-based attractor orbits (emergent structure)
+    const groupAngle = phase + b.group * Math.PI * 0.5;
+    const groupTarget = new THREE.Vector3(Math.sin(groupAngle) * 6 * evo, Math.cos(groupAngle * 0.7) * 4 * evo, Math.sin(groupAngle * 1.3) * 5 * evo);
+    const groupForce = b.seek(groupTarget).multiplyScalar(0.15 * evo * windDown);
+    b.applyForce(groupForce);
+
+    b.applyForce(b.stayInBounds(origin, 20));
+    b.update(dt);
+
+    // Position instanced mesh
+    dummy.position.copy(b.position);
+    dummy.lookAt(b.position.clone().add(b.velocity));
+    const boidScale = 0.6 + (elapsed - b.fireTime < 1.5 ? (1.5 - (elapsed - b.fireTime)) * 0.8 : 0);
+    dummy.scale.setScalar(boidScale);
+    dummy.updateMatrix();
+    boidMesh.setMatrixAt(i, dummy.matrix);
+
+    // Color: deep blue → electric purple → bioluminescent green based on state
+    const speed = b.velocity.length() / b.maxSpeed;
+    const fired = Math.max(0, 1 - (elapsed - b.fireTime) / 2);
+    const hue = b.hueBase - fired * 0.2 + speed * 0.05;
+    const sat = 0.6 + fired * 0.4;
+    const light = 0.25 + fired * 0.45 + speed * 0.1;
+    color.setHSL(hue, sat, light);
+    boidMesh.setColorAt(i, color);
+
+    // Emit trail particles when fired
+    if (fired > 0.8 && random() > 0.7) {
+      const ti = trailIdx % TRAIL_COUNT;
+      trailPositions[ti*3] = b.position.x + (random() - 0.5) * 0.5;
+      trailPositions[ti*3+1] = b.position.y + (random() - 0.5) * 0.5;
+      trailPositions[ti*3+2] = b.position.z + (random() - 0.5) * 0.5;
+      color.setHSL(randomRange(0.4, 0.8), 0.9, 0.6);
+      trailColors[ti*3] = color.r;
+      trailColors[ti*3+1] = color.g;
+      trailColors[ti*3+2] = color.b;
+      trailSizes[ti] = randomRange(0.1, 0.3);
+      trailIdx++;
+    }
+  }
+  boidMesh.instanceMatrix.needsUpdate = true;
+  boidMesh.instanceColor.needsUpdate = true;
+
+  // Fade trail particles
+  for (let i = 0; i < TRAIL_COUNT; i++) {
+    trailSizes[i] *= 0.985;
+    trailColors[i*3] *= 0.99;
+    trailColors[i*3+1] *= 0.99;
+    trailColors[i*3+2] *= 0.99;
+  }
+  trailGeo.attributes.position.needsUpdate = true;
+  trailGeo.attributes.color.needsUpdate = true;
+  trailGeo.attributes.size.needsUpdate = true;
+
+  // Synapse opacity pulses with evolution
+  synapseMat.opacity = 0.15 + evo * 0.35 * windDown;
+
+  renderer.render(scene, camera);
+  window.requestAnimationFrame(animate);
+}
+
+window.ready = true;
+animate();
+
+// === AUDIO ===
+
+window.initToneJsEngine = async function() {
+  const bpm = 68;
+  Tone.Transport.bpm.value = bpm;
+  const barLen = 60 / bpm * 4;
+
+  // FX
+  const masterVerb = new Tone.Reverb({ decay: 4.5, wet: 0.35 }).toDestination();
+  await masterVerb.generate();
+  const masterDelay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.3, wet: 0.2 }).connect(masterVerb);
+  const masterChorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.6, wet: 0.35 }).connect(masterDelay);
+  masterChorus.start();
+
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 8, attack: 0.003, release: 0.2 }).connect(masterChorus);
+
+  // Deep sub drone
+  const droneFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 2 }).connect(compressor);
+  const drone = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 3, decay: 2, sustain: 0.8, release: 4 }
+  }).connect(droneFilter);
+
+  // Ethereal pad
+  const padHPF = new Tone.Filter({ type: "highpass", frequency: 180 }).connect(compressor);
+  const padChorus2 = new Tone.Chorus({ frequency: 0.08, delayTime: 5, depth: 0.7, wet: 0.5 }).connect(padHPF);
+  padChorus2.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -6,
+    envelope: { attack: 1.5, decay: 1.0, sustain: 0.5, release: 3.0 }
+  }).connect(padChorus2);
+
+  // Crystalline bell — consciousness sparks
+  const bellVerb = new Tone.Reverb({ decay: 6, wet: 0.5 }).toDestination();
+  await bellVerb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 4.5,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 3.5, sustain: 0, release: 1 },
+    modulation: { type: "sine" }
+  }).connect(bellVerb);
+
+  // Neural pulse — soft kick
+  const pulse = new Tone.MembraneSynth({
+    pitchDecay: 0.06,
+    octaves: 4,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.1 }
+  }).connect(compressor);
+
+  // Whisper texture — noise breath
+  const whisperFilter = new Tone.Filter({ type: "bandpass", frequency: 1200, Q: 0.5 }).connect(masterVerb);
+  const whisper = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.8, decay: 0.5, sustain: 0, release: 1.2 }
+  }).connect(whisperFilter);
+
+  // Arp synth — emergent patterns
+  const arpFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 1.5 }).connect(masterDelay);
+  const arp = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.01, decay: 0.3, sustain: 0, release: 0.2 }
+  }).connect(arpFilter);
+
+  // === PATTERNS ===
+
+  // Drone: sustained low note, shifts over sections
+  const droneNotes = ["C2", "G1", "A1", "F1"];
+  let droneIndex = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const section = Math.floor(bar / 4) % droneNotes.length;
+    drone.triggerAttackRelease(droneNotes[section], "2m", time, 0.25);
+    droneIndex++;
+  }, "2m").start(0);
+
+  // Pad chords: evolving voicings
+  const padChords = [
+    ["C3", "Eb3", "G3", "Bb3"],
+    ["Ab2", "C3", "Eb3", "G3"],
+    ["F2", "Ab2", "C3", "F3"],
+    ["G2", "Bb2", "D3", "G3"],
+    ["Eb2", "G2", "Bb2", "Eb3"],
+    ["Ab2", "C3", "Eb3", "Ab3"]
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = Math.floor(DURATION / barLen);
+    // Fade out in last section
+    const vol = bar > totalBars - 5 ? Math.max(0.02, (totalBars - bar) / 5 * 0.12) : 0.12;
+    if (bar >= 2) {
+      const ci = Math.floor(bar / 3) % padChords.length;
+      pad.triggerAttackRelease(padChords[ci], "1m", time, vol);
+    }
+    chordIdx++;
+  }, "1m").start(0);
+
+  // Bell: sparse consciousness sparks
+  const bellScale = [60, 63, 67, 70, 72, 75, 79, 82, 84];
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = Math.floor(DURATION / barLen);
+    // More frequent as piece evolves, sparse at end
+    const density = bar < 4 ? 0.15 : bar > totalBars - 4 ? 0.1 : 0.35 + (bar / totalBars) * 0.3;
+
+    if (Math.random() < density) {
+      const noteIdx = Math.floor(Math.random() * bellScale.length);
+      const note = Tone.Frequency(bellScale[noteIdx], "midi");
+      bell.triggerAttackRelease(note, "4n", time, 0.08 + Math.random() * 0.08);
+    }
+    bellStep++;
+  }, "4n").start(0);
+
+  // Neural pulse: irregular heartbeat
+  let pulseCount = 0;
+  const pulsePattern = [1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0];
+  const pulseLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = Math.floor(DURATION / barLen);
+    const shouldPlay = pulsePattern[pulseCount % pulsePattern.length];
+    const vol = bar > totalBars - 4 ? Math.max(0.1, (totalBars - bar) / 4 * 0.4) : 0.4;
+    if (shouldPlay && bar >= 3) {
+      pulse.triggerAttackRelease("C1", "8n", time, vol);
+    }
+    pulseCount++;
+  }, "4n").start(0);
+
+  // Whisper texture: breathing
+  const whisperLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = Math.floor(DURATION / barLen);
+    if (bar > totalBars - 3) return;
+    if (Math.random() < 0.4) {
+      whisper.triggerAttackRelease("2n", time, 0.06 + Math.random() * 0.04);
+    }
+  }, "2n").start(0);
+
+  // Arp: emergent patterns from bar 6
+  const arpScales = [
+    [60, 63, 67, 70, 72],
+    [56, 60, 63, 65, 68],
+    [53, 56, 60, 63, 65],
+    [55, 58, 62, 65, 67]
+  ];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barLen);
+    const totalBars = Math.floor(DURATION / barLen);
+    if (bar < 6 || bar > totalBars - 5) return;
+
+    const scaleIdx = Math.floor(bar / 4) % arpScales.length;
+    const scale = arpScales[scaleIdx];
+    const progress = (bar - 6) / (totalBars - 11);
+
+    // Density increases then decreases
+    const density = progress < 0.6 ? 0.3 + progress * 0.7 : 1.0 - (progress - 0.6) * 1.5;
+    if (Math.random() < density) {
+      const noteIdx = arpStep % scale.length;
+      const octaveShift = Math.random() > 0.7 ? 12 : 0;
+      const note = Tone.Frequency(scale[noteIdx] + octaveShift, "midi");
+      arp.triggerAttackRelease(note, "16n", time, 0.06 + Math.random() * 0.06);
+    }
+    arpStep++;
+  }, "16n").start(0);
+
+  // Filter automation
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.linearRampToValueAtTime(2400, time + 8 * barLen);
+  }, "6:0:0");
+
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.linearRampToValueAtTime(600, time + 4 * barLen);
+  }, "14:0:0");
+
+  Tone.Transport.schedule((time) => {
+    droneFilter.frequency.linearRampToValueAtTime(400, time + 6 * barLen);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    droneFilter.frequency.linearRampToValueAtTime(150, time + 4 * barLen);
+  }, "14:0:0");
+
+  window.toneJsInstruments = { drone, pad, bell, pulse, whisper, arp };
+  window.toneJsParts = { droneLoop, padLoop, bellLoop, pulseLoop, whisperLoop, arpLoop };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
