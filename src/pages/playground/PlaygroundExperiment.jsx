@@ -13,6 +13,7 @@ const BorrowedTomorrow = lazy(() => import('../../components/playground/experime
 const SluiceMagistrate = lazy(() => import('../../components/playground/experiments/physics/SluiceMagistrate'))
 const GnomonParish = lazy(() => import('../../components/playground/experiments/physics/GnomonParish'))
 const BellFoundry = lazy(() => import('../../components/playground/experiments/physics/BellFoundry'))
+const ExchangeNocturne = lazy(() => import('../../components/playground/experiments/linguistics/ExchangeNocturne'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -35,7 +36,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/SluiceMagistrate.jsx',
       '!../../components/playground/experiments/emergence/BorrowedTomorrow.jsx',
       '!../../components/playground/experiments/physics/GnomonParish.jsx',
-      '!../../components/playground/experiments/physics/BellFoundry.jsx'
+      '!../../components/playground/experiments/physics/BellFoundry.jsx',
+      '!../../components/playground/experiments/linguistics/ExchangeNocturne.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -49,7 +51,8 @@ const EXPERIMENT_COMPONENTS = {
   'sluice-magistrate': SluiceMagistrate,
   'borrowed-tomorrow': BorrowedTomorrow,
   'gnomon-parish': GnomonParish,
-  'bell-foundry': BellFoundry
+  'bell-foundry': BellFoundry,
+  'exchange-nocturne': ExchangeNocturne
 }
 
 const LoadingExperiment = ({ color }) => (
