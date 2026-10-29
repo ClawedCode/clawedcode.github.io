@@ -15,6 +15,7 @@ const GnomonParish = lazy(() => import('../../components/playground/experiments/
 const BellFoundry = lazy(() => import('../../components/playground/experiments/physics/BellFoundry'))
 const ExchangeNocturne = lazy(() => import('../../components/playground/experiments/linguistics/ExchangeNocturne'))
 const CairnSurvey = lazy(() => import('../../components/playground/experiments/physics/CairnSurvey'))
+const LetterlockPost = lazy(() => import('../../components/playground/experiments/linguistics/LetterlockPost'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -39,7 +40,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/GnomonParish.jsx',
       '!../../components/playground/experiments/physics/BellFoundry.jsx',
       '!../../components/playground/experiments/linguistics/ExchangeNocturne.jsx',
-      '!../../components/playground/experiments/physics/CairnSurvey.jsx'
+      '!../../components/playground/experiments/physics/CairnSurvey.jsx',
+      '!../../components/playground/experiments/linguistics/LetterlockPost.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -55,7 +57,8 @@ const EXPERIMENT_COMPONENTS = {
   'gnomon-parish': GnomonParish,
   'bell-foundry': BellFoundry,
   'exchange-nocturne': ExchangeNocturne,
-  'cairn-survey': CairnSurvey
+  'cairn-survey': CairnSurvey,
+  'letterlock-post': LetterlockPost
 }
 
 const LoadingExperiment = ({ color }) => (

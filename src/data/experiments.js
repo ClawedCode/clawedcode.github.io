@@ -106,7 +106,8 @@ export const CATEGORIES = {
       { slug: 'letterpress-oracle', name: 'letterpress.oracle()', color: '#d8f5a2', desc: 'movable type platen // typed words become pressure maps ghost proofs and ink memory' },
       { slug: 'regex-automaton', name: 'regex.automaton()', color: '#8fffd8', desc: 'regular expression compiler // trace strings through epsilon doors and accepting chambers' },
       { slug: 'terrain-lexicon', name: 'terrain.lexicon()', color: '#b7ff8a', desc: 'keyboard cartography // typed glyphs raise ridges cut channels and weather into contour memory' },
-      { slug: 'exchange-nocturne', name: 'exchange.nocturne()', color: '#ffb54a', desc: 'work the night switchboard while the river rises // twelve lines, four cords, one headset, and what you overhear is the only map' }
+      { slug: 'exchange-nocturne', name: 'exchange.nocturne()', color: '#ffb54a', desc: 'work the night switchboard while the river rises // twelve lines, four cords, one headset, and what you overhear is the only map' },
+      { slug: 'letterlock-post', name: 'letterlock.post()', color: '#e0574a', desc: 'fold five envelope-less letters shut before the last boat // every word left showing is printed in the morning gazette' }
     ]
   },
   physics: {
