@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+const rotationSpeed = 2;
+const SIZE = 20;
+const TILE_W = 20;
+const TILE_H = 10;
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+window.renderFrame = function(time) {
+  ctx.fillStyle = '#050a05';
+  ctx.fillRect(0, 0, 900, 900);
+  const p = (time / duration) * rotationSpeed;
+  for (let i = 0; i < SIZE; i++) {
+    for (let j = 0; j < SIZE; j++) {
+      const xo = i - SIZE/2 + 0.5;
+      const yo = j - SIZE/2 + 0.5;
+      const d = Math.sqrt(xo*xo + yo*yo);
+      const w1 = Math.sin(d * 0.6 - p * Math.PI * 2);
+      const w2 = Math.cos(xo * 0.4 + p * Math.PI * 4);
+      const w3 = Math.sin(yo * 0.4 - p * Math.PI * 2);
+      const z = Math.max(0, 15 + (w1 + w2 + w3) * 18);
+      const sx = 450 + (i - j) * TILE_W;
+      const sy = 400 + (i + j) * TILE_H - z * 2;
+      const v = z / 60;
+      ctx.lineWidth = 0.5;
+      ctx.strokeStyle = '#001100';
+      ctx.fillStyle = `rgba(${10+v*20}, ${40+v*60}, ${10+v*20}, 1)`;
+      ctx.beginPath(); 
+      ctx.moveTo(sx, sy); 
+      ctx.lineTo(sx - TILE_W, sy + TILE_H);
+      ctx.lineTo(sx - TILE_W, sy + TILE_H + z*2 + 30); 
+      ctx.lineTo(sx, sy + z*2 + 30);
+      ctx.fill(); 
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${5+v*10}, ${20+v*30}, ${5+v*10}, 1)`;
+      ctx.beginPath(); 
+      ctx.moveTo(sx, sy); 
+      ctx.lineTo(sx + TILE_W, sy + TILE_H);
+      ctx.lineTo(sx + TILE_W, sy + TILE_H + z*2 + 30); 
+      ctx.lineTo(sx, sy + z*2 + 30);
+      ctx.fill(); 
+      ctx.stroke();
+      ctx.fillStyle = `rgba(${30+v*50}, ${100+v*155}, ${30+v*50}, 1)`;
+      ctx.beginPath(); 
+      ctx.moveTo(sx, sy); 
+      ctx.lineTo(sx + TILE_W, sy - TILE_H);
+      ctx.lineTo(sx, sy - TILE_H*2); 
+      ctx.lineTo(sx - TILE_W, sy - TILE_H);
+      ctx.fill(); 
+      ctx.stroke();
+      if (z > 35) {
+        ctx.fillStyle = `rgba(100, 255, 100, ${(z-35)/25})`;
+        ctx.fill();
+      }
+    }
+  }
+  for (let k = 0; k < 96; k++) {
+    const hd = (k / 96) * SIZE * 1.2;
+    const ha = k * 2.39996 + p * Math.PI * 4;
+    const hx = Math.cos(ha) * hd;
+    const hy = Math.sin(ha) * hd;
+    const ix = 450 + (hx - hy) * TILE_W;
+    const iy = 400 + (hx + hy) * TILE_H;
+    const fz = 150 + Math.sin(k * 0.15 - p * Math.PI * 2) * 30;
+    ctx.globalAlpha = 0.4 + 0.6 * Math.sin(p * Math.PI * 2 + k);
+    ctx.fillStyle = '#0f0';
+    ctx.beginPath();
+    ctx.arc(ix, iy - fz, 1.5 + (k%2), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1.0;
+  return canvas.toDataURL('image/png');
+};
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 96;
+  Tone.Transport.bpm.value = bpm;
+  const masterReverb = new Tone.Reverb({ decay: 2.0, wet: 0.15 }).toDestination();
+  await masterReverb.generate();
+  const comp = new Tone.Compressor({ threshold: -24, ratio: 12, attack: 0.003, release: 0.1 }).toDestination();
+  const kick = new Tone.MembraneSynth({ pitchDecay: 0.02, oscillator: { type: "square" }, envelope: { attack: 0.001, decay: 0.1, sustain: 0 } }).connect(comp);
+  let beatCount = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(beatCount / 4);
+    if (bar < 4 || bar >= 20) {
+      if (beatCount % 2 === 0) kick.triggerAttackRelease("C1", "8n", time);
+    } else {
+      kick.triggerAttackRelease("C1", "8n", time);
+      comp.threshold.setValueAtTime(-30, time);
+      comp.threshold.exponentialRampToValueAtTime(-20, time + 0.1);
+    }
+    beatCount++;
+  }, "4n").start(0);
+  const arpFilter = new Tone.Filter(800, "lowpass").connect(comp).connect(masterReverb);
+  const arp = new Tone.Synth({ oscillator: { type: "sawtooth" }, envelope: { attack: 0.01, decay: 0.05, sustain: 0 } }).connect(arpFilter);
+  const arpNotes = ["C4", "G4", "C5", "D#4", "F4", "D#4", "G4", "A#4"];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(arpStep / 16);
+    if (bar >= 2 && bar < 22) arp.triggerAttackRelease(arpNotes[arpStep % arpNotes.length], "16n", time, 0.4);
+    arpStep++;
+  }, "16n").start(0);
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.setValueAtTime(800, time);
+    arpFilter.frequency.linearRampToValueAtTime(3500, time + 10);
+  }, "4:0:0");
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.linearRampToValueAtTime(800, time + 10);
+  }, "16:0:0");
+  const pad = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "square" }, envelope: { attack: 2, decay: 1, sustain: 0.5, release: 2 } }).connect(comp).connect(masterReverb);
+  pad.volume.value = -12;
+  const padChords = [ ["C3", "G3", "D#4"], ["G2", "D3", "A#3"], ["F2", "C3", "G#3"], ["C3", "G3", "D#4"] ];
+  let chordBar = 0;
+  const padLoop = new Tone.Loop((time) => {
+    if (chordBar >= 4 && chordBar < 20) pad.triggerAttackRelease(padChords[chordBar % padChords.length], "1m", time, 0.5);
+    chordBar++;
+  }, "1m").start(0);
+  const noise = new Tone.NoiseSynth({ noise: { type: "white" }, envelope: { attack: 0.05, decay: 0.1, sustain: 0, release: 0.1 } }).connect(arpFilter);
+  const noisePattern = [1,0,1,1,0,1,0,0,1,1,0,1,0,0,1,0];
+  let noiseStep = 0;
+  const noiseLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(noiseStep / 8);
+    if (bar >= 0 && bar < 4 || bar >= 20) {
+      if (noisePattern[noiseStep % noisePattern.length]) noise.triggerAttackRelease("32n", time, 0.3);
+    }
+    noiseStep++;
+  }, "8n").start(0);
+  window.toneJsInstruments = { kick, arp, pad, noise };
+  window.toneJsParts = { kickLoop, arpLoop, padLoop, noiseLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

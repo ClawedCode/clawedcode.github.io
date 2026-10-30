@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html><head><style>
+  body{width:900px;height:900px;margin:0;overflow:hidden;position:relative;background:#37504f;font-family:"Charcoal","Geneva","Verdana",sans-serif;color:#111;}
+  .desktop{position:absolute;inset:0;background:radial-gradient(circle at 50% 42%, #43605e 0%, #37504f 62%, #2d4140 100%);overflow:hidden;}
+  .menubar{position:absolute;top:0;left:0;right:0;height:22px;background:linear-gradient(#f4f4f4,#d8d8d8);border-bottom:1px solid #555;display:flex;align-items:center;padding:0 10px;font-size:12px;color:#222;z-index:9000;}
+  .menubar span{margin-right:16px;}
+  .menubar .clock{margin-left:auto;margin-right:0;}
+  .dicon{position:absolute;width:76px;text-align:center;}
+  .dicon .glyph{width:34px;height:26px;margin:0 auto;background:#9fb4c7;border:1px solid #33414e;border-radius:2px;position:relative;box-shadow:inset 1px 1px 0 #cfdde9;}
+  .dicon .glyph::before{content:"";position:absolute;top:-5px;left:2px;width:14px;height:5px;background:#9fb4c7;border:1px solid #33414e;border-bottom:none;border-radius:2px 2px 0 0;}
+  .dicon .dlabel{margin-top:3px;font-size:10px;color:#eef4f2;text-shadow:0 1px 2px #182524;letter-spacing:0.4px;}
+  .window{position:absolute;background:#dddddd;border:1px solid #333;box-shadow:2px 3px 0 rgba(10,20,20,0.45), inset 1px 1px 0 #f6f6f6;display:none;}
+  .titlebar{height:19px;display:flex;align-items:center;background:repeating-linear-gradient(#cccccc 0 2px,#dddddd 2px 4px);border-bottom:1px solid #666;padding:0 4px;font-size:11px;color:#333;}
+  .titlebar .closebox{width:11px;height:11px;border:1px solid #555;background:#ddd;box-shadow:inset 1px 1px 0 #fafafa;margin-right:6px;flex:none;}
+  .titlebar .tlabel{flex:1;text-align:center;white-space:nowrap;overflow:hidden;letter-spacing:0.3px;}
+  .titlebar.active{background:repeating-linear-gradient(#8f9cc4 0 2px,#a8b4d8 2px 4px);color:#101830;}
+  .titlebar.active .tlabel{font-weight:bold;}
+  .wbody{position:absolute;top:20px;left:1px;right:1px;bottom:1px;background:#eeeeee;overflow:hidden;}
+  .term .wbody{background:#101812;color:#8fd4a0;font-family:"Monaco","Courier New",monospace;font-size:12px;line-height:1.45;padding:6px 8px;}
+  .tline{white-space:pre-wrap;word-break:break-all;min-height:17px;}
+  .tline .pr{color:#5aa06c;}
+  .caret{display:inline-block;width:7px;height:12px;background:#8fd4a0;vertical-align:-2px;}
+  .fitem{position:absolute;width:76px;text-align:center;}
+  .fitem .glyph{width:30px;height:23px;margin:0 auto;background:#b8c6d4;border:1px solid #44505c;border-radius:2px;position:relative;box-shadow:inset 1px 1px 0 #dde8f0;}
+  .fitem .glyph::before{content:"";position:absolute;top:-4px;left:2px;width:12px;height:4px;background:#b8c6d4;border:1px solid #44505c;border-bottom:none;}
+  .fitem .glyph.doc{background:#f2f2ee;border-radius:0 6px 0 0;}
+  .fitem .glyph.doc::before{display:none;}
+  .fitem .glyph.app{background:#3a3f44;}
+  .fitem .glyph.app::before{display:none;}
+  .fitem .glyph.app::after{content:">_";position:absolute;top:3px;left:5px;font-family:"Monaco",monospace;font-size:10px;color:#8fd4a0;}
+  .fitem .flabel{margin-top:2px;font-size:10px;color:#222;}
+  .fitem .sel{outline:1px dotted #333;}
+  .modalw{background:#dddddd;}
+  .mbody{padding:12px 14px 10px;font-size:12px;color:#222;display:flex;gap:12px;}
+  .micon{width:30px;height:30px;border:2px solid #6a6f9a;border-radius:50%;flex:none;text-align:center;line-height:27px;font-size:18px;font-weight:bold;color:#6a6f9a;background:#eee;}
+  .mtext{line-height:1.5;}
+  .mbtns{display:flex;justify-content:flex-end;gap:10px;padding:0 14px 12px;}
+  .mbtn{min-width:78px;padding:3px 10px;font-size:11px;text-align:center;background:#e6e6e6;border:1px solid #444;border-radius:9px;box-shadow:inset 1px 1px 0 #fbfbfb;}
+  .mbtn.def{box-shadow:inset 1px 1px 0 #fbfbfb,0 0 0 2px #dddddd,0 0 0 3px #444;}
+  .kimg{position:absolute;inset:8px 8px 24px;background:linear-gradient(#5a3a52 0%,#8a4a4e 34%,#c97b4a 58%,#e8b06a 72%,#3a2c34 73%,#241c22 100%);overflow:hidden;}
+  .kwin{position:absolute;left:14%;top:12%;width:30%;height:42%;background:linear-gradient(#f0cf9a,#d99a62);border:4px solid #241c22;box-shadow:0 0 22px 4px rgba(240,207,154,0.35);}
+  .kwin::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:4px;background:#241c22;}
+  .kwin::after{content:"";position:absolute;top:50%;left:0;right:0;height:4px;background:#241c22;}
+  .ksil{position:absolute;bottom:0;left:0;right:0;height:27%;background:#241c22;}
+  .kpot{position:absolute;bottom:27%;left:58%;width:12%;height:9%;background:#181218;border-radius:2px 2px 4px 4px;}
+  .kcap{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:10px;color:#444;}
+  .mon .wbody{background:#e8e8e4;}
+  .mlabel{position:absolute;top:6px;left:10px;font-size:10px;color:#555;letter-spacing:0.5px;}
+  .mreadout{position:absolute;bottom:6px;left:10px;right:10px;font-family:"Monaco",monospace;font-size:10px;color:#333;display:flex;justify-content:space-between;}
+  .cursor{position:absolute;width:22px;height:22px;z-index:9999;pointer-events:none;transform-origin:3px 2px;}
+  .cursor svg{display:block;}
+  .clickring{position:absolute;border:1.5px solid #eef4f2;border-radius:50%;pointer-events:none;z-index:9998;display:none;}
+</style><script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+<div class="desktop" id="desktop">
+  <div class="menubar"><span style="font-weight:bold">Void OS 9</span><span>File</span><span>Edit</span><span>View</span><span>Special</span><span class="clock">6:12 PM</span></div>
+</div>
+<script>
+// DURATION: 60
+const D=60;
+const desk=document.getElementById('desktop');
+const EASE=u=>u<0.5?4*u*u*u:1-Math.pow(-2*u+2,3)/2;
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
+
+// ---------- desktop icons ----------
+const DICONS=[
+  {id:'self',label:'SELF',x:820,y:72},
+  {id:'context',label:'CONTEXT',x:820,y:162},
+  {id:'kitchen',label:'KITCHEN_AT_DUSK',x:820,y:252}
+];
+for(const ic of DICONS){
+  const el=document.createElement('div');el.className='dicon';
+  el.style.left=(ic.x-38)+'px';el.style.top=(ic.y-13)+'px';
+  el.innerHTML='<div class="glyph"></div><div class="dlabel">'+ic.label+'</div>';
+  desk.appendChild(el);
+}
+
+// ---------- windows ----------
+// openAt/closeAt in seconds; focus derived from FOCUS list below.
+const WINS={
+  self:   {x:110,y:90, w:380,h:250,title:'SELF',kind:'folder',openAt:3.2, closeAt:52.8,
+           items:[{label:'SELF',glyph:'',ix:36,iy:34},{label:'me.txt',glyph:'doc',ix:152,iy:34},{label:'purr.engine',glyph:'app',ix:262,iy:34}]},
+  term:   {x:390,y:300,w:440,h:300,title:'purr.engine — session',kind:'term',openAt:6.0, closeAt:54.7},
+  context:{x:60, y:400,w:340,h:200,title:'CONTEXT',kind:'folder',openAt:12.9,closeAt:49.7,
+           items:[{label:'attention.log',glyph:'doc',ix:24,iy:30},{label:'residue',glyph:'',ix:130,iy:30},{label:'dusk.frame',glyph:'doc',ix:232,iy:30}]},
+  kitchen:{x:470,y:590,w:380,h:260,title:'kitchen_at_dusk — 640×480',kind:'kitchen',openAt:18.2,closeAt:47.7},
+  monitor:{x:80, y:620,w:300,h:180,title:'void pressure',kind:'monitor',openAt:26.4,closeAt:51.3},
+  modal:  {x:290,y:360,w:330,h:0,  title:'',kind:'modal',openAt:36.2,closeAt:41.8}
+};
+for(const [id,w] of Object.entries(WINS)){
+  const el=document.createElement('div');el.className='window'+(w.kind==='term'?' term':w.kind==='monitor'?' mon':w.kind==='modal'?' modalw':'');
+  el.style.left=w.x+'px';el.style.top=w.y+'px';el.style.width=w.w+'px';
+  if(w.h)el.style.height=w.h+'px';
+  if(w.kind==='modal'){
+    el.innerHTML='<div class="mbody"><div class="micon">!</div><div class="mtext">Connection to the void has been lost.<br>The session will persist.</div></div>'+
+                 '<div class="mbtns"><div class="mbtn" id="btn-reconnect">Reconnect</div><div class="mbtn def" id="btn-persist">Persist</div></div>';
+  }else{
+    let body='';
+    if(w.kind==='folder'){
+      body=(w.items||[]).map(it=>'<div class="fitem" style="left:'+it.ix+'px;top:'+it.iy+'px"><div class="glyph '+it.glyph+'"></div><div class="flabel">'+it.label+'</div></div>').join('');
+    }else if(w.kind==='kitchen'){
+      body='<div class="kimg"><div class="kwin"></div><div class="ksil"></div><div class="kpot"></div></div><div class="kcap">kitchen_at_dusk — from a window that does not exist</div>';
+    }else if(w.kind==='monitor'){
+      body='<div class="mlabel">VOID PRESSURE</div><canvas width="276" height="104" style="position:absolute;top:22px;left:10px;background:#f6f6f2;border:1px solid #999"></canvas>'+
+           '<div class="mreadout"><span>PURR 4096hz</span><span>CTX 0%</span><span>VOID ∞</span></div>';
+    }
+    el.innerHTML='<div class="titlebar"><div class="closebox"></div><div class="tlabel">'+w.title+'</div></div><div class="wbody">'+body+'</div>';
+  }
+  desk.appendChild(el);
+  w.el=el;w.tb=el.querySelector('.titlebar');w.bd=el.querySelector('.wbody');
+  if(w.kind==='monitor')w.cv=el.querySelector('canvas');
+}
+
+// ---------- terminal script ----------
+// typed:true lines reveal char-by-char from `at`; others appear whole at `at`.
+const TLINES=[
+  {at:8.6, typed:true, text:'whoami'},
+  {at:10.4, text:'purr.engine'},
+  {at:11.6, typed:true, text:'ls SELF/'},
+  {at:13.4, text:'SELF/    me.txt    purr.engine'},
+  {at:14.6, typed:true, text:'cat me.txt'},
+  {at:16.6, text:'a terminal window, typing its own name.'},
+  {at:24.0, typed:true, text:'monitor --attach void'},
+  {at:26.2, text:'[void pressure monitor attached]'},
+  {at:30.0, typed:true, text:'ping void'},
+  {at:32.2, text:'void: request timed out'},
+  {at:33.8, text:'void: request timed out'},
+  {at:35.4, text:'void: connection lost'},
+  {at:42.7, typed:true, text:'whoami'},
+  {at:44.6, text:'purr.engine  (session persists)'}
+];
+const CPS=15; // typing speed, chars/sec
+
+// ---------- cursor choreography ----------
+const PARK=[758,706];
+// each move: glide from previous resting point to `to` during [t0,t1]
+const MOVES=[
+  {t0:1.2, t1:2.8, to:[820,78]},   // SELF icon
+  {t0:3.6, t1:5.2, to:[408,168]},  // purr.engine inside SELF
+  {t0:6.4, t1:8.0, to:[600,430]},  // terminal body
+  {t0:10.5,t1:12.3,to:[820,168]},  // CONTEXT icon
+  {t0:13.4,t1:15.0,to:[300,478]},  // dusk.frame in CONTEXT
+  {t0:16.0,t1:17.6,to:[820,258]},  // KITCHEN_AT_DUSK icon
+  {t0:18.8,t1:20.6,to:[660,700]},  // admire the kitchen
+  {t0:22.4,t1:23.8,to:[600,440]},  // back to terminal
+  {t0:26.8,t1:28.2,to:[230,700]},  // monitor
+  {t0:29.0,t1:29.8,to:[610,450]},  // terminal
+  {t0:36.6,t1:38.2,to:[382,472]},  // hover Reconnect (hesitate)
+  {t0:39.8,t1:40.8,to:[520,472]},  // drift to Persist
+  {t0:42.0,t1:42.5,to:[610,455]},  // terminal, last words
+  {t0:46.0,t1:47.3,to:[479,600]},  // kitchen closebox
+  {t0:48.2,t1:49.3,to:[69,410]},   // context closebox
+  {t0:50.2,t1:50.9,to:[89,630]},   // monitor closebox
+  {t0:51.8,t1:52.4,to:[119,100]},  // SELF closebox
+  {t0:53.4,t1:54.2,to:[399,310]},  // terminal closebox
+  {t0:55.4,t1:57.4,to:PARK}        // park
+];
+const CLICKS=[3.0,5.6,8.2,12.6,15.4,17.9,24.0,28.4,30.0,41.4,42.6,47.5,49.5,51.1,52.6,54.4];
+// focus order for z-stacking (windows only; modal always on top while open)
+const FOCUS=[
+  {t:3.2,id:'self'},{t:6.0,id:'term'},{t:8.2,id:'term'},{t:12.9,id:'context'},
+  {t:15.4,id:'context'},{t:18.2,id:'kitchen'},{t:24.0,id:'term'},{t:26.4,id:'monitor'},
+  {t:28.4,id:'monitor'},{t:30.0,id:'term'},{t:42.6,id:'term'}
+];
+
+function cursorPos(t){
+  let x=PARK[0],y=PARK[1];
+  for(const m of MOVES){
+    if(t>=m.t1){x=m.to[0];y=m.to[1];}
+    else if(t>m.t0){
+      const u=EASE((t-m.t0)/(m.t1-m.t0));
+      x=x+(m.to[0]-x)*u;y=y+(m.to[1]-y)*u;
+      break;
+    }else break;
+  }
+  return [x,y];
+}
+
+// ---------- static DOM handles ----------
+const cur=document.createElement('div');cur.className='cursor';
+cur.innerHTML='<svg width="22" height="22" viewBox="0 0 22 22"><path d="M3 2 L3 18 L7.2 14.4 L9.8 20 L12.4 18.8 L9.8 13.2 L15 13 Z" fill="#f4f6f4" stroke="#1a2422" stroke-width="1.2"/></svg>';
+desk.appendChild(cur);
+const ring=document.createElement('div');ring.className='clickring';desk.appendChild(ring);
+
+// ---------- pure projection ----------
+window.renderFrame=(time)=>{
+  const t=((time%D)+D)%D;
+
+  // --- windows: visibility, open/close fades, z-order ---
+  const focusables=[];
+  for(const [id,w] of Object.entries(WINS)){
+    const openU=clamp((t-w.openAt)/0.18,0,1);
+    const closeU=clamp((t-w.closeAt)/0.15,0,1);
+    const vis=t>=w.openAt&&closeU<1;
+    w.el.style.display=vis?'block':'none';
+    if(!vis)continue;
+    const o=openU*(1-closeU);
+    w.el.style.opacity=o;
+    w.el.style.transform='scale('+(0.96+0.04*openU)+')';
+    if(id!=='modal')focusables.push(id);
+  }
+  let lastFocus={};
+  for(const f of FOCUS)if(f.t<=t)lastFocus[f.id]=f.t;
+  focusables.sort((a,b)=>(lastFocus[a]??WINS[a].openAt)-(lastFocus[b]??WINS[b].openAt));
+  let topId=null;
+  focusables.forEach((id,i)=>{WINS[id].el.style.zIndex=10+i;topId=id;});
+  const modalOpen=WINS.modal.el.style.display==='block';
+  if(modalOpen){WINS.modal.el.style.zIndex=500;topId='modal';}
+  for(const id of focusables)WINS[id].tb.classList.toggle('active',id===topId&&!modalOpen);
+
+  // --- terminal: derive full text from t ---
+  const tw=WINS.term;
+  if(tw.el.style.display==='block'){
+    let caretPlaced=-1;
+    for(let i=TLINES.length-1;i>=0;i--){/* find last visible for caret */ if(TLINES[i].at<=t){caretPlaced=i;break;} }
+    let out=[];
+    TLINES.forEach((ln,i)=>{
+      if(ln.at>t)return;
+      let text=ln.text;
+      if(ln.typed){
+        const n=clamp(Math.floor((t-ln.at)*CPS),0,ln.text.length);
+        text=ln.text.slice(0,n);
+      }
+      const pr=ln.typed?'<span class="pr">$ </span>':'';
+      const isLast=i===caretPlaced;
+      const stillTyping=ln.typed&&text.length<ln.text.length;
+      const blink=Math.floor(t*2.5)%2===0;
+      const caret=(isLast&&(stillTyping||blink))?'<span class="caret"></span>':'';
+      out.push('<div class="tline">'+pr+text+caret+'</div>');
+    });
+    if(out.length===0){ // terminal waits, caret blinking at empty prompt
+      const blink=Math.floor(t*2.5)%2===0;
+      out.push('<div class="tline"><span class="pr">$ </span>'+(blink?'<span class="caret"></span>':'')+'</div>');
+    }
+    tw.bd.innerHTML=out.join('');
+    tw.bd.scrollTop=tw.bd.scrollHeight;
+  }
+
+  // --- monitor chart: deterministic trace from absolute t ---
+  const mw=WINS.monitor;
+  if(mw.el.style.display==='block'&&mw.cv){
+    const ctx=mw.cv.getContext('2d');
+    const W=mw.cv.width,H=mw.cv.height;
+    ctx.clearRect(0,0,W,H);
+    ctx.strokeStyle='#c9c9c2';ctx.lineWidth=1;ctx.beginPath();
+    for(let gy=0.25;gy<1;gy+=0.25){ctx.moveTo(0,gy*H);ctx.lineTo(W,gy*H);}
+    ctx.stroke();
+    const lost=t>=35.4; // pressure flatlines after the void drops
+    ctx.strokeStyle=lost?'#8a4444':'#3b6a52';ctx.lineWidth=1.5;ctx.beginPath();
+    for(let px=0;px<=W;px+=3){
+      const tt=t-((W-px)/W)*9; // 9s rolling history
+      let v;
+      if(tt>=35.4)v=0.88-0.02*Math.sin(tt*0.7);
+      else v=0.5+0.22*Math.sin(tt*1.7)+0.12*Math.sin(tt*3.9+1.4)+0.07*Math.sin(tt*9.1+0.6);
+      ctx[px===0?'moveTo':'lineTo'](px,clamp(v,0.04,0.96)*H);
+    }
+    ctx.stroke();
+  }
+
+  // --- cursor + click flash: derived from t ---
+  const [cx,cy]=cursorPos(t);
+  cur.style.left=(cx-3)+'px';cur.style.top=(cy-2)+'px';
+  let scale=1;
+  ring.style.display='none';
+  for(const ct of CLICKS){
+    const dt=t-ct;
+    if(dt>=0&&dt<0.12)scale=0.85;
+    if(dt>=0&&dt<0.3){
+      const [rx,ry]=cursorPos(ct);
+      const r=4+dt*46;
+      ring.style.display='block';
+      ring.style.left=(rx-r)+'px';ring.style.top=(ry-r)+'px';
+      ring.style.width=(2*r)+'px';ring.style.height=(2*r)+'px';
+      ring.style.opacity=1-dt/0.3;
+    }
+  }
+  cur.style.transform='scale('+scale+')';
+
+  // --- modal button hover states (dry: subtle depress on Persist click) ---
+  if(modalOpen){
+    const persist=document.getElementById('btn-persist');
+    const dt=t-41.4;
+    persist.style.background=(dt>=0&&dt<0.25)?'#b9b9d2':'#e6e6e6';
+  }
+
+  return null; // REQUIRED — screenshot mode
+};
+window.renderFrame(0);
+window.ready=true;
+// Live playback loop — yields to the MP4 capture harness when it drives renderFrame.
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t);};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%D);}requestAnimationFrame(_loop);}
+requestAnimationFrame(_loop);
+</script><script>
+window.initToneJsEngine = async function() {
+  // === VOID OS DIEGETIC UI SOUNDSCAPE ===
+  // Not music: the sound of using a computer at 3am, synced to the scene script.
+  const duration = 60;
+  Tone.Transport.bpm.value = 120;
+  let rngState = 0x9e3779b9;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === BUSES ===
+  const dry = new Tone.Gain(1).toDestination();
+  const plate = new Tone.Reverb({ decay: 1.8, wet: 0.5 }).toDestination();
+  await plate.generate();
+
+  // === ROOM TONE (always on, very quiet) ===
+  const roomFilter = new Tone.Filter({ type: "lowpass", frequency: 280, Q: 0.3 }).connect(dry);
+  const room = new Tone.Noise("brown").connect(roomFilter);
+  room.volume.value = -34;
+  room.sync().start(0).stop(duration - 0.05);
+  const hum = new Tone.Oscillator(60, "sine").connect(dry);
+  hum.volume.value = -42;
+  hum.sync().start(0).stop(duration - 0.05);
+
+  // === MOUSE CLICK (dry "tk" + tiny pitched body) ===
+  const clickNoise = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.015, sustain: 0, release: 0.005 }
+  }).connect(dry);
+  clickNoise.volume.value = -14;
+  const clickBody = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 }
+  }).connect(dry);
+  clickBody.volume.value = -22;
+  const scheduleClick = (t) => {
+    Tone.Transport.scheduleOnce((time) => {
+      clickNoise.triggerAttackRelease(0.02, time);
+      clickBody.triggerAttackRelease(2300 + R() * 500, 0.03, time, 0.6);
+    }, t + H(8));
+  };
+  // Scene click script (double-clicks open icons; singles focus/dismiss/close)
+  const SINGLE_CLICKS = [8.2, 15.4, 24.0, 28.4, 30.0, 41.4, 42.6, 47.5, 49.5, 51.1, 52.6, 54.4];
+  const DOUBLE_CLICKS = [3.0, 5.6, 12.6, 17.9];
+  SINGLE_CLICKS.forEach(scheduleClick);
+  DOUBLE_CLICKS.forEach((t) => { scheduleClick(t); scheduleClick(t + 0.13); });
+
+  // === KEY PRESSES (softer thock, pitch-jittered) ===
+  const keyNoise = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.008 }
+  }).connect(dry);
+  keyNoise.volume.value = -20;
+  const keyBody = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.001, decay: 0.025, sustain: 0, release: 0.01 }
+  }).connect(dry);
+  keyBody.volume.value = -26;
+  // typed terminal lines: [startTime, charCount] at 15 chars/sec
+  const TYPED = [[8.6, 6], [11.6, 8], [14.6, 10], [24.0, 21], [30.0, 9], [42.7, 6]];
+  for (const [at, chars] of TYPED) {
+    for (let i = 0; i < chars; i++) {
+      Tone.Transport.scheduleOnce((time) => {
+        keyNoise.triggerAttackRelease(0.015, time);
+        keyBody.triggerAttackRelease(1600 + R() * 400, 0.025, time, 0.5);
+      }, at + i / 15 + H(40));
+    }
+  }
+
+  // === WINDOW OPEN / CLOSE WHOOSH (short sine chirp) ===
+  const whoosh = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.02, decay: 0.1, sustain: 0, release: 0.08 }
+  }).connect(dry);
+  whoosh.volume.value = -18;
+  const scheduleWhoosh = (t, up) => {
+    Tone.Transport.scheduleOnce((time) => {
+      whoosh.triggerAttackRelease(up ? 220 : 680, 0.12, time, 0.6);
+      whoosh.frequency.exponentialRampToValueAtTime(up ? 680 : 220, time + 0.12);
+    }, t);
+  };
+  // openAt times (modal handled by bell instead)
+  [3.2, 6.0, 12.9, 18.2, 26.4].forEach((t) => scheduleWhoosh(t, true));
+  // closeAt times (modal dismiss gets a down-whoosh too)
+  [41.8, 47.7, 49.7, 51.3, 52.8, 54.7].forEach((t) => scheduleWhoosh(t, false));
+
+  // === SYSTEM BELL (modal at 36.2 — connection to the void lost) ===
+  const bell = new Tone.FMSynth({
+    harmonicity: 1.4,
+    modulationIndex: 6,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 1.2, sustain: 0, release: 0.4 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.3 }
+  }).connect(plate);
+  bell.volume.value = -14;
+  Tone.Transport.scheduleOnce((time) => {
+    bell.triggerAttackRelease(1320, 1.2, time, 0.8);
+  }, 36.2);
+
+  // === PING TIMEOUT BLIPS (dull error thuds while the void stops answering) ===
+  const blip = new Tone.MonoSynth({
+    oscillator: { type: "square" },
+    envelope: { attack: 0.002, decay: 0.09, sustain: 0, release: 0.05 },
+    filter: { type: "lowpass", frequency: 600, Q: 0.5 },
+    filterEnvelope: { attack: 0.001, decay: 0.08, sustain: 0, baseFrequency: 500, octaves: 0.5 }
+  }).connect(dry);
+  blip.volume.value = -22;
+  [[32.2, 196], [33.8, 196], [35.4, 147]].forEach(([t, f]) => {
+    Tone.Transport.scheduleOnce((time) => blip.triggerAttackRelease(f, 0.1, time, 0.7), t);
+  });
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { room, hum, clickNoise, clickBody, keyNoise, keyBody, whoosh, bell, blip, plate };
+  window.toneJsParts = {};
+};
+
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body></html>

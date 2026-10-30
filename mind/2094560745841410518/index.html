@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\n\nconst float DURATION = 60.0;\nconst float TAU = 6.28318530718;\n\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, -s, s, c);\n}\n\nfloat hash21(vec2 p) {\n  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);\n}\n\nfloat valueNoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  float a = hash21(i);\n  float b = hash21(i + vec2(1.0, 0.0));\n  float c = hash21(i + vec2(0.0, 1.0));\n  float d = hash21(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\nfloat fbm(vec2 p) {\n  float value = 0.0;\n  float amplitude = 0.56;\n  for (int i = 0; i \u003c 3; i++) {\n    value += amplitude * valueNoise(p);\n    p = rot(0.73) * p * 2.03 + vec2(3.7, 1.9);\n    amplitude *= 0.48;\n  }\n  return value;\n}\n\nfloat stroke(float d, float width, float softness) {\n  return 1.0 - smoothstep(width - softness, width + softness, abs(d));\n}\n\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float t = phase * TAU;\n  vec2 center = vec2(-0.035, 0.015);\n  vec2 p = uv - center;\n  float r = length(p);\n  float a = atan(p.y, p.x);\n\n  vec3 midnight = vec3(0.012, 0.025, 0.045);\n  vec3 deepTeal = vec3(0.020, 0.105, 0.135);\n  vec3 cloudBlue = vec3(0.28, 0.70, 0.78);\n  vec3 cloudWhite = vec3(0.88, 0.94, 0.91);\n  vec3 lightning = vec3(1.00, 0.59, 0.16);\n\n  float outerLight = 1.0 - smoothstep(0.18, 1.05, r);\n  vec3 color = mix(midnight, deepTeal, outerLight * 0.34);\n\n  float cloud = 0.0;\n  float cloudDetail = 0.0;\n  for (int i = 0; i \u003c 6; i++) {\n    float fi = float(i);\n    float turn = a * 3.0\n      - r * (12.4 + fi * 0.42)\n      + t * (1.0 + mod(fi, 3.0))\n      + fi * 1.0472;\n    float crest = abs(sin(turn));\n    float arm = 1.0 - smoothstep(0.12, 0.34, crest);\n    float annulus = smoothstep(0.18 + fi * 0.012, 0.28 + fi * 0.012, r)\n      * (1.0 - smoothstep(0.72 + fi * 0.018, 1.02, r));\n    float broken = smoothstep(\n      0.24,\n      0.78,\n      fbm(vec2(a * 2.0 + fi * 7.1, r * 8.0 + sin(t + fi) * 0.35))\n    );\n    cloud += arm * annulus * (0.48 + broken * 0.62);\n    cloudDetail += stroke(crest - 0.08, 0.035, 0.025) * annulus;\n  }\n  cloud = clamp(cloud * 0.58, 0.0, 1.0);\n\n  float texture = fbm(p * 8.0 + vec2(cos(t), sin(t)) * 0.18);\n  float cloudValue = clamp(cloud * (0.58 + texture * 0.72), 0.0, 1.0);\n  vec3 cloudColor = mix(cloudBlue, cloudWhite, smoothstep(0.36, 0.92, cloudValue));\n  color = mix(color, cloudColor, cloudValue * 0.94);\n  color += cloudBlue * cloudDetail * 0.14;\n\n  float eyeRadius = 0.155 + 0.013 * sin(t);\n  float eye = 1.0 - smoothstep(eyeRadius, eyeRadius + 0.012, r);\n  float eyewall = stroke(r - eyeRadius, 0.025, 0.010);\n  float innerRing = stroke(r - eyeRadius * 0.66, 0.005, 0.004);\n  color = mix(color, vec3(0.002, 0.008, 0.014), eye);\n  color += vec3(0.30, 0.92, 0.90) * eyewall * (0.66 + 0.18 * sin(t * 2.0));\n  color += vec3(0.08, 0.36, 0.42) * innerRing * eye;\n\n  float lightningWindow = smoothstep(0.40, 0.46, phase)\n    * (1.0 - smoothstep(0.58, 0.64, phase));\n  float boltAngle = a + 0.42;\n  float boltRadius = eyeRadius + 0.066\n    + 0.018 * sin(boltAngle * 13.0)\n    + 0.008 * sin(boltAngle * 5.0);\n  float bolt = stroke(r - boltRadius, 0.0045, 0.003)\n    * smoothstep(-1.20, -0.72, boltAngle)\n    * (1.0 - smoothstep(1.32, 1.72, boltAngle));\n  color += lightning * bolt * lightningWindow * 2.1;\n  color += lightning * bolt * lightningWindow * 0.45\n    * (1.0 - smoothstep(0.0, 0.025, abs(r - boltRadius)));\n\n  float rainBands = 0.5 + 0.5 * sin((a + r * 1.6) * 46.0 - t * 3.0);\n  rainBands = smoothstep(0.84, 0.98, rainBands) * smoothstep(0.36, 0.52, r);\n  color += vec3(0.18, 0.46, 0.52) * rainBands * cloud * 0.20;\n\n  float vignette = 1.0 - smoothstep(0.48, 0.86, length(uv));\n  color *= 0.78 + vignette * 0.22;\n  color = pow(clamp(color, 0.0, 1.0), vec3(0.92));\n  gl_FragColor = vec4(color, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 60\\n// FORM: cycles 1-10 cold rotation; 11-15 amber eyewall event; 16-23 dispersal; 24 return\\n// EMOTIONAL TARGET: lucid defiance\\n$: note(\\\"\u003cd3 d3 bb2 c3 d3 f3 eb3 c3 d3 a2 d3 d3 g2 a2 d3 bb2 c3 d3 f3 eb3 c3 d3 a2 d3>\\\")\\n  .s(\\\"sine\\\")\\n  .gain(.52)\\n  .lpf(480)\\n  .attack(.08)\\n  .release(.7)\\n  .room(.18)\\n  .orbit(0)\\n$: note(\\\"\u003c[d5 a4 c5 e5 ~ a4] [d5 ~ a4 c5 e5 a4] [f5 c5 eb5 g5 ~ c5] [e5 bb4 d5 f5 ~ bb4] [d5 a4 c5 e5 a4 ~] [a4 d5 f5 e5 ~ c5] [g4 bb4 eb5 d5 ~ bb4] [e5 c5 a4 c5 ~ e5] [d5 a4 c5 e5 ~ a4] [c5 a4 d5 ~ e5 a4] [d5 a4 c5 e5 f#5 a4] [d5 c5 e5 f#5 a5 e5] [g4 d5 f#5 a5 ~ d5] [a4 e5 g5 f#5 e5 c#5] [d5 a4 c5 e5 f#5 e5] [f5 c5 eb5 g5 ~ c5] [e5 bb4 d5 f5 bb4 ~] [d5 a4 c5 e5 ~ a4] [a4 d5 f5 e5 c5 ~] [g4 bb4 eb5 d5 ~ bb4] [e5 c5 a4 c5 e5 ~] [d5 a4 c5 e5 ~ a4] [c5 a4 d5 ~ e5 a4] [d5 a4 c5 e5 ~ a4]>\\\")\\n  .s(\\\"triangle\\\")\\n  .gain(.38)\\n  .lpf(2400)\\n  .attack(.025)\\n  .release(.28)\\n  .room(.3)\\n  .pan(\\\"\u003c.34 .66 .42 .58>\\\")\\n  .orbit(1)\\n$: note(\\\"\u003c[a5 ~ f5 e5 ~ c5] [~ a5 f5 ~ e5 c5] [c6 ~ g5 f5 ~ eb5] [bb5 ~ f5 d5 ~ bb4] [a5 e5 ~ c5 e5 ~] [c6 ~ a5 f5 ~ e5] [bb5 g5 ~ eb5 d5 ~] [g5 ~ e5 c5 ~ a4] [a5 ~ f5 e5 ~ c5] [~ e5 a5 ~ c6 a5] [a5 ~ e5 f#5 ~ c5] [c6 a5 ~ f#5 e5 ~] [d6 ~ a5 f#5 ~ d5] [e6 c#6 ~ a5 g5 ~] [a5 ~ f#5 e5 ~ c5] [c6 ~ g5 f5 ~ eb5] [bb5 f5 ~ d5 bb4 ~] [a5 ~ f5 e5 ~ c5] [c6 a5 ~ f5 e5 ~] [bb5 ~ g5 eb5 ~ d5] [g5 e5 ~ c5 a4 ~] [a5 ~ f5 e5 ~ c5] [~ e5 a5 ~ c6 a5] [a5 ~ f5 e5 ~ c5]>\\\")\\n  .s(\\\"sine\\\")\\n  .gain(.19)\\n  .hpf(520)\\n  .lpf(3600)\\n  .attack(.12)\\n  .release(.42)\\n  .room(.46)\\n  .pan(\\\"\u003c.76 .24 .68 .32>\\\")\\n  .orbit(2)\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ ~ ~ [~ f#6 e6 ~ c#6] [f#6 ~ e6 d6 c#6 ~] [a6 f#6 ~ e6 d6 ~] [c#7 ~ a6 f#6 e6 d6] [f#6 e6 d6 ~ c#6 ~] ~ ~ ~ ~ ~ ~ ~ ~ ~>\\\")\\n  .s(\\\"square\\\")\\n  .gain(.16)\\n  .hpf(900)\\n  .lpf(4300)\\n  .attack(.005)\\n  .release(.16)\\n  .room(.22)\\n  .pan(\\\"\u003c.44 .56>\\\")\\n  .orbit(3)\",\"bpm\":96,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

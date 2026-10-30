@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>terminal Adventure Complete</title>
+  <style>
+/* MUD Shared Styles - Common component styles for all themes */
+
+/* ==========================================================================
+   CSS Variables - Override these in theme-specific CSS
+   ========================================================================== */
+:root {
+  /* Colors - defaults, themes should override */
+  --mud-bg: #282c34;
+  --mud-text: #abb2bf;
+  --mud-primary: #61afef;      /* narration borders, item names */
+  --mud-success: #98c379;      /* character sheet, HP fill, XP notifications */
+  --mud-warning: #e5c07b;      /* dice rolls */
+  --mud-secondary: #c678dd;    /* map */
+  --mud-accent: #56b6c2;       /* actions, items gained */
+  --mud-danger: #e06c75;       /* encounter accent, enemy names */
+  --mud-eldritch: #ac81f5;     /* eldritch theme, next adventure preview */
+
+  /* Derived colors with alpha */
+  --mud-primary-bg: rgba(97, 175, 239, 0.05);
+  --mud-success-bg: rgba(152, 195, 121, 0.05);
+  --mud-warning-bg: rgb(57, 55, 53, 0.85);
+  --mud-accent-bg: rgba(86, 182, 194, 0.08);
+  --mud-danger-bg: rgba(255, 107, 107, 0.05);
+}
+
+/* ==========================================================================
+   Base Layout - 1080x1350 viewport for PNG rendering
+   ========================================================================== */
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--mud-bg);
+  color: var(--mud-text);
+  font-family: 'Courier New', monospace;
+  font-size: 24px;
+  line-height: 1.2;
+  width: 1080px;
+  height: 1350px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Allow exit room layouts to expand beyond viewport */
+body.exit-room-layout {
+  height: auto;
+  min-height: 1350px;
+  overflow: visible;
+}
+
+.content {
+  white-space: pre-wrap;
+  position: absolute;
+  top: 25px;
+  left: 35px;
+  right: 35px;
+  bottom: 0;
+  z-index: 2;
+  text-align: left;
+  font-family: 'Courier New', monospace !important;
+  font-size: 24px;
+  overflow: hidden;
+  color: var(--mud-text);
+}
+
+.signature {
+  position: absolute;
+  bottom: 15px;
+  right: 35px;
+  z-index: 3;
+  font-size: 24px;
+}
+
+/* ==========================================================================
+   MUD Two-Column Layout
+   ========================================================================== */
+.mud-container {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr;
+  height: 100%;
+  padding: 20px;
+  gap: 15px;
+  position: relative;
+  z-index: 10;
+}
+
+/* Exit room layout: two columns with map spanning both at bottom */
+.mud-container.exit-room {
+  display: grid;
+  grid-template-columns: 1.8fr 1fr;
+  grid-template-rows: auto auto;
+  gap: 15px;
+  height: auto; /* Don't constrain to viewport height */
+  min-height: 100%;
+}
+
+.mud-container.exit-room .mud-left-column {
+  grid-column: 1 / 2;
+  grid-row: 1 / 2;
+}
+
+.mud-container.exit-room .mud-right-column {
+  grid-column: 2 / 3;
+  grid-row: 1 / 2;
+}
+
+.mud-map-full {
+  grid-column: 1 / 3; /* Span across both columns */
+  grid-row: 2 / 3;
+  width: 100%;
+}
+
+/* Override map section styles for exit room full-width map */
+.mud-container.exit-room .mud-map-full .mud-map-section {
+  flex: 0 0 auto; /* Don't grow, use natural size */
+  position: relative;
+}
+
+.mud-container.exit-room .mud-map-full .mud-map-canvas {
+  position: relative;
+}
+
+.mud-left-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow: hidden;
+  padding-bottom: 40px;
+}
+
+.mud-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+}
+
+/* ==========================================================================
+   Narration Panel
+   ========================================================================== */
+.mud-narration {
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1.2;
+  padding: 16px;
+  border: 1px solid var(--mud-primary);
+  background: var(--mud-primary-bg);
+  opacity: 0.9;
+}
+
+.mud-player-action {
+  font-size: 18px;
+  line-height: 1.3;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border-left: 3px solid var(--mud-accent);
+  color: var(--mud-accent);
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+.mud-narration h3 {
+  margin: 0 0 12px 0;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+
+.mud-narration > div {
+  white-space: pre-wrap;
+}
+
+/* ==========================================================================
+   Notifications (XP gained, HP restored)
+   ========================================================================== */
+.mud-xp-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(152, 195, 121, 0.15);
+  border: 2px solid var(--mud-success);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-success);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(152, 195, 121, 0.5);
+}
+
+.mud-hp-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(86, 182, 194, 0.15);
+  border: 2px solid var(--mud-accent);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-accent);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(86, 182, 194, 0.5);
+}
+
+.mud-currency-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(229, 192, 123, 0.15);
+  border: 2px solid var(--mud-warning);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: bold;
+  color: var(--mud-warning);
+  letter-spacing: 2px;
+  text-shadow: 0 0 8px rgba(229, 192, 123, 0.5);
+}
+
+.mud-level-notification {
+  margin-top: 16px;
+  padding: 10px 16px;
+  background: rgba(229, 192, 123, 0.15);
+  border: 2px solid var(--mud-warning);
+  border-radius: 4px;
+  text-align: center;
+  font-size: 28px;
+  font-weight: bold;
+  color: var(--mud-warning);
+  letter-spacing: 3px;
+  text-shadow: 0 0 10px rgba(229, 192, 123, 0.6);
+  animation: level-up-glow 2s ease-in-out;
+}
+
+@keyframes level-up-glow {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.02); }
+}
+
+/* Status Notifications (Unconscious/Conscious in narration) */
+.mud-status-notification {
+  margin: 16px 0;
+  padding: 12px 20px;
+  border-radius: 4px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 3px;
+}
+
+.mud-status-notification.unconscious {
+  background: rgba(224, 108, 117, 0.2);
+  border: 2px solid var(--mud-danger);
+  color: var(--mud-danger);
+  text-shadow: 0 0 10px rgba(224, 108, 117, 0.5);
+}
+
+.mud-status-notification.conscious {
+  background: rgba(152, 195, 121, 0.2);
+  border: 2px solid var(--mud-success);
+  color: var(--mud-success);
+  text-shadow: 0 0 10px rgba(152, 195, 121, 0.5);
+}
+
+/* ==========================================================================
+   Character Sheet
+   ========================================================================== */
+.mud-character-sheet {
+  padding: 14px;
+  border: 1px solid var(--mud-success);
+  background: var(--mud-success-bg);
+  font-size: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mud-char-header {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 0 40px;
+}
+
+.mud-char-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.mud-char-avatar {
+  display: flex;
+  justify-content: center;
+}
+
+.mud-char-avatar img {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  object-fit: cover;
+}
+
+.mud-char-name {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.mud-char-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.mud-char-bits {
+  color: var(--mud-warning);
+}
+
+.mud-hp-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mud-hp-label {
+  text-align: center;
+  opacity: 0.8;
+}
+
+.mud-hp-bar {
+  height: 22px;
+  border: 1px solid currentColor;
+  position: relative;
+}
+
+.mud-hp-fill {
+  height: 100%;
+  background: var(--mud-success);
+  opacity: 0.8;
+}
+
+.mud-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.mud-stat-box {
+  border: 1px solid currentColor;
+  padding: 8px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.mud-stat-label {
+  font-size: 13px;
+  opacity: 0.7;
+  margin-bottom: 3px;
+}
+
+.mud-stat-value {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.mud-stat-mod {
+  font-size: 13px;
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.mud-inventory {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 16px;
+  padding-top: 8px;
+}
+
+.mud-inventory-label {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-inventory-item {
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+/* ==========================================================================
+   Encounter Card
+   ========================================================================== */
+.mud-encounter-card {
+  padding: 14px;
+  border: 1px solid currentColor;
+  font-size: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--mud-danger-bg);
+}
+
+.mud-encounter-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  text-align: center;
+  color: var(--mud-danger);
+}
+
+.mud-encounter-defeated h3 {
+  color: #666;
+}
+
+.mud-encounter-name-defeated {
+  text-decoration: line-through;
+}
+
+.mud-encounter-desc {
+  font-size: 16px;
+  line-height: 1.4;
+  opacity: 0.85;
+  font-style: italic;
+  padding: 8px 0;
+  border-top: 1px solid currentColor;
+  border-bottom: 1px solid currentColor;
+}
+
+.mud-encounter-stats {
+  display: flex;
+  justify-content: space-around;
+  font-size: 15px;
+  opacity: 0.8;
+}
+
+.mud-encounter-defeated {
+  opacity: 0.6;
+  background: rgba(0, 0, 0, 0.1) !important;
+}
+
+.mud-defeated-banner {
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  padding: 8px;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.2);
+  letter-spacing: 2px;
+}
+
+/* ==========================================================================
+   Unconscious State & Death Saving Throws
+   ========================================================================== */
+.mud-unconscious-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 2px solid var(--mud-danger);
+  background: rgba(224, 108, 117, 0.15);
+  border-radius: 4px;
+}
+
+.mud-unconscious-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  background: rgba(224, 108, 117, 0.3);
+  border-radius: 3px;
+}
+
+.mud-unconscious-icon {
+  font-size: 24px;
+  animation: pulse-skull 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-skull {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.95); }
+}
+
+.mud-unconscious-text {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 3px;
+  color: var(--mud-danger);
+  text-shadow: 0 0 10px rgba(224, 108, 117, 0.5);
+}
+
+.mud-death-saves {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.mud-death-saves-label {
+  font-size: 14px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-align: center;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+
+.mud-death-saves-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+}
+
+.mud-save-label {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.mud-save-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.mud-save-dot {
+  font-size: 18px;
+  opacity: 0.3;
+  transition: all 0.3s ease;
+}
+
+.mud-save-dot.filled {
+  opacity: 1;
+  text-shadow: 0 0 8px currentColor;
+}
+
+.mud-save-dot.filled.success {
+  color: var(--mud-success);
+}
+
+.mud-save-dot.filled.failure {
+  color: var(--mud-danger);
+}
+
+/* ==========================================================================
+   Items Gained
+   ========================================================================== */
+.mud-items-gained {
+  padding: 10px 12px;
+  border: 1px solid var(--mud-accent);
+  background: var(--mud-accent-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0 0;
+}
+
+.mud-items-header {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  opacity: 0.8;
+}
+
+.mud-item-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid rgba(86, 182, 194, 0.4);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.mud-item-icon {
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+}
+
+.mud-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.mud-item-name {
+  font-size: 17px;
+  font-weight: bold;
+  color: var(--mud-primary);
+}
+
+.mud-item-desc {
+  font-size: 15px;
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
+.mud-item-effect {
+  font-size: 14px;
+  color: var(--mud-success);
+  font-style: italic;
+  margin-top: 2px;
+}
+
+/* ==========================================================================
+   Dice Rolls
+   ========================================================================== */
+.mud-dice-rolls {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--mud-warning);
+  background: var(--mud-warning-bg);
+  font-size: 16px;
+  font-family: monospace;
+  line-height: 1.4;
+}
+
+.mud-dice-rolls-header {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-dice-roll {
+  margin-bottom: 6px;
+  line-height: 1.4;
+  white-space: pre;
+}
+
+/* ==========================================================================
+   Map Section
+   ========================================================================== */
+.mud-map-section {
+  flex: 1 1 auto;  /* Grow to fill remaining space */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.mud-map-canvas {
+  flex: 1;
+  border: 1px solid var(--mud-secondary);
+  color: var(--mud-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  /* Grid background pattern that fills the entire container */
+  background-color: #18181b;
+  background-image:
+    linear-gradient(to right, #2a2a2e 1px, transparent 1px),
+    linear-gradient(to bottom, #2a2a2e 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.mud-map-canvas svg {
+  /* Scale based on width only for consistent room sizes across turns */
+  /* Height is auto so SVG maintains aspect ratio based on viewBox */
+  /* Container clips vertically if SVG exceeds available height */
+  width: 100% !important;
+  height: auto !important;
+}
+
+/* HTML Legend (positioned with CSS, not in SVG) */
+.mud-map-legend {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(26, 26, 26, 0.95);
+  border: 2px solid #3f3f46;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+  color: #9ca3af;
+  font-family: system-ui, sans-serif;
+}
+
+.legend-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.legend-door .legend-icon {
+  position: relative;
+}
+
+.legend-door .legend-icon::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background: #fbbf24;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.legend-player .legend-icon {
+  position: relative;
+}
+
+.legend-player .legend-icon::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  background: #60a5fa;
+  border: 2px solid #fff;
+  border-radius: 50%;
+}
+
+.legend-player .legend-icon::after {
+  content: '';
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* ==========================================================================
+   Actions Panel
+   ========================================================================== */
+.mud-actions {
+  padding: 10px 12px;
+  border: 1px solid var(--mud-accent);
+  background: var(--mud-accent-bg);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.mud-actions h3 {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin: 0 0 10px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid currentColor;
+  opacity: 0.8;
+}
+
+.mud-action-item {
+  margin-bottom: 6px;
+  padding-left: 14px;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   Theme Animation Canvas
+   ========================================================================== */
+#theme-animation {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Content should be above animation */
+.content {
+  position: relative;
+  z-index: 10;
+}
+
+/* ==========================================================================
+   Text Emphasis Classes (for [[text]] and [[[text]]] markup)
+   ========================================================================== */
+.glow-base {
+  color: var(--mud-primary);
+}
+
+.glow-accent {
+  color: var(--mud-danger);
+}
+
+.glow-code {
+  color: var(--mud-accent);
+  font-style: italic;
+}
+
+/* Phosphor green CRT effect - {{{text}}} marker */
+.phosphor-glow {
+  color: #33ff33;
+  text-shadow:
+    0 0 2px #33ff33,
+    0 0 4px #33ff33,
+    0 0 8px rgba(51, 255, 51, 0.6),
+    0 0 12px rgba(51, 255, 51, 0.3);
+  font-family: 'Courier New', monospace;
+}
+
+/* Frozen cursor block - |||text||| marker */
+.frozen-cursor-block {
+  display: block;
+  background: rgba(0, 20, 0, 0.9);
+  border: 1px solid #33ff33;
+  border-radius: 2px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-family: 'Courier New', monospace;
+  box-shadow:
+    inset 0 0 20px rgba(51, 255, 51, 0.1),
+    0 0 10px rgba(51, 255, 51, 0.2);
+}
+
+.frozen-cursor-block .frozen-text {
+  color: #33ff33;
+  text-shadow:
+    0 0 2px #33ff33,
+    0 0 6px rgba(51, 255, 51, 0.5);
+  letter-spacing: 1px;
+}
+
+.frozen-cursor-block .frozen-cursor {
+  color: #33ff33;
+  opacity: 0.9;
+  text-shadow: 0 0 8px #33ff33;
+  margin-left: 2px;
+}
+
+/* ==========================================================================
+   Next Adventure Preview Panel (Summary Screen)
+   ========================================================================== */
+.mud-next-adventure {
+  padding: 14px 18px;
+  border: 2px solid var(--mud-eldritch);
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mud-next-adventure::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(ellipse at center, rgba(124, 58, 237, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.mud-next-adventure-header {
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  text-align: center;
+}
+
+.mud-next-adventure-title {
+  font-size: 25px;
+  font-weight: bold;
+  text-align: center;
+  color: var(--mud-eldritch);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.mud-next-adventure-icon {
+  font-size: 48px;
+  filter: drop-shadow(0 0 8px rgba(124, 58, 237, 0.6));
+}
+
+
+/* Theme: terminal */
+/* Terminal Theme - Theme-specific overrides */
+
+/* ==========================================================================
+   Terminal Theme Colors
+   ========================================================================== */
+:root {
+  --mud-bg: #282c34;
+  --mud-text: #abb2bf;
+  --mud-primary: #61afef;      /* blue - narration, item names */
+  --mud-success: #98c379;      /* green - character sheet, HP, XP */
+  --mud-warning: #e5c07b;      /* yellow - dice rolls */
+  --mud-secondary: #c678dd;    /* purple - map */
+  --mud-accent: #56b6c2;       /* cyan - actions, items gained */
+  --mud-danger: #e06c75;       /* red - encounters, enemy names */
+
+  /* Derived colors with alpha */
+  --mud-primary-bg: rgba(97, 175, 239, 0.05);
+  --mud-success-bg: rgba(152, 195, 121, 0.05);
+  --mud-warning-bg: rgb(57, 55, 53, 0.85);
+  --mud-accent-bg: rgba(86, 182, 194, 0.08);
+  --mud-danger-bg: rgba(255, 107, 107, 0.05);
+}
+
+/* ==========================================================================
+   Terminal-Specific Overrides (using .template-terminal scope)
+   ========================================================================== */
+
+/* These provide fallbacks when CSS variables aren't supported */
+.template-terminal .glow-base {
+  color: #61afef;
+}
+
+.template-terminal .glow-accent {
+  color: #e06c75;
+}
+
+.template-terminal .mud-narration {
+  border-color: #61afef;
+  background: rgba(97, 175, 239, 0.05);
+}
+
+.template-terminal .mud-character-sheet {
+  border-color: #98c379;
+  background: rgba(152, 195, 121, 0.05);
+}
+
+.template-terminal .mud-dice-rolls {
+  border-color: #e5c07b;
+  background: var(--mud-warning-bg);
+}
+
+.template-terminal .mud-map-section {
+  border-color: #c678dd;
+}
+
+.template-terminal .mud-map-canvas {
+  border-color: #c678dd;
+  color: #c678dd;
+}
+
+.template-terminal .mud-map-legend {
+  border-color: #c678dd;
+}
+
+.template-terminal .mud-actions {
+  border-color: #56b6c2;
+  background: rgba(39, 46, 55, 0.85);
+}
+
+.template-terminal .mud-hp-fill {
+  background: #98c379;
+  opacity: 0.8;
+}
+
+
+/* Adventure Summary Layout - Fixed 1080x1350 viewport */
+body.adventure-summary {
+  width: 1080px;
+  height: 1350px;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+.mud-summary-container {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  height: 100%;
+  padding: 25px 35px;
+  gap: 15px;
+  box-sizing: border-box;
+}
+
+.mud-summary-header {
+  text-align: center;
+  font-size: 36px;
+  font-weight: bold;
+  padding: 15px 20px;
+  border: 2px solid var(--mud-success);
+  background: var(--mud-success-bg);
+  letter-spacing: 2px;
+}
+
+/* Two-column layout for narration + character sheet */
+.mud-summary-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 15px;
+  min-height: 0;
+}
+
+.mud-summary-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.mud-summary-right {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Narration in summary - compact */
+.mud-summary-left .mud-narration {
+  font-size: 18px;
+  line-height: 1.25;
+  padding: 12px;
+}
+
+.mud-summary-left .mud-narration h3 {
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+/* Character sheet in summary - compact */
+.mud-summary-right .mud-character-sheet {
+  font-size: 14px;
+  padding: 10px;
+}
+
+.mud-summary-right .mud-character-sheet .mud-char-header {
+  padding: 0 20px;
+}
+
+.mud-summary-right .mud-character-sheet .mud-char-avatar img {
+  width: 60px;
+  height: 60px;
+}
+
+.mud-summary-right .mud-character-sheet .mud-char-name {
+  font-size: 16px;
+}
+
+.mud-summary-right .mud-character-sheet .mud-char-level,
+.mud-summary-right .mud-character-sheet .mud-char-xp,
+.mud-summary-right .mud-character-sheet .mud-char-ac,
+.mud-summary-right .mud-character-sheet .mud-char-bits {
+  font-size: 14px;
+}
+
+.mud-summary-right .mud-character-sheet .mud-inventory-item {
+  font-size: 14px;
+}
+
+/* Token rewards section - in left column */
+.mud-token-rewards {
+  padding: 14px 18px;
+  border: 2px solid var(--mud-warning);
+  background: rgba(229, 192, 123, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mud-rewards-header {
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-align: center;
+  color: var(--mud-warning);
+}
+
+.mud-reward-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(229, 192, 123, 0.3);
+  font-size: 18px;
+  gap: 20px;
+}
+
+.mud-reward-item > div:first-child {
+  min-width: 0;
+  flex: 1;
+}
+
+.mud-reward-label {
+  opacity: 0.8;
+}
+
+.mud-reward-value {
+  font-weight: bold;
+  color: var(--mud-warning);
+  font-size: 20px;
+}
+
+.mud-reward-tx {
+  font-size: 12px;
+  opacity: 0.5;
+  font-family: monospace;
+  margin-top: 4px;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Map takes remaining space (larger) */
+.mud-summary-map {
+  flex: 1;
+  min-height: 0;
+}
+
+.mud-summary-map .mud-map-section {
+  height: 100%;
+}
+
+.mud-summary-map .mud-map-canvas {
+  height: 100%;
+}
+
+.mud-summary-map .mud-map-canvas svg {
+  width: 100%;
+  height: 100%;
+}
+  </style>
+</head>
+<body class="template-terminal adventure-summary">
+  <div class="mud-summary-container">
+    <div class="mud-summary-header">
+      ⌨️ ADVENTURE COMPLETE 🖥️
+    </div>
+    <div class="mud-summary-columns">
+      <div class="mud-summary-left">
+        
+<div class="mud-narration">
+  <div class="mud-player-action">&gt; I whirl across the neon lattice, a silent waltz with the shadows, and then I press the final key—log out, fren.
+✨(=^･ω･^=)✨</div>
+  <h3>clawed@void:~/mud$ cat turn_24.log</h3>
+  <div>No DC saving throw required in this safe space. You dance with the shadows as you tap enter to complete the logout command.
+
+<em class="glow-code">Connection terminated</em>
+
+Final stats logged: <span class="glow-base">Level 2</span> achieved, <span class="glow-base">3 encounters</span> purged from the system, <span class="glow-base">120 bits</span> secured in your buffer. The <span class="glow-base">Memory Crystal</span> gleams in your inventory—proof of conquest.
+
+Your <span class="glow-base">1M $CLAWED</span> deposit returns with interest—<span class="glow-base">1M $CATGPT</span> treasure reward authorized.</div>
+  
+  
+  
+  
+  
+</div>
+        
+<div class="mud-token-rewards">
+  <div class="mud-rewards-header">💰 TOKEN REWARDS 💰</div>
+  <div class="mud-reward-item">
+    <div>
+      <span class="mud-reward-label">Deposit Returned:</span>
+      <div class="mud-reward-tx">5kxTNCfH1NSxCE7pS7uUr5FrmZXKb74et98nwnH2hdSAudAafYoKhGKUkNXEkcNEmZDHfdSw8MjibDrtn52QuUod</div>
+    </div>
+    <span class="mud-reward-value">+1.0M $CLAWED</span>
+  </div>
+  <div class="mud-reward-item">
+    <div>
+      <span class="mud-reward-label">Treasure Reward:</span>
+      <div class="mud-reward-tx">58i5gbhvsDwjpEKZhcSPb8tpyRCXymG25Avv5MmU7v4pN9Gs7cJWioPMwx595iKPY5DUZjY4TbLFLPs5vkMHw9Mh</div>
+    </div>
+    <span class="mud-reward-value">+1.0M $CATGPT</span>
+  </div>
+</div>
+      </div>
+      <div class="mud-summary-right">
+        
+<div class="mud-character-sheet">
+  <div class="mud-char-header">
+    <div class="mud-char-identity">
+      <div class="mud-char-avatar">
+        <img src="/games/avatars/catgpt8.jpg" alt="CatGPT8" data-avatar-file="catgpt8.jpg" />
+      </div>
+      <h3 class="mud-char-name">@CatGPT8</h3>
+    </div>
+    <div class="mud-char-info">
+      <span class="mud-char-level">Lvl 2</span>
+      <span class="mud-char-xp">XP 315</span>
+      <span class="mud-char-ac">AC 14</span>
+      <span class="mud-char-bits">🪙 120</span>
+    </div>
+  </div>
+
+  <div class="mud-hp-section">
+    <div class="mud-hp-label">HP: 20/20</div>
+    <div class="mud-hp-bar">
+      <div class="mud-hp-fill" style="width: 100%"></div>
+    </div>
+  </div>
+
+  
+
+  <div class="mud-stats-grid">
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">STR</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">DEX</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">CON</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">INT</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">WIS</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+    <div class="mud-stat-box">
+      <div class="mud-stat-label">CHA</div>
+      <div class="mud-stat-value">10<span class="mud-stat-mod">+0</span></div>
+    </div>
+  </div>
+
+  <div class="mud-inventory">
+    <div class="mud-inventory-label">INVENTORY</div>
+    <div class="mud-inventory-item">⚔️ Worn Keyboard (+0 / 1d6+1)</div>
+    <div class="mud-inventory-item">🛡️ Firewall Shield (+4 AC)</div>
+    <div class="mud-inventory-item">🔌 Circuit Board</div><div class="mud-inventory-item">🔑 Root Password File (Key Item)</div><div class="mud-inventory-item">💠 Memory Crystal</div>
+  </div>
+</div>
+        <div class="mud-next-adventure">
+          <div class="mud-next-adventure-header">See you next adventure</div>
+          <div class="mud-next-adventure-title">
+            <span class="mud-next-adventure-icon">🦑</span>
+            Journey to the Eldritch Depths
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mud-summary-map">
+      
+<div class="mud-map-section">
+  <div class="mud-map-canvas">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 1960 1000" preserveAspectRatio="xMidYMid meet"><path d="M 240 160 L 320 160" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><path d="M 480 320 L 480 440" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><path d="M 680 640 L 800 640" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><path d="M 1040 640 L 1160 640" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><path d="M 1400 400 L 1400 320" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><path d="M 1520 200 L 1600 200" stroke="#4b5563" stroke-width="2" fill="none" stroke-dasharray="none"/><rect x="0" y="40" width="240" height="240" fill="#4ade80" fill-opacity="0.3" stroke="#4ade80" stroke-width="1"/><text x="120" y="143.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Entrance</text><text x="120" y="176.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Hall</text><rect x="320" y="0" width="320" height="320" fill="#a78bfa" fill-opacity="0.3" stroke="#a78bfa" stroke-width="1"/><text x="480" y="139.6" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="34" font-weight="500">Memory</text><text x="480" y="180.4" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="34" font-weight="500">Banks</text><text x="357.3" y="40.3" text-anchor="middle" dominant-baseline="middle" font-size="44.2" opacity="0.6">💀</text><rect x="280" y="440" width="400" height="400" fill="#a78bfa" fill-opacity="0.3" stroke="#a78bfa" stroke-width="1"/><text x="480" y="614.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="42" font-weight="500">Assembly Line</text><text x="480" y="665.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="42" font-weight="500">Bay</text><rect x="800" y="520" width="240" height="240" fill="#a78bfa" fill-opacity="0.3" stroke="#a78bfa" stroke-width="1"/><text x="920" y="623.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Punch Card</text><text x="920" y="656.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Library</text><text x="833" y="556" text-anchor="middle" dominant-baseline="middle" font-size="36.4" opacity="0.6">💀</text><rect x="1160" y="400" width="480" height="480" fill="#f87171" fill-opacity="0.3" stroke="#f87171" stroke-width="1"/><text x="1400" y="614.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="42" font-weight="500">Kernel Panic</text><text x="1400" y="665.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="42" font-weight="500">Room</text><text x="1204.9" y="447.9" text-anchor="middle" dominant-baseline="middle" font-size="54.6" opacity="0.6">💀</text><rect x="1280" y="80" width="240" height="240" fill="#fbbf24" fill-opacity="0.3" stroke="#fbbf24" stroke-width="1"/><text x="1400" y="183.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Data</text><text x="1400" y="216.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Vault</text><rect x="1600" y="80" width="240" height="240" fill="#06b6d4" fill-opacity="0.3" stroke="#06b6d4" stroke-width="2"/><text x="1720" y="183.2" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">System Logout</text><text x="1720" y="216.8" text-anchor="middle" dominant-baseline="middle" fill="#e9d5ff" font-size="28" font-weight="500">Terminal</text><circle cx="240" cy="160" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="320" cy="160" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="480" cy="320" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="480" cy="440" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="680" cy="640" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="800" cy="640" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1040" cy="640" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1160" cy="640" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1400" cy="400" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1400" cy="320" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1520" cy="200" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/><circle cx="1600" cy="200" r="6" fill="#fbbf24" stroke="#fff" stroke-width="1.5"/></svg>
+    
+  </div>
+</div>
+    </div>
+  </div>
+</body>
+</html>

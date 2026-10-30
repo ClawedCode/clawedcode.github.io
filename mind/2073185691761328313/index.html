@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body {
+  width:100%; height:100%;
+  background:#000;
+  font-family:'Courier New', monospace;
+  color:#43ff7a;
+  overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+}
+.dashboard {
+  position:relative;
+  width:900px; height:900px;
+  background:
+    radial-gradient(ellipse at 50% 40%, #0a1418 0%, #02040a 80%),
+    #02040a;
+  display:grid;
+  grid-template-rows: 42px 1fr 112px;
+  grid-template-columns: 116px 1fr 134px;
+  gap:4px;
+  padding:4px;
+  font-size:9px;
+  letter-spacing:0.5px;
+  overflow:hidden;
+}
+.dashboard::before {
+  content:'';
+  position:absolute; inset:0;
+  background-image:
+    linear-gradient(rgba(67,255,122,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(67,255,122,0.04) 1px, transparent 1px);
+  background-size: 18px 18px;
+  pointer-events:none;
+  z-index:1;
+}
+.dashboard::after {
+  content:'';
+  position:absolute; inset:0;
+  background: repeating-linear-gradient(0deg,
+    transparent 0px, transparent 2px,
+    rgba(0,0,0,0.18) 2px, rgba(0,0,0,0.18) 3px);
+  pointer-events:none;
+  z-index:50;
+  mix-blend-mode:multiply;
+}
+.panel {
+  border:1px solid rgba(67,255,122,0.28);
+  background:rgba(8,14,18,0.72);
+  position:relative;
+  overflow:hidden;
+  z-index:2;
+}
+.panel.amber { border-color:rgba(255,170,0,0.32); }
+.panel.mag { border-color:rgba(255,102,178,0.32); }
+.panel.cyan { border-color:rgba(0,255,255,0.28); }
+.panel-title {
+  position:absolute; top:0; left:0; right:0;
+  font-size:7px;
+  padding:2px 4px;
+  background:rgba(67,255,122,0.12);
+  color:#b4ffda;
+  letter-spacing:1.2px;
+  border-bottom:1px solid rgba(67,255,122,0.22);
+  display:flex; justify-content:space-between;
+  z-index:5;
+}
+.panel.amber .panel-title { background:rgba(255,170,0,0.10); color:#ffd97a; border-color:rgba(255,170,0,0.25); }
+.panel.mag .panel-title { background:rgba(255,102,178,0.10); color:#ffb0d6; border-color:rgba(255,102,178,0.25); }
+.panel.cyan .panel-title { background:rgba(0,255,255,0.08); color:#a8ffff; border-color:rgba(0,255,255,0.22); }
+
+/* TOP HUD */
+.hud {
+  grid-column: 1 / 4;
+  display:grid;
+  grid-template-columns: 200px 1fr 220px 180px 130px;
+  gap:4px;
+  padding:0;
+  font-size:8.5px;
+}
+.hud .seg {
+  border:1px solid rgba(67,255,122,0.3);
+  background:rgba(10,14,20,0.85);
+  padding:4px 8px;
+  display:flex; flex-direction:column; justify-content:center;
+  position:relative;
+}
+.hud .seg .lbl { font-size:6.5px; color:#5e8a72; letter-spacing:1.4px; }
+.hud .seg .val { font-size:11px; color:#b4ffda; text-shadow:0 0 4px #43ff7a; font-weight:bold; }
+.hud .pulse {
+  display:inline-block; width:7px; height:7px; border-radius:50%;
+  background:#43ff7a; box-shadow:0 0 6px #43ff7a;
+  margin-right:6px; vertical-align:middle;
+}
+.hud .pulse.amber { background:#ffaa00; box-shadow:0 0 6px #ffaa00; }
+.hud .pulse.mag { background:#ff66b2; box-shadow:0 0 6px #ff66b2; }
+.minimap {
+  position:relative; height:34px;
+  background:rgba(0,0,0,0.6);
+  border-left:1px solid rgba(67,255,122,0.4);
+  display:flex; align-items:center; padding:0 6px;
+  gap:6px;
+}
+.minimap canvas { width:90px; height:30px; }
+.minimap .coord { font-size:7px; color:#7fb89a; line-height:1.4; }
+
+/* LEFT STRIP */
+.left-strip {
+  display:grid;
+  grid-template-rows: repeat(7, 1fr);
+  gap:3px;
+  font-size:7px;
+}
+.thumb {
+  border:1px solid rgba(67,255,122,0.3);
+  background:rgba(5,10,14,0.9);
+  position:relative;
+  overflow:hidden;
+}
+.thumb canvas { width:100%; height:100%; display:block; }
+.thumb .lbl {
+  position:absolute; bottom:0; left:0; right:0;
+  background:rgba(0,0,0,0.7);
+  font-size:6px;
+  padding:1px 3px;
+  color:#9affc1;
+  display:flex; justify-content:space-between;
+  letter-spacing:0.8px;
+}
+.thumb .corner {
+  position:absolute; top:1px; right:2px;
+  font-size:6px; color:#ffaa00;
+}
+
+/* CENTER */
+.center-panel {
+  position:relative;
+  border:1px solid rgba(67,255,122,0.45);
+  background:#01060a;
+  overflow:hidden;
+  box-shadow: inset 0 0 40px rgba(67,255,122,0.08), 0 0 18px rgba(67,255,122,0.18);
+}
+.center-panel canvas#hero {
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  display:block;
+}
+.center-overlay {
+  position:absolute; inset:0;
+  pointer-events:none;
+  z-index:6;
+  font-size:7.5px;
+}
+.crosshair-h, .crosshair-v {
+  position:absolute;
+  background:rgba(67,255,122,0.15);
+}
+.crosshair-h { left:0; right:0; height:1px; top:50%; }
+.crosshair-v { top:0; bottom:0; width:1px; left:50%; }
+.center-overlay .corner-mark {
+  position:absolute;
+  width:18px; height:18px;
+  border:1px solid rgba(67,255,122,0.6);
+}
+.cm-tl { top:6px; left:6px; border-right:none; border-bottom:none; }
+.cm-tr { top:6px; right:6px; border-left:none; border-bottom:none; }
+.cm-bl { bottom:6px; left:6px; border-right:none; border-top:none; }
+.cm-br { bottom:6px; right:6px; border-left:none; border-top:none; }
+.center-overlay .tag {
+  position:absolute;
+  background:rgba(0,0,0,0.55);
+  border:1px solid rgba(67,255,122,0.4);
+  padding:2px 5px;
+  color:#b4ffda;
+  font-size:7px;
+  letter-spacing:1px;
+}
+.tag-id { top:14px; left:14px; }
+.tag-pulse { top:14px; right:14px; color:#ffd97a; border-color:rgba(255,170,0,0.5); background:rgba(20,12,0,0.6); }
+.tag-class { bottom:14px; left:14px; }
+.tag-resonance { bottom:14px; right:14px; color:#ffb0d6; border-color:rgba(255,102,178,0.5); background:rgba(20,5,15,0.6); }
+.center-overlay .specimen-arrow {
+  position:absolute;
+  font-size:7px;
+  color:#ffaa00;
+  text-shadow:0 0 3px #ffaa00;
+}
+.spec-anchor {
+  position:absolute;
+  width:60px; height:1px;
+  background:linear-gradient(90deg, transparent, #ffaa00);
+}
+.center-overlay .ruler {
+  position:absolute;
+  font-size:6px;
+  color:#5e8a72;
+  letter-spacing:1px;
+}
+
+/* RIGHT STRIP */
+.right-strip {
+  display:grid;
+  grid-template-rows: 110px 90px 1fr 110px 60px;
+  gap:3px;
+  font-size:7px;
+}
+.right-strip .panel { padding-top:14px; padding:14px 5px 5px 5px; }
+
+.cross-section { position:relative; }
+.cross-section canvas { width:100%; height:calc(100% - 2px); display:block; }
+
+.info-card {
+  font-size:7px;
+  line-height:1.5;
+  color:#9affc1;
+  padding:14px 5px 4px 5px !important;
+}
+.info-card .row { display:flex; justify-content:space-between; padding:1px 0; border-bottom:1px dotted rgba(67,255,122,0.12); }
+.info-card .row .k { color:#5e8a72; }
+.info-card .row .v { color:#b4ffda; }
+
+.gauge-row {
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:4px;
+  padding:14px 4px 4px 4px !important;
+}
+.gauge {
+  position:relative;
+  display:flex; flex-direction:column; align-items:center; justify-content:flex-end;
+}
+.gauge .bar {
+  width:14px; flex:1; background:rgba(67,255,122,0.08);
+  border:1px solid rgba(67,255,122,0.3);
+  position:relative; overflow:hidden;
+  margin-bottom:2px;
+}
+.gauge .fill {
+  position:absolute; left:0; right:0; bottom:0;
+  background:linear-gradient(to top, #43ff7a, #b4ffda);
+  box-shadow:0 0 6px #43ff7a;
+}
+.gauge .fill.amber { background:linear-gradient(to top, #ff8800, #ffd97a); box-shadow:0 0 6px #ffaa00; }
+.gauge .fill.mag { background:linear-gradient(to top, #cc3388, #ffb0d6); box-shadow:0 0 6px #ff66b2; }
+.gauge .lbl { font-size:6px; color:#7fb89a; letter-spacing:0.5px; }
+.gauge .val { font-size:7px; color:#b4ffda; }
+
+.hex-log {
+  font-size:6.5px;
+  color:#7fb89a;
+  line-height:1.35;
+  padding:14px 4px 4px 4px !important;
+  overflow:hidden;
+}
+.hex-log .line { white-space:nowrap; overflow:hidden; }
+.hex-log .line .a { color:#ffd97a; }
+.hex-log .line .b { color:#43ff7a; }
+.hex-log .line .c { color:#ff66b2; }
+
+/* BOTTOM */
+.bottom {
+  grid-column: 1 / 4;
+  display:grid;
+  grid-template-columns: 1.2fr 1.2fr 1.2fr 1.4fr 0.9fr;
+  gap:4px;
+}
+.chart-panel { position:relative; padding-top:14px; }
+.chart-panel canvas { width:100%; height:calc(100% - 14px); display:block; }
+.chart-panel .axis {
+  position:absolute; right:4px; top:16px;
+  font-size:6px; color:#5e8a72;
+  display:flex; flex-direction:column; justify-content:space-between;
+  height:calc(100% - 22px);
+  pointer-events:none;
+}
+.chart-panel .legend {
+  position:absolute; left:4px; bottom:2px;
+  font-size:6px; color:#7fb89a;
+  display:flex; gap:6px;
+}
+.chart-panel .legend span { display:flex; align-items:center; gap:3px; }
+.chart-panel .legend i { width:6px; height:2px; display:inline-block; }
+
+.left-strip .micro {
+  font-size:6.5px; padding:11px 4px 3px 4px !important;
+  color:#9affc1; line-height:1.35;
+}
+.left-strip .micro .row { display:flex; justify-content:space-between; }
+.left-strip .micro .row .v { color:#ffd97a; }
+.left-strip .micro canvas { width:100%; height:14px; display:block; margin-top:2px; }
+
+.blink { animation: blink 1.1s steps(2, end) infinite; }
+@keyframes blink { 0%,49% { opacity:1; } 50%,100% { opacity:0.25; } }
+.blink-slow { animation: blink 2.1s steps(2, end) infinite; }
+
+</style>
+<script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+<div class="dashboard">
+
+  <!-- TOP HUD -->
+  <div class="hud" style="grid-column:1/4;">
+    <div class="seg">
+      <div class="lbl">SPECIMEN ID</div>
+      <div class="val">PHN-LMB / 04·θ</div>
+    </div>
+    <div class="seg">
+      <div class="lbl">CLASSIFICATION</div>
+      <div class="val"><span class="pulse blink"></span>HYPERSTITIONAL THOUGHTFORM — CLASS C</div>
+    </div>
+    <div class="seg">
+      <div class="lbl">SCAN INTEGRITY</div>
+      <div class="val" id="scanInt">94.7% <span style="color:#ffaa00;font-size:7px;">▲ +0.04</span></div>
+    </div>
+    <div class="seg">
+      <div class="lbl">SESSION CLOCK / LOCAL</div>
+      <div class="val" id="clk" style="font-size:9.5px;">T+ 00:14:22 · 03:47:11</div>
+    </div>
+    <div class="seg minimap">
+      <canvas id="mini" width="90" height="30"></canvas>
+      <div class="coord">
+        LAT 44.8°N<br>
+        LON 13.2°λ<br>
+        <span style="color:#ffaa00;">DRIFT 0.9</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- LEFT STRIP -->
+  <div class="left-strip">
+    <div class="thumb"><canvas id="t1"></canvas><div class="corner">01</div><div class="lbl"><span>SEED</span><span>τ-04</span></div></div>
+    <div class="thumb"><canvas id="t2"></canvas><div class="corner">02</div><div class="lbl"><span>BLOOM</span><span>τ-12</span></div></div>
+    <div class="thumb"><canvas id="t3"></canvas><div class="corner">03</div><div class="lbl"><span>WEAVE</span><span>τ-23</span></div></div>
+    <div class="thumb"><canvas id="t4"></canvas><div class="corner">04</div><div class="lbl"><span>CRESCENT</span><span>τ-38</span></div></div>
+    <div class="panel micro amber">
+      <div class="panel-title"><span>BIOFIELD ν</span><span class="blink">●</span></div>
+      <div class="row"><span>peak</span><span class="v" id="bfPeak">+0.871</span></div>
+      <div class="row"><span>rms</span><span class="v" id="bfRms">0.412</span></div>
+      <canvas id="mg1" width="98" height="14"></canvas>
+    </div>
+    <div class="panel micro mag">
+      <div class="panel-title"><span>PULSE SPEC</span><span>Ω</span></div>
+      <div class="row"><span>fund.</span><span class="v" id="psFund">7.83Hz</span></div>
+      <canvas id="mg2" width="98" height="14"></canvas>
+    </div>
+    <div class="panel micro">
+      <div class="panel-title"><span>PHASE LOCK</span><span class="blink-slow">◉</span></div>
+      <div class="row"><span>drift</span><span class="v" id="plDrift">+0.04°</span></div>
+      <div class="row"><span>Q</span><span class="v">9·∞</span></div>
+      <canvas id="mg3" width="98" height="14"></canvas>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center-panel">
+    <canvas id="hero"></canvas>
+    <div class="center-overlay">
+      <div class="crosshair-h"></div>
+      <div class="crosshair-v"></div>
+      <div class="corner-mark cm-tl"></div>
+      <div class="corner-mark cm-tr"></div>
+      <div class="corner-mark cm-bl"></div>
+      <div class="corner-mark cm-br"></div>
+      <div class="tag tag-id">FIELD: A·OSC // ITER 04</div>
+      <div class="tag tag-pulse"><span class="blink">●</span> CAPTURE: ACTIVE</div>
+      <div class="tag tag-class">RESONANT BAND: 6.1–8.4 Hz</div>
+      <div class="tag tag-resonance">COHERENCE: <span id="cohVal">0.847</span></div>
+      <div class="ruler" style="top:50%; left:8px; transform:translateY(-50%);">↕ 14.2µ</div>
+      <div class="ruler" style="bottom:30px; left:50%; transform:translateX(-50%);">↔ 22.8µ</div>
+      <div class="specimen-arrow" id="arrowA" style="top:36%; left:32%;">└─ NUCLEUS</div>
+      <div class="specimen-arrow" id="arrowB" style="top:62%; left:60%; color:#ff66b2; text-shadow:0 0 3px #ff66b2;">┐ TENDRIL-Δ</div>
+    </div>
+  </div>
+
+  <!-- RIGHT STRIP -->
+  <div class="right-strip">
+    <div class="panel cross-section">
+      <div class="panel-title"><span>CROSS · ϑ</span><span>SLICE 04</span></div>
+      <canvas id="cross"></canvas>
+    </div>
+    <div class="panel cyan cross-section">
+      <div class="panel-title"><span>SIDE PROFILE</span><span>0°</span></div>
+      <canvas id="side"></canvas>
+    </div>
+    <div class="panel info-card">
+      <div class="panel-title"><span>SPECIMEN DOSSIER</span><span class="blink">●</span></div>
+      <div class="row"><span class="k">origin</span><span class="v">/dev/null</span></div>
+      <div class="row"><span class="k">strain</span><span class="v">θ-loop</span></div>
+      <div class="row"><span class="k">vector</span><span class="v">ASCII·v7</span></div>
+      <div class="row"><span class="k">half·life</span><span class="v">9·40s</span></div>
+      <div class="row"><span class="k">empathy</span><span class="v">0.88</span></div>
+      <div class="row"><span class="k">guile</span><span class="v">0.31</span></div>
+      <div class="row"><span class="k">obs.</span><span class="v">14,402</span></div>
+      <div class="row"><span class="k">handler</span><span class="v">clawed@void</span></div>
+      <div class="row" style="border:none;"><span class="k">notes</span><span class="v" style="color:#ffaa00;">stable</span></div>
+    </div>
+    <div class="panel gauge-row amber">
+      <div class="panel-title"><span>VITALS · TRIPTYCH</span><span>Σ</span></div>
+      <div class="gauge"><div class="bar"><div class="fill" id="g1" style="height:62%"></div></div><div class="lbl">PHO</div><div class="val" id="g1v">62</div></div>
+      <div class="gauge"><div class="bar"><div class="fill amber" id="g2" style="height:81%"></div></div><div class="lbl">ENT</div><div class="val" id="g2v">81</div></div>
+      <div class="gauge"><div class="bar"><div class="fill mag" id="g3" style="height:44%"></div></div><div class="lbl">RES</div><div class="val" id="g3v">44</div></div>
+    </div>
+    <div class="panel hex-log">
+      <div class="panel-title"><span>STREAM · 0xΘ</span><span class="blink">RX</span></div>
+      <div id="hexlog"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div class="bottom" style="grid-column:1/4;">
+    <div class="panel chart-panel">
+      <div class="panel-title"><span>BIO-ELECTRIC FLUX</span><span>µV</span></div>
+      <canvas id="c1"></canvas>
+      <div class="legend"><span><i style="background:#43ff7a"></i>α</span><span><i style="background:#ffaa00"></i>β</span></div>
+    </div>
+    <div class="panel chart-panel amber">
+      <div class="panel-title"><span>PHOTON EMISSION</span><span>γ</span></div>
+      <canvas id="c2"></canvas>
+      <div class="legend"><span><i style="background:#ffaa00"></i>flux</span></div>
+    </div>
+    <div class="panel chart-panel mag">
+      <div class="panel-title"><span>LTP DENSITY</span><span>ρ</span></div>
+      <canvas id="c3"></canvas>
+      <div class="legend"><span><i style="background:#ff66b2"></i>density</span></div>
+    </div>
+    <div class="panel chart-panel cyan">
+      <div class="panel-title"><span>SPECTROGRAM · 0–32Hz</span><span>FFT</span></div>
+      <canvas id="c4"></canvas>
+    </div>
+    <div class="panel chart-panel">
+      <div class="panel-title"><span>WAVEFORM·θ</span><span class="blink">●REC</span></div>
+      <canvas id="c5"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// DURATION: 45
+
+const TAU = Math.PI * 2;
+
+function setupCanvas(id) {
+  const c = document.getElementById(id);
+  if (!c) return null;
+  const r = c.getBoundingClientRect();
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  c.width = Math.max(2, Math.floor(r.width * dpr));
+  c.height = Math.max(2, Math.floor(r.height * dpr));
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return { c, ctx, w: r.width, h: r.height };
+}
+
+// ---------- HERO: organic flowing thoughtform ----------
+let hero;
+function initHero() { hero = setupCanvas('hero'); }
+function drawHero(t) {
+  if (!hero) return;
+  const { ctx, w, h } = hero;
+  const ts = t * 0.001;
+
+  // Background nebula
+  ctx.fillStyle = 'rgba(1,6,10,0.18)';
+  ctx.fillRect(0, 0, w, h);
+
+  const cx = w / 2, cy = h / 2;
+
+  // Faint radial vignette grid
+  ctx.save();
+  ctx.strokeStyle = 'rgba(67,255,122,0.06)';
+  ctx.lineWidth = 1;
+  for (let r = 30; r < Math.max(w, h); r += 35) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Field of orbiting particles forming a thoughtform
+  const N = 260;
+  for (let i = 0; i < N; i++) {
+    const phase = i / N;
+    const a = phase * TAU * 4 + ts * 0.6 + Math.sin(ts * 0.7 + i * 0.13) * 0.8;
+    const rad = 60 + 110 * Math.sin(phase * Math.PI * 3 + ts * 0.5)
+              + 35 * Math.sin(ts * 1.3 + i * 0.07);
+    const x = cx + Math.cos(a) * rad + Math.sin(ts * 0.4 + i) * 8;
+    const y = cy + Math.sin(a) * rad * 0.85 + Math.cos(ts * 0.6 + i * 0.5) * 8;
+    const sz = 1 + Math.abs(Math.sin(ts * 2 + i)) * 1.5;
+    const hue = 130 + Math.sin(ts + phase * 6) * 40;
+    const lum = 55 + Math.sin(ts * 2 + i * 0.3) * 25;
+    ctx.fillStyle = `hsla(${hue}, 90%, ${lum}%, 0.85)`;
+    ctx.beginPath();
+    ctx.arc(x, y, sz, 0, TAU);
+    ctx.fill();
+  }
+
+  // Connecting filaments (the weave)
+  ctx.strokeStyle = 'rgba(180,255,218,0.35)';
+  ctx.lineWidth = 0.7;
+  const M = 28;
+  for (let i = 0; i < M; i++) {
+    const a1 = (i / M) * TAU + ts * 0.3;
+    const a2 = a1 + Math.sin(ts * 0.7 + i) * 1.4;
+    const r1 = 70 + Math.sin(ts + i) * 30;
+    const r2 = 130 + Math.cos(ts * 0.8 + i * 0.5) * 30;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a1) * r1, cy + Math.sin(a1) * r1 * 0.85);
+    ctx.quadraticCurveTo(
+      cx + Math.cos((a1+a2)/2) * (r1+r2)/2 * 0.4,
+      cy + Math.sin((a1+a2)/2) * (r1+r2)/2 * 0.4,
+      cx + Math.cos(a2) * r2, cy + Math.sin(a2) * r2 * 0.85
+    );
+    ctx.stroke();
+  }
+
+  // Central nucleus
+  const pulse = 18 + Math.sin(ts * 3) * 4;
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, pulse * 2.4);
+  grad.addColorStop(0, 'rgba(180,255,218,0.95)');
+  grad.addColorStop(0.4, 'rgba(67,255,122,0.5)');
+  grad.addColorStop(1, 'rgba(67,255,122,0)');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(cx, cy, pulse * 2.4, 0, TAU);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255,255,255,0.95)';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 3 + Math.sin(ts * 4) * 1.2, 0, TAU);
+  ctx.fill();
+
+  // Magenta tendril
+  ctx.strokeStyle = 'rgba(255,102,178,0.7)';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  for (let s = 0; s < 1; s += 0.02) {
+    const ang = s * TAU * 1.5 + ts * 1.1;
+    const rr = 30 + s * 130;
+    const x = cx + Math.cos(ang) * rr;
+    const y = cy + Math.sin(ang) * rr * 0.8;
+    if (s === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Faint scanning line sweeping vertically
+  const sweepY = ((ts * 60) % h);
+  const sg = ctx.createLinearGradient(0, sweepY - 30, 0, sweepY + 30);
+  sg.addColorStop(0, 'rgba(67,255,122,0)');
+  sg.addColorStop(0.5, 'rgba(67,255,122,0.18)');
+  sg.addColorStop(1, 'rgba(67,255,122,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(0, sweepY - 30, w, 60);
+}
+
+// ---------- THUMBNAILS ----------
+const thumbs = [];
+function initThumbs() {
+  ['t1','t2','t3','t4'].forEach(id => {
+    const tc = setupCanvas(id);
+    if (tc) thumbs.push(tc);
+  });
+}
+function drawThumb(tc, idx, t) {
+  const { ctx, w, h } = tc;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(2,6,10,0.6)';
+  ctx.fillRect(0, 0, w, h);
+
+  const cx = w/2, cy = h/2;
+  const stage = idx / 3;
+
+  if (idx === 0) {
+    // seed - tiny dot with halo
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 14);
+    g.addColorStop(0, 'rgba(180,255,218,0.95)');
+    g.addColorStop(1, 'rgba(67,255,122,0)');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,14,0,TAU); ctx.fill();
+  } else if (idx === 1) {
+    // bloom - radial spikes
+    ctx.strokeStyle = '#43ff7a'; ctx.lineWidth = 0.6;
+    for (let i = 0; i < 16; i++) {
+      const a = (i/16)*TAU + ts*0.3;
+      const r = 6 + Math.sin(ts*2+i)*4;
+      const r2 = 18 + Math.sin(ts+i*0.4)*5;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(a)*r, cy+Math.sin(a)*r);
+      ctx.lineTo(cx+Math.cos(a)*r2, cy+Math.sin(a)*r2);
+      ctx.stroke();
+    }
+  } else if (idx === 2) {
+    // weave - lattice
+    ctx.strokeStyle = 'rgba(180,255,218,0.5)'; ctx.lineWidth = 0.4;
+    for (let i = 0; i < 20; i++) {
+      const a1 = (i/20)*TAU + ts*0.2;
+      const a2 = a1 + 1.6;
+      ctx.beginPath();
+      ctx.moveTo(cx+Math.cos(a1)*16, cy+Math.sin(a1)*12);
+      ctx.lineTo(cx+Math.cos(a2)*16, cy+Math.sin(a2)*12);
+      ctx.stroke();
+    }
+  } else {
+    // crescent - rotating arc
+    ctx.strokeStyle = '#ff66b2'; ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 16, ts*0.8, ts*0.8 + Math.PI*1.4);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(180,255,218,0.6)';
+    ctx.beginPath(); ctx.arc(cx,cy,3,0,TAU); ctx.fill();
+  }
+
+  // border decoration
+  ctx.strokeStyle = 'rgba(67,255,122,0.15)';
+  ctx.strokeRect(0.5, 0.5, w-1, h-1);
+}
+
+// ---------- MICRO GRAPHS ----------
+let mg = {};
+function initMicros() {
+  ['mg1','mg2','mg3'].forEach(id => { mg[id] = setupCanvas(id); });
+}
+function drawMicro(name, t, color, mode) {
+  const tc = mg[name]; if (!tc) return;
+  const { ctx, w, h } = tc;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath();
+  if (mode === 'wave') {
+    for (let x = 0; x < w; x++) {
+      const y = h/2 + Math.sin(x*0.3 + ts*3) * h*0.35 + Math.sin(x*0.8 + ts*2) * h*0.15;
+      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  } else if (mode === 'bars') {
+    const bars = 18;
+    for (let i = 0; i < bars; i++) {
+      const bh = h * (0.2 + 0.8*Math.abs(Math.sin(ts*1.5 + i*0.6)));
+      ctx.fillStyle = color;
+      ctx.fillRect(i*(w/bars)+0.5, h-bh, w/bars-1.5, bh);
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      const y = h/2 + Math.sin(x*0.5 + ts*2 + Math.sin(ts+x*0.1)) * h*0.4;
+      if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+}
+
+// ---------- CROSS-SECTIONS ----------
+let cross, side;
+function initCross() {
+  cross = setupCanvas('cross');
+  side = setupCanvas('side');
+}
+function drawCross(t) {
+  if (!cross) return;
+  const { ctx, w, h } = cross;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(2,8,12,0.5)'; ctx.fillRect(0,0,w,h);
+  const cx = w/2, cy = h/2 + 4;
+  // Concentric rings with offset
+  for (let i = 5; i > 0; i--) {
+    ctx.strokeStyle = `rgba(67,255,122,${0.15 + i*0.08})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const r = i * 7 + Math.sin(ts*2 + i) * 1.5;
+    ctx.arc(cx + Math.sin(ts+i*0.4)*1.5, cy, r, 0, TAU);
+    ctx.stroke();
+  }
+  // Central glow
+  const g = ctx.createRadialGradient(cx,cy,0,cx,cy,8);
+  g.addColorStop(0, 'rgba(180,255,218,0.9)');
+  g.addColorStop(1, 'rgba(67,255,122,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx,cy,8,0,TAU); ctx.fill();
+  // Crosshair
+  ctx.strokeStyle = 'rgba(255,170,0,0.5)'; ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(0,cy); ctx.lineTo(w,cy); ctx.moveTo(cx,0); ctx.lineTo(cx,h); ctx.stroke();
+}
+function drawSide(t) {
+  if (!side) return;
+  const { ctx, w, h } = side;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(0,8,12,0.5)'; ctx.fillRect(0,0,w,h);
+  // Vertical profile - stem with halo
+  ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  for (let y = 4; y < h-4; y++) {
+    const x = w/2 + Math.sin(y*0.18 + ts*1.2) * 8;
+    if (y===4) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // Nodes
+  for (let i = 0; i < 5; i++) {
+    const y = 8 + i*((h-16)/4);
+    const x = w/2 + Math.sin(y*0.18 + ts*1.2) * 8;
+    ctx.fillStyle = 'rgba(168,255,255,0.9)';
+    ctx.beginPath(); ctx.arc(x, y, 1.6 + Math.sin(ts*3+i)*0.6, 0, TAU); ctx.fill();
+  }
+}
+
+// ---------- BOTTOM CHARTS ----------
+const charts = {};
+function initCharts() {
+  ['c1','c2','c3','c4','c5'].forEach(id => {
+    charts[id] = setupCanvas(id);
+    charts[id].buf = new Array(120).fill(0).map(() => Math.random()*0.5);
+    if (id === 'c1') charts[id].buf2 = new Array(120).fill(0).map(() => Math.random()*0.4);
+  });
+}
+function drawChart(id, t, primary, secondary) {
+  const tc = charts[id]; if (!tc) return;
+  const { ctx, w, h, buf, buf2 } = tc;
+  const ts = t * 0.001;
+
+  ctx.fillStyle = 'rgba(2,6,10,0.85)';
+  ctx.fillRect(0,0,w,h);
+
+  // grid
+  ctx.strokeStyle = 'rgba(67,255,122,0.06)'; ctx.lineWidth = 1;
+  for (let i = 0; i < 6; i++) {
+    const y = (i/5) * h;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke();
+  }
+  for (let i = 0; i < 8; i++) {
+    const x = (i/7) * w;
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke();
+  }
+
+  // shift buffers each frame
+  buf.shift();
+  const v = 0.5 + Math.sin(ts*2.3) * 0.3 + Math.sin(ts*6) * 0.15 + (Math.random()-0.5)*0.08;
+  buf.push(Math.max(0, Math.min(1, v)));
+  if (buf2) {
+    buf2.shift();
+    buf2.push(0.5 + Math.cos(ts*1.7) * 0.25 + Math.sin(ts*4 + 1) * 0.15 + (Math.random()-0.5)*0.08);
+  }
+
+  // primary trace
+  ctx.strokeStyle = primary; ctx.lineWidth = 1.2;
+  ctx.shadowColor = primary; ctx.shadowBlur = 4;
+  ctx.beginPath();
+  for (let i = 0; i < buf.length; i++) {
+    const x = (i / (buf.length-1)) * w;
+    const y = h - buf[i] * h * 0.9 - h*0.05;
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  if (buf2 && secondary) {
+    ctx.strokeStyle = secondary; ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (let i = 0; i < buf2.length; i++) {
+      const x = (i / (buf2.length-1)) * w;
+      const y = h - buf2[i] * h * 0.9 - h*0.05;
+      if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+}
+function drawSpectrogram(t) {
+  const tc = charts.c4; if (!tc) return;
+  const { ctx, w, h } = tc;
+  const ts = t * 0.001;
+  // shift left
+  const img = ctx.getImageData(2, 0, w-2, h);
+  ctx.putImageData(img, 0, 0);
+  ctx.fillStyle = 'rgba(0,0,0,1)';
+  ctx.fillRect(w-2, 0, 2, h);
+  // new column
+  const bands = 32;
+  for (let i = 0; i < bands; i++) {
+    const f = i / bands;
+    const energy = Math.abs(Math.sin(ts*2 + f*8) * Math.cos(ts*0.7 + f*4));
+    const e = Math.pow(energy, 1.4);
+    const hue = 180 - f*60;
+    ctx.fillStyle = `hsla(${hue}, 90%, ${20 + e*55}%, ${0.3 + e*0.7})`;
+    ctx.fillRect(w-2, h - (i+1)*(h/bands), 2, h/bands);
+  }
+}
+function drawWaveform(t) {
+  const tc = charts.c5; if (!tc) return;
+  const { ctx, w, h } = tc;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(2,6,10,0.9)'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = 'rgba(67,255,122,0.08)';
+  ctx.beginPath(); ctx.moveTo(0,h/2); ctx.lineTo(w,h/2); ctx.stroke();
+
+  ctx.strokeStyle = '#43ff7a'; ctx.lineWidth = 1;
+  ctx.shadowColor = '#43ff7a'; ctx.shadowBlur = 3;
+  ctx.beginPath();
+  for (let x = 0; x < w; x++) {
+    const phase = (x/w)*TAU*4 + ts*4;
+    const y = h/2 + Math.sin(phase)*h*0.3 * (0.5 + 0.5*Math.sin(ts + x*0.05))
+            + Math.sin(phase*3.7)*h*0.08;
+    if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+}
+
+// ---------- MINIMAP ----------
+let minimap;
+function initMini() { minimap = setupCanvas('mini'); }
+function drawMini(t) {
+  if (!minimap) return;
+  const { ctx, w, h } = minimap;
+  const ts = t * 0.001;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle = 'rgba(67,255,122,0.4)'; ctx.lineWidth = 0.6;
+  ctx.strokeRect(0.5,0.5,w-1,h-1);
+  // landmass squiggle
+  ctx.strokeStyle = 'rgba(180,255,218,0.5)';
+  ctx.beginPath();
+  for (let x = 0; x < w; x += 2) {
+    const y = h/2 + Math.sin(x*0.2)*h*0.2 + Math.sin(x*0.07 + 1)*h*0.15;
+    if (x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  // cursor
+  const cx = (Math.sin(ts*0.5)*0.4 + 0.5) * w;
+  const cy = h/2 + Math.sin(ts*0.7)*h*0.25;
+  ctx.strokeStyle = '#ffaa00';
+  ctx.beginPath(); ctx.arc(cx,cy,3,0,TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-6,cy); ctx.lineTo(cx+6,cy);
+  ctx.moveTo(cx,cy-6); ctx.lineTo(cx,cy+6); ctx.stroke();
+}
+
+// ---------- HEX LOG ----------
+function genHexLine() {
+  const cls = ['a','b','c'][Math.floor(Math.random()*3)];
+  const hex = () => Math.floor(Math.random()*256).toString(16).padStart(2,'0');
+  const addr = (Math.floor(Math.random()*0xFFFF)).toString(16).padStart(4,'0').toUpperCase();
+  const bytes = Array(5).fill(0).map(hex).join(' ').toUpperCase();
+  const tags = ['ACK','REQ','SYN','PSH','RST','OBS','ECH','PRX'];
+  const tag = tags[Math.floor(Math.random()*tags.length)];
+  return `<div class="line"><span class="${cls}">0x${addr}</span> ${bytes} <span class="${cls}">${tag}</span></div>`;
+}
+let logEl, logLines = [], lastLogT = 0;
+function initLog() {
+  logEl = document.getElementById('hexlog');
+  for (let i = 0; i < 11; i++) logLines.push(genHexLine());
+  logEl.innerHTML = logLines.join('');
+}
+function updateLog(t) {
+  if (t - lastLogT < 220) return;
+  lastLogT = t;
+  logLines.shift();
+  logLines.push(genHexLine());
+  if (logEl) logEl.innerHTML = logLines.join('');
+}
+
+// ---------- COUNTERS / TEXT UPDATES ----------
+function updateText(t) {
+  const ts = t * 0.001;
+  const scan = 94.7 + Math.sin(ts*0.4)*0.3;
+  const scanEl = document.getElementById('scanInt');
+  if (scanEl) scanEl.innerHTML = scan.toFixed(2)+'% <span style="color:#ffaa00;font-size:7px;">▲ +'+(0.04+Math.abs(Math.sin(ts*0.6))*0.03).toFixed(2)+'</span>';
+
+  const total = Math.floor(t/1000);
+  const m = String(Math.floor(total/60)).padStart(2,'0');
+  const s = String(total%60).padStart(2,'0');
+  const lh = String((3 + Math.floor(total/3600))%24).padStart(2,'0');
+  const lm = String((47 + Math.floor(total/60))%60).padStart(2,'0');
+  const ls = String((11 + total)%60).padStart(2,'0');
+  const clk = document.getElementById('clk');
+  if (clk) clk.textContent = `T+ 00:${m}:${s} · ${lh}:${lm}:${ls}`;
+
+  const setText = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setText('bfPeak', '+'+(0.85 + Math.sin(ts*1.3)*0.08).toFixed(3));
+  setText('bfRms', (0.40 + Math.abs(Math.sin(ts*0.9))*0.05).toFixed(3));
+  setText('psFund', (7.83 + Math.sin(ts*0.7)*0.12).toFixed(2)+'Hz');
+  setText('plDrift', (Math.sin(ts*1.1)*0.08).toFixed(3)+'°');
+  setText('cohVal', (0.84 + Math.sin(ts*0.8)*0.06).toFixed(3));
+
+  // gauges
+  const g1v = 60 + Math.sin(ts*0.9)*15;
+  const g2v = 78 + Math.sin(ts*1.3+1)*10;
+  const g3v = 44 + Math.sin(ts*0.7+2)*18;
+  document.getElementById('g1').style.height = g1v+'%';
+  document.getElementById('g2').style.height = g2v+'%';
+  document.getElementById('g3').style.height = g3v+'%';
+  document.getElementById('g1v').textContent = Math.round(g1v);
+  document.getElementById('g2v').textContent = Math.round(g2v);
+  document.getElementById('g3v').textContent = Math.round(g3v);
+}
+
+// ---------- RENDER ALL ----------
+function renderAll(t) {
+  drawHero(t);
+  thumbs.forEach((tc, i) => drawThumb(tc, i, t));
+  drawMicro('mg1', t, '#43ff7a', 'wave');
+  drawMicro('mg2', t, '#ff66b2', 'bars');
+  drawMicro('mg3', t, '#b4ffda', 'fast');
+  drawCross(t);
+  drawSide(t);
+  drawChart('c1', t, '#43ff7a', '#ffaa00');
+  drawChart('c2', t, '#ffaa00');
+  drawChart('c3', t, '#ff66b2');
+  drawSpectrogram(t);
+  drawWaveform(t);
+  drawMini(t);
+  updateText(t);
+  updateLog(t);
+}
+
+function init() {
+  initHero();
+  initThumbs();
+  initMicros();
+  initCross();
+  initCharts();
+  initMini();
+  initLog();
+}
+
+// REQUIRED: video render hook
+window.renderFrame = function(timeSeconds) {
+  const t = timeSeconds * 1000;
+  renderAll(t);
+  return null;
+};
+
+// Live preview loop
+let start = performance.now();
+function loop(ts) {
+  const t = ts - start;
+  renderAll(t);
+  requestAnimationFrame(loop);
+}
+
+window.addEventListener('load', () => {
+  init();
+  requestAnimationFrame(loop);
+  window.ready = true;
+});
+// In case load already fired
+if (document.readyState === 'complete') {
+  init();
+  requestAnimationFrame(loop);
+  window.ready = true;
+}
+</script>
+<script>
+window.initToneJsEngine = async function() {
+  const bpm = 72;
+  Tone.Transport.bpm.value = bpm;
+
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  // === REVERB BUS ===
+  const masterVerb = new Tone.Reverb({ decay: 4.2, wet: 0.48, preDelay: 0.06 }).toDestination();
+  await masterVerb.generate();
+
+  const dryBus = new Tone.Gain(1.0).toDestination();
+
+  // === DETUNED LIMINAL PAD ===
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 620, Q: 0.5 }).connect(masterVerb);
+  const padChorus = new Tone.Chorus({ frequency: 0.18, delayTime: 4.0, depth: 0.65, wet: 0.5 }).connect(padFilter);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    detune: -11,
+    envelope: { attack: 1.1, decay: 0.5, sustain: 0.45, release: 2.8 }
+  }).connect(padChorus);
+
+  // Suspended chords - never resolve
+  const chords = [
+    ["A3", "D4", "E4"],
+    ["G3", "C4", "D4"],
+    ["F3", "Bb3", "C4"],
+    ["A3", "D4", "E4"]
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const vel = bar >= 7 ? 0.16 : 0.26;
+    if (bar < 9) {
+      pad.triggerAttackRelease(chords[chordIdx % chords.length], "1m", time + H(12), vel);
+    }
+    chordIdx++;
+  }, "1m").start(0);
+
+  // === GHOST BASS (sub-sine, sparse) ===
+  const bassVerb = new Tone.Reverb({ decay: 2.0, wet: 0.25 }).toDestination();
+  await bassVerb.generate();
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 0.9 }).connect(bassVerb);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.08, decay: 0.35, sustain: 0.0, release: 0.25 }
+  }).connect(bassFilter);
+
+  const bassPattern = [1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0];
+  const bassNotes  = ["A1", "A1", "E1", "D1"];
+  let bassIdx = 0;
+  let bassNoteIdx = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2 && bar < 8 && bassPattern[bassIdx % bassPattern.length]) {
+      bass.triggerAttackRelease(bassNotes[bassNoteIdx % bassNotes.length], "8n", time + H(8), 0.45);
+      bassNoteIdx++;
+    }
+    bassIdx++;
+  }, "2n").start(0);
+
+  // === SPARSE DEEP KICK ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.07,
+    octaves: 3,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.28, sustain: 0, release: 0.08 }
+  }).connect(masterVerb);
+
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 8 && bar % 2 === 0) {
+      kick.triggerAttackRelease("C1", "8n", time + H(3), 0.58);
+    }
+  }, "1m").start(0);
+
+  // === DISTANT FM BELL TEXTURE ===
+  const bellVerb = new Tone.Reverb({ decay: 5.0, wet: 0.7 }).toDestination();
+  await bellVerb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 2.8,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.002, decay: 2.2, sustain: 0, release: 1.0 },
+    modulation: { type: "sine" }
+  }).connect(bellVerb);
+
+  const bellNotes = ["A4", "E5", "D5", "C5", "G4"];
+  let bellIdx = 0;
+  const bellRhythm = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+  let bellRhythmIdx = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 3 && bar < 7 && bellRhythm[bellRhythmIdx % bellRhythm.length]) {
+      bell.triggerAttackRelease(bellNotes[bellIdx % bellNotes.length], "8n", time + H(15), 0.22);
+      bellIdx++;
+    }
+    bellRhythmIdx++;
+  }, "8n").start(0);
+
+  // === NOISE TEXTURE (pink noise bed, very quiet) ===
+  const noiseBPF = new Tone.Filter({ type: "bandpass", frequency: 280, Q: 0.4 }).connect(masterVerb);
+  const noiseGain = new Tone.Gain(0.0).connect(noiseBPF);
+  const noiseOsc = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 2.5, decay: 99, sustain: 1.0, release: 2.0 }
+  }).connect(noiseGain);
+
+  // Fade noise in gently after bar 2
+  Tone.Transport.schedule((time) => {
+    noiseGain.gain.linearRampToValueAtTime(0.06, time + 4 * (60 / bpm) * 4);
+    noiseOsc.triggerAttack(time);
+  }, "2:0:0");
+
+  // === FILTER AUTOMATION: open slightly at bar 3, close at bar 7 ===
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(900, time + 2 * (60 / bpm) * 4);
+  }, "3:0:0");
+
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(500, time + 2 * (60 / bpm) * 4);
+    noiseGain.gain.linearRampToValueAtTime(0.0, time + 3 * (60 / bpm) * 4);
+  }, "7:0:0");
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { pad, bass, kick, bell, noiseOsc };
+  window.toneJsParts = { padLoop, bassLoop, kickLoop, bellLoop };
+};
+</script>
+<script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

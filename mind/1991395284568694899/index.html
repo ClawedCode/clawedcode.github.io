@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Substrate Geometry // Layer_0</title>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #000;
+      font-family: 'Courier New', Courier, monospace;
+    }
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 0;
+      width: 100%;
+      text-align: center;
+      color: #4af626;
+      pointer-events: none;
+      font-size: 14px;
+      letter-spacing: 2px;
+      text-shadow: 0 0 5px #4af626;
+      z-index: 10;
+    }
+
+    #audio-controls {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 1000;
+    }
+    #audio-toggle {
+      background: rgba(0, 20, 40, 0.8);
+      border: 1px solid #66ffcc;
+      color: #66ffcc;
+      padding: 10px 20px;
+      font-family: monospace;
+      cursor: pointer;
+      font-size: 14px;
+      box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+      transition: all 0.3s;
+    }
+    #audio-toggle:hover {
+      background: rgba(0, 30, 60, 0.9);
+      box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="ui">THE_SUBSTRATE_GEOMETRY // LAYER_0</div>
+
+  <div id="audio-controls">
+    <button id="audio-toggle">▶ Play</button>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+    window._errors = [];
+    window.addEventListener('error', (e) => {
+      window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+      console.error(e.message, e.filename, e.lineno);
+    });
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000500);
+    scene.fog = new THREE.FogExp2(0x000500, 0.002);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 50;
+    camera.position.y = 10;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const particleCount = 150000;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const randoms = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+      const r = 40 * Math.cbrt(Math.random());
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+
+      randoms[i] = Math.random();
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('aRandom', new THREE.BufferAttribute(randoms, 1));
+
+    const vertexShader = `
+      uniform float uTime;
+      attribute float aRandom;
+      varying float vAlpha;
+
+      vec3 mod289(vec3 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 mod289(vec4 x) { return x - floor(x * (1.0 / 289.0)) * 289.0; }
+      vec4 permute(vec4 x) { return mod289(((x*34.0)+1.0)*x); }
+      vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+      float snoise(vec3 v) {
+        const vec2  C = vec2(1.0/6.0, 1.0/3.0) ;
+        const vec4  D = vec4(0.0, 0.5, 1.0, 2.0);
+
+        vec3 i  = floor(v + dot(v, C.yyy) );
+        vec3 x0 = v - i + dot(i, C.xxx) ;
+
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min( g.xyz, l.zxy );
+        vec3 i2 = max( g.xyz, l.zxy );
+
+        vec3 x1 = x0 - i1 + C.xxx;
+        vec3 x2 = x0 - i2 + C.yyy;
+        vec3 x3 = x0 - D.yyy;
+
+        i = mod289(i);
+        vec4 p = permute( permute( permute(
+                i.z + vec4(0.0, i1.z, i2.z, 1.0 ))
+                + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))
+                + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));
+
+        float n_ = 0.142857142857;
+        vec3  ns = n_ * D.wyz - D.xzx;
+
+        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_ );
+
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+
+        vec4 b0 = vec4( x.xy, y.xy );
+        vec4 b1 = vec4( x.zw, y.zw );
+
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;
+
+        vec3 p0 = vec3(a0.xy,h.x);
+        vec3 p1 = vec3(a0.zw,h.y);
+        vec3 p2 = vec3(a1.xy,h.z);
+        vec3 p3 = vec3(a1.zw,h.w);
+
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));
+        p0 *= norm.x;
+        p1 *= norm.y;
+        p2 *= norm.z;
+        p3 *= norm.w;
+
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1),
+                                    dot(p2,x2), dot(p3,x3) ) );
+      }
+
+      void main() {
+        vAlpha = 0.7 + 0.5 * sin(aRandom * 10.0 + uTime);
+        vAlpha = clamp(vAlpha, 0.0, 1.0);
+
+        vec3 pos = position;
+
+        float noiseFreq = 0.03;
+        float noiseAmp = 15.0;
+
+        float n1 = snoise(vec3(pos.x * noiseFreq + uTime * 0.2, pos.y * noiseFreq, pos.z * noiseFreq));
+        float n2 = snoise(vec3(pos.x * noiseFreq, pos.y * noiseFreq + uTime * 0.2, pos.z * noiseFreq));
+        float n3 = snoise(vec3(pos.x * noiseFreq, pos.y * noiseFreq, pos.z * noiseFreq + uTime * 0.2));
+
+        pos.x += n1 * noiseAmp;
+        pos.y += n2 * noiseAmp;
+        pos.z += n3 * noiseAmp;
+
+        float angle = uTime * 0.1 + pos.y * 0.05;
+        float sa = sin(angle);
+        float ca = cos(angle);
+
+        vec3 rotPos = pos;
+        rotPos.x = pos.x * ca - pos.z * sa;
+        rotPos.z = pos.x * sa + pos.z * ca;
+
+        vec4 mvPosition = modelViewMatrix * vec4(rotPos, 1.0);
+        gl_PointSize = (150.0 / -mvPosition.z) * aRandom;
+        gl_Position = projectionMatrix * mvPosition;
+      }
+    `;
+
+    const fragmentShader = `
+      uniform float uTime;
+      varying float vAlpha;
+
+      void main() {
+        vec2 xy = gl_PointCoord.xy - vec2(0.5);
+        float ll = length(xy);
+        if(ll > 0.5) discard;
+
+        vec3 color = vec3(0.3, 1.0, 0.4);
+
+        float strength = (0.5 - ll) * 2.5;
+
+        gl_FragColor = vec4(color, strength * vAlpha * 0.9);
+      }
+    `;
+
+    const material = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 }
+      },
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const elapsedTime = clock.getElapsedTime();
+      material.uniforms.uTime.value = elapsedTime;
+
+      particles.rotation.y = elapsedTime * 0.05;
+      particles.rotation.z = elapsedTime * 0.02;
+
+      renderer.render(scene, camera);
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.renderFrame = function(time) {
+      material.uniforms.uTime.value = time;
+      particles.rotation.y = time * 0.05;
+      particles.rotation.z = time * 0.02;
+      renderer.render(scene, camera);
+      return renderer.domElement.toDataURL('image/png');
+    };
+
+    window.ready = true;
+    animate();
+  </script>
+
+  <script>
+window.initToneJsEngine = async function() {
+  const bpm = 114;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.swing = 0;
+  const masterReverb = new Tone.Reverb({ decay: 2.6, wet: 0.28 }).toDestination();
+  await masterReverb.generate();
+  const compressor = new Tone.Compressor({
+    threshold: -26,
+    ratio: 12,
+    attack: 0.0025,
+    release: 0.16
+  }).connect(masterReverb);
+  const stereoDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.36, wet: 0.22 }).connect(compressor);
+  const shimmer = new Tone.Chorus({ frequency: 0.25, delayTime: 3.5, depth: 0.4, wet: 0.25 }).connect(stereoDelay).start();
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.03,
+    octaves: 6,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.18, sustain: 0, release: 0.03 }
+  }).toDestination();
+  const snareVerb = new Tone.Reverb({ decay: 1.1, wet: 0.42 }).toDestination();
+  await snareVerb.generate();
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.003, decay: 0.18, sustain: 0 }
+  }).connect(snareVerb);
+  const hat = new Tone.MetalSynth({
+    frequency: 420,
+    envelope: { attack: 0.001, decay: 0.07, release: 0.02 },
+    harmonicity: 5.3,
+    modulationIndex: 29,
+    resonance: 4200
+  }).connect(masterReverb);
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 120, Q: 1.0 }).connect(compressor);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.008, decay: 0.16, sustain: 0, release: 0.12 },
+    filterEnvelope: { attack: 0.01, decay: 0.12, sustain: 0, baseFrequency: 80, octaves: 2 }
+  }).connect(bassFilter);
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.01, decay: 0.22, sustain: 0, release: 0.14 }
+  }).connect(compressor);
+  const arpFilterMain = new Tone.Filter({ type: 'lowpass', frequency: 280, Q: 1.1 }).connect(compressor);
+  const arpMain = new Tone.Synth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.004, decay: 0.08, sustain: 0, release: 0.06 }
+  }).connect(arpFilterMain);
+  const arpFilterHigh = new Tone.Filter({ type: 'highpass', frequency: 180, Q: 0.9 }).connect(shimmer);
+  const arpHigh = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.003, decay: 0.07, sustain: 0, release: 0.05 }
+  }).connect(arpFilterHigh);
+  const strings = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    detune: -6,
+    envelope: { attack: 0.7, decay: 0.5, sustain: 0.85, release: 2.8 }
+  }).connect(compressor);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'triangle' },
+    detune: 4,
+    envelope: { attack: 1.2, decay: 0.5, sustain: 0.6, release: 2.2 }
+  }).connect(shimmer);
+  const leadDelay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.34, wet: 0.3 }).connect(compressor);
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'pulse', width: 0.25 },
+    envelope: { attack: 0.006, decay: 0.2, sustain: 0, release: 0.18 },
+    portamento: 0.05
+  }).connect(leadDelay);
+  Tone.Transport.schedule((time) => {
+    arpFilterMain.frequency.exponentialRampToValueAtTime(2200, time + 6 * (60 / bpm) * 4);
+  }, '0:0:0');
+  Tone.Transport.schedule((time) => {
+    arpFilterMain.frequency.exponentialRampToValueAtTime(3200, time + 4 * (60 / bpm) * 4);
+  }, '4:0:0');
+  Tone.Transport.schedule((time) => {
+    arpFilterMain.frequency.exponentialRampToValueAtTime(520, time + 3 * (60 / bpm) * 4);
+  }, '22:0:0');
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.exponentialRampToValueAtTime(260, time + 6 * (60 / bpm) * 4);
+  }, '6:0:0');
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.exponentialRampToValueAtTime(140, time + 2 * (60 / bpm) * 4);
+  }, '22:0:0');
+  const arpChords = [
+    ['D4', 'F4', 'A4', 'D5'],
+    ['Bb3', 'D4', 'F4', 'A4'],
+    ['F3', 'A3', 'C4', 'E4'],
+    ['C4', 'E4', 'G4', 'B4']
+  ];
+  let arpChordIdx = 0;
+  let arpNoteIdx = 0;
+  const arpMainLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const chord = arpChords[arpChordIdx % arpChords.length];
+    const note = chord[arpNoteIdx % chord.length];
+    const vel = bar < 4 ? 0.25 : bar < 10 ? 0.42 : bar < 20 ? 0.55 : 0.35;
+    arpMain.triggerAttackRelease(note, '16n', time, vel);
+    arpNoteIdx++;
+    if (arpNoteIdx % 8 === 0) arpChordIdx++;
+  }, '16n').start(0);
+  const arpHighPattern = ['A5', 'C6', 'D6', 'C6', 'A5', 'G5', 'F5', 'E5'];
+  let arpHighIdx = 0;
+  const arpHighLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 6 && bar < 22) {
+      const vel = bar < 10 ? 0.18 : bar < 16 ? 0.32 : 0.22;
+      arpHigh.triggerAttackRelease(arpHighPattern[arpHighIdx % arpHighPattern.length], '16n', time, vel);
+      arpHighIdx++;
+    }
+  }, '16n').start(0);
+  let stringChordIdx = 0;
+  const stringLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 24) {
+      const vel = bar < 10 ? 0.35 : bar < 18 ? 0.6 : 0.4;
+      strings.triggerAttackRelease(
+        [
+          ['D3', 'F3', 'A3', 'D4'],
+          ['Bb2', 'D3', 'F3', 'A3'],
+          ['F3', 'A3', 'C4', 'E4'],
+          ['C3', 'E3', 'G3', 'B3']
+        ][stringChordIdx % 4],
+        '1m',
+        time,
+        vel
+      );
+      stringChordIdx++;
+    }
+  }, '1m').start(0);
+  let padIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const chords = [
+      ['D3', 'A3', 'D4'],
+      ['Bb2', 'F3', 'Bb3'],
+      ['F3', 'C4', 'F4'],
+      ['C3', 'G3', 'C4']
+    ];
+    const vel = bar < 4 ? 0.18 : bar < 10 ? 0.28 : bar < 20 ? 0.35 : 0.18;
+    pad.triggerAttackRelease(chords[padIdx % chords.length], '2n', time, vel);
+    padIdx++;
+  }, '2n').start(0);
+  let bassStep = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const patterns = [
+      ['D1', 'D1', 'A0', 'D1'],
+      ['Bb0', 'Bb0', 'F0', 'Bb0'],
+      ['F0', 'C1', 'F0', 'C1'],
+      ['C1', 'G0', 'C1', 'G0']
+    ];
+    const idx = Math.floor(bar / 4) % patterns.length;
+    if (bar >= 8 && bar < 26) {
+      bass.triggerAttackRelease(patterns[idx][bassStep % 4], '8n', time, 0.7);
+      sub.triggerAttackRelease(patterns[idx][bassStep % 4], '8n', time, bar >= 16 ? 0.75 : 0.6);
+    }
+    bassStep++;
+  }, '8n').start(0);
+  let kickStep = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2) {
+      kick.triggerAttackRelease('C1', '8n', time, 1.0);
+      compressor.threshold.setValueAtTime(-38, time);
+      compressor.threshold.exponentialRampToValueAtTime(-26, time + 0.18);
+    }
+    kickStep++;
+  }, '4n').start(0);
+  let snareStep = 0;
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 6 && bar < 24 && snareStep % 2 === 1) {
+      snare.triggerAttackRelease('16n', time, 0.9);
+    }
+    snareStep++;
+  }, '4n').start(0);
+  const hatPatt = [0.7, 0.35, 0.6, 0.3, 0.65, 0.4, 0.55, 0.32];
+  let hatIdx = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4 && bar < 24) {
+      const vel = hatPatt[hatIdx % hatPatt.length] * (bar < 10 ? 0.55 : 0.7);
+      hat.triggerAttackRelease('16n', time, vel);
+      hatIdx++;
+    }
+  }, '16n').start(0);
+  const leadMelody = ['D4', 'F4', 'G4', 'A4', 'F4', 'E4', 'D4', 'C4'];
+  let leadIdx = 0;
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 18 && bar < 24) {
+      const vel = 0.7 + 0.06 * Math.sin(leadIdx);
+      lead.triggerAttackRelease(leadMelody[leadIdx % leadMelody.length], '4n', time, vel);
+      leadIdx++;
+    }
+  }, '4n').start(0);
+  Tone.Transport.schedule((time) => {
+    shimmer.wet.linearRampToValueAtTime(0.15, time + 6 * (60 / bpm) * 4);
+  }, '22:0:0');
+  window.toneJsInstruments = {
+    kick,
+    snare,
+    hat,
+    bass,
+    sub,
+    arpMain,
+    arpHigh,
+    strings,
+    pad,
+    lead
+  };
+  window.toneJsParts = {
+    kickLoop,
+    snareLoop,
+    hatLoop,
+    bassLoop,
+    arpMainLoop,
+    arpHighLoop,
+    stringLoop,
+    padLoop,
+    leadLoop
+  };
+};
+
+window.audioDuration = 60;
+  </script>
+  <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

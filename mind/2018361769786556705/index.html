@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Driver: Dark Synthwave (Automated)</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Audiowide&family=Roboto+Mono:wght@300;700&display=swap');
+
+        :root {
+            --neon-magenta: #ff00ff;
+            --neon-cyan: #00ffff;
+            --deep-purple: #1a0b2e;
+            --grid-color: rgba(255, 0, 255, 0.15);
+        }
+
+        body {
+            background-color: #050510;
+            color: var(--neon-cyan);
+            font-family: 'Roboto Mono', monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        /* Retro Grid Background */
+        .retro-grid {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: 
+                linear-gradient(transparent 0%, var(--deep-purple) 100%),
+                repeating-linear-gradient(0deg, transparent 0, transparent 40px, var(--grid-color) 41px),
+                repeating-linear-gradient(90deg, transparent 0, transparent 40px, var(--grid-color) 41px);
+            perspective: 500px;
+            transform-style: preserve-3d;
+            z-index: 0;
+            opacity: 0.6;
+            animation: gridMove 20s linear infinite;
+        }
+
+        @keyframes gridMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 82px; } /* Matches grid size x2 */
+        }
+
+        /* CRT Vignette */
+        .vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, transparent 50%, black 100%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Main UI Panel */
+        .cyber-panel {
+            position: relative;
+            z-index: 20;
+            background: rgba(10, 10, 20, 0.85);
+            border: 1px solid var(--neon-magenta);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.2), inset 0 0 20px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            padding: 2rem;
+            width: 90%;
+            max-width: 750px;
+            clip-path: polygon(
+                0 0, 100% 0, 
+                100% 85%, 95% 100%, 
+                0 100%, 0 15%
+            ); /* Angled corners */
+        }
+
+        h1 {
+            font-family: 'Audiowide', cursive;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            text-shadow: 2px 2px 0px var(--neon-magenta);
+            margin-bottom: 0.5rem;
+        }
+
+        /* Custom Sliders */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+            margin: 10px 0;
+        }
+
+        input[type=range]::-webkit-slider-track {
+            width: 100%;
+            height: 4px;
+            background: #333;
+            border: 1px solid #555;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 10px;
+            background: var(--neon-cyan);
+            border: 1px solid white;
+            cursor: pointer;
+            margin-top: -9px; /* Align thumb */
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        /* Vertical Mixer Sliders */
+        input[type=range][orient=vertical] {
+            writing-mode: bt-lr;
+            -webkit-appearance: slider-vertical;
+            width: 8px;
+            height: 80px;
+            padding: 0;
+        }
+
+        .mixer-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Buttons */
+        .cyber-btn {
+            background: transparent;
+            border: 2px solid var(--neon-magenta);
+            color: var(--neon-magenta);
+            padding: 1rem 2rem;
+            font-family: 'Audiowide', cursive;
+            font-size: 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cyber-btn:hover {
+            background: var(--neon-magenta);
+            color: #000;
+            box-shadow: 0 0 20px var(--neon-magenta);
+        }
+
+        .cyber-btn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+            transition: 0.5s;
+        }
+
+        .cyber-btn:hover::before {
+            left: 100%;
+        }
+
+        #vizCanvas {
+            border-bottom: 2px solid var(--neon-cyan);
+            margin-bottom: 1.5rem;
+            background: rgba(0,0,0,0.3);
+        }
+
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body>
+
+    <div class="retro-grid"></div>
+    <div class="vignette"></div>
+
+    <div class="cyber-panel">
+        <div class="flex justify-between items-end border-b border-gray-700 pb-2 mb-6">
+            <div>
+                <h1 class="text-3xl md:text-5xl text-white">NEON DRIVER</h1>
+                <p class="text-xs text-pink-500 tracking-[0.3em]">AUTOMATED DATA HEIST</p>
+            </div>
+            <div id="status" class="text-xs text-right text-gray-400 font-bold">SYSTEM OFFLINE</div>
+        </div>
+
+        <canvas id="vizCanvas" width="640" height="150" class="w-full h-32"></canvas>
+
+        <!-- Main Effects -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+            <div>
+                <label class="flex justify-between text-xs font-bold text-pink-400 mb-2">
+                    <span>CORRUPTION (GRIT/WARBLE)</span>
+                </label>
+                <input type="range" id="corruptionSlider" min="0" max="100" value="0">
+            </div>
+
+            <div>
+                <label class="flex justify-between text-xs font-bold text-cyan-400 mb-2">
+                    <span>NOSTALGIA (FILTER/SPACE)</span>
+                </label>
+                <input type="range" id="nostalgiaSlider" min="0" max="100" value="50">
+            </div>
+        </div>
+
+        <!-- Mixer Section -->
+        <div class="flex justify-between px-4 mb-8 border-t border-gray-800 pt-4">
+            <div class="mixer-group">
+                <input type="range" orient="vertical" id="bassVol" min="-60" max="-2" value="-60">
+                <span class="text-[10px] text-gray-400">BASS</span>
+            </div>
+            <div class="mixer-group">
+                <input type="range" orient="vertical" id="arpVol" min="-60" max="-8" value="-60">
+                <span class="text-[10px] text-gray-400">ARP</span>
+            </div>
+            <div class="mixer-group">
+                <input type="range" orient="vertical" id="padVol" min="-60" max="-10" value="-60">
+                <span class="text-[10px] text-gray-400">PAD</span>
+            </div>
+            <div class="mixer-group">
+                <input type="range" orient="vertical" id="drumVol" min="-60" max="0" value="-60">
+                <span class="text-[10px] text-gray-400">DRUMS</span>
+            </div>
+        </div>
+
+        <div class="text-center">
+            <button id="startBtn" class="cyber-btn w-full">INITIATE DRIVE</button>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        let isPlaying = false;
+        let analyser, canvas, ctx;
+
+        // --- Audio Nodes ---
+        let bassSynth, arpSynth, padSynth, kickSynth, snareSynth;
+        
+        // Effects
+        let masterLimiter, masterFilter, masterCrush, masterReverb, tapeLFO;
+        
+        // Sequences
+        let bassPart, arpPart, drumPart, padLoop;
+        
+        // Volume Nodes
+        const vols = { bass: null, arp: null, pad: null, drum: null };
+
+        function updateStatus(msg, error=false) {
+            const el = document.getElementById('status');
+            el.innerText = msg;
+            el.style.color = error ? '#ff0055' : '#00ffff';
+        }
+
+        async function initAudio() {
+            updateStatus("BOOTING AUDIO ENGINE...");
+
+            // 1. Master Chain
+            masterLimiter = new Tone.Limiter(-1).toDestination();
+
+            masterReverb = new Tone.Reverb({
+                decay: 4,
+                preDelay: 0.1,
+                wet: 0.3
+            });
+            masterReverb.connect(masterLimiter);
+
+            // The "Stranger Things" Filter
+            masterFilter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 2000,
+                rolloff: -12,
+                Q: 1
+            });
+            masterFilter.connect(masterReverb);
+
+            // The "Lorn" Grit
+            masterCrush = new Tone.BitCrusher({
+                bits: 16, 
+                wet: 0
+            });
+            masterCrush.connect(masterFilter);
+
+            // Tape Warble LFO (Global Detune)
+            tapeLFO = new Tone.LFO(0.2, -5, 5).start();
+
+            // Initialize Volumes
+            vols.bass = new Tone.Gain(0).connect(masterCrush); // Bass goes to crush/filter
+            vols.arp = new Tone.Gain(0).connect(masterCrush);
+            vols.pad = new Tone.Gain(0).connect(masterFilter); // Pads bypass crush for clarity
+            vols.drum = new Tone.Gain(0).connect(masterLimiter); // Drums bypass effects for punch
+
+            // 2. Instruments
+
+            // A. Bass (Reese)
+            bassSynth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.8, release: 0.5 },
+                filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5, baseFrequency: 80, octaves: 2 }
+            });
+            const bassWidener = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 }).start();
+            bassSynth.connect(bassWidener);
+            bassWidener.connect(vols.bass);
+
+            // B. Arp (Juno Pluck - smoother)
+            arpSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "square" },
+                envelope: { attack: 0.02, decay: 0.2, sustain: 0.3, release: 0.3 }
+            });
+            const arpDelay = new Tone.PingPongDelay("8n.", 0.3);
+            arpSynth.connect(arpDelay);
+            arpDelay.connect(vols.arp);
+
+            // C. Pads
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+                envelope: { attack: 1, decay: 2, sustain: 0.8, release: 3 }
+            }).connect(vols.pad);
+
+            // D. Drums
+            kickSynth = new Tone.MembraneSynth({
+                pitchDecay: 0.05,
+                octaves: 6,
+                oscillator: { type: "sine" },
+                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 }
+            }).connect(vols.drum);
+
+            snareSynth = new Tone.NoiseSynth({
+                noise: { type: "white" },
+                envelope: { attack: 0.001, decay: 0.2, sustain: 0 }
+            });
+            const snareVerb = new Tone.Reverb({ decay: 1.5, wet: 0.4 });
+            snareSynth.connect(snareVerb);
+            snareVerb.connect(vols.drum);
+
+            // Connect LFO for corruption
+            if(padSynth.detune) tapeLFO.connect(padSynth.detune);
+            if(arpSynth.detune) tapeLFO.connect(arpSynth.detune);
+            if(bassSynth.detune) tapeLFO.connect(bassSynth.detune);
+
+
+            // 3. Composition (D Minor)
+            Tone.Transport.bpm.value = 105;
+
+            // Bass
+            const bassSeq = [
+                { time: "0:0:0", note: "D2", dur: "8n" }, { time: "0:0:2", note: "D2", dur: "8n" },
+                { time: "0:0:4", note: "D2", dur: "8n" }, { time: "0:0:6", note: "D2", dur: "8n" },
+                { time: "0:1:0", note: "F2", dur: "8n" }, { time: "0:1:2", note: "F2", dur: "8n" }, 
+                { time: "0:1:4", note: "D2", dur: "8n" }, { time: "0:1:6", note: "D2", dur: "8n" },
+                { time: "0:2:0", note: "Bb1", dur: "8n" }, { time: "0:2:2", note: "Bb1", dur: "8n" },
+                { time: "0:2:4", note: "Bb1", dur: "8n" }, { time: "0:2:6", note: "Bb1", dur: "8n" },
+                { time: "0:3:0", note: "C2", dur: "8n" }, { time: "0:3:2", note: "C2", dur: "8n" },
+                { time: "0:3:4", note: "A1", dur: "8n" }, { time: "0:3:6", note: "A1", dur: "8n" },
+            ];
+            bassPart = new Tone.Part((time, val) => {
+                bassSynth.triggerAttackRelease(val.note, val.dur, time);
+            }, bassSeq);
+            bassPart.loop = true; bassPart.loopEnd = "4m";
+
+            // Arp (slower 8th notes instead of 16ths)
+            const arpNotes = [
+                { time: "0:0:0", note: "D3" }, { time: "0:0:2", note: "A3" },
+                { time: "0:1:0", note: "F3" }, { time: "0:1:2", note: "C4" },
+                { time: "0:2:0", note: "Bb2" }, { time: "0:2:2", note: "F3" },
+                { time: "0:3:0", note: "C3" }, { time: "0:3:2", note: "G3" },
+            ];
+            arpPart = new Tone.Part((time, val) => {
+                arpSynth.triggerAttackRelease(val.note, "8n", time);
+            }, arpNotes);
+            arpPart.loop = true; arpPart.loopEnd = "1m";
+
+            // Drums
+            const drumSeq = [
+                { time: "0:0:0", type: "kick" },
+                { time: "0:1:0", type: "snare" },
+                { time: "0:2:0", type: "kick" },
+                { time: "0:2:3", type: "kick" }, 
+                { time: "0:3:0", type: "snare" },
+            ];
+            drumPart = new Tone.Part((time, val) => {
+                if(val.type === "kick") kickSynth.triggerAttackRelease("D1", "8n", time);
+                if(val.type === "snare") snareSynth.triggerAttackRelease("8n", time);
+            }, drumSeq);
+            drumPart.loop = true; drumPart.loopEnd = "1m";
+
+            // Pads
+            const padNotes = [
+                { time: "0:0:0", notes: ["D3", "F3", "A3"], dur: "1m" },
+                { time: "1:0:0", notes: ["Bb2", "D3", "F3"], dur: "1m" },
+                { time: "2:0:0", notes: ["C3", "E3", "G3"], dur: "1m" },
+                { time: "3:0:0", notes: ["A2", "C3", "E3"], dur: "1m" },
+            ];
+            padLoop = new Tone.Part((time, val) => {
+                 padSynth.triggerAttackRelease(val.notes, val.dur, time);
+            }, padNotes);
+            padLoop.loop = true; padLoop.loopEnd = "4m";
+
+            // 4. Analyzer
+            analyser = new Tone.Analyser("fft", 64);
+            masterLimiter.connect(analyser);
+
+            updateStatus("SYSTEM ONLINE :: 105 BPM");
+            startViz();
+            
+            setupSongStructure();
+            applyCompositionState('intro');
+        }
+
+        // --- Automation Logic ---
+
+        function animateUI(id, targetVal, duration) {
+            const el = document.getElementById(id);
+            if(!el) return;
+            const startVal = parseFloat(el.value);
+            const startTime = performance.now();
+            
+            function step(now) {
+                const elapsed = (now - startTime) / 1000;
+                const progress = Math.min(elapsed / duration, 1);
+                el.value = startVal + (targetVal - startVal) * progress;
+                if(progress < 1) requestAnimationFrame(step);
+            }
+            requestAnimationFrame(step);
+        }
+
+        function scheduleEvent(bar, name, dur, values) {
+            Tone.Transport.schedule((time) => {
+                Tone.Draw.schedule(() => {
+                    updateStatus("SEQUENCE: " + name);
+                    // UI Animation
+                    if(values.corruption !== undefined) animateUI('corruptionSlider', values.corruption, dur);
+                    if(values.nostalgia !== undefined) animateUI('nostalgiaSlider', values.nostalgia, dur);
+                    if(values.bass !== undefined) animateUI('bassVol', values.bass, dur);
+                    if(values.arp !== undefined) animateUI('arpVol', values.arp, dur);
+                    if(values.pad !== undefined) animateUI('padVol', values.pad, dur);
+                    if(values.drum !== undefined) animateUI('drumVol', values.drum, dur);
+                }, time);
+
+                // Audio Ramping
+                if(values.bass !== undefined) vols.bass.gain.rampTo(Tone.dbToGain(values.bass), dur, time);
+                if(values.arp !== undefined) vols.arp.gain.rampTo(Tone.dbToGain(values.arp), dur, time);
+                if(values.pad !== undefined) vols.pad.gain.rampTo(Tone.dbToGain(values.pad), dur, time);
+                if(values.drum !== undefined) vols.drum.gain.rampTo(Tone.dbToGain(values.drum), dur, time);
+
+                // Corruption (Grit/LFO)
+                if(values.corruption !== undefined) {
+                    const val = values.corruption;
+                    const bits = 16 - (val / 100 * 12);
+                    const crushWet = val / 100;
+                    const lfoAmp = val / 100;
+                    const lfoFreq = 0.2 + (val/100 * 5);
+                    
+                    masterCrush.bits.rampTo(Math.max(4, bits), dur, time);
+                    masterCrush.wet.rampTo(crushWet, dur, time);
+                    tapeLFO.amplitude.rampTo(lfoAmp, dur, time);
+                    tapeLFO.frequency.rampTo(lfoFreq, dur, time);
+                }
+
+                // Nostalgia (Filter/Reverb)
+                if(values.nostalgia !== undefined) {
+                    const val = values.nostalgia;
+                    const freq = 500 + (Math.pow(val / 100, 2) * 9500);
+                    const revWet = val / 100 * 0.5;
+                    
+                    masterFilter.frequency.rampTo(freq, dur, time);
+                    masterReverb.wet.rampTo(revWet, dur, time);
+                }
+
+            }, bar);
+        }
+
+        function setupSongStructure() {
+            // 0:0:0 - INTRO (Muffled, High Corruption)
+            scheduleEvent("0:0:0", "CONNECTION LOST", 2, {
+                bass: -5, pad: -15, arp: -60, drum: -60,
+                nostalgia: 10, corruption: 40
+            });
+
+            // 4:0:0 - STABILIZE (Filter opens, Drums enter)
+            scheduleEvent("4:0:0", "DATA UPLOAD", 4, {
+                drum: 0, nostalgia: 40, corruption: 10
+            });
+
+            // 8:0:0 - MAIN THEME (Arp enters, Full band)
+            scheduleEvent("8:0:0", "NEON HORIZON", 4, {
+                arp: -8, nostalgia: 70
+            });
+
+            // 16:0:0 - BREAKDOWN (Drums cut, Pad swells)
+            scheduleEvent("16:0:0", "SYSTEM HANG", 2, {
+                drum: -60, bass: -60, pad: -5, nostalgia: 20
+            });
+
+            // 20:0:0 - BUILD (Corruption rises)
+            scheduleEvent("20:0:0", "CORRUPTION DETECTED", 4, {
+                corruption: 50, nostalgia: 60, arp: -5
+            });
+
+            // 24:0:0 - DROP (Heavy, Distorted)
+            scheduleEvent("24:0:0", "CRITICAL FAILURE", 0.1, {
+                drum: 0, bass: -2, pad: -10, corruption: 70, nostalgia: 100
+            });
+
+            // 30:0:0 - FADE OUT
+            scheduleEvent("30:0:0", "TERMINATED", 2, {
+                bass: -60, arp: -60, pad: -60, drum: -60, corruption: 100
+            });
+
+            // 32:0:0 - LOOP
+            Tone.Transport.schedule(() => {
+                Tone.Transport.position = "0:0:0";
+            }, "32:0:0");
+        }
+
+        function applyCompositionState(state) {
+            if(state === 'intro') {
+                // Set UI
+                document.getElementById('bassVol').value = -60;
+                document.getElementById('arpVol').value = -60;
+                document.getElementById('padVol').value = -60;
+                document.getElementById('drumVol').value = -60;
+                document.getElementById('corruptionSlider').value = 40;
+                document.getElementById('nostalgiaSlider').value = 10;
+                
+                // Set Audio Instant
+                vols.bass.gain.value = 0;
+                vols.arp.gain.value = 0;
+                vols.pad.gain.value = 0;
+                vols.drum.gain.value = 0;
+                
+                // Intro FX
+                masterCrush.bits.value = 10;
+                masterCrush.wet.value = 0.4;
+                tapeLFO.amplitude.value = 0.4;
+                masterFilter.frequency.value = 600;
+            }
+        }
+
+        // --- Interaction ---
+        const startBtn = document.getElementById('startBtn');
+
+        startBtn.addEventListener('click', async () => {
+            if (isPlaying) {
+                Tone.Transport.stop();
+                Tone.Transport.cancel();
+                bassPart.stop(); arpPart.stop(); drumPart.stop(); padLoop.stop();
+                
+                // Panic release
+                if(bassSynth) bassSynth.triggerRelease();
+                if(padSynth) padSynth.releaseAll();
+                
+                startBtn.innerText = "INITIATE DRIVE";
+                updateStatus("SYSTEM OFFLINE");
+                isPlaying = false;
+            } else {
+                try {
+                    await Tone.start();
+                    if (Tone.context.state !== 'running') await Tone.context.resume();
+                    
+                    if (!bassSynth) await initAudio();
+
+                    // Reset Automation
+                    Tone.Transport.cancel();
+                    setupSongStructure();
+                    applyCompositionState('intro');
+
+                    Tone.Transport.start();
+                    bassPart.start(0);
+                    arpPart.start(0);
+                    drumPart.start(0);
+                    padLoop.start(0);
+
+                    startBtn.innerText = "ABORT";
+                    isPlaying = true;
+                } catch(e) {
+                    console.error(e);
+                    updateStatus("ERROR: " + e.message, true);
+                }
+            }
+        });
+
+        // Sliders (Manual Override)
+        // Note: These will be fought by the automation loop
+        document.getElementById('corruptionSlider').addEventListener('input', (e) => {
+            // Apply logic immediately
+            const val = parseInt(e.target.value);
+            if(!masterCrush) return;
+            const bits = 16 - (val / 100 * 12);
+            masterCrush.bits.rampTo(Math.max(4, bits), 0.1);
+            masterCrush.wet.rampTo(val/100, 0.1);
+            tapeLFO.amplitude.rampTo(val/100, 0.1);
+        });
+
+        document.getElementById('nostalgiaSlider').addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if(!masterFilter) return;
+            const freq = 500 + (Math.pow(val / 100, 2) * 9500);
+            masterFilter.frequency.rampTo(freq, 0.1);
+            masterReverb.wet.rampTo(val/100 * 0.5, 0.1);
+        });
+        
+        ['bassVol', 'arpVol', 'padVol', 'drumVol'].forEach(id => {
+            document.getElementById(id).addEventListener('input', (e) => {
+                const key = id.replace('Vol','');
+                if(vols[key]) vols[key].gain.rampTo(Tone.dbToGain(e.target.value), 0.1);
+            });
+        });
+
+        // --- Visualizer ---
+        canvas = document.getElementById('vizCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            function draw() {
+                requestAnimationFrame(draw);
+                if (!isPlaying) {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    return;
+                }
+                
+                const buffer = analyser.getValue(); 
+                const w = canvas.width;
+                const h = canvas.height;
+
+                ctx.clearRect(0, 0, w, h);
+
+                const barWidth = (w / buffer.length);
+                let x = 0;
+
+                for (let i = 0; i < buffer.length; i++) {
+                    const val = buffer[i]; 
+                    const percent = Math.max(0, (val + 100) / 100); 
+                    const barHeight = percent * h;
+
+                    const gradient = ctx.createLinearGradient(0, h - barHeight, 0, h);
+                    gradient.addColorStop(0, '#00ffff'); 
+                    gradient.addColorStop(1, '#ff00ff'); 
+
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, h - barHeight, barWidth - 1, barHeight);
+
+                    ctx.fillStyle = "rgba(255, 0, 255, 0.1)";
+                    ctx.fillRect(x, h, barWidth - 1, barHeight * 0.5);
+
+                    x += barWidth;
+                }
+            }
+            draw();
+        }
+
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 75;
+      window.initToneJsEngine = async function() {
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+        // Don't specify time to avoid scheduling errors
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              if (window[varName].state !== 'started') {
+                window[varName].start();
+              }
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+        window.ready = true;
+      });
+      // DURATION: 75
+    </script>
+  
+</body>
+</html>
