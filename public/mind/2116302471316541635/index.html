@@ -1,0 +1,1485 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+
+(() => {
+  const DURATION = 60;
+  const TAU = Math.PI * 2;
+  const PI = Math.PI;
+
+  // Deterministic PRNG used ONLY during one-time initialization
+  let seed = 0x5f3759df;
+  const rnd = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+  const smooth = (x) => {
+    const u = clamp(x, 0, 1);
+    return u * u * (3 - 2 * u);
+  };
+  const seg = (t, a, b) => smooth((t - a) / (b - a));
+  const win = (t, a, b, c, d) => seg(t, a, b) * (1 - seg(t, c, d));
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const wrapT = (t) => ((t % DURATION) + DURATION) % DURATION;
+
+  // Plate geometry in canvas space
+  const PX = 354;
+  const PY = 472;
+  const PR = 238; // half-size of the 476x476 brass Chladni plate
+
+  // Exact Chladni eigenmodes W(u, v) on u, v in [-1, 1]
+  // Mode 0: (1, 2) four-petalled star-cross & four edge arches
+  // Mode 1: (2, 3) four cellular eyes + hyperbolic cross
+  // Mode 2: (3, 4) symmetric 8-fold cathedral rose window
+  // Mode 3: (3, 5) twelve-chamber grand star lattice
+  const MODES = [
+    { n: 1, m: 2, sign: -1, tag: '(1,2)', dialAngle: -0.95 },
+    { n: 2, m: 3, sign: -1, tag: '(2,3)', dialAngle: -0.32 },
+    { n: 3, m: 4, sign: +1, tag: '(3,4)', dialAngle: 0.32 },
+    { n: 3, m: 5, sign: -1, tag: '(3,5)', dialAngle: 0.95 }
+  ];
+
+  function evalMode(k, u, v) {
+    const { n, m, sign } = MODES[k];
+    const nPx = n * PI * u;
+    const mPy = m * PI * v;
+    const mPx = m * PI * u;
+    const nPy = n * PI * v;
+    return Math.cos(nPx) * Math.cos(mPy) + sign * Math.cos(mPx) * Math.cos(nPy);
+  }
+
+  function evalModeGrad(k, u, v) {
+    const { n, m, sign } = MODES[k];
+    const nPx = n * PI * u;
+    const mPy = m * PI * v;
+    const mPx = m * PI * u;
+    const nPy = n * PI * v;
+    const w = Math.cos(nPx) * Math.cos(mPy) + sign * Math.cos(mPx) * Math.cos(nPy);
+    const wx = -n * PI * Math.sin(nPx) * Math.cos(mPy) - sign * m * PI * Math.sin(mPx) * Math.cos(nPy);
+    const wy = -m * PI * Math.cos(nPx) * Math.sin(mPy) - sign * n * PI * Math.cos(mPx) * Math.sin(nPy);
+    return { w, wx, wy };
+  }
+
+  // Sample exact nodal contour points uniformly across every branch of mode k
+  function sampleModeContourPoints(k, count) {
+    const candidates = [];
+    const G = 150;
+    for (let iy = 0; iy < G; iy++) {
+      const v0 = ((iy + 0.5) / G) * 1.88 - 0.94;
+      for (let ix = 0; ix < G; ix++) {
+        const u0 = ((ix + 0.5) / G) * 1.88 - 0.94;
+        const { w, wx, wy } = evalModeGrad(k, u0, v0);
+        const grad = Math.hypot(wx, wy);
+        if (grad < 0.25) continue;
+        const dist = Math.abs(w) / grad;
+        if (dist < 0.024) {
+          // 6 Newton steps onto the exact zero locus W(u,v) = 0
+          let u = u0 + (rnd() - 0.5) * 0.012;
+          let v = v0 + (rnd() - 0.5) * 0.012;
+          for (let s = 0; s < 6; s++) {
+            const st = evalModeGrad(k, u, v);
+            const g2 = st.wx * st.wx + st.wy * st.wy;
+            if (g2 < 1e-5) break;
+            u = clamp(u - (st.w / g2) * st.wx, -0.94, 0.94);
+            v = clamp(v - (st.w / g2) * st.wy, -0.94, 0.94);
+          }
+          // Add natural granular ridge thickness perpendicular to the nodal line
+          const stF = evalModeGrad(k, u, v);
+          const gn = Math.hypot(stF.wx, stF.wy) || 1;
+          const spread = (rnd() - 0.5) * 0.022;
+          u = clamp(u + (stF.wx / gn) * spread, -0.94, 0.94);
+          v = clamp(v + (stF.wy / gn) * spread, -0.94, 0.94);
+          candidates.push({ u, v, key: Math.atan2(v, u) + 0.35 * Math.hypot(u, v) });
+        }
+      }
+    }
+    // Deterministic Fisher-Yates shuffle then pick `count` points sorted by spatial key
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(rnd() * (i + 1));
+      const tmp = candidates[i];
+      candidates[i] = candidates[j];
+      candidates[j] = tmp;
+    }
+    const picked = [];
+    for (let i = 0; i < count; i++) {
+      picked.push(candidates[i % candidates.length]);
+    }
+    picked.sort((a, b) => a.key - b.key);
+    return picked;
+  }
+
+  const makeCanvas = (w, h) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+  };
+
+  // Pre-render the workshop bench & brass plate base into an offscreen 900x900 layer
+  const BG = makeCanvas(900, 900);
+  (() => {
+    const bx = BG.getContext('2d');
+    const g = bx.createRadialGradient(250, 210, 40, 450, 480, 760);
+    g.addColorStop(0, '#231c18');
+    g.addColorStop(0.45, '#141115');
+    g.addColorStop(1, '#08070b');
+    bx.fillStyle = g;
+    bx.fillRect(0, 0, 900, 900);
+
+    // Subtle wood/slate grain lines across the bench
+    bx.strokeStyle = 'rgba(255, 218, 165, 0.022)';
+    bx.lineWidth = 1;
+    for (let i = 0; i < 160; i++) {
+      const y = i * 5.7 + (rnd() - 0.5) * 3;
+      bx.beginPath();
+      bx.moveTo(0, y);
+      for (let x = 0; x <= 900; x += 60) {
+        bx.lineTo(x, y + Math.sin(x * 0.008 + i * 0.7) * 3.5);
+      }
+      bx.stroke();
+    }
+
+    // Warm amber spill around the Chladni plate on the bench
+    const spill = bx.createRadialGradient(PX, PY, PR * 0.5, PX, PY, PR * 1.48);
+    spill.addColorStop(0, 'rgba(232, 162, 68, 0.19)');
+    spill.addColorStop(0.65, 'rgba(180, 108, 36, 0.075)');
+    spill.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    bx.fillStyle = spill;
+    bx.fillRect(0, 0, 900, 900);
+
+    // Turned oak & brass pedestal shadow under the plate
+    bx.fillStyle = 'rgba(0, 0, 0, 0.64)';
+    bx.beginPath();
+    bx.roundRect(PX - PR + 16, PY - PR + 22, PR * 2 + 8, PR * 2 + 10, 18);
+    bx.fill();
+
+    // Brass thickness skirt below the bottom/right edges
+    const skirtGrad = bx.createLinearGradient(PX - PR, PY + PR, PX + PR, PY + PR + 14);
+    skirtGrad.addColorStop(0, '#5a411e');
+    skirtGrad.addColorStop(0.5, '#967136');
+    skirtGrad.addColorStop(1, '#3d2b12');
+    bx.fillStyle = skirtGrad;
+    bx.beginPath();
+    bx.roundRect(PX - PR + 3, PY - PR + 8, PR * 2, PR * 2 + 6, 14);
+    bx.fill();
+
+    // Main oxidized-brass plate face
+    const plateGrad = bx.createLinearGradient(PX - PR, PY - PR, PX + PR, PY + PR);
+    plateGrad.addColorStop(0, '#362a19');
+    plateGrad.addColorStop(0.35, '#241c12');
+    plateGrad.addColorStop(0.7, '#19140d');
+    plateGrad.addColorStop(1, '#2b2114');
+    bx.fillStyle = plateGrad;
+    bx.beginPath();
+    bx.roundRect(PX - PR, PY - PR, PR * 2, PR * 2, 12);
+    bx.fill();
+
+    // Brushed concentric brass micro-texture on the plate
+    bx.save();
+    bx.beginPath();
+    bx.roundRect(PX - PR + 4, PY - PR + 4, PR * 2 - 8, PR * 2 - 8, 10);
+    bx.clip();
+    const sheen = bx.createLinearGradient(PX - PR, PY - PR, PX + PR, PY + PR);
+    sheen.addColorStop(0, 'rgba(255, 215, 130, 0.10)');
+    sheen.addColorStop(0.28, 'rgba(255, 200, 110, 0.02)');
+    sheen.addColorStop(0.5, 'rgba(255, 224, 150, 0.08)');
+    sheen.addColorStop(0.78, 'rgba(0, 0, 0, 0.12)');
+    sheen.addColorStop(1, 'rgba(255, 195, 100, 0.07)');
+    bx.fillStyle = sheen;
+    bx.fillRect(PX - PR, PY - PR, PR * 2, PR * 2);
+
+    for (let r = 18; r < PR * 1.38; r += 3.5) {
+      bx.strokeStyle = r % 7 < 3.5 ? 'rgba(255, 214, 140, 0.018)' : 'rgba(0, 0, 0, 0.035)';
+      bx.lineWidth = 1;
+      bx.beginPath();
+      bx.arc(PX, PY, r, 0, TAU);
+      bx.stroke();
+    }
+
+    // Faint ruled harmonic grid hairlines etched into the brass
+    bx.strokeStyle = 'rgba(218, 175, 98, 0.065)';
+    bx.lineWidth = 1;
+    for (const frac of [-0.5, 0, 0.5]) {
+      bx.beginPath();
+      bx.moveTo(PX + frac * PR * 2, PY - PR + 8);
+      bx.lineTo(PX + frac * PR * 2, PY + PR - 8);
+      bx.moveTo(PX - PR + 8, PY + frac * PR * 2);
+      bx.lineTo(PX + PR - 8, PY + frac * PR * 2);
+      bx.stroke();
+    }
+    bx.restore();
+
+    // Chamfered bright brass bevel around the plate perimeter
+    bx.strokeStyle = '#bc8f44';
+    bx.lineWidth = 3.2;
+    bx.beginPath();
+    bx.roundRect(PX - PR + 1.5, PY - PR + 1.5, PR * 2 - 3, PR * 2 - 3, 12);
+    bx.stroke();
+
+    bx.strokeStyle = 'rgba(255, 236, 185, 0.44)';
+    bx.lineWidth = 1.2;
+    bx.beginPath();
+    bx.roundRect(PX - PR + 4, PY - PR + 4, PR * 2 - 8, PR * 2 - 8, 10);
+    bx.stroke();
+
+    // Node calibration tick marks along top and right brass bevels
+    bx.strokeStyle = '#e5be72';
+    bx.lineWidth = 1.8;
+    for (const f of [-0.6, -0.5, -0.333, 0, 0.333, 0.5, 0.6]) {
+      const tx = PX + f * PR;
+      bx.beginPath();
+      bx.moveTo(tx, PY - PR + 2);
+      bx.lineTo(tx, PY - PR + 11);
+      bx.stroke();
+      const ty = PY + f * PR;
+      bx.beginPath();
+      bx.moveTo(PX + PR - 2, ty);
+      bx.lineTo(PX + PR - 11, ty);
+      bx.stroke();
+    }
+
+    // Lower-left landmark: spilled glass salt vial & ivory crystal mound on the bench
+    bx.save();
+    bx.translate(88, 796);
+    bx.rotate(-0.28);
+    bx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    bx.beginPath();
+    bx.roundRect(-42, -14, 88, 36, 10);
+    bx.fill();
+    const vialG = bx.createLinearGradient(0, -16, 0, 16);
+    vialG.addColorStop(0, 'rgba(210, 228, 240, 0.42)');
+    vialG.addColorStop(0.35, 'rgba(255, 255, 255, 0.62)');
+    vialG.addColorStop(0.75, 'rgba(140, 165, 185, 0.22)');
+    vialG.addColorStop(1, 'rgba(220, 200, 165, 0.38)');
+    bx.fillStyle = vialG;
+    bx.beginPath();
+    bx.roundRect(-44, -15, 76, 30, 8);
+    bx.fill();
+    bx.strokeStyle = 'rgba(235, 245, 255, 0.55)';
+    bx.lineWidth = 1.4;
+    bx.stroke();
+    bx.fillStyle = '#f3ead2';
+    bx.beginPath();
+    bx.roundRect(-38, -8, 56, 18, 5);
+    bx.fill();
+    bx.fillStyle = '#c49648';
+    bx.beginPath();
+    bx.roundRect(28, -12, 16, 24, 4);
+    bx.fill();
+    bx.restore();
+
+    for (let i = 0; i < 140; i++) {
+      const a = rnd() * TAU;
+      const d = Math.pow(rnd(), 0.7) * 34;
+      const sx = 148 + Math.cos(a) * d * 1.3;
+      const sy = 786 + Math.sin(a) * d * 0.75;
+      bx.fillStyle = i % 3 === 0 ? '#fff9e6' : '#e8d7b4';
+      bx.beginPath();
+      bx.arc(sx, sy, 1.1 + rnd() * 1.3, 0, TAU);
+      bx.fill();
+    }
+
+    // Upper-right landmark: round wooden box of dark amber violin rosin
+    bx.save();
+    bx.translate(784, 114);
+    bx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    bx.beginPath();
+    bx.arc(5, 7, 36, 0, TAU);
+    bx.fill();
+    bx.fillStyle = '#4a2e1b';
+    bx.beginPath();
+    bx.arc(0, 0, 35, 0, TAU);
+    bx.fill();
+    bx.strokeStyle = '#7c5333';
+    bx.lineWidth = 2;
+    bx.stroke();
+    const rosG = bx.createRadialGradient(-8, -8, 3, 0, 0, 26);
+    rosG.addColorStop(0, '#f59e2d');
+    rosG.addColorStop(0.55, '#b85314');
+    rosG.addColorStop(1, '#5e2208');
+    bx.fillStyle = rosG;
+    bx.beginPath();
+    bx.arc(0, 0, 25, 0, TAU);
+    bx.fill();
+    bx.strokeStyle = 'rgba(255, 228, 175, 0.35)';
+    bx.lineWidth = 5;
+    bx.beginPath();
+    bx.moveTo(-18, -12);
+    bx.lineTo(18, 12);
+    bx.stroke();
+    bx.restore();
+  })();
+
+  // Pre-render the 4 soft nodal glow + antinode copper shimmer maps (238x238 each)
+  const MODE_GLOWS = [];
+  const MODE_ANTINODES = [];
+  for (let k = 0; k < 4; k++) {
+    const S = 238;
+    const cNode = makeCanvas(S, S);
+    const cxNode = cNode.getContext('2d');
+    const imgNode = cxNode.createImageData(S, S);
+    const dNode = imgNode.data;
+
+    const cAnti = makeCanvas(S, S);
+    const cxAnti = cAnti.getContext('2d');
+    const imgAnti = cxAnti.createImageData(S, S);
+    const dAnti = imgAnti.data;
+
+    for (let y = 0; y < S; y++) {
+      const v = (y / (S - 1)) * 2 - 1;
+      const edgeY = smooth((1 - Math.abs(v)) / 0.05);
+      for (let x = 0; x < S; x++) {
+        const u = (x / (S - 1)) * 2 - 1;
+        const edge = edgeY * smooth((1 - Math.abs(u)) / 0.05);
+        const { w, wx, wy } = evalModeGrad(k, u, v);
+        const grad = Math.hypot(wx, wy) / PI + 0.35;
+        const dist = Math.abs(w) / grad;
+        const core = Math.exp(-(dist * dist) / (0.016 * 0.016));
+        const halo = Math.exp(-(dist * dist) / (0.045 * 0.045));
+        const aNode = clamp((core * 0.85 + halo * 0.28) * edge, 0, 1);
+        const o = (y * S + x) * 4;
+        dNode[o] = 255;
+        dNode[o + 1] = 241;
+        dNode[o + 2] = 204;
+        dNode[o + 3] = Math.round(aNode * 210);
+
+        // Antinode standing-wave belly glow (where |W| is large and grains flee)
+        const belly = clamp((Math.abs(w) - 0.35) / 1.25, 0, 1);
+        const aAnti = belly * belly * edge;
+        dAnti[o] = 245;
+        dAnti[o + 1] = 168;
+        dAnti[o + 2] = 62;
+        dAnti[o + 3] = Math.round(aAnti * 92);
+      }
+    }
+    cxNode.putImageData(imgNode, 0, 0);
+    cxAnti.putImageData(imgAnti, 0, 0);
+    MODE_GLOWS.push(cNode);
+    MODE_ANTINODES.push(cAnti);
+  }
+
+  // Uniformly sample 3,600 grains across all branches of each mode's nodal locus
+  const GRAIN_COUNT = 3600;
+  const pts0 = sampleModeContourPoints(0, GRAIN_COUNT);
+  const pts1 = sampleModeContourPoints(1, GRAIN_COUNT);
+  const pts2 = sampleModeContourPoints(2, GRAIN_COUNT);
+  const pts3 = sampleModeContourPoints(3, GRAIN_COUNT);
+
+  const GRAINS = [];
+  for (let i = 0; i < GRAIN_COUNT; i++) {
+    const p0 = pts0[i];
+    // Scattered position after ClawedCode's paw sweeps right-to-left across the plate
+    const sweepAngle = 2.62 + (rnd() - 0.5) * 0.95;
+    const sweepDist = 0.12 + rnd() * 0.62;
+    const uScat = clamp(
+      p0.u * 0.48 + Math.cos(sweepAngle) * sweepDist * 0.5 + (rnd() - 0.5) * 0.46,
+      -0.89,
+      0.89
+    );
+    const vScat = clamp(
+      p0.v * 0.48 + Math.sin(sweepAngle) * sweepDist * 0.44 + (rnd() - 0.5) * 0.46,
+      -0.89,
+      0.89
+    );
+    GRAINS.push({
+      p0,
+      pScat: { u: uScat, v: vScat },
+      p1: pts1[i],
+      p2: pts2[i],
+      p3: pts3[i],
+      stagger: rnd(),
+      phase: rnd() * TAU,
+      size: 1.15 + rnd() * 1.25,
+      bright: rnd()
+    });
+  }
+
+  function sceneState(t) {
+    const bow1 = win(t, 6.67, 7.25, 12.3, 13.1);
+    const bow2 = win(t, 20.0, 20.6, 25.9, 26.75);
+    const bow3 = win(t, 33.33, 33.9, 38.8, 39.55);
+    const bow4 = win(t, 46.67, 47.25, 52.5, 53.4);
+    const bowAmp = Math.max(bow1, bow2, bow3, bow4);
+
+    let activeMode = 0;
+    if (t >= 6.67 && t < 20.0) activeMode = 1;
+    else if (t >= 20.0 && t < 33.33) activeMode = 2;
+    else if (t >= 33.33 && t < 46.67) activeMode = 3;
+
+    // Smooth dial needle angle tracking the active eigenmode
+    const m1Mix = seg(t, 6.67, 8.2) * (1 - seg(t, 46.67, 48.5));
+    const m2Mix = seg(t, 20.0, 21.5) * (1 - seg(t, 46.67, 48.5));
+    const m3Mix = seg(t, 33.33, 34.8) * (1 - seg(t, 46.67, 48.5));
+    let dialAngle = MODES[0].dialAngle;
+    dialAngle = lerp(dialAngle, MODES[1].dialAngle, m1Mix);
+    dialAngle = lerp(dialAngle, MODES[2].dialAngle, m2Mix);
+    dialAngle = lerp(dialAngle, MODES[3].dialAngle, m3Mix);
+
+    const w0 = (1 - seg(t, 1.75, 3.4)) + seg(t, 48.2, 54.2);
+    const w1 = seg(t, 8.2, 13.0) * (1 - seg(t, 20.0, 22.4));
+    const w2 = seg(t, 21.6, 26.5) * (1 - seg(t, 33.33, 35.6));
+    const w3 = seg(t, 34.8, 39.4) * (1 - seg(t, 46.67, 49.2));
+
+    let bowPos = -0.35;
+    let bowContact = 0.25;
+    if (t >= 6.67 && t < 13.5) {
+      bowPos = lerp(-0.75, 0.78, seg(t, 6.67, 13.0));
+      bowContact = bow1;
+    } else if (t >= 13.5 && t < 20.0) {
+      bowPos = lerp(0.78, 0.65, seg(t, 13.5, 19.5));
+      bowContact = 0.15;
+    } else if (t >= 20.0 && t < 27.2) {
+      bowPos = lerp(0.65, -0.78, seg(t, 20.0, 26.67));
+      bowContact = bow2;
+    } else if (t >= 27.2 && t < 33.33) {
+      bowPos = lerp(-0.78, -0.68, seg(t, 27.2, 33.0));
+      bowContact = 0.15;
+    } else if (t >= 33.33 && t < 40.0) {
+      bowPos = lerp(-0.68, 0.85, seg(t, 33.33, 39.5));
+      bowContact = bow3;
+    } else if (t >= 40.0 && t < 46.67) {
+      bowPos = lerp(0.85, 0.45, seg(t, 40.0, 46.2));
+      bowContact = 0.1;
+    } else if (t >= 46.67 && t < 54.5) {
+      bowPos = lerp(0.45, -0.35, seg(t, 46.67, 53.33));
+      bowContact = bow4;
+    }
+
+    const tap1 = Math.exp(-Math.pow((t - 40.0) / 0.11, 2));
+    const tap2 = Math.exp(-Math.pow((t - 41.67) / 0.11, 2));
+
+    return {
+      bow1,
+      bow2,
+      bow3,
+      bow4,
+      bowAmp,
+      activeMode,
+      dialAngle,
+      glows: [clamp(w0, 0, 1), clamp(w1, 0, 1), clamp(w2, 0, 1), clamp(w3, 0, 1)],
+      bowPos,
+      bowContact,
+      tap1,
+      tap2
+    };
+  }
+
+  function leftPawPose(t) {
+    const rest = { x: PX + PR - 14, y: PY - PR + 18 };
+    const node1 = { x: PX + PR - 8, y: PY - PR * 0.333 };
+    const node2 = { x: PX + PR - 8, y: PY - PR * 0.5 };
+    const node3 = { x: PX + PR - 8, y: PY - PR * 0.6 };
+    const bolt = { x: PX + 8, y: PY - 6 };
+
+    let x = rest.x;
+    let y = rest.y;
+    let lift = 0;
+    let spread = 0;
+
+    if (t >= 1.2 && t < 6.4) {
+      const enter = seg(t, 1.2, 1.75);
+      const sweep = seg(t, 1.7, 4.1);
+      const exit = seg(t, 4.2, 6.2);
+      const sx = lerp(PX + PR * 0.65, PX - PR * 0.58, sweep);
+      const sy = PY - 38 + Math.sin(sweep * PI) * 86;
+      x = lerp(rest.x, sx, enter);
+      y = lerp(rest.y, sy, enter);
+      x = lerp(x, node1.x, exit);
+      y = lerp(y, node1.y, exit);
+      lift = Math.sin(enter * PI) * 0.5 + Math.sin(exit * PI) * 0.6;
+      spread = win(t, 1.5, 1.9, 4.0, 4.5);
+    } else if (t >= 6.4 && t < 19.2) {
+      x = node1.x;
+      y = node1.y;
+    } else if (t >= 19.2 && t < 32.5) {
+      const u = seg(t, 19.2, 20.1);
+      x = lerp(node1.x, node2.x, u);
+      y = lerp(node1.y, node2.y, u);
+      lift = Math.sin(u * PI) * 0.45;
+    } else if (t >= 32.5 && t < 39.2) {
+      const u = seg(t, 32.5, 33.4);
+      x = lerp(node2.x, node3.x, u);
+      y = lerp(node2.y, node3.y, u);
+      lift = Math.sin(u * PI) * 0.45;
+    } else if (t >= 39.2 && t < 46.4) {
+      const toBolt = seg(t, 39.2, 39.85);
+      const backToEdge = seg(t, 42.6, 46.2);
+      const hover = { x: bolt.x + 16, y: bolt.y - 14 };
+      const strike1 = Math.exp(-Math.pow((t - 40.0) / 0.12, 2));
+      const strike2 = Math.exp(-Math.pow((t - 41.67) / 0.12, 2));
+      const strike = Math.max(strike1, strike2);
+      const bx = lerp(hover.x, bolt.x, strike);
+      const by = lerp(hover.y, bolt.y, strike);
+      x = lerp(node3.x, bx, toBolt);
+      y = lerp(node3.y, by, toBolt);
+      x = lerp(x, rest.x, backToEdge);
+      y = lerp(y, rest.y, backToEdge);
+      lift = toBolt * (1 - backToEdge) * (0.85 - 0.75 * strike);
+      spread = 0.4 * strike;
+    }
+
+    return { x, y, lift, spread };
+  }
+
+  function drawCatLimb(sx, sy, ex, ey, px, py, scale, spread, shadowOnly) {
+    const dx = px - ex;
+    const dy = py - ey;
+    const ang = Math.atan2(dy, dx);
+    ctx.save();
+    if (shadowOnly) {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.48)';
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.48)';
+    } else {
+      ctx.strokeStyle = '#121118';
+      ctx.fillStyle = '#121118';
+    }
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 36 * scale;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.quadraticCurveTo(ex, ey, px, py);
+    ctx.stroke();
+
+    if (!shadowOnly) {
+      ctx.strokeStyle = 'rgba(236, 178, 102, 0.25)';
+      ctx.lineWidth = 4 * scale;
+      ctx.beginPath();
+      ctx.moveTo(sx - 6, sy - 8);
+      ctx.quadraticCurveTo(ex - 8, ey - 8, px - 6, py - 8);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = shadowOnly ? 'rgba(0, 0, 0, 0.48)' : '#15141c';
+    ctx.beginPath();
+    ctx.arc(px, py, 21 * scale, 0, TAU);
+    ctx.fill();
+
+    for (let k = 0; k < 4; k++) {
+      const a = ang + (k - 1.5) * (0.36 + 0.12 * spread);
+      const tx = px + Math.cos(a) * 21 * scale;
+      const ty = py + Math.sin(a) * 21 * scale;
+      ctx.beginPath();
+      ctx.arc(tx, ty, 8.5 * scale, 0, TAU);
+      ctx.fill();
+      if (!shadowOnly) {
+        ctx.strokeStyle = 'rgba(242, 192, 120, 0.28)';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+        if (spread > 0.08) {
+          const cx = tx + Math.cos(a) * (8 + 5 * spread) * scale;
+          const cy = ty + Math.sin(a) * (8 + 5 * spread) * scale;
+          ctx.strokeStyle = '#efe5cf';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(tx + Math.cos(a) * 5 * scale, ty + Math.sin(a) * 5 * scale);
+          ctx.lineTo(cx, cy);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawTuningForks(t, state) {
+    const baseX = 76;
+    const baseY = 128;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(baseX + 6, baseY + 8, 198, 42, 8);
+    ctx.fill();
+
+    const woodG = ctx.createLinearGradient(baseX, baseY, baseX, baseY + 40);
+    woodG.addColorStop(0, '#5a2d18');
+    woodG.addColorStop(0.5, '#3d1c0d');
+    woodG.addColorStop(1, '#241007');
+    ctx.fillStyle = woodG;
+    ctx.beginPath();
+    ctx.roundRect(baseX, baseY, 196, 38, 7);
+    ctx.fill();
+    ctx.strokeStyle = '#8c5230';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    const labels = ['(2,3)', '(3,4)', '(3,5)'];
+    const forkAmps = [
+      state.glows[1] * (0.45 + 0.55 * state.bow1),
+      state.glows[2] * (0.45 + 0.55 * state.bow2),
+      state.glows[3] * (0.55 + 0.45 * state.bow3)
+    ];
+
+    for (let i = 0; i < 3; i++) {
+      const fx = baseX + 38 + i * 60;
+      const fy = baseY + 4;
+      const amp = forkAmps[i];
+      const buzz = amp * Math.sin(t * 90 + i * 2.1) * 3.2;
+
+      if (amp > 0.08) {
+        for (let r = 1; r <= 2; r++) {
+          const prog = ((t * 1.8 + r * 0.5) % 1);
+          const rad = 14 + prog * 28;
+          ctx.strokeStyle = `rgba(255, 214, 128, ${(1 - prog) * amp * 0.45})`;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(fx, fy - 48, rad, 0, TAU);
+          ctx.stroke();
+        }
+      }
+
+      ctx.strokeStyle = '#d4a656';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(fx, fy);
+      ctx.lineTo(fx, fy - 18);
+      ctx.stroke();
+
+      ctx.strokeStyle = amp > 0.15 ? '#ffe29a' : '#c79846';
+      ctx.lineWidth = 3.2;
+      ctx.beginPath();
+      ctx.moveTo(fx - 10 - buzz, fy - 72);
+      ctx.lineTo(fx - 10 - buzz * 0.3, fy - 26);
+      ctx.arc(fx, fy - 26, 10, PI, 0, true);
+      ctx.lineTo(fx + 10 + buzz, fy - 72);
+      ctx.stroke();
+
+      ctx.fillStyle = '#2a1a0e';
+      ctx.fillRect(fx - 16, baseY + 12, 32, 15);
+      ctx.strokeStyle = '#b5853b';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(fx - 16, baseY + 12, 32, 15);
+      ctx.fillStyle = amp > 0.15 ? '#ffe6a3' : '#c9a263';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(labels[i], fx, baseY + 23);
+    }
+    ctx.restore();
+  }
+
+  // Draw the analog brass harmonic mode gauge at upper-center-right
+  function drawHarmonicGauge(state) {
+    const gx = 594;
+    const gy = 122;
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(gx - 84 + 5, gy - 54 + 7, 168, 78, 14);
+    ctx.fill();
+
+    // Brass bezel & dark enamel dial face
+    const bezelG = ctx.createLinearGradient(gx - 84, gy - 54, gx + 84, gy + 24);
+    bezelG.addColorStop(0, '#c89b4b');
+    bezelG.addColorStop(0.5, '#7c5922');
+    bezelG.addColorStop(1, '#4a3310');
+    ctx.fillStyle = bezelG;
+    ctx.beginPath();
+    ctx.roundRect(gx - 84, gy - 54, 168, 78, 14);
+    ctx.fill();
+
+    ctx.fillStyle = '#16120f';
+    ctx.beginPath();
+    ctx.roundRect(gx - 78, gy - 48, 156, 66, 10);
+    ctx.fill();
+
+    // Arc scale & 4 mode notches
+    ctx.strokeStyle = 'rgba(228, 186, 108, 0.45)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(gx, gy + 6, 44, -PI * 0.84, -PI * 0.16);
+    ctx.stroke();
+
+    for (let k = 0; k < 4; k++) {
+      const a = -PI * 0.5 + MODES[k].dialAngle;
+      const x0 = gx + Math.cos(a) * 37;
+      const y0 = gy + 6 + Math.sin(a) * 37;
+      const x1 = gx + Math.cos(a) * 46;
+      const y1 = gy + 6 + Math.sin(a) * 46;
+      const isLit = state.activeMode === k;
+      ctx.strokeStyle = isLit ? '#ffe8a3' : '#9c7a44';
+      ctx.lineWidth = isLit ? 2.4 : 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      const lx = gx + Math.cos(a) * 58;
+      const ly = gy + 8 + Math.sin(a) * 53;
+      ctx.fillStyle = isLit ? '#ffe8a3' : '#8d6f3f';
+      ctx.font = 'bold 9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(MODES[k].tag, lx, ly);
+    }
+
+    // Brass indicator needle
+    const na = -PI * 0.5 + state.dialAngle;
+    ctx.strokeStyle = '#ffdf88';
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.moveTo(gx, gy + 6);
+    ctx.lineTo(gx + Math.cos(na) * 41, gy + 6 + Math.sin(na) * 41);
+    ctx.stroke();
+
+    ctx.fillStyle = '#d4a44e';
+    ctx.beginPath();
+    ctx.arc(gx, gy + 6, 5.5, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  window.renderFrame = function(time) {
+    const t = wrapT(time);
+    const state = sceneState(t);
+    const lp = leftPawPose(t);
+
+    // 1. Draw static workbench + oxidized brass plate base
+    ctx.drawImage(BG, 0, 0);
+
+    // 2. Draw sympathetic tuning forks & harmonic mode dial
+    drawTuningForks(t, state);
+    drawHarmonicGauge(state);
+
+    // 3. Standing-wave antinode shimmer on the brass plate during bowing
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(PX - PR + 6, PY - PR + 6, PR * 2 - 12, PR * 2 - 12, 8);
+    ctx.clip();
+
+    if (state.bowAmp > 0.01) {
+      const pulse = 0.65 + 0.35 * Math.sin(t * 36);
+      ctx.globalAlpha = state.bowAmp * pulse * 0.85;
+      ctx.drawImage(MODE_ANTINODES[state.activeMode], PX - PR, PY - PR, PR * 2, PR * 2);
+      ctx.globalAlpha = 1;
+    }
+
+    // 4. Composite pre-rendered nodal glow maps so thumbnail silhouettes read with crisp contrast
+    for (let k = 0; k < 4; k++) {
+      const gk = state.glows[k];
+      if (gk > 0.01) {
+        ctx.globalAlpha = gk * 0.72;
+        ctx.drawImage(MODE_GLOWS[k], PX - PR, PY - PR, PR * 2, PR * 2);
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // 5. Render all 3,600 individual crystalline salt grains as a pure function of t
+    const wave1Age = t - 40.0;
+    const wave2Age = t - 41.67;
+
+    for (let i = 0; i < GRAIN_COUNT; i++) {
+      const g = GRAINS[i];
+      const st = g.stagger * 0.32;
+
+      let u = g.p0.u;
+      let v = g.p0.v;
+
+      if (t >= 1.65 && t < 6.67) {
+        const sweepStart = 1.7 + (1 - (g.p0.u + 1) * 0.5) * 1.4 + st * 0.4;
+        const s = seg(t, sweepStart, sweepStart + 0.95);
+        u = lerp(g.p0.u, g.pScat.u, s);
+        v = lerp(g.p0.v, g.pScat.v, s);
+      } else if (t >= 6.67 && t < 20.0) {
+        const s = seg(t, 6.8 + st * 2.2, 11.4 + st * 1.5);
+        const arc = Math.sin(s * PI) * 0.06 * Math.sin(g.phase);
+        u = lerp(g.pScat.u, g.p1.u, s) + arc;
+        v = lerp(g.pScat.v, g.p1.v, s) - arc;
+      } else if (t >= 20.0 && t < 33.33) {
+        const s = seg(t, 20.15 + st * 2.1, 24.8 + st * 1.6);
+        const arc = Math.sin(s * PI) * 0.055 * Math.cos(g.phase);
+        u = lerp(g.p1.u, g.p2.u, s) + arc;
+        v = lerp(g.p1.v, g.p2.v, s) + arc;
+      } else if (t >= 33.33 && t < 46.67) {
+        const s = seg(t, 33.45 + st * 2.0, 38.0 + st * 1.4);
+        const arc = Math.sin(s * PI) * 0.05 * Math.sin(g.phase * 1.7);
+        u = lerp(g.p2.u, g.p3.u, s) - arc;
+        v = lerp(g.p2.v, g.p3.v, s) + arc;
+      } else if (t >= 46.67) {
+        const s = seg(t, 46.8 + st * 2.2, 51.8 + st * 1.4);
+        const arc = Math.sin(s * PI) * 0.05 * Math.cos(g.phase);
+        u = lerp(g.p3.u, g.p0.u, s) + arc;
+        v = lerp(g.p3.v, g.p0.v, s) - arc;
+      }
+
+      if (state.bowAmp > 0.01) {
+        const wAmp = Math.abs(evalMode(state.activeMode, u, v));
+        const hop = state.bowAmp * (0.004 + 0.028 * wAmp);
+        u += Math.sin(t * 68 + g.phase) * hop;
+        v += Math.cos(t * 74 + g.phase * 1.3) * hop;
+      }
+
+      const rNorm = Math.hypot(u, v) + 1e-4;
+      let rippleLift = 0;
+      if (wave1Age > 0 && wave1Age < 1.55) {
+        const dr = rNorm - wave1Age * 0.85;
+        rippleLift += Math.sin(dr * 28) * Math.exp(-(dr * dr) / 0.018) * Math.exp(-wave1Age * 1.5);
+      }
+      if (wave2Age > 0 && wave2Age < 1.75) {
+        const dr = rNorm - wave2Age * 0.85;
+        rippleLift += Math.sin(dr * 28) * Math.exp(-(dr * dr) / 0.018) * Math.exp(-wave2Age * 1.5);
+      }
+      if (Math.abs(rippleLift) > 1e-3) {
+        u += (u / rNorm) * rippleLift * 0.022;
+        v += (v / rNorm) * rippleLift * 0.022;
+      }
+
+      const gx = PX + u * (PR - 10);
+      const gy = PY + v * (PR - 10);
+      ctx.fillStyle = g.bright > 0.35 ? '#fff8e2' : '#e6cf9e';
+      ctx.fillRect(gx - g.size * 0.5, gy - g.size * 0.5, g.size, g.size);
+    }
+
+    // Concentric golden flexural wave rings across the plate during the two bolt taps
+    for (const age of [wave1Age, wave2Age]) {
+      if (age > 0 && age < 1.6) {
+        const rad = age * 0.85 * (PR - 10);
+        const alpha = Math.exp(-age * 1.65) * 0.72;
+        ctx.strokeStyle = `rgba(255, 232, 165, ${alpha})`;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath();
+        ctx.arc(PX, PY, rad, 0, TAU);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    // Vibrating right brass edge blur where the bow excites the plate
+    if (state.bowAmp > 0.01) {
+      ctx.save();
+      ctx.strokeStyle = `rgba(255, 232, 168, ${0.58 * state.bowAmp})`;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      for (let y = PY - PR + 12; y <= PY + PR - 12; y += 6) {
+        const v = (y - PY) / PR;
+        const w = evalMode(state.activeMode, 1.0, v);
+        const dx = Math.sin(t * 120 + y * 0.15) * w * 3.5 * state.bowAmp;
+        if (y === PY - PR + 12) ctx.moveTo(PX + PR + dx, y);
+        else ctx.lineTo(PX + PR + dx, y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 6. Central machined hexagonal brass clamping bolt at (PX, PY)
+    ctx.save();
+    ctx.translate(PX, PY);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.arc(2, 3, 19, 0, TAU);
+    ctx.fill();
+    const washerG = ctx.createRadialGradient(-4, -4, 2, 0, 0, 18);
+    washerG.addColorStop(0, '#f3cf82');
+    washerG.addColorStop(0.65, '#9e722e');
+    washerG.addColorStop(1, '#4c3412');
+    ctx.fillStyle = washerG;
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#d8aa54';
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = (k * PI) / 3 + 0.25;
+      const hx = Math.cos(a) * 11.5;
+      const hy = Math.sin(a) * 11.5;
+      if (k === 0) ctx.moveTo(hx, hy);
+      else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#fff0c2';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = '#2b1d0b';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4.2, 0, TAU);
+    ctx.fill();
+    ctx.restore();
+
+    // 7. Violin Bow & Rosin Spark at the lower-right bevel of the Chladni plate
+    const contactX = PX + PR;
+    const contactY = PY + 52;
+    const bowAngle = -1.24 + state.bowContact * 0.04;
+    const bowSlide = state.bowPos * 96;
+    const dirX = Math.cos(bowAngle);
+    const dirY = Math.sin(bowAngle);
+    const normX = -dirY;
+    const normY = dirX;
+
+    const frogX = contactX - dirX * (150 - bowSlide) + normX * 6;
+    const frogY = contactY - dirY * (150 - bowSlide) + normY * 6;
+    const tipX = contactX + dirX * (165 + bowSlide) + normX * 6;
+    const tipY = contactY + dirY * (165 + bowSlide) + normY * 6;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.45)';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(frogX + 10, frogY + 14);
+    ctx.lineTo(tipX + 10, tipY + 14);
+    ctx.stroke();
+
+    ctx.strokeStyle = state.bowAmp > 0.05 ? '#fffdf4' : '#ded6c1';
+    ctx.lineWidth = 3.2;
+    ctx.beginPath();
+    ctx.moveTo(frogX - normX * 5, frogY - normY * 5);
+    ctx.quadraticCurveTo(
+      contactX - normX * (1.5 * state.bowContact),
+      contactY - normY * (1.5 * state.bowContact),
+      tipX - normX * 4,
+      tipY - normY * 4
+    );
+    ctx.stroke();
+
+    const stickG = ctx.createLinearGradient(frogX, frogY, tipX, tipY);
+    stickG.addColorStop(0, '#5e2310');
+    stickG.addColorStop(0.5, '#91381b');
+    stickG.addColorStop(1, '#6b2812');
+    ctx.strokeStyle = stickG;
+    ctx.lineWidth = 5.5;
+    ctx.beginPath();
+    ctx.moveTo(frogX + normX * 6, frogY + normY * 6);
+    ctx.quadraticCurveTo(
+      contactX + normX * 15,
+      contactY + normY * 15,
+      tipX - normX * 2,
+      tipY - normY * 2
+    );
+    ctx.stroke();
+
+    ctx.fillStyle = '#18141a';
+    ctx.strokeStyle = '#d8aa54';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.arc(frogX, frogY, 9, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+
+    if (state.bowAmp > 0.02) {
+      const fg = ctx.createRadialGradient(contactX, contactY, 2, contactX, contactY, 34);
+      fg.addColorStop(0, `rgba(255, 245, 200, ${0.85 * state.bowAmp})`);
+      fg.addColorStop(0.4, `rgba(255, 190, 80, ${0.42 * state.bowAmp})`);
+      fg.addColorStop(1, 'rgba(255, 160, 40, 0)');
+      ctx.fillStyle = fg;
+      ctx.beginPath();
+      ctx.arc(contactX, contactY, 34, 0, TAU);
+      ctx.fill();
+
+      for (let m = 0; m < 10; m++) {
+        const age = ((t * 1.7 + m * 0.13) % 1);
+        const mx = contactX + Math.cos(m * 1.9 + t * 2) * (8 + age * 26);
+        const my = contactY + (m - 4.5) * 4 - age * 22;
+        ctx.fillStyle = `rgba(255, 236, 180, ${(1 - age) * state.bowAmp * 0.75})`;
+        ctx.beginPath();
+        ctx.arc(mx, my, 1.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // 8. ClawedCode (sitting at right / lower-right, bowing with right paw, damping/tapping with left paw)
+    const breath = Math.sin((TAU * t) / 3.3333) * 3.5;
+    const catLean = 14 * win(t, 33.0, 34.5, 45.0, 46.5);
+    const bodyX = 774 - catLean * 0.6;
+    const bodyY = 640;
+    const headX = 740 - catLean;
+    const headY = 472 + breath * 0.4;
+
+    // Cat torso & curled tail shadow
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.ellipse(bodyX + 12, bodyY + 16, 96, 132, -0.18, 0, TAU);
+    ctx.fill();
+
+    const tailSwish = Math.sin((TAU * t) / 6.6667) * 0.16;
+    ctx.strokeStyle = '#100f15';
+    ctx.lineWidth = 26;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(bodyX + 54, bodyY + 95);
+    ctx.bezierCurveTo(
+      bodyX + 115,
+      bodyY + 145,
+      bodyX + 40,
+      bodyY + 215,
+      bodyX - 45 + Math.cos(tailSwish) * 24,
+      bodyY + 188 + Math.sin(tailSwish) * 16
+    );
+    ctx.stroke();
+
+    const torsoG = ctx.createRadialGradient(bodyX - 38, bodyY - 40, 18, bodyX, bodyY, 138);
+    torsoG.addColorStop(0, '#272433');
+    torsoG.addColorStop(0.55, '#14131c');
+    torsoG.addColorStop(1, '#0b0a10');
+    ctx.fillStyle = torsoG;
+    ctx.beginPath();
+    ctx.ellipse(bodyX, bodyY, 92 + breath * 0.4, 128, -0.18, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(242, 182, 98, 0.28)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.ellipse(bodyX, bodyY, 92 + breath * 0.4, 128, -0.18, PI * 0.65, PI * 1.38);
+    ctx.stroke();
+    ctx.restore();
+
+    // Right foreleg gripping the violin bow frog
+    const rShoulderX = bodyX - 8;
+    const rShoulderY = bodyY - 22;
+    const rElbowX = (rShoulderX + frogX) * 0.5 + 32;
+    const rElbowY = (rShoulderY + frogY) * 0.5 + 24;
+    drawCatLimb(rShoulderX + 10, rShoulderY + 12, rElbowX + 10, rElbowY + 12, frogX + 10, frogY + 12, 0.96, 0.25, true);
+    drawCatLimb(rShoulderX, rShoulderY, rElbowX, rElbowY, frogX, frogY, 0.96, 0.25, false);
+
+    // Left foreleg (damping node / sweeping salt / tapping center bolt) drawn over bow so reach is unobstructed
+    const lShoulderX = headX - 18;
+    const lShoulderY = headY + 56;
+    const lElbowX = (lShoulderX + lp.x) * 0.5 + 16;
+    const lElbowY = (lShoulderY + lp.y) * 0.5 - 38;
+    const lShadowOff = 10 + lp.lift * 18;
+    drawCatLimb(
+      lShoulderX + lShadowOff,
+      lShoulderY + lShadowOff,
+      lElbowX + lShadowOff,
+      lElbowY + lShadowOff,
+      lp.x + lShadowOff,
+      lp.y + lShadowOff,
+      0.95 + lp.lift * 0.08,
+      lp.spread,
+      true
+    );
+    drawCatLimb(
+      lShoulderX,
+      lShoulderY,
+      lElbowX,
+      lElbowY,
+      lp.x,
+      lp.y,
+      0.95 + lp.lift * 0.08,
+      lp.spread,
+      false
+    );
+
+    // ClawedCode's head, pointed ears, chartreuse-amber eyes, and whiskers
+    ctx.save();
+    const lookBolt = win(t, 39.2, 39.8, 43.0, 44.2);
+    const lookSweep = win(t, 1.4, 1.9, 4.4, 5.2);
+    const gazeX = lerp(lerp(-12, -22, lookSweep), -26, lookBolt);
+    const gazeY = lerp(lerp(4, -6, state.bowAmp), 8, lookBolt);
+
+    ctx.translate(headX, headY);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.beginPath();
+    ctx.arc(8, 12, 68, 0, TAU);
+    ctx.fill();
+
+    const earPerk = 0.08 * state.bowAmp + 0.1 * lookBolt;
+    const drawEar = (side, angleOffset) => {
+      ctx.save();
+      ctx.rotate(angleOffset);
+      ctx.fillStyle = '#111017';
+      ctx.beginPath();
+      ctx.moveTo(side * 22, -46);
+      ctx.lineTo(side * 58, -104);
+      ctx.lineTo(side * 62, -32);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#2c1e24';
+      ctx.beginPath();
+      ctx.moveTo(side * 28, -48);
+      ctx.lineTo(side * 52, -90);
+      ctx.lineTo(side * 54, -38);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(240, 184, 102, 0.25)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.restore();
+    };
+    drawEar(-1, -0.12 + earPerk);
+    drawEar(1, 0.14 - earPerk);
+
+    const headG = ctx.createRadialGradient(-20, -18, 10, 0, 0, 70);
+    headG.addColorStop(0, '#2a2736');
+    headG.addColorStop(0.6, '#15141d');
+    headG.addColorStop(1, '#0b0a10');
+    ctx.fillStyle = headG;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 68, 60, -0.08, 0, TAU);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(248, 195, 112, 0.38)';
+    ctx.lineWidth = 2.8;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 68, 60, -0.08, PI * 0.62, PI * 1.38);
+    ctx.stroke();
+
+    const blink = 1 - 0.92 * Math.max(
+      win(t, 18.5, 18.7, 18.95, 19.2),
+      win(t, 57.1, 57.3, 57.55, 57.8)
+    );
+
+    const eyeCoords = [
+      { x: -30 + gazeX * 0.25, y: -4 + gazeY * 0.25, rx: 13.5, ry: 11.5 * blink },
+      { x: 14 + gazeX * 0.25, y: -2 + gazeY * 0.25, rx: 14.5, ry: 12.0 * blink }
+    ];
+    for (const e of eyeCoords) {
+      ctx.save();
+      ctx.translate(e.x, e.y);
+      ctx.rotate(-0.08);
+      const irisG = ctx.createRadialGradient(-2, -2, 1, 0, 0, e.rx);
+      irisG.addColorStop(0, '#f2ff7a');
+      irisG.addColorStop(0.65, '#b8d432');
+      irisG.addColorStop(1, '#5d7312');
+      ctx.fillStyle = irisG;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, e.rx, Math.max(1.2, e.ry), 0, 0, TAU);
+      ctx.fill();
+
+      if (blink > 0.25) {
+        const pupilW = 3.6 + 2.2 * state.glows[3];
+        ctx.fillStyle = '#09080d';
+        ctx.beginPath();
+        ctx.ellipse(gazeX * 0.12, gazeY * 0.12, pupilW, e.ry * 0.82, 0, 0, TAU);
+        ctx.fill();
+
+        ctx.fillStyle = '#fff9e6';
+        ctx.beginPath();
+        ctx.arc(-4.5, -3.5 * blink, 2.6, 0, TAU);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    ctx.fillStyle = '#38242b';
+    ctx.beginPath();
+    ctx.moveTo(-14 + gazeX * 0.3, 18);
+    ctx.lineTo(-4 + gazeX * 0.3, 18);
+    ctx.lineTo(-9 + gazeX * 0.3, 25);
+    ctx.closePath();
+    ctx.fill();
+
+    const whiskerLean = 0.15 * (state.bowAmp + lookBolt);
+    ctx.strokeStyle = 'rgba(242, 234, 216, 0.78)';
+    ctx.lineWidth = 1.5;
+    for (let k = -1; k <= 1; k++) {
+      ctx.beginPath();
+      ctx.moveTo(-42, 22 + k * 6);
+      ctx.quadraticCurveTo(
+        -88,
+        18 + k * 12 - whiskerLean * 28,
+        -132,
+        24 + k * 18 - whiskerLean * 42
+      );
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(28, 24 + k * 6);
+      ctx.quadraticCurveTo(68, 22 + k * 11, 102, 30 + k * 16);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // 9. Subtle warm perimeter vignette
+    const vig = ctx.createRadialGradient(450, 450, 290, 450, 450, 680);
+    vig.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    vig.addColorStop(1, 'rgba(5, 4, 9, 0.42)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, 900, 900);
+
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 72\\n// DURATION: 60\\n// FORM: A cycles 0-2 | B cycles 2-6 | C cycles 6-10 | D cycles 10-14 | A' cycles 14-18\\n// TONAL CENTER: Eb Lydian, anchored on an unbroken Eb2 plate fundamental pedal\\n// MOTIF: Eb4 Bb4 A4 G4 D5 - fifth leap to Bb4 settling onto the Lydian #4 (A4) and G4 before lifting to D5\\n// HARMONIC PLAN: A Ebmaj9(#11) | B Ebmaj9(#11) to F7sus4/Eb | C Cm11 to Dm7(b5)/Eb | D Ebmaj13(#11) double-stop bloom and suspended bolt-tap halo | A' Bbmaj7/Eb resolving to Ebmaj9(#11)\\n// PHRASE RULE: each bow stroke (cycles 2-3, 6-7, 10-11, 14-15) swells the bowed brass and subdivides the mallet motif while the salt migrates; locked nodal figures (cycles 4-5, 8-9, 12-13, 16-17) thin and ring clear, with two brass-bolt bell pings on beat 1 (40.00s) and beat 3 (41.67s) of cycle 12\\nconst cell = (items) => '[' + items.map((i) => (Array.isArray(i) ? '[' + i.join(' ') + ']' : i)).join(' ') + ']'\\nconst cycles = (cs) => '\u003c' + cs.map(cell).join(' ') + '>'\\nconst nums = (xs, k = 1) => '\u003c' + xs.map((x) => Math.round(x * k * 1000) / 1000).join(' ') + '>'\\n\\n// Voice 1: Crystalline nodal mallet (carries the Eb4 Bb4 A4 G4 D5 motif across all 18 cycles)\\nconst mOpen = ['eb4', 'bb4', 'a4', 'g4', 'd5', '~', 'a4', '~']\\nconst mSweep = ['eb4', 'bb4', ['a4', 'g4'], 'd5', ['f5', 'd5'], ['bb4', 'a4'], 'g4', 'd5']\\nconst mBow1A = ['eb4', 'bb4', 'a4', 'g4', 'd5', 'a4', 'bb4', 'd5']\\nconst mBow1B = [['eb4', 'bb4'], 'a4', ['g4', 'd5'], 'a4', ['eb4', 'bb4'], 'a4', ['g4', 'd5'], 'f5']\\nconst mLock1 = ['eb4', 'bb4', 'a4', 'g4', 'd5', '~', 'bb4', '~']\\nconst mBow2A = ['g4', 'd5', 'c5', 'a4', ['eb4', 'bb4'], 'a4', 'g4', 'd5']\\nconst mBow2B = [['eb4', 'bb4'], ['a4', 'c5'], ['g4', 'd5'], ['f5', 'd5'], ['c5', 'a4'], ['bb4', 'g4'], 'a4', 'd5']\\nconst mLock2 = ['eb4', 'bb4', 'a4', 'g4', 'd5', 'c5', 'a4', '~']\\nconst mBow3A = [['eb4', 'bb4'], ['a4', 'd5'], ['g4', 'f5'], ['d5', 'a5'], ['f5', 'd5'], ['c5', 'a4'], ['bb4', 'g4'], 'd5']\\nconst mBow3B = [['eb4', 'bb4', 'a4'], ['g4', 'd5'], ['a4', 'd5', 'f5'], ['g5', 'a5'], ['f5', 'd5', 'a4'], ['bb4', 'g4'], ['eb4', 'bb4', 'a4'], ['g4', 'd5']]\\nconst mTapRest = ['~', '~', '~', '~', '~', '~', '~', '~']\\nconst mAfterTap = ['~', 'eb4', 'bb4', 'a4', 'g4', 'd5', '~', '~']\\nconst mRetA = [['d5', 'a4'], 'g4', ['a4', 'bb4'], 'eb4', 'bb4', 'a4', 'g4', 'd5']\\nconst mRetB = ['eb4', 'bb4', 'a4', 'g4', 'd5', 'a4', 'g4', '~']\\n\\nconst malletCycles = [\\n  mOpen, mSweep,\\n  mBow1A, mBow1B, mLock1, mLock1,\\n  mBow2A, mBow2B, mLock2, mLock2,\\n  mBow3A, mBow3B, mTapRest, mAfterTap,\\n  mRetA, mRetB, mOpen, mOpen\\n]\\n\\nconst malletGain = [\\n  0.30, 0.34,\\n  0.36, 0.40, 0.31, 0.29,\\n  0.37, 0.41, 0.32, 0.30,\\n  0.42, 0.44, 0.00, 0.28,\\n  0.36, 0.33, 0.30, 0.30\\n]\\n\\n// Voice 2: Bowed brass plate resonance (swells on each bow stroke: cycles 2-3, 6-7, 10-11, 14-15)\\nconst padChords = [\\n  'eb3,bb3,f4,a4', 'eb3,bb3,f4,a4',\\n  'eb3,bb3,g4,a4', 'eb3,c4,f4,a4', 'eb3,bb3,g4,a4', 'eb3,bb3,f4,a4',\\n  'c3,g3,bb3,d4,a4', 'd3,a3,c4,f4', 'c3,g3,bb3,d4,a4', 'eb3,bb3,d4,g4',\\n  'eb3,g3,bb3,d4,f4,a4', 'eb3,g3,bb3,d4,f4,a4', 'eb3,bb3,d4,a4', 'eb3,bb3,d4,g4',\\n  'eb3,bb3,d4,f4,a4', 'eb3,bb3,f4,a4', 'eb3,bb3,f4,a4', 'eb3,bb3,f4,a4'\\n].map((c) => [c])\\n\\nconst padLevel = [\\n  0.08, 0.09,\\n  0.15, 0.17, 0.10, 0.09,\\n  0.15, 0.17, 0.11, 0.09,\\n  0.18, 0.19, 0.09, 0.09,\\n  0.15, 0.13, 0.09, 0.08\\n]\\n\\n// Voice 4: Sympathetic tuning forks & brass bolt tap chimes\\n// Cycle 0 beat 3 (1.67s): paw sweeps the salt\\n// Cycle 4 beat 1 (13.33s): Mode (2,3) locks + fork I rings\\n// Cycle 8 beat 1 (26.67s): Mode (3,4) locks + fork II rings\\n// Cycle 10 beat 1 (33.33s): Signature double-stop fork III rings\\n// Cycle 12 beat 1 (40.00s) & beat 3 (41.67s): ClawedCode taps the central brass bolt twice\\n// Cycle 16 beat 1 (53.33s): Fundamental (1,2) figure home\\nconst chimeCycles = [\\n  ['~', '~', ['a5', 'g5', 'f5', 'eb5'], '~'],\\n  ['~', '~', '~', '~'],\\n  ['f5', '~', '~', '~'],\\n  ['~', '~', '~', '~'],\\n  ['bb5', '~', 'a5', '~'],\\n  ['~', '~', '~', '~'],\\n  ['c6', '~', '~', '~'],\\n  ['~', '~', '~', '~'],\\n  ['d6', '~', 'a5', '~'],\\n  ['~', '~', '~', '~'],\\n  ['f6', '~', 'd6', '~'],\\n  ['~', '~', '~', 'a5'],\\n  ['eb6', '~', 'bb6', '~'],\\n  ['~', '~', '~', '~'],\\n  ['d6', '~', '~', '~'],\\n  ['~', '~', '~', '~'],\\n  ['bb5', '~', '~', '~'],\\n  ['~', '~', '~', '~']\\n]\\n\\nconst chimeGain = [\\n  0.26, 0.00,\\n  0.18, 0.00, 0.24, 0.00,\\n  0.20, 0.00, 0.26, 0.00,\\n  0.28, 0.18, 0.46, 0.00,\\n  0.20, 0.00, 0.22, 0.00\\n]\\n\\n$: note(cycles(malletCycles))\\n  .sound('triangle')\\n  .gain(nums(malletGain, 1.32))\\n  .attack(0.004)\\n  .decay(0.85)\\n  .sustain(0)\\n  .release(0.14)\\n  .lpf(3600)\\n  .pan(0.43)\\n  .room(0.34)\\n  .roomsize(3)\\n\\n$: stack(\\n  note(cycles(padChords)).gain(nums(padLevel, 1.32)).pan(0.35),\\n  note(cycles(padChords)).add(note(0.07)).gain(nums(padLevel, 0.72)).pan(0.65)\\n)\\n  .sound('sawtooth')\\n  .attack(1.1)\\n  .decay(0.4)\\n  .sustain(0.88)\\n  .release(1.8)\\n  .lpf(sine.range(640, 2100).slow(18))\\n  .lpq(3.5)\\n  .room(0.32)\\n  .roomsize(5)\\n\\n$: stack(\\n  note('eb2').gain(0.43),\\n  note('eb3').gain(0.07)\\n)\\n  .sound('sine')\\n  .attack(0.55)\\n  .decay(0.2)\\n  .sustain(1)\\n  .release(1.6)\\n  .lpf(320)\\n  .pan(0.5)\\n\\n$: stack(\\n  note(cycles(chimeCycles)).gain(nums(chimeGain, 1.32)),\\n  note(cycles(chimeCycles)).add(note(19.02)).gain(nums(chimeGain, 0.33))\\n)\\n  .sound('sine')\\n  .attack(0.001)\\n  .decay(1.5)\\n  .sustain(0)\\n  .release(0.35)\\n  .pan(0.58)\\n  .room(0.48)\\n  .roomsize(6)\",\"bpm\":72,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.3,\"cycles\":18,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
