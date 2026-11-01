@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   
   <style>
-    
     body {
       margin: 0;
       overflow: hidden;
@@ -51,545 +50,127 @@
       <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
     </div>
   <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
 window._errors = [];
 window.addEventListener('error', (e) => {
-  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
   console.error(e.message, e.filename, e.lineno);
 });
-
-// DURATION: 60
+  </script>
+  <script>
 const canvas = document.createElement('canvas');
-canvas.width = 900;
-canvas.height = 900;
-const ctx = canvas.getContext('2d');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
-(() => {
-  // GREETINGS TO EVERYONE WHO ISN'T HERE
-  // Phase boundaries in seconds (shared with the score):
-  //   0.0  ACQUIRE     — carrier locks, one ribbon unfolds, scroller enters right
-  //   9.0  ARTICULATE  — three ribbons braid, reflection sharpens
-  //  27.0  INTERFERE   — ribbons quantize into raster bars, lock shifts
-  //  36.0  SIGNATURE   — the whole screen resolves into a slow rotozoom field
-  //  45.0  REACQUIRE   — ribbons re-knit, scroller lands on AND YOU STILL WATCHING
-  //  60.0  CLOSE       — carrier settles back into frame zero
-
-  const DURATION = 60;
-  const TAU = Math.PI * 2;
-  const W = 900, H = 900;
-
-  // curved glass window inside the shell
-  const GX = 112, GY = 152, GW = 676, GH = 507, GR = 56;
-  // invented signal, painted once per frame then bent onto the glass
-  const SW = 600, SH = 450;
-
-  let seed = 14660834;
-  const random = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
-
-  const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
-  const smooth = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
-  const win = (x, a, b, c, d) => smooth(a, b, x) * (1 - smooth(c, d, x));
-  const fold = (y, lo, hi) => { const m = (lo + hi) / 2, h = (hi - lo) / 2; return m + h * Math.tanh((y - m) / h); };
-  const surface = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  const tphase = (t) => (((t % DURATION) + DURATION) % DURATION) / DURATION;
-
-  // adds a rounded subpath only — caller owns beginPath so subpaths can combine
-  const roundSub = (c, x, y, w, h, r) => {
-    c.moveTo(x + r, y);
-    c.lineTo(x + w - r, y); c.quadraticCurveTo(x + w, y, x + w, y + r);
-    c.lineTo(x + w, y + h - r); c.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    c.lineTo(x + r, y + h); c.quadraticCurveTo(x, y + h, x, y + h - r);
-    c.lineTo(x, y + r); c.quadraticCurveTo(x, y, x + r, y);
-    c.closePath();
-  };
-
-  // ---------------------------------------------------------------- cached room
-  const roomLayer = (() => {
-    const c = surface(W, H), g = c.getContext('2d');
-    const bg = g.createLinearGradient(0, 0, 0, H);
-    bg.addColorStop(0, '#05060b'); bg.addColorStop(0.62, '#0a0c15'); bg.addColorStop(1, '#070810');
-    g.fillStyle = bg; g.fillRect(0, 0, W, H);
-    const wash = g.createRadialGradient(450, 400, 50, 450, 400, 640);
-    wash.addColorStop(0, 'rgba(255,170,70,0.13)');
-    wash.addColorStop(0.45, 'rgba(84,118,158,0.06)');
-    wash.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = wash; g.fillRect(0, 0, W, H);
-    g.fillStyle = '#0b0d14'; g.fillRect(0, 806, W, H - 806);
-    g.strokeStyle = 'rgba(255,186,96,0.15)'; g.lineWidth = 2;
-    g.beginPath(); g.moveTo(0, 807); g.lineTo(W, 807); g.stroke();
-    for (let i = 0; i < 900; i++) {
-      const x = random() * W, y = 808 + random() * (H - 808);
-      g.fillStyle = 'rgba(214,226,244,' + (0.015 + random() * 0.05).toFixed(3) + ')';
-      g.fillRect(x, y, 1.4, 1.4);
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
     }
-    return c;
-  })();
+  `;
 
-  // --------------------------------------------------------------- cached shell
-  const bezelLayer = (() => {
-    const c = surface(W, H), g = c.getContext('2d');
-    g.fillStyle = '#10131b';
-    g.beginPath(); g.moveTo(386, 700); g.lineTo(514, 700); g.lineTo(556, 800); g.lineTo(344, 800); g.closePath(); g.fill();
-    g.fillStyle = '#151922';
-    g.beginPath(); g.ellipse(450, 806, 152, 22, 0, 0, TAU); g.fill();
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\n\n// IT WAS NEVER STRONG. IT WAS HELD.\n// A Prince Rupert's drop in a water tank between crossed polarizers, seen from the side.\n// Its skin set first and its core shrank later, so the drop is locked in tension; the\n// polariscope shows that tension as interference color (the Michel-Levy sequence,\n// integrated over eight wavelengths). Clock: 17 cycles of 240/68 s (68 BPM).\n// A  0-1   rest while the analyzer turns and the dark isoclinic cross sweeps the head; an\n//          arbor-press ram starts down on beat 3 of cycle 0\n// B  2-5   contact on the cycle-2 downbeat, then a load notch on each downbeat to full load\n//          on cycle 5: contact fringes bloom from the two load points and it holds\n// C  6-8   release on cycle 6 and the ram leaves; ClawedCode's paw dips in on cycle 7 and\n//          reaches for the hook of the tail through cycle 8\n// D  9     one claw on the tail tip (cycle-9 downbeat): a crack front runs the drop in one bar\n// E  10-13 burst on the cycle-10 downbeat: a ghost of grey glitter, no color left, sinking\n// F  14-16 a molten gob plunges in on cycle 14, lands on beat 4, tips onto its side on the\n//          cycle-15 downbeat; skin then core cool from orange to red to dark, and the\n//          tension blooms back as color, so frame 60 is frame 0\n\nconst float PI = 3.14159265359;\nconst float TAU = 6.28318530718;\nconst float BAR = 3.52941176471;\nconst float BEAT = 0.882352941176;\n\nconst vec2 HEAD = vec2(-0.13, -0.17);\nconst float HEAD_R = 0.13;\nconst float RAM_X = -0.13;\nconst float WATER_Y = 0.16;\nconst float RIM_Y = 0.198;\nconst float ANVIL_TOP = -0.3;\n\nconst float T_CONTACT = 7.05882352941;\nconst float T_RELEASE = 21.1764705882;\nconst float T_DIP = 24.7058823529;\nconst float T_NIP = 31.7647058824;\nconst float T_BURST = 35.2941176471;\nconst float T_PLUNGE = 49.4117647059;\nconst float T_LAND = 52.0588235294;\n\n// rest shape of the tail: a straight run leaving the head, then a curl hooking upward\nconst float TAIL_ANG = -0.16;\nconst float TAIL_RUN = 0.2;\nconst float TAIL_CURL = 0.09;\nconst float TAIL_SWEEP = 2.2;\nconst float TAIL_R0 = 0.058;\n\nconst vec2 CAT_HEAD = vec2(0.305, 0.318);\nconst vec2 CAT_SHOULDER = vec2(0.59, 0.272);\nconst vec2 PAW_REST = vec2(0.192, 0.226);\n\nfloat hash11(float n) {\n  return fract(sin(n * 91.3458 + 47.2361) * 43758.5453);\n}\n\nfloat hash21(vec2 p) {\n  p = fract(p * vec2(123.34, 456.21));\n  p += dot(p, p + 45.32);\n  return fract(p.x * p.y);\n}\n\nfloat valueNoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  float a = hash21(i);\n  float b = hash21(i + vec2(1.0, 0.0));\n  float c = hash21(i + vec2(0.0, 1.0));\n  float d = hash21(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\nfloat smin(float a, float b, float k) {\n  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n  return mix(b, a, h) - k * h * (1.0 - h);\n}\n\nfloat sdTaper(vec2 p, vec2 a, vec2 b, float ra, float rb) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\n  return length(pa - ba * h) - mix(ra, rb, h);\n}\n\nfloat roundBox(vec2 p, vec2 halfSize, float radius) {\n  vec2 d = abs(p) - halfSize + radius;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;\n}\n\nfloat sdTriangle(vec2 p, vec2 p0, vec2 p1, vec2 p2) {\n  vec2 e0 = p1 - p0;\n  vec2 e1 = p2 - p1;\n  vec2 e2 = p0 - p2;\n  vec2 v0 = p - p0;\n  vec2 v1 = p - p1;\n  vec2 v2 = p - p2;\n  vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);\n  vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);\n  vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);\n  float sgn = sign(e0.x * e2.y - e0.y * e2.x);\n  vec2 d = min(min(vec2(dot(pq0, pq0), sgn * (v0.x * e0.y - v0.y * e0.x)),\n                   vec2(dot(pq1, pq1), sgn * (v1.x * e1.y - v1.y * e1.x))),\n                   vec2(dot(pq2, pq2), sgn * (v2.x * e2.y - v2.y * e2.x)));\n  return -sqrt(d.x) * sign(d.y);\n}\n\nvec2 rotate2(vec2 v, float a) {\n  float cs = cos(a);\n  float sn = sin(a);\n  return vec2(cs * v.x - sn * v.y, sn * v.x + cs * v.y);\n}\n\nfloat ease(float x) {\n  x = clamp(x, 0.0, 1.0);\n  return x * x * (3.0 - 2.0 * x);\n}\n\nfloat easeOut(float x) {\n  x = clamp(x, 0.0, 1.0);\n  return 1.0 - (1.0 - x) * (1.0 - x);\n}\n\n// interference color of a crossed plane polariscope in white light, retardation g in nm\nvec3 fringeColor(float g) {\n  float x = PI * g;\n  vec3 c = vec3(0.0);\n  float s = sin(x / 430.0);\n  c += s * s * vec3(0.0492, -0.0651, 0.5029);\n  s = sin(x / 465.0);\n  c += s * s * vec3(-0.0262, -0.012, 0.5457);\n  s = sin(x / 500.0);\n  c += s * s * vec3(-0.1741, 0.2161, 0.0749);\n  s = sin(x / 535.0);\n  c += s * s * vec3(-0.1984, 0.5237, -0.0487);\n  s = sin(x / 570.0);\n  c += s * s * vec3(0.288, 0.3585, -0.0508);\n  s = sin(x / 605.0);\n  c += s * s * vec3(0.6903, 0.0192, -0.0196);\n  s = sin(x / 640.0);\n  c += s * s * vec3(0.3327, -0.0388, -0.0036);\n  s = sin(x / 675.0);\n  c += s * s * vec3(0.0386, -0.0016, -0.0008);\n  // past the fourth order the bands wash out into higher-order white\n  return mix(max(c, vec3(0.0)), vec3(0.47), smoothstep(1800.0, 3400.0, g));\n}\n\n// deviatoric plane stress of a unit disk squeezed along its vertical diameter by a unit\n// load (Flamant pair plus the uniform field): returns ((sx - sy) / 2, txy)\nvec2 diskSqueeze(vec2 q) {\n  float a = 1.0 - q.y;\n  float b = 1.0 + q.y;\n  float r1 = q.x * q.x + a * a;\n  float r2 = q.x * q.x + b * b;\n  r1 = max(r1 * r1, 0.00004);\n  r2 = max(r2 * r2, 0.00004);\n  float k = 2.0 / PI;\n  float sx = -k * (a * q.x * q.x / r1 + b * q.x * q.x / r2 - 0.5);\n  float sy = -k * (a * a * a / r1 + b * b * b / r2 - 0.5);\n  float txy = k * (a * a * q.x / r1 - b * b * q.x / r2);\n  return vec2(0.5 * (sx - sy), txy);\n}\n\n// tail centerline for point p: (distance, arc length from the neck, unit tangent)\nvec4 tailFrame(vec2 p, vec2 neck, vec4 tail) {\n  vec2 dir = vec2(cos(tail.x), sin(tail.x));\n  vec2 lft = vec2(-dir.y, dir.x);\n  float h = clamp(dot(p - neck, dir), 0.0, tail.y);\n  float dRun = length(p - (neck + dir * h));\n  vec2 bend = neck + dir * tail.y;\n  vec2 c = bend + lft * tail.z;\n  vec2 rel = p - c;\n  float a0 = atan(-lft.y, -lft.x);\n  float aw = mod(atan(rel.y, rel.x) - a0 + 2.0 * TAU, TAU);\n  float a = mix(tail.w, aw, step(aw, tail.w));\n  vec2 arcPoint = c + tail.z * vec2(cos(a0 + a), sin(a0 + a));\n  float dArc = length(p - arcPoint);\n  if (dRun \u003c= dArc) {\n    return vec4(dRun, h, dir);\n  }\n  return vec4(dArc, tail.y + a * tail.z, -sin(a0 + a), cos(a0 + a));\n}\n\n// point on the rest tail's centerline at arc length s\nvec2 restTailPoint(float s) {\n  vec2 dir = vec2(cos(TAIL_ANG), sin(TAIL_ANG));\n  vec2 lft = vec2(-dir.y, dir.x);\n  vec2 neck = HEAD + dir * HEAD_R * 0.72;\n  if (s \u003c TAIL_RUN) {\n    return neck + dir * s;\n  }\n  vec2 c = neck + dir * TAIL_RUN + lft * TAIL_CURL;\n  float a = atan(-lft.y, -lft.x) + (s - TAIL_RUN) / TAIL_CURL;\n  return c + TAIL_CURL * vec2(cos(a), sin(a));\n}\n\nfloat tailRadius(float s, float len, float r0) {\n  float k = clamp(s / len, 0.0, 1.0);\n  return 0.0032 + (r0 - 0.0032) * pow(1.0 - k, 0.9);\n}\n\n// signed distance to the drop: round head blended into the tapering, curling tail\nfloat dropSdf(vec2 p, vec2 c, vec4 tail, float r0) {\n  vec2 neck = c + vec2(cos(tail.x), sin(tail.x)) * HEAD_R * 0.72;\n  vec4 tf = tailFrame(p, neck, tail);\n  float len = tail.y + tail.z * tail.w;\n  return smin(length(p - c) - HEAD_R, tf.x - tailRadius(tf.y, len, r0), 0.04);\n}\n\n// photoelastic transmission at p: rgb = interference color, a = silhouette coverage.\n// stress = residual tempering field scaled by S + press load L; front = crack front\n// distance from the tail tip (negative before the nip); pol = (cos 2a, sin 2a) of the analyzer\nvec4 dropSample(vec2 p, vec2 c, vec4 tail, float r0, float S, float L, float front, vec2 pol, float px) {\n  vec2 neck = c + vec2(cos(tail.x), sin(tail.x)) * HEAD_R * 0.72;\n  vec4 tf = tailFrame(p, neck, tail);\n  float len = tail.y + tail.z * tail.w;\n  float r = tailRadius(tf.y, len, r0);\n  float sHead = length(p - c) - HEAD_R;\n  float sTail = tf.x - r;\n  float sd = smin(sHead, sTail, 0.04);\n  float cover = 1.0 - smoothstep(-px, px, sd);\n  float w = smoothstep(-0.015, 0.03, sHead);\n  // one depth below the skin for head, neck and tail: 0 at the surface, 1 on the axis\n  float depth = clamp(-sd / mix(HEAD_R, r, w), 0.0, 1.0);\n  float chord = sqrt(depth * (2.0 - depth));\n  float radial = 1.0 - depth;\n\n  // head: tempering rings (zero at the center, densest just inside the skin) + press contacts\n  vec2 q = (p - c) / HEAD_R;\n  vec2 n = q / max(length(q), 0.0001);\n  vec2 headD = 0.5 * S * 3900.0 * radial * radial * chord * vec2(n.x * n.x - n.y * n.y, 2.0 * n.x * n.y);\n  headD += L * 760.0 * chord * diskSqueeze(q / max(length(q), 1.0));\n\n  // tail: axial tension in the core, compression in the skin (a zero line at half radius)\n  float tailG = S * 950.0 * (r / TAIL_R0) * chord * (1.0 - 4.0 * radial * radial);\n  vec2 tailD = 0.5 * tailG * vec2(tf.z * tf.z - tf.w * tf.w, 2.0 * tf.z * tf.w);\n\n  vec2 D = mix(headD, tailD, w);\n  if (front > -0.5) {\n    float dTip = mix(len + length(p - neck), len - tf.y, w);\n    float broken = 1.0 - smoothstep(front - 0.004, front + 0.004, dTip);\n    // the stress gathers just ahead of the running front, then lets go behind it\n    D *= 1.0 + 1.4 * exp(-pow((dTip - front - 0.02) / 0.014, 2.0));\n    D *= 1.0 - broken;\n  }\n  float d2 = dot(D, D);\n  float iso = pow(D.y * pol.x - D.x * pol.y, 2.0) / max(d2, 0.000001);\n  return vec4(fringeColor(2.0 * sqrt(d2)) * iso, cover);\n}\n\n// crackle of the fractured drop: x = distance to the nearest crack line, y = facet value\nvec2 crackle(vec2 q) {\n  vec2 i = floor(q);\n  vec2 f = fract(q);\n  float d1 = 8.0;\n  float d2 = 8.0;\n  float id = 0.0;\n  for (int k = 0; k \u003c 9; k++) {\n    vec2 o = vec2(mod(float(k), 3.0) - 1.0, floor(float(k) / 3.0) - 1.0);\n    vec2 cp = o + 0.05 + 0.9 * vec2(hash21(i + o), hash21(i + o + 19.7)) - f;\n    float d = dot(cp, cp);\n    if (d \u003c d1) {\n      d2 = d1;\n      d1 = d;\n      id = hash21(i + o + 7.3);\n    } else if (d \u003c d2) {\n      d2 = d;\n    }\n  }\n  return vec2(sqrt(d2) - sqrt(d1), id);\n}\n\n// press load: contact on cycle 2, one notch per cycle to full load on cycle 5, release on 6\nfloat pressLoad(float t) {\n  float load = 0.36 * smoothstep(T_CONTACT, T_CONTACT + 0.3, t);\n  load += 0.24 * smoothstep(T_CONTACT + BAR, T_CONTACT + BAR + 0.3, t);\n  load += 0.22 * smoothstep(T_CONTACT + 2.0 * BAR, T_CONTACT + 2.0 * BAR + 0.3, t);\n  load += 0.18 * smoothstep(T_CONTACT + 3.0 * BAR, T_CONTACT + 3.0 * BAR + 0.3, t);\n  float hold = smoothstep(T_CONTACT + 3.0 * BAR, T_CONTACT + 3.0 * BAR + 0.5, t) * (1.0 - smoothstep(T_RELEASE - 0.4, T_RELEASE, t));\n  load *= 1.0 + 0.025 * hold * sin(t * 47.0);\n  return load * (1.0 - smoothstep(T_RELEASE, T_RELEASE + 0.5, t));\n}\n\n// bottom of the ram's foot: down from beat 3 of cycle 0 to contact on cycle 2, held under\n// load, back up during cycle 6\nfloat ramFootY(float t, float load) {\n  float down = ease((t - 2.0 * BEAT) / (T_CONTACT - 2.0 * BEAT));\n  float up = ease((t - T_RELEASE - 0.3) / 2.9);\n  float y = mix(0.66, HEAD.y + HEAD_R, down);\n  y -= 0.0035 * load;\n  return mix(y, 0.66, up);\n}\n\n// height of the molten gob's center: falls through the air, plunges on cycle 14, settles\nfloat gobY(float t) {\n  float air = clamp((t - (T_PLUNGE - 0.26)) / 0.26, 0.0, 1.0);\n  float y = mix(0.66, WATER_Y, air * air);\n  float sink = (t - T_PLUNGE) / (T_LAND - T_PLUNGE);\n  if (sink > 0.0) {\n    y = mix(WATER_Y, HEAD.y, 1.0 - pow(1.0 - clamp(sink, 0.0, 1.0), 2.2));\n  }\n  return y;\n}\n\n// gob temperature (K) after it hits the water: the core cools slowly, the skin sets first\nfloat gobTemp(float t) {\n  return 600.0 + 860.0 * exp(-max(t - T_PLUNGE, 0.0) / 2.9);\n}\n\nfloat gobSkinTemp(float t) {\n  return 600.0 + 860.0 * exp(-max(t - T_PLUNGE, 0.0) / 1.25);\n}\n\n// the gob drifts left as it falls, trailing its thread up and to the right\nfloat gobX(float t) {\n  return mix(-0.075, RAM_X, ease((t - (T_PLUNGE - 0.26)) / (T_LAND - T_PLUNGE + 0.26)));\n}\n\nvec3 heatColor(float temp) {\n  float k = clamp((temp - 650.0) / 800.0, 0.0, 1.0);\n  return vec3(1.0, 0.16 + 0.56 * k * k, 0.03 + 0.31 * k * k * k);\n}\n\nfloat heatGlow(float temp) {\n  return 1.25 * pow(clamp((temp - 630.0) / 830.0, 0.0, 1.0), 1.3);\n}\n\n// the new drop lands head down on cycle 14 beat 4 and tips over onto its side, its tail\n// coming down on the cycle-15 downbeat (a little bounce at the end)\nfloat tipOver(float t) {\n  float x = clamp((t - T_LAND) / BEAT, 0.0, 1.0);\n  float settle = t - T_LAND - BEAT;\n  float bounce = settle > 0.0 ? 0.06 * sin(settle * 19.0) * exp(-settle / 0.16) : 0.0;\n  return x * x - bounce;\n}\n\nfloat rippleAt(float x, float t, float x0, float t0, float amp) {\n  float dt = t - t0;\n  if (dt \u003c 0.0) {\n    return 0.0;\n  }\n  float r = abs(x - x0);\n  float reach = 0.05 + 0.34 * dt;\n  return amp * exp(-dt / 1.1) * sin(80.0 * r - 17.0 * dt) * (1.0 - smoothstep(reach - 0.05, reach, r));\n}\n\nfloat waterLine(float x, float t, float tau) {\n  float y = WATER_Y + 0.0014 * sin(x * 38.0 + 8.0 * tau) + 0.001 * sin(x * 71.0 - 13.0 * tau);\n  y += rippleAt(x, t, RAM_X, 5.15, 0.0045);\n  y += rippleAt(x, t, RAM_X, 22.5, 0.004);\n  y += rippleAt(x, t, 0.235, 25.9, 0.005);\n  y += rippleAt(x, t, 0.3, 36.2, 0.006);\n  y += rippleAt(x, t, -0.085, T_PLUNGE, 0.01);\n  return y;\n}\n\n// ClawedCode from the front, chin over the tank rim: skull, cheeks and two ears\nfloat catHeadSdf(vec2 l, float earBack) {\n  float skull = (length(l / vec2(0.096, 0.086)) - 1.0) * 0.086;\n  float cheeks = (length((l - vec2(0.0, -0.03)) / vec2(0.108, 0.062)) - 1.0) * 0.062;\n  float d = smin(skull, cheeks, 0.03);\n  vec2 tipL = vec2(-0.078 - 0.016 * earBack, 0.136 - 0.026 * earBack);\n  vec2 tipR = vec2(0.078 + 0.016 * earBack, 0.136 - 0.026 * earBack);\n  float earL = sdTriangle(l, vec2(-0.095, 0.028), vec2(-0.026, 0.076), tipL);\n  float earR = sdTriangle(l, vec2(0.095, 0.028), vec2(0.026, 0.076), tipR);\n  return smin(d, min(earL, earR), 0.012);\n}\n\n// the inner ear, a smaller triangle inside each ear\nfloat catEarInner(vec2 l, float earBack) {\n  vec2 tipL = vec2(-0.074 - 0.014 * earBack, 0.118 - 0.022 * earBack);\n  vec2 tipR = vec2(0.074 + 0.014 * earBack, 0.118 - 0.022 * earBack);\n  float earL = sdTriangle(l, vec2(-0.08, 0.04), vec2(-0.036, 0.07), tipL);\n  float earR = sdTriangle(l, vec2(0.08, 0.04), vec2(0.036, 0.07), tipR);\n  return min(earL, earR);\n}\n\n// foreleg from the shoulder off the right edge to a round paw with four toes and one claw\nfloat catLegSdf(vec2 p, vec2 paw, vec2 fwd) {\n  vec2 wrist = paw - fwd * 0.03;\n  vec2 reach = wrist - CAT_SHOULDER;\n  vec2 elbow = CAT_SHOULDER + reach * 0.5 + normalize(vec2(-reach.y, reach.x)) * 0.05;\n  float leg = smin(sdTaper(p, CAT_SHOULDER, elbow, 0.056, 0.042), sdTaper(p, elbow, wrist, 0.042, 0.03), 0.02);\n  vec2 side = vec2(-fwd.y, fwd.x);\n  vec2 lp = p - paw;\n  vec2 pl = vec2(dot(lp, fwd), dot(lp, side));\n  float palm = (length(pl / vec2(0.044, 0.035)) - 1.0) * 0.035;\n  float d = smin(leg, palm, 0.022);\n  for (int k = 0; k \u003c 4; k++) {\n    float a = (float(k) - 1.5) * 0.42;\n    vec2 tp = paw + (fwd * cos(a) + side * sin(a)) * 0.041;\n    d = smin(d, length(p - tp) - 0.0135, 0.006);\n  }\n  return d;\n}\n\nfloat catClaw(vec2 p, vec2 paw, vec2 fwd, float out1) {\n  vec2 side = vec2(-fwd.y, fwd.x);\n  vec2 base = paw + fwd * 0.05;\n  vec2 mid = base + (fwd * 0.9 + side * 0.18) * 0.016 * out1;\n  vec2 tip = mid + (fwd * 0.75 - side * 0.35) * 0.014 * out1;\n  return min(sdTaper(p, base, mid, 0.0034, 0.0021), sdTaper(p, mid, tip, 0.0021, 0.0006));\n}\n\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  float t = phase * DURATION;\n  float px = 1.0 / iResolution.y;\n  vec2 p = uv;\n\n  // ---------------- timeline ----------------\n  float load = pressLoad(t);\n  float footY = ramFootY(t, load);\n  // the analyzer and polarizer turn together a quarter turn per loop\n  float polA = 0.35 + 0.5 * PI * phase;\n  vec2 pol = vec2(cos(2.0 * polA), sin(2.0 * polA));\n\n  float oldDrop = 1.0 - step(T_BURST, t);\n  float newDrop = step(T_PLUNGE - 0.26, t);\n  float sinceBurst = t - T_BURST;\n  float front = -1.0;\n  if (t >= T_NIP && t \u003c T_BURST) {\n    float run = (t - T_NIP) / (T_BURST - T_NIP);\n    front = (TAIL_RUN + TAIL_CURL * TAIL_SWEEP + 2.0 * HEAD_R + 0.03) * pow(run, 1.15);\n  }\n\n  // drop placement and shape: the rest drop, or the new gob falling, landing and settling\n  vec2 dropC = HEAD;\n  vec4 tail = vec4(TAIL_ANG, TAIL_RUN, TAIL_CURL, TAIL_SWEEP);\n  float r0 = TAIL_R0;\n  float tension = 1.0;\n  float temp = 0.0;\n  if (newDrop > 0.5) {\n    dropC = vec2(gobX(t), gobY(t));\n    // the thread snaps off the gathering rod just after entry, then rolls up into the hook\n    float snapped = step(T_PLUNGE + 0.45, t);\n    float roll = ease((t - T_PLUNGE - 0.6) / 1.8) * TAIL_SWEEP;\n    float freeLen = TAIL_RUN + TAIL_CURL * TAIL_SWEEP;\n    float runLen = mix(0.66, freeLen - TAIL_CURL * roll, snapped);\n    tail = vec4(TAIL_ANG + 1.25 * (1.0 - tipOver(t)), runLen, TAIL_CURL, roll);\n    r0 = mix(0.03, TAIL_R0, ease((t - T_PLUNGE) / 1.4));\n    tension = pow(ease((t - 55.2) / 4.2), 1.3);\n    temp = t \u003c T_PLUNGE ? 1460.0 : gobTemp(t);\n  }\n  // the last of the core's glow is gone before the tension shows as color\n  float glow = newDrop * heatGlow(temp) * (1.0 - smoothstep(54.6, 55.7, t));\n  vec3 hot = heatColor(temp);\n\n  // ---------------- ground: the polariscope's extinction field ----------------\n  float surf = waterLine(p.x, t, tau);\n  float inWater = 1.0 - smoothstep(surf - px, surf + px, p.y);\n  vec3 col = mix(vec3(0.0085, 0.008, 0.021), vec3(0.0135, 0.012, 0.04), inWater);\n  vec2 lb = p - vec2(-0.06, -0.12);\n  col += vec3(0.008, 0.0065, 0.026) * exp(-dot(lb, lb) * 4.5) * inWater;\n  col *= 1.0 - 0.35 * smoothstep(0.35, 0.75, length(p * vec2(1.0, 0.9)));\n  // above the rim the room is darker still\n  col *= mix(1.0, 0.72, smoothstep(RIM_Y - px, RIM_Y + px, p.y));\n  // warm spill from the molten gob through the water\n  if (glow > 0.0) {\n    vec2 gd = p - dropC;\n    col += hot * glow * 0.09 * exp(-dot(gd, gd) * 26.0) * (0.35 + 0.65 * inWater);\n  }\n\n  // ambient bubbles rising at the tank's two sides\n  for (int i = 0; i \u003c 7; i++) {\n    float fi = float(i);\n    float h = hash11(fi * 3.7 + 1.0);\n    float lane = fi \u003c 3.5 ? -0.455 + 0.05 * fi : 0.34 + 0.045 * (fi - 4.0);\n    float speed = 2.0 + mod(fi, 3.0);\n    float by = -0.56 + fract(phase * speed + h) * (WATER_Y + 0.555);\n    vec2 bc = vec2(lane + 0.006 * sin(TAU * (phase * speed * 5.0 + h)), by);\n    float br = 0.0032 + 0.003 * hash11(fi + 9.1);\n    float bd = length(p - bc);\n    float ring = 1.0 - smoothstep(0.0, 1.6 * px, abs(bd - br));\n    col = mix(col, col * 0.6, 1.0 - smoothstep(br - px, br + px, bd));\n    col += vec3(0.32, 0.34, 0.45) * ring * 0.55;\n    col += vec3(0.6) * (1.0 - smoothstep(0.0, 1.2 * px, length(p - bc - vec2(-0.35, 0.35) * br) - 0.25 * br));\n  }\n\n  // ---------------- the burst: a grey glitter ghost of the drop + tumbling chunks ----------------\n  if (sinceBurst > 0.0 && sinceBurst \u003c 13.5) {\n    float u = sinceBurst;\n    float fade = exp(-u / 9.0) * (1.0 - smoothstep(9.5, 13.5, u));\n    vec2 drift = vec2(0.005 * u, 0.03 * (1.0 - exp(-u / 0.5)) - 0.008 * u - 0.0011 * u * u);\n    vec2 gq = p - drift;\n    float spread = 0.016 + 0.062 * (1.0 - exp(-u / 1.6));\n    float gsd = dropSdf(gq, HEAD, vec4(TAIL_ANG, TAIL_RUN, TAIL_CURL, TAIL_SWEEP), TAIL_R0);\n    float ghost = 1.0 - smoothstep(-0.02 - 0.3 * spread, spread, gsd);\n    float haze = ghost * (0.14 + 0.16 * exp(-u / 0.8)) * fade;\n    col += vec3(0.62, 0.66, 0.78) * haze;\n    // glints: one sparkle cell per 4.5 thousandths, twinkling as the powder turns\n    vec2 cell = floor(gq / 0.0045);\n    float hc = hash21(cell);\n    vec2 sp = (cell + 0.2 + 0.6 * vec2(hash21(cell + 3.1), hash21(cell + 8.7))) * 0.0045;\n    float tw = pow(0.5 + 0.5 * sin(hc * 61.0 + u * (2.0 + 5.0 * hash21(cell + 1.3))), 10.0);\n    float spark = step(0.45, hc) * tw * (1.0 - smoothstep(0.0, 1.5 * px, length(gq - sp) - 0.0009));\n    col += vec3(1.0, 0.97, 0.92) * spark * ghost * fade * 1.3;\n\n    // chunks thrown out of the head and the tail\n    for (int i = 0; i \u003c 36; i++) {\n      float fi = float(i);\n      float h1 = hash11(fi * 1.31 + 0.5);\n      float h2 = hash11(fi * 2.17 + 4.1);\n      float h3 = hash11(fi * 3.73 + 7.9);\n      float h4 = hash11(fi * 5.11 + 2.3);\n      vec2 o;\n      vec2 vel;\n      if (fi \u003c 22.0) {\n        float a = TAU * h2;\n        vec2 nrm = vec2(cos(a), sin(a));\n        o = HEAD + nrm * HEAD_R * sqrt(h1) * 0.9;\n        vel = nrm * (0.12 + 0.3 * h3) + vec2(0.0, 0.07);\n      } else {\n        o = restTailPoint(h1 * (TAIL_RUN + TAIL_CURL * TAIL_SWEEP));\n        vel = vec2(h2 - 0.4, h4 - 0.25) * 0.36;\n      }\n      float drag = 0.45 + 0.75 * h4;\n      vec2 cp = o + vel * drag * (1.0 - exp(-u / drag));\n      cp.y -= (0.01 + 0.014 * h2) * u + 0.0014 * u * u;\n      cp.x += 0.012 * sin(u * 0.9 + 6.0 * h1) * (1.0 - exp(-u));\n      float spin = TAU * h3 + (3.0 + 6.0 * h1) * (1.0 - exp(-u / 2.2)) + 0.4 * u;\n      vec2 lq = rotate2(p - cp, spin);\n      float size = 0.003 + 0.0065 * h3 * h3;\n      float chunk = (abs(lq.x) / (size * 1.6) + abs(lq.y) / size - 1.0) * size;\n      float m = 1.0 - smoothstep(-px, px, chunk);\n      float glint = pow(max(cos(2.0 * spin + 5.0 * h2), 0.0), 26.0);\n      col = mix(col, vec3(0.09, 0.1, 0.13) + vec3(1.0, 0.96, 0.9) * glint * 1.8, m * fade);\n      col += vec3(0.9, 0.92, 1.0) * glint * fade * 0.25 * exp(-length(p - cp) / 0.006);\n    }\n    // the burst itself: a flash of scattered light and a pressure ring through the water\n    float flash = exp(-u / 0.09);\n    col += vec3(0.85, 0.88, 1.0) * flash * exp(-max(gsd, 0.0) / 0.04) * 0.75;\n    float ringR = 0.12 + 1.3 * u;\n    col += vec3(0.7, 0.75, 0.95) * exp(-u / 0.22) * 0.3 * (1.0 - smoothstep(0.0, 0.006, abs(length(p - HEAD) - ringR)));\n  }\n\n  // ---------------- steel anvil with a copper top plate ----------------\n  vec2 ap = p - vec2(-0.13, -0.43);\n  float anvil = roundBox(ap, vec2(0.128, 0.13), 0.008);\n  if (anvil \u003c 0.002) {\n    float brushed = valueNoise(vec2(p.x * 700.0, p.y * 9.0));\n    vec3 steel = vec3(0.03, 0.032, 0.04) + vec3(0.016) * brushed;\n    // key light from the upper left: a lit left shoulder, a darker right face\n    steel += vec3(0.07, 0.074, 0.085) * exp(-pow((ap.x + 0.085) / 0.05, 2.0));\n    steel *= 1.0 - 0.45 * smoothstep(0.02, 0.128, ap.x);\n    float bevel = exp(-pow((p.y - (ANVIL_TOP - 0.008)) / 0.0035, 2.0));\n    steel += vec3(0.2, 0.21, 0.24) * bevel * (1.0 - 0.6 * smoothstep(-0.06, 0.12, ap.x));\n    float plate = step(ANVIL_TOP - 0.007, p.y);\n    vec3 copper = vec3(0.26, 0.12, 0.055) + vec3(0.3, 0.16, 0.08) * exp(-pow((p.x + 0.19) / 0.045, 2.0));\n    steel = mix(steel, copper, plate);\n    // the molten gob lights the plate it lands on\n    steel += hot * glow * 0.4 * exp(-abs(p.x - dropC.x) / 0.05) * exp(-abs(p.y - ANVIL_TOP) / 0.03) * exp(-max(dropC.y - HEAD.y, 0.0) / 0.06);\n    steel *= 0.7 + 0.3 * smoothstep(-0.56, -0.32, p.y);\n    col = mix(col, steel, 1.0 - smoothstep(-px, px, anvil));\n  }\n\n  // ---------------- the drop in polarized light ----------------\n  float dropOn = max(oldDrop, newDrop);\n  if (dropOn > 0.5) {\n    float sdC = dropSdf(p, dropC, tail, r0);\n    if (sdC \u003c 0.03) {\n      vec3 fringe = vec3(0.0);\n      float cover = 0.0;\n      for (int k = 0; k \u003c 4; k++) {\n        vec2 o = (vec2(mod(float(k), 2.0), floor(float(k) / 2.0)) - 0.5) * 0.5 * px;\n        vec4 smp = dropSample(p + o, dropC, tail, r0, tension, load * oldDrop, front, pol, px);\n        fringe += smp.rgb * 0.25;\n        cover += smp.a * 0.25;\n      }\n      vec3 dropCol = col * 0.25 + fringe * 1.55;\n      vec2 neck = dropC + vec2(cos(tail.x), sin(tail.x)) * HEAD_R * 0.72;\n      vec4 tf = tailFrame(p, neck, tail);\n      float len = tail.y + tail.z * tail.w;\n      float w = smoothstep(-0.02, 0.02, length(p - dropC) - HEAD_R - tf.x + tailRadius(tf.y, len, r0));\n      // fractured glass behind the running crack: frosted facets and bright crack lines\n      if (front > -0.5) {\n        float dTip = mix(len + length(p - neck), len - tf.y, w);\n        float broken = 1.0 - smoothstep(front - 0.004, front + 0.004, dTip);\n        vec2 ck = crackle((p - dropC) * 95.0);\n        vec3 frost = vec3(0.13, 0.14, 0.18) + vec3(0.22, 0.23, 0.27) * ck.y;\n        frost += vec3(0.75, 0.8, 0.95) * (1.0 - smoothstep(0.0, 0.09, ck.x));\n        dropCol = mix(dropCol, frost, broken);\n        float edge = exp(-pow((dTip - front) / 0.006, 2.0));\n        dropCol += vec3(1.0, 0.98, 0.94) * edge * 1.6;\n      }\n      // molten: blackbody glow, brightest in the core, and a shimmering vapor skin\n      if (glow > 0.0) {\n        float core = sqrt(max(1.0 - dot(p - dropC, p - dropC) / (HEAD_R * HEAD_R), 0.0));\n        float thin = mix(smoothstep(0.003, 0.02, tailRadius(tf.y, len, r0)), 1.0, 1.0 - w);\n        float skinT = t \u003c T_PLUNGE ? 1460.0 : gobSkinTemp(t);\n        float localT = mix(skinT, temp, core * core * (1.0 - w));\n        localT = mix(localT, skinT, w);\n        dropCol += heatColor(localT) * heatGlow(localT) * thin * (1.0 - smoothstep(54.6, 55.7, t));\n      }\n      // the skin refracts the backlight into a thin bright outline; the front light leaves a highlight\n      dropCol += vec3(0.5, 0.52, 0.62) * exp(-pow(sdC / 0.0035, 2.0)) * 0.22;\n      vec2 hl = p - (dropC + vec2(-0.048, 0.056));\n      dropCol += vec3(0.85, 0.88, 1.0) * 0.22 * exp(-dot(hl, hl) / 0.00035);\n      dropCol += vec3(1.0) * 0.35 * exp(-dot(hl, hl) / 0.00002);\n      col = mix(col, dropCol, cover);\n      if (glow > 0.0 && temp > 900.0) {\n        float skin = exp(-pow((sdC - 0.006) / 0.0035, 2.0));\n        float shimmer = 0.6 + 0.4 * valueNoise(vec2(atan(p.y - dropC.y, p.x - dropC.x) * 9.0, t * 7.0));\n        col += hot * skin * shimmer * glow * 0.22 * smoothstep(900.0, 1100.0, temp);\n      }\n      if (glow > 0.0) {\n        col += hot * glow * 0.22 * exp(-max(sdC, 0.0) / 0.025) * (1.0 - cover);\n      }\n    }\n  }\n\n  // vapor bubbles shed by the hot gob, rising to the surface\n  if (newDrop > 0.5 && t > T_PLUNGE && t \u003c T_PLUNGE + 6.0) {\n    for (int i = 0; i \u003c 10; i++) {\n      float fi = float(i);\n      float h = hash11(fi * 7.3 + 2.0);\n      float age = fract((t - T_PLUNGE) / 0.8 + h) * 0.8;\n      float born = t - age;\n      float alive = step(T_PLUNGE, born) * smoothstep(860.0, 1000.0, gobTemp(born));\n      vec2 bc = vec2(gobX(born) + (h - 0.5) * 0.17, gobY(born) + 0.08 + 0.03 * h);\n      bc.y += 0.22 * age;\n      bc.x += 0.012 * sin(age * 9.0 + 6.0 * h);\n      float br = 0.004 + 0.004 * hash11(fi + 3.3);\n      float bd = length(p - bc);\n      float on = alive * step(bc.y, WATER_Y);\n      col += mix(vec3(0.4, 0.42, 0.5), hot * 0.9, 0.5) * on * (1.0 - smoothstep(0.0, 1.6 * px, abs(bd - br))) * 0.8;\n    }\n  }\n\n  // ---------------- arbor-press ram: rack-toothed rod and a copper-faced foot ----------------\n  if (footY \u003c 0.6) {\n    vec2 fp = p - vec2(RAM_X, footY + 0.027);\n    float foot = roundBox(fp, vec2(0.054, 0.027), 0.008);\n    float rodD = roundBox(p - vec2(RAM_X, footY + 0.55), vec2(0.016, 0.5), 0.003);\n    float toothY = fract((p.y - footY) / 0.024) - 0.5;\n    float teeth = roundBox(vec2(p.x - (RAM_X + 0.02), toothY * 0.024), vec2(0.0045, 0.006), 0.0015);\n    teeth = max(teeth, footY + 0.064 - p.y);\n    float ram = min(min(foot, rodD), teeth);\n    if (ram \u003c 0.003) {\n      float cx = (p.x - RAM_X) / 0.054;\n      float rodX = (p.x - RAM_X) / 0.016;\n      float shade = foot \u003c rodD ? 0.12 + 0.32 * exp(-pow(cx + 0.45, 2.0) * 7.0) : 0.11 + 0.38 * exp(-pow(rodX + 0.45, 2.0) * 6.0);\n      vec3 steel = vec3(shade) * vec3(0.95, 1.0, 1.08);\n      steel += vec3(0.04) * valueNoise(vec2(p.x * 600.0, (p.y - footY) * 10.0));\n      if (teeth \u003c min(foot, rodD)) {\n        steel = vec3(0.09, 0.095, 0.11) + vec3(0.2) * smoothstep(0.3, -0.3, toothY);\n      }\n      float face = 1.0 - smoothstep(footY + 0.008, footY + 0.0095, p.y);\n      steel = mix(steel, vec3(0.5, 0.24, 0.11) + vec3(0.2, 0.1, 0.05) * exp(-pow(cx + 0.4, 2.0) * 5.0), face * step(foot, rodD));\n      // under water the steel takes the tank's tint\n      steel = mix(steel, steel * vec3(0.78, 0.84, 1.0), inWater);\n      col = mix(col, steel, 1.0 - smoothstep(-px, px, ram));\n    }\n  }\n\n  // the thread parts from the rod: a spark that drops a short glowing end\n  float snapT = t - (T_PLUNGE + 0.45);\n  if (snapT > 0.0 && snapT \u003c 0.5) {\n    vec2 sp = p - vec2(gobX(T_PLUNGE + 0.45) + cos(TAIL_ANG + 1.25) * 0.47, gobY(T_PLUNGE + 0.45) + sin(TAIL_ANG + 1.25) * 0.47 - 0.25 * snapT);\n    col += vec3(1.0, 0.7, 0.35) * exp(-snapT / 0.12) * exp(-dot(sp, sp) / 0.00008) * 1.4;\n  }\n\n  // ---------------- splash and puff where the gob goes in ----------------\n  if (t > T_PLUNGE && t \u003c T_PLUNGE + 2.5) {\n    float dt = t - T_PLUNGE;\n    for (int i = 0; i \u003c 8; i++) {\n      float fi = float(i);\n      float h = hash11(fi * 4.9 + 1.7);\n      vec2 v0 = vec2((h - 0.5) * 0.5, 0.45 + 0.35 * hash11(fi + 5.5));\n      vec2 dp = vec2(-0.085 + (h - 0.5) * 0.05, WATER_Y) + v0 * dt - vec2(0.0, 1.6 * dt * dt);\n      float on = step(WATER_Y, dp.y) * (1.0 - smoothstep(0.4, 0.9, dt));\n      col += mix(vec3(0.7, 0.75, 0.9), hot, 0.6) * on * (1.0 - smoothstep(0.0, 1.5 * px, length(p - dp) - 0.0035)) * 1.2;\n    }\n    vec2 pc = p - vec2(-0.085, WATER_Y + 0.03 + 0.07 * dt);\n    float puff = exp(-dot(pc, pc) / pow(0.025 + 0.05 * dt, 2.0)) * exp(-dt / 0.9);\n    col += vec3(0.55, 0.52, 0.55) * puff * 0.35 * step(WATER_Y, p.y);\n  }\n\n  // ---------------- water surface and the tank's rim ----------------\n  float meniscus = exp(-pow((p.y - surf) / (1.3 * px), 2.0));\n  col += vec3(0.24, 0.26, 0.38) * meniscus * 0.9;\n  col += vec3(0.05, 0.05, 0.09) * exp(-max(surf - p.y, 0.0) / 0.012) * inWater;\n  float rim = exp(-pow((p.y - RIM_Y) / (1.4 * px), 2.0));\n  col += vec3(0.28, 0.3, 0.38) * rim * 0.6;\n\n  // ---------------- ClawedCode: foreleg, paw and the one claw ----------------\n  vec2 reachFwd = normalize(vec2(-0.4, -1.0));\n  vec2 restFwd = normalize(vec2(-1.0, -0.22));\n  vec2 tipPoint = restTailPoint(TAIL_RUN + TAIL_CURL * TAIL_SWEEP);\n  vec2 pawAtNip = tipPoint - reachFwd * 0.078 + vec2(0.006, 0.002);\n  vec2 paw = PAW_REST;\n  vec2 fwd = restFwd;\n  float clawOut = 0.0;\n  if (t > T_DIP && t \u003c T_BURST + 5.5) {\n    vec2 lifted = vec2(0.205, 0.29);\n    vec2 above = pawAtNip + vec2(0.012, 0.034);\n    float k1 = ease((t - T_DIP) / 0.6);\n    float k2 = ease((t - T_DIP - 0.6) / 2.0);\n    float k3 = ease((t - T_DIP - 2.6) / (T_NIP - T_DIP - 2.8));\n    paw = mix(mix(mix(PAW_REST, lifted, k1), above, k2), pawAtNip, k3);\n    fwd = normalize(mix(restFwd, reachFwd, ease((t - T_DIP - 0.4) / 2.0)));\n    clawOut = ease((t - 29.4) / 1.3);\n    paw.y -= 0.004 * exp(-pow((t - T_NIP - 0.06) / 0.08, 2.0));\n    // the burst: a flinch up and away, the claw sheathed, the paw back on the rim with a shake\n    float flinch = easeOut((t - T_BURST) / 0.3);\n    vec2 recoil = pawAtNip + vec2(0.07, 0.17);\n    float home = ease((t - T_BURST - 0.6) / 2.6);\n    paw = mix(paw, mix(recoil, PAW_REST + vec2(0.0, 0.045), home), flinch);\n    fwd = normalize(mix(fwd, restFwd, home));\n    clawOut *= 1.0 - ease((t - T_BURST) / 0.5);\n    float shake = smoothstep(T_BURST + 3.2, T_BURST + 3.5, t) * (1.0 - smoothstep(T_BURST + 4.4, T_BURST + 4.8, t));\n    paw += vec2(0.009 * sin(t * 41.0), 0.004 * sin(t * 57.0)) * shake;\n    paw.y -= 0.045 * ease((t - T_BURST - 4.6) / 0.8);\n  }\n  float legD = catLegSdf(p, paw, fwd);\n  vec2 legAxis = normalize(paw - CAT_SHOULDER);\n  vec2 fq = vec2(dot(p, legAxis), dot(p, vec2(-legAxis.y, legAxis.x)));\n  legD -= 0.0022 * (0.6 * valueNoise(fq * vec2(420.0, 50.0)) + 0.4 * valueNoise(fq * vec2(140.0, 18.0)));\n  float clawD = catClaw(p, paw, fwd, clawOut);\n  if (legD \u003c 0.01) {\n    vec3 fur = vec3(0.012, 0.011, 0.015) + vec3(0.007, 0.007, 0.009) * valueNoise(fq * vec2(170.0, 60.0));\n    float legRim = exp(-pow((legD + 0.0015) / 0.0022, 2.0));\n    // dry fur takes a faint cool rim from the light box; under water a film of air silvers it\n    fur += mix(vec3(0.09, 0.09, 0.16), vec3(0.42, 0.45, 0.56), inWater) * legRim;\n    col = mix(col, fur, 1.0 - smoothstep(-px, px, legD));\n  }\n  if (clawOut > 0.01) {\n    vec3 keratin = vec3(0.78, 0.74, 0.68) * (0.75 + 0.25 * inWater);\n    col = mix(col, keratin, 1.0 - smoothstep(-px, px, clawD));\n  }\n  // the nip: a white point of contact at the tail tip\n  float nip = exp(-pow((t - T_NIP) / 0.12, 2.0)) + 0.4 * exp(-pow((t - T_NIP) / 0.6, 2.0));\n  vec2 np = p - tipPoint;\n  col += vec3(1.0, 0.98, 0.95) * nip * (exp(-dot(np, np) / 0.00006) * 1.6 + exp(-dot(np, np) / 0.0012) * 0.25);\n  // fur bubbles let go as the paw enters the water\n  if (t > 25.9 && t \u003c 30.5) {\n    for (int i = 0; i \u003c 5; i++) {\n      float fi = float(i);\n      float h = hash11(fi * 2.9 + 8.0);\n      float age = t - (26.0 + 0.5 * fi);\n      vec2 bc = vec2(0.255 + 0.04 * (h - 0.5), 0.07 - 0.03 * h) + vec2(0.01 * sin(age * 7.0), 0.14 * age);\n      float on = step(0.0, age) * step(bc.y, WATER_Y - 0.004);\n      float bd = length(p - bc);\n      col += vec3(0.5, 0.53, 0.65) * on * (1.0 - smoothstep(0.0, 1.5 * px, abs(bd - 0.0035)));\n    }\n  }\n\n  // ---------------- ClawedCode's head over the rim ----------------\n  float startle = smoothstep(T_BURST, T_BURST + 0.15, t) * (1.0 - smoothstep(T_BURST + 1.6, T_BURST + 3.6, t));\n  vec2 hc = CAT_HEAD + vec2(0.0, 0.003 * sin(tau * 3.0)) + vec2(0.008, 0.014) * startle;\n  vec2 hl = rotate2(p - hc, -0.1);\n  float headD = catHeadSdf(hl, startle);\n  headD -= 0.0016 * valueNoise(hl * 300.0);\n  if (headD \u003c 0.02) {\n    vec3 fur = vec3(0.012, 0.011, 0.015) + vec3(0.006, 0.006, 0.008) * valueNoise(hl * 120.0);\n    float headRim = exp(-pow((headD + 0.0015) / 0.0026, 2.0));\n    fur += vec3(0.11, 0.11, 0.2) * headRim * smoothstep(-0.05, 0.06, hl.y);\n    // the drop's light on the chin: its fringe color while it holds, the gob's heat later\n    vec3 dropLight = vec3(0.45, 0.38, 0.62) * oldDrop * (0.6 + 0.4 * load) + hot * glow * 0.5;\n    fur += dropLight * headRim * smoothstep(0.02, -0.06, hl.y) * 0.5;\n    fur = mix(fur, vec3(0.06, 0.035, 0.045), 1.0 - smoothstep(-px, px, catEarInner(hl, startle)));\n    col = mix(col, fur, 1.0 - smoothstep(-px, px, headD));\n\n    // eyes: amber, pupils wide in the dark, following what happens to the drop\n    vec2 look = normalize(vec2(-0.75, -0.5));\n    if (t > T_DIP && t \u003c T_BURST) {\n      look = normalize(mix(look, vec2(-0.25, -0.95), ease((t - T_DIP) / 3.0)));\n    }\n    if (t > T_PLUNGE - 0.5) {\n      look = normalize(mix(vec2(-0.6, 0.15), vec2(-0.75, -0.5), ease((t - T_PLUNGE) / 2.5)));\n    }\n    float blink = 1.0 - 0.92 * exp(-pow((t - 57.6) / 0.16, 2.0)) - 0.92 * exp(-pow((t - 12.4) / 0.08, 2.0));\n    float open = blink * (1.0 + 0.18 * startle);\n    float pupilR = 0.011 + 0.006 * startle;\n    for (int e = 0; e \u003c 2; e++) {\n      float sx = float(e) * 2.0 - 1.0;\n      vec2 el = hl - vec2(0.039 * sx, -0.002);\n      el = rotate2(el, 0.12 * sx);\n      float eyeD = (length(el / vec2(0.025, 0.0185 * open + 0.0005)) - 1.0) * 0.0185;\n      float eyeM = 1.0 - smoothstep(-px, px, eyeD);\n      vec3 iris = mix(vec3(0.7, 0.3, 0.03), vec3(1.0, 0.6, 0.1), smoothstep(-0.02, 0.012, el.y));\n      vec2 pc = el - look * 0.0075;\n      float pupil = 1.0 - smoothstep(-px, px, length(pc / vec2(0.85, 1.0)) - pupilR);\n      iris = mix(iris, vec3(0.008), pupil);\n      vec2 sh = el - vec2(-0.008, 0.007);\n      iris += (vec3(0.9) + dropLight) * 0.6 * (1.0 - smoothstep(0.0, 1.5 * px, length(sh) - 0.0035));\n      col = mix(col, iris, eyeM);\n    }\n    // nose and whiskers\n    float nose = sdTriangle(hl, vec2(-0.008, -0.03), vec2(0.008, -0.03), vec2(0.0, -0.04));\n    col = mix(col, vec3(0.05, 0.035, 0.04), 1.0 - smoothstep(-px, px, nose));\n    float whisker = 1.0;\n    for (int k = 0; k \u003c 6; k++) {\n      float fk = float(k);\n      float sx = fk \u003c 2.5 ? -1.0 : 1.0;\n      float j = mod(fk, 3.0);\n      vec2 wa = vec2(0.03 * sx, -0.046 - 0.005 * j);\n      vec2 wb = wa + vec2(0.13 * sx, 0.012 - 0.024 * j - 0.01 * startle);\n      whisker = min(whisker, sdTaper(hl, wa, wb, 0.0011, 0.0004));\n    }\n    col = mix(col, vec3(0.62, 0.62, 0.68), 0.6 * (1.0 - smoothstep(-px, px, whisker)));\n  }\n\n  // ---------------- grade ----------------\n  col = max(col, vec3(0.0));\n  col = col * (2.51 * col + 0.03) / (col * (2.43 * col + 0.59) + 0.14);\n  col = pow(clamp(col, 0.0, 1.0), vec3(1.0 / 2.2));\n  gl_FragColor = vec4(col, 1.0);\n}";
 
-    const shell = g.createLinearGradient(0, 96, 0, 730);
-    shell.addColorStop(0, '#1e222d'); shell.addColorStop(0.32, '#15181f'); shell.addColorStop(1, '#0b0d12');
-    g.beginPath();
-    roundSub(g, 56, 96, 788, 634, 52);
-    roundSub(g, GX, GY, GW, GH, GR);
-    g.fillStyle = shell; g.fill('evenodd');
-
-    g.beginPath(); roundSub(g, GX - 4, GY - 4, GW + 8, GH + 8, GR + 4);
-    g.lineWidth = 8; g.strokeStyle = 'rgba(5,7,11,0.92)'; g.stroke();
-    g.beginPath(); roundSub(g, GX - 10, GY - 10, GW + 20, GH + 20, GR + 9);
-    g.lineWidth = 2; g.strokeStyle = 'rgba(188,204,228,0.11)'; g.stroke();
-
-    g.fillStyle = 'rgba(0,0,0,0.55)';
-    for (let i = 0; i < 16; i++) g.fillRect(192 + i * 28, 690, 18, 6);
-
-    const bolts = [[88, 128], [812, 128], [88, 700], [812, 700]];
-    for (const p of bolts) {
-      g.fillStyle = '#232834'; g.beginPath(); g.arc(p[0], p[1], 6, 0, TAU); g.fill();
-      g.strokeStyle = 'rgba(0,0,0,0.6)'; g.lineWidth = 1.6;
-      g.beginPath(); g.moveTo(p[0] - 3.6, p[1] - 2); g.lineTo(p[0] + 3.6, p[1] + 2); g.stroke();
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
     }
-    g.fillStyle = '#0a0c11'; g.beginPath(); g.arc(770, 688, 9, 0, TAU); g.fill();
+    return shader;
+  }
 
-    // granular stipple, held to the stationary plastic
-    g.save();
-    g.beginPath(); roundSub(g, 56, 96, 788, 634, 52); roundSub(g, GX, GY, GW, GH, GR);
-    g.clip('evenodd');
-    for (let i = 0; i < 2600; i++) {
-      const x = 56 + random() * 788, y = 96 + random() * 634;
-      g.fillStyle = random() < 0.5
-        ? 'rgba(226,238,255,' + (0.02 + random() * 0.05).toFixed(3) + ')'
-        : 'rgba(0,0,0,' + (0.05 + random() * 0.12).toFixed(3) + ')';
-      g.fillRect(x, y, 1.5, 1.5);
-    }
-    g.restore();
-    return c;
-  })();
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
 
-  // ------------------------------------------------ cached scanlines and sheen
-  const scanLayer = (() => {
-    const c = surface(GW, GH), g = c.getContext('2d');
-    g.fillStyle = 'rgba(0,0,0,0.26)';
-    for (let y = 0; y < GH; y += 4) g.fillRect(0, y, GW, 2);
-    return c;
-  })();
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
 
-  const sheenLayer = (() => {
-    const c = surface(GW, GH), g = c.getContext('2d');
-    const v = g.createRadialGradient(GW * 0.5, GH * 0.46, GH * 0.26, GW * 0.5, GH * 0.5, GH * 0.98);
-    v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.6)');
-    g.fillStyle = v; g.fillRect(0, 0, GW, GH);
-    const s = g.createLinearGradient(0, 0, GW * 0.8, GH);
-    s.addColorStop(0, 'rgba(214,230,255,0.10)');
-    s.addColorStop(0.22, 'rgba(214,230,255,0.02)');
-    s.addColorStop(0.5, 'rgba(0,0,0,0)');
-    g.fillStyle = s; g.fillRect(0, 0, GW, GH * 0.62);
-    return c;
-  })();
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
 
-  // ------------------------------------------------------ signal plane + cache
-  const sc = surface(SW, SH);
-  const sctx = sc.getContext('2d');
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
 
-  const signalBg = (() => {
-    const c = surface(SW, SH), g = c.getContext('2d');
-    const bg = g.createLinearGradient(0, 0, 0, SH);
-    bg.addColorStop(0, '#070a14'); bg.addColorStop(0.55, '#0b1020'); bg.addColorStop(1, '#06080f');
-    g.fillStyle = bg; g.fillRect(0, 0, SW, SH);
-    g.fillStyle = 'rgba(78,118,158,0.10)';
-    for (let y = 8; y < SH; y += 16) for (let x = 8; x < SW; x += 16) g.fillRect(x, y, 1, 1);
-    for (let i = 0; i < 2000; i++) {
-      const x = random() * SW, y = random() * SH;
-      const edge = Math.max(Math.abs(x / SW - 0.5), Math.abs(y / SH - 0.5)) * 2;
-      if (random() > edge * edge) continue;
-      g.fillStyle = 'rgba(150,190,230,' + (0.02 + random() * 0.06).toFixed(3) + ')';
-      g.fillRect(x, y, 1.4, 1.4);
-    }
-    return c;
-  })();
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
 
-  const rotoTile = (() => {
-    const c = surface(72, 72), g = c.getContext('2d');
-    g.fillStyle = '#0c1326'; g.fillRect(0, 0, 72, 72);
-    g.strokeStyle = 'rgba(255,176,74,0.85)'; g.lineWidth = 9;
-    g.beginPath(); g.moveTo(-10, 30); g.lineTo(42, 82); g.stroke();
-    g.beginPath(); g.moveTo(30, -10); g.lineTo(82, 42); g.stroke();
-    g.strokeStyle = 'rgba(42,210,232,0.5)'; g.lineWidth = 3;
-    g.beginPath(); g.moveTo(72, 0); g.lineTo(0, 72); g.stroke();
-    g.fillStyle = 'rgba(154,107,255,0.85)'; g.beginPath(); g.arc(54, 18, 7, 0, TAU); g.fill();
-    g.fillStyle = 'rgba(236,244,255,0.8)'; g.fillRect(8, 8, 5, 5);
-    return c;
-  })();
-  const rotoPattern = sctx.createPattern(rotoTile, 'repeat');
+      gl.useProgram(program);
 
-  // ------------------------------------------------------------- 5x7 bitmap font
-  const FONT = {
-    A: ['.###.', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-    B: ['####.', '#...#', '#...#', '####.', '#...#', '#...#', '####.'],
-    C: ['.####', '#....', '#....', '#....', '#....', '#....', '.####'],
-    D: ['####.', '#...#', '#...#', '#...#', '#...#', '#...#', '####.'],
-    E: ['#####', '#....', '#....', '####.', '#....', '#....', '#####'],
-    F: ['#####', '#....', '#....', '####.', '#....', '#....', '#....'],
-    G: ['.####', '#....', '#....', '#..##', '#...#', '#...#', '.###.'],
-    H: ['#...#', '#...#', '#...#', '#####', '#...#', '#...#', '#...#'],
-    I: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '#####'],
-    L: ['#....', '#....', '#....', '#....', '#....', '#....', '#####'],
-    N: ['#...#', '##..#', '#.#.#', '#..##', '#...#', '#...#', '#...#'],
-    O: ['.###.', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    P: ['####.', '#...#', '#...#', '####.', '#....', '#....', '#....'],
-    R: ['####.', '#...#', '#...#', '####.', '#.#..', '#..#.', '#...#'],
-    S: ['.####', '#....', '#....', '.###.', '....#', '....#', '####.'],
-    T: ['#####', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..'],
-    U: ['#...#', '#...#', '#...#', '#...#', '#...#', '#...#', '.###.'],
-    W: ['#...#', '#...#', '#...#', '#.#.#', '#.#.#', '##.##', '#...#'],
-    Y: ['#...#', '#...#', '.#.#.', '..#..', '..#..', '..#..', '..#..'],
-    0: ['.###.', '#...#', '#..##', '#.#.#', '##..#', '#...#', '.###.'],
-    2: ['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####'],
-    4: ['#...#', '#...#', '#...#', '#####', '....#', '....#', '....#'],
-    ' ': ['.....', '.....', '.....', '.....', '.....', '.....', '.....'],
-    ',': ['.....', '.....', '.....', '.....', '..##.', '..##.', '.#...'],
-    '.': ['.....', '.....', '.....', '.....', '.....', '.##..', '.##..']
-  };
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
 
-  const TEXT = 'GREETINGS TO NULL CARRIER . THE LAST BBS . 2400 BAUD CHOIR . SYSOP OF NOWHERE . AND YOU, STILL WATCHING ';
-  const PXL = 5, CW = 6 * PXL;
-  const CHARS = (() => {
-    const cache = {};
-    for (const k in FONT) {
-      const rows = FONT[k], pts = [];
-      for (let r = 0; r < 7; r++) for (let x = 0; x < 5; x++) if (rows[r][x] === '#') pts.push([x, r]);
-      cache[k] = pts;
-    }
-    return TEXT.split('').map((ch) => cache[ch] || []);
-  })();
-  const TRAVEL = CHARS.length * CW + SW;
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
 
-  // ----------------------------------------------------------- ribbon geometry
-  const RIBBONS = [
-    { hue: [42, 210, 232], k: 1.00, n: 2, ph: 0.0, amp: 72, off: -34, half: 17 },
-    { hue: [255, 176, 74], k: 1.70, n: 3, ph: 2.1, amp: 56, off: 6, half: 20 },
-    { hue: [154, 107, 255], k: 2.60, n: 5, ph: 4.2, amp: 38, off: 44, half: 13 }
-  ];
+      // Public Pages controls are installed only in the exported document.
+      // Unset GLSL delta uniforms stay zero throughout ordinary capture.
+      if (window.__applyAnimationControls) window.__applyAnimationControls(gl, program);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-  const bandY = (p) => SH * (0.34 + 0.12 * Math.cos(p * TAU));
-  const tiltOf = (p) => -70 * Math.cos(p * TAU);
-  const focusX = (p) => SW * (0.5 - 0.32 * Math.cos(p * TAU));
+      return canvas.toDataURL('image/png');
+    };
 
-  // three wavefronts at three scales; the short one surges as the long one collapses
-  const ribbonEnv = (i, p) => {
-    if (i === 0) return win(p, 0.04, 0.17, 0.90, 1.0);
-    if (i === 1) return win(p, 0.17, 0.30, 0.82, 0.96);
-    return Math.max(win(p, 0.25, 0.38, 0.68, 0.84), 0.92 * win(p, 0.84, 0.90, 0.95, 1.0));
-  };
-
-  const ribbonPoints = (i, t) => {
-    const p = tphase(t), tau = p * TAU, r = RIBBONS[i];
-    const env = 0.09 + 0.91 * ribbonEnv(i, p);
-    const sep = 1 - 0.66 * win(p, 0.14, 0.32, 0.60, 0.80);
-    const by = bandY(p), tl = tiltOf(p), fx = focusX(p);
-    const tearQ = win(p, 0.46, 0.53, 0.66, 0.74);
-    const pts = [];
-    for (let s = 0; s <= 60; s++) {
-      const x = (s / 60) * SW;
-      const d = (x - fx) / (SW * 0.40);
-      const gain = 0.42 + 0.86 * Math.exp(-d * d);
-      let y = by + r.off * sep + tl * (x / SW - 0.5)
-        + env * r.amp * gain * Math.sin(r.k * (x / SW) * TAU + tau * r.n + r.ph);
-      const q = tearQ * clamp01(0.5 + 0.7 * Math.sin((x / SW) * TAU * 2 + tau * 4));
-      if (q > 0) y = y * (1 - q) + Math.round(y / 15) * 15 * q;
-      pts.push(x, fold(y, 10, 404));
-    }
-    return pts;
-  };
-
-  const strokePoly = (c, pts, dy, width, color, alpha) => {
-    c.globalAlpha = alpha; c.strokeStyle = color; c.lineWidth = width;
-    c.lineJoin = 'round'; c.lineCap = 'round';
-    c.beginPath();
-    c.moveTo(pts[0], pts[1] + dy);
-    for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1] + dy);
-    c.stroke();
-  };
-
-  const lockEvent = (p) => {
-    const seg = p * 12, i = Math.floor(seg), f = seg - i;
-    const s = 0.3 + 0.7 * Math.abs(Math.sin(i * 7.37));
-    return s * Math.exp(-f * 11) * Math.sin(f * 34);
-  };
-
-  const BLINKS = [0.105, 0.37, 0.615, 0.885];
-  const blink = (p) => {
-    let v = 0;
-    for (let i = 0; i < BLINKS.length; i++) {
-      const d = (p - BLINKS[i]) / 0.016;
-      v = Math.max(v, Math.exp(-d * d * 3));
-    }
-    return v;
-  };
-
-  // ---------------------------------------------------------- the signal itself
-  const drawSignal = (t) => {
-    const p = tphase(t), tau = p * TAU;
-    sctx.setTransform(1, 0, 0, 1, 0, 0);
-    sctx.globalCompositeOperation = 'source-over';
-    sctx.globalAlpha = 1;
-    sctx.drawImage(signalBg, 0, 0);
-
-    const beat = (p * 125) % 1;                 // 125 beats across the loop
-    const kick = Math.exp(-beat * 5.5);
-    const rz = win(p, 0.44, 0.545, 0.70, 0.80);
-    const dim = 1 - 0.82 * rz;
-
-    // carrier lock
-    const carrier = win(p, 0.002, 0.016, 0.10, 0.20);
-    if (carrier > 0.004) {
-      const by = bandY(p), tl = tiltOf(p);
-      sctx.globalAlpha = carrier * 0.85;
-      sctx.strokeStyle = '#8ff2ff'; sctx.lineWidth = 2;
-      sctx.beginPath(); sctx.moveTo(0, by - tl * 0.5); sctx.lineTo(SW, by + tl * 0.5); sctx.stroke();
-      sctx.globalAlpha = 1;
-    }
-
-    // copper ribbons: two analytic echoes, then shaded layers, depth-sorted
-    const order = [0, 1, 2].sort((a, b) => Math.sin(tau * 2 + a * 2.094) - Math.sin(tau * 2 + b * 2.094));
-    for (let oi = 0; oi < order.length; oi++) {
-      const i = order[oi], r = RIBBONS[i];
-      const flat = 'rgb(' + r.hue[0] + ',' + r.hue[1] + ',' + r.hue[2] + ')';
-      sctx.globalCompositeOperation = 'lighter';
-      for (let e = 1; e <= 2; e++) {
-        strokePoly(sctx, ribbonPoints(i, t - e * 0.42), 0, r.half * 1.5, flat, (0.15 / e) * dim);
-      }
-      sctx.globalCompositeOperation = 'source-over';
-      const pts = ribbonPoints(i, t);
-      for (let li = 0; li <= 10; li++) {
-        const k = ((li / 10) * 2 - 1) * r.half;
-        const prof = 1 - Math.pow(Math.abs(k) / r.half, 1.5);
-        const core = clamp01((prof - 0.84) / 0.16);
-        const base = Math.pow(prof, 1.15);
-        const cr = Math.min(255, r.hue[0] * base * 0.95 + 232 * core * 0.8 + 8);
-        const cg = Math.min(255, r.hue[1] * base * 0.95 + 240 * core * 0.8 + 10);
-        const cb = Math.min(255, r.hue[2] * base * 0.95 + 236 * core * 0.8 + 14);
-        strokePoly(sctx, pts, k, r.half / 4.2 + 1.6,
-          'rgb(' + (cr | 0) + ',' + (cg | 0) + ',' + (cb | 0) + ')', dim);
-      }
-    }
-    sctx.globalAlpha = 1;
-
-    // signature moment: the whole field becomes one slow rotozoom
-    if (rz > 0.005) {
-      sctx.save();
-      sctx.globalAlpha = rz * 0.92;
-      sctx.translate(SW * 0.5, SH * 0.42);
-      sctx.rotate(tau * 2 + 0.5 * Math.sin(tau));
-      const z = 2.3 + 1.25 * Math.sin(tau * 3);
-      sctx.scale(z, z);
-      sctx.fillStyle = rotoPattern;
-      sctx.fillRect(-900, -900, 1800, 1800);
-      sctx.restore();
-      sctx.globalAlpha = 1;
-    }
-
-    // raster tears
-    const tearW = win(p, 0.46, 0.51, 0.69, 0.76);
-    if (tearW > 0.01) {
-      for (let i = 0; i < 3; i++) {
-        const yy = ((p * 4 + i / 3) % 1) * SH;
-        const a = tearW * (0.5 + 0.5 * Math.sin(tau * 6 + i * 2.1));
-        sctx.globalAlpha = a * 0.5; sctx.fillStyle = '#fff7ea';
-        sctx.fillRect(0, yy, SW, 2 + 2 * (i % 2));
-        sctx.globalAlpha = a * 0.4; sctx.fillStyle = '#04060c';
-        sctx.fillRect(0, yy + 4 + 2 * (i % 2), SW, 3);
-      }
-      sctx.globalAlpha = 1;
-    }
-
-    // greetings scroller — one pass, stuttering on NOWHERE
-    const stut = win(p, 0.60, 0.635, 0.70, 0.74)
-      * (Math.round(Math.sin(p * TAU * 19) * 3) / 3) * 0.013;
-    const sx = SW - (p + stut) * TRAVEL;
-    const baseY = SH * 0.735 - 2 * kick;
-    const amp = 6 + 10 * win(p, 0.16, 0.34, 0.80, 0.95);
-    const cells = [];
-    for (let i = 0; i < CHARS.length; i++) {
-      const cx = sx + i * CW;
-      if (cx < -CW || cx > SW) continue;
-      const glyph = CHARS[i];
-      if (!glyph.length) continue;
-      const cy = baseY + amp * Math.sin((cx / SW) * TAU * 1.5 + tau * 8);
-      for (let j = 0; j < glyph.length; j++) {
-        cells.push(cx + glyph[j][0] * PXL, cy + glyph[j][1] * PXL);
-      }
-    }
-    if (cells.length) {
-      sctx.globalAlpha = 0.7; sctx.fillStyle = '#20100a';
-      sctx.beginPath();
-      for (let i = 0; i < cells.length; i += 2) sctx.rect(cells[i] + 3, cells[i + 1] + 4, PXL, PXL);
-      sctx.fill();
-      const tg = sctx.createLinearGradient(0, baseY - 14, 0, baseY + 40);
-      tg.addColorStop(0, '#fff3dd'); tg.addColorStop(0.34, '#ffcb77');
-      tg.addColorStop(0.62, '#ff9a2b'); tg.addColorStop(1, '#b95a14');
-      sctx.globalAlpha = 1; sctx.fillStyle = tg;
-      sctx.beginPath();
-      for (let i = 0; i < cells.length; i += 2) sctx.rect(cells[i], cells[i + 1], PXL, PXL);
-      sctx.fill();
-    }
-
-    // the lane rules carry the beat
-    sctx.globalAlpha = 0.16 + 0.46 * kick; sctx.fillStyle = '#2ad2e6';
-    sctx.fillRect(0, SH * 0.735 + 46, SW, 2);
-    sctx.globalAlpha = 0.09 + 0.2 * kick;
-    sctx.fillRect(0, SH * 0.735 - 24, SW, 1);
-    sctx.globalAlpha = 1;
-  };
-
-  // --------------------------------------------- the watcher, held in the glass
-  const drawWatcher = (c, p) => {
-    const solid = 0.26 + 0.2 * win(p, 0.12, 0.34, 0.86, 0.995);
-    const open = 1 - 0.93 * blink(p);
-    c.save();
-    c.translate(600, 318);
-
-    c.fillStyle = 'rgba(5,7,13,' + solid.toFixed(3) + ')';
-    c.beginPath(); c.ellipse(4, 112, 92, 78, 0, 0, TAU); c.fill();
-    c.beginPath(); c.ellipse(0, 0, 56, 48, 0, 0, TAU); c.fill();
-    c.beginPath(); c.moveTo(-44, -26); c.lineTo(-34, -84); c.lineTo(-2, -40); c.closePath(); c.fill();
-    c.beginPath(); c.moveTo(44, -26); c.lineTo(34, -84); c.lineTo(2, -40); c.closePath(); c.fill();
-
-    c.strokeStyle = 'rgba(226,236,250,' + (0.06 + 0.07 * solid).toFixed(3) + ')';
-    c.lineWidth = 1.6;
-    c.beginPath(); c.ellipse(0, 0, 56, 48, 0, 0, TAU); c.stroke();
-    c.beginPath(); c.moveTo(-44, -26); c.lineTo(-34, -84); c.lineTo(-2, -40); c.stroke();
-    c.beginPath(); c.moveTo(44, -26); c.lineTo(34, -84); c.lineTo(2, -40); c.stroke();
-    c.beginPath(); c.ellipse(4, 112, 92, 78, 0, 0, TAU); c.stroke();
-
-    c.strokeStyle = 'rgba(226,236,250,0.07)'; c.lineWidth = 1.1;
-    for (let i = -1; i <= 1; i++) {
-      c.beginPath(); c.moveTo(-18, 24 + i * 5); c.lineTo(-92, 16 + i * 13); c.stroke();
-      c.beginPath(); c.moveTo(18, 24 + i * 5); c.lineTo(92, 16 + i * 13); c.stroke();
-    }
-
-    const eyes = [-21, 20];
-    for (let i = 0; i < 2; i++) {
-      const ex = eyes[i];
-      const glow = c.createRadialGradient(ex, -4, 1, ex, -4, 26);
-      glow.addColorStop(0, 'rgba(255,196,96,0.9)');
-      glow.addColorStop(0.35, 'rgba(255,150,40,0.32)');
-      glow.addColorStop(1, 'rgba(255,140,30,0)');
-      c.globalCompositeOperation = 'lighter';
-      c.fillStyle = glow;
-      c.beginPath(); c.ellipse(ex, -4, 26, 20 * open + 2, 0, 0, TAU); c.fill();
-      c.globalCompositeOperation = 'source-over';
-      c.fillStyle = 'rgba(255,186,74,0.9)';
-      c.beginPath(); c.ellipse(ex, -4, 12, 13 * open + 0.6, 0, 0, TAU); c.fill();
-      c.fillStyle = 'rgba(12,8,4,0.85)';
-      c.beginPath(); c.ellipse(ex, -4, 3.2, (13 * open + 0.6) * 0.8, 0, 0, TAU); c.fill();
-    }
-    c.restore();
-  };
-
-  // ------------------------------------------------- barrel strips (cached map)
-  const mapV = (v) => {
-    const u = v * 2 - 1;
-    return GY + GH * 0.5 + (GH / 2) * (0.97 * u + 0.03 * u * u * u);
-  };
-  const STRIPS = (() => {
-    const n = 68, out = [];
-    for (let i = 0; i < n; i++) {
-      const v0 = i / n, v1 = (i + 1) / n, v = (v0 + v1) / 2, u = v * 2 - 1;
-      const dw = GW * (1 - 0.052 * u * u);
-      const y0 = mapV(v0), y1 = mapV(v1);
-      out.push({ v: v, sy: v0 * SH, sh: (v1 - v0) * SH, dy: y0, dh: y1 - y0 + 1, dw: dw, dx: GX + (GW - dw) / 2 });
-    }
-    return out;
-  })();
-
-  window.renderFrame = function (time) {
-    const t = ((time % DURATION) + DURATION) % DURATION;
-    const p = t / DURATION;
-    const tau = p * TAU;
-
-    drawSignal(t);
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#04050a'; ctx.fillRect(0, 0, W, H);
-    ctx.drawImage(roomLayer, 0, 0);
-
-    ctx.save();
-    ctx.beginPath(); roundSub(ctx, GX, GY, GW, GH, GR); ctx.clip();
-    ctx.fillStyle = '#05070d'; ctx.fillRect(GX, GY, GW, GH);
-
-    const lock = lockEvent(p);
-    const tearW = win(p, 0.46, 0.52, 0.68, 0.76);
-    for (let i = 0; i < STRIPS.length; i++) {
-      const s = STRIPS[i];
-      const band = Math.floor(s.v * 7);
-      const hit = Math.abs(Math.sin(s.v * TAU * 1.5 + tau * 2)) > 0.72 ? 1 : 0.12;
-      const shift = 13 * lock * Math.sin(s.v * 9.1 + tau * 3)
-        + tearW * 16 * Math.sin(band * 2.7 + tau * 9) * hit;
-      ctx.drawImage(sc, 0, s.sy, SW, s.sh, s.dx + shift, s.dy, s.dw, s.dh);
-    }
-
-    drawWatcher(ctx, p);
-    ctx.globalAlpha = 1;
-    ctx.drawImage(scanLayer, GX, GY);
-    ctx.drawImage(sheenLayer, GX, GY);
-    ctx.restore();
-
-    ctx.drawImage(bezelLayer, 0, 0);
-
-    const spill = ctx.createRadialGradient(450, GY + GH * 0.5, GH * 0.42, 450, GY + GH * 0.5, GH * 1.25);
-    spill.addColorStop(0, 'rgba(255,172,72,0.12)');
-    spill.addColorStop(0.5, 'rgba(60,180,210,0.05)');
-    spill.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.6 + 0.25 * Math.sin(tau * 2);
-    ctx.fillStyle = spill; ctx.fillRect(0, 0, W, H);
-
-    const ledA = 0.45 + 0.55 * Math.exp(-((p * 125) % 1) * 5.5);
-    const led = ctx.createRadialGradient(770, 688, 0, 770, 688, 20);
-    led.addColorStop(0, 'rgba(255,190,90,' + (0.95 * ledA).toFixed(3) + ')');
-    led.addColorStop(0.3, 'rgba(255,150,50,' + (0.35 * ledA).toFixed(3) + ')');
-    led.addColorStop(1, 'rgba(255,140,40,0)');
-    ctx.globalAlpha = 1; ctx.fillStyle = led;
-    ctx.fillRect(748, 666, 44, 44);
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
-
-    return canvas.toDataURL('image/png');
-  };
-
-  window.ready = true;
-})();
-
-
-
+    window.ready = true;
+  }
+}
 
 document.body.appendChild(canvas);
 let startTime = Date.now();
 function animate() {
   const time = (Date.now() - startTime) / 1000;
-  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
-  window.renderFrame(time % loopDuration);
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
   requestAnimationFrame(animate);
 }
 animate();
 
 window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
 
-window.ready = true;
+
+
   </script>
 <script type="module">
 (async () => {
   window.strudelState = 'loading';
   window.strudelError = null;
   try {
-    const CONFIG = JSON.parse("{\"code\":\"// BPM: 124\\n// DURATION: 60\\n// FORM: acquisition 0-5 | greetings drive 5-14 | interference breakdown 14-23 | reacquisition loop 23-31\\n// TONAL CENTER: F minor\\n// MOTIF: F4 Ab4 C5 Eb5 C5 Ab4 — one-bar cell: F4 eighth on 1, Ab4 eighth on 1.5, C5 quarter on 2, Eb5 eighth on 3, C5 eighth on 3.5, Ab4 quarter on 4\\n// HARMONIC PLAN: Fm7 | Dbmaj7 | Abadd9 | Ebsus2 four-bar loop; interference reduces to F and Eb pedal tones for four cycles before the full loop returns; the final cycle re-states the filtered Fm7 arpeggio in the cycle-0 phase and timbre\\n// GROOVE: RolandTR909 — four-on-the-floor kick on beats 1, 2, 3 and 4; clap on 2 and 4; closed hats on every offbeat eighth; open hat on beat 4.5; short snare fill only at section boundaries; bright, driving and machine-tight with slight swing on the hats\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst fill = s(\\\"~ ~ ~ ~ ~ ~ [sd sd] [sd sd sd]\\\").bank(\\\"RolandTR909\\\").velocity(0.5)\\nconst dAcq = stack(\\n  s(\\\"bd*4\\\").velocity(0.9),\\n  s(\\\"~ cp ~ cp\\\").velocity(0.5),\\n  s(\\\"~ hh ~ hh ~ hh ~ hh\\\").velocity(0.38).late(0.015)\\n).bank(\\\"RolandTR909\\\").lpf(2800)\\nconst dFull = stack(\\n  s(\\\"bd*4\\\").velocity(1),\\n  s(\\\"~ cp ~ cp\\\").velocity(0.62),\\n  s(\\\"~ hh ~ hh ~ hh ~ ~\\\").velocity(0.46).late(0.015),\\n  s(\\\"~ ~ ~ ~ ~ ~ ~ oh\\\").velocity(0.4).late(0.015)\\n).bank(\\\"RolandTR909\\\").lpf(12000)\\nconst dThin = stack(\\n  s(\\\"bd ~ ~ bd ~ ~ bd ~\\\").velocity(0.95),\\n  s(\\\"~ ~ hh ~ ~ ~ hh ~\\\").velocity(0.4).late(0.015),\\n  s(\\\"~ ~ ~ ~ cp ~ ~ ~\\\").velocity(0.46).mask(\\\"\u003c0 1>\\\")\\n).bank(\\\"RolandTR909\\\").lpf(3400)\\nconst dOut = stack(\\n  s(\\\"bd*4\\\").velocity(0.95),\\n  s(\\\"~ cp ~ cp\\\").velocity(0.52),\\n  s(\\\"~ hh ~ hh ~ hh ~ oh\\\").velocity(0.42).late(0.015)\\n).bank(\\\"RolandTR909\\\").lpf(\\\"\u003c9000 7000 5600 4600 3800 3200 2800>\\\")\\n\\nconst motif = note(\\\"f4 ab4 c5@2 eb5 c5 ab4@2\\\")\\nconst motifx2 = motif.fast(2)\\nconst motifOct = motif.fast(2).add(note(\\\"\u003c0 12>\\\"))\\nconst motifFrag = note(\\\"\u003c[f4 ab4 ~ ~] [c5 eb5 c5 ab4] [f5 ab5 ~ ~] [eb6 c6 ab5 ~]>\\\").fast(2).clip(0.6)\\nconst head = note(\\\"[f4 ab4] ~ [f4 ab4] ~\\\")\\n\\nconst bassLoop = note(\\\"\u003c[f1 ~ f1 c2 ~ f1 ~ c2] [db1 ~ db1 ab1 ~ db1 ~ ab1] [ab1 ~ ab1 eb2 ~ ab1 ~ eb2] [eb1 ~ eb1 bb1 ~ eb1 ~ bb1]>\\\")\\nconst bassPedal = note(\\\"\u003c[f1 ~ f1 ~ f1 ~ f1 f1] [eb1 ~ eb1 ~ eb1 ~ eb1 eb1]>\\\")\\n\\nconst arpOf = (c) => stack(note(c).s(\\\"sawtooth\\\").velocity(0.4), note(c).s(\\\"square\\\").velocity(0.24).detune(0.12))\\nconst arp = arpOf(\\\"\u003c[f4 ab4 c5 eb5]*4 [db4 f4 ab4 c5]*4 [ab3 c4 eb4 bb4]*4 [eb4 f4 bb4 eb5]*4>\\\").sometimesBy(0.12, x => x.add(note(12)))\\nconst arpFrag = arpOf(\\\"\u003c[f4 ab4 c5 eb5] [eb4 f4 bb4 eb5]>\\\").degradeBy(0.2)\\nconst arpHome = arpOf(\\\"[f4 ab4 c5 eb5]*4\\\")\\n\\nconst wash = s(\\\"~ ~ ~ white ~ ~ ~ [white white]\\\").hpf(5200).velocity(0.5)\\nconst burst = s(\\\"[white white white white] ~ ~ ~\\\").hpf(6000).velocity(0.6)\\nconst quiet = s(\\\"~\\\")\\n\\n$: arrange(\\n  [4, dAcq],\\n  [1, stack(dAcq, fill.lpf(3000))],\\n  [8, dFull],\\n  [1, stack(dFull, fill)],\\n  [7, dThin],\\n  [1, dFull],\\n  [1, stack(dFull, fill)],\\n  [7, dOut],\\n  [1, dAcq]\\n).gain(0.32)\\n\\n$: arrange(\\n  [5, bassLoop.mask(\\\"\u003c0 0 1 1 1>\\\")],\\n  [9, bassLoop],\\n  [4, bassPedal],\\n  [5, bassLoop],\\n  [8, bassLoop.mask(\\\"\u003c1 1 1 1 1 1 1 0>\\\")]\\n).s(\\\"square\\\").lpf(2200).lpq(4).adsr(\\\"0.004:0.14:0.1:0.06\\\").pan(0.5).gain(0.28)\\n\\n$: arrange(\\n  [5, arp.lpf(900)],\\n  [9, arp.lpf(3200)],\\n  [4, arpFrag.lpf(1700)],\\n  [5, arp.lpf(3600)],\\n  [7, arp.lpf(\\\"\u003c4000 3400 2800 2200 1700 1300 1050>\\\")],\\n  [1, arpHome.lpf(900)]\\n).lpq(7).adsr(\\\"0.003:0.07:0.08:0.05\\\").room(0.1).roomsize(0.5).gain(0.24)\\n\\n$: arrange(\\n  [3, head.velocity(0.34)],\\n  [2, motifx2.velocity(0.8)],\\n  [9, motifOct.velocity(0.95)],\\n  [7, motifFrag.velocity(0.8)],\\n  [2, motifx2.velocity(0.95)],\\n  [5, motifOct.velocity(0.85)],\\n  [2, head.velocity(0.6)],\\n  [1, quiet]\\n).s(\\\"square\\\").lpf(4800).lpq(5).adsr(\\\"0.004:0.12:0.3:0.08\\\").vib(5.5).vibmod(0.06).delay(0.22).delaytime(0.1875).delayfeedback(0.26).room(0.12).roomsize(0.55).gain(0.26)\\n\\n$: arrange(\\n  [5, wash],\\n  [1, burst],\\n  [8, quiet],\\n  [1, burst],\\n  [6, quiet],\\n  [1, burst],\\n  [1, quiet],\\n  [1, burst],\\n  [6, quiet],\\n  [1, wash]\\n).lpf(13000).adsr(\\\"0.002:0.07:0:0.05\\\").room(0.18).roomsize(0.5).gain(0.12)\",\"bpm\":124,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5166666666666667,\"cycles\":31.000000000000004,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 68\\n// DURATION: 60\\n// FORM: A cycles 0-2 | B cycles 2-6 | C cycles 6-9 | D cycles 9-14 | E cycles 14-17 (17 cycles of 240/68 s, one 4/4 bar each)\\n// TONAL CENTER: A Phrygian (A1 pedal, no third, no fifth until cycle 14)\\n// MOTIF: A3 Bb3 Eb4 E4 F4 — one struck attack on beat 1 sustaining all four beats, re-struck on the next downbeat, no internal subdivision; the cell advances by accretion from bar to bar\\n// HARMONIC PLAN: A (0-2) A1 pedal + held A3+Bb3 minor second; B (2-6) accretion over the same pedal — c2 +Eb4, c3 +E4, c4 +F4, c5 holds all five as the densest/loudest chord; C (6-9) release back to A3+Bb3 over A1 on the c6 downbeat, then the dyad thinned to a whisper for c7-8; D (9-14) faint dyad under an accelerating high line in c9, then from the c10 downbeat all sustained harmony is cut — no pedal, no cluster — leaving only unpitched impact and isolated glints A5 C6 D6 E6 G6 through c13; E (14-17) warm open fifth A1+E2 under a bar-long noise hiss in c14, the fifth fading in c15, and A3+Bb3 over A1 restored on the c16 downbeat\\n// PHRASE RULE: One sustained voice re-struck on every cycle downbeat; all event rhythm is short dry attacks placed on beats (metallic knock on load downbeats, one soft tick per beat in c8, the accelerating plink run in c9). Sustained voices change only on a cycle downbeat and only by adding or removing a whole voice — never by sliding a pitch; a new tone enters in the nearest free space above the current top note and is always doubled by a percussive attack, while a departure simply stops. Cycle 16 restores the exact cycle-0 state and takes no attack after beat 2, so the loop seam is inaudible.\\n\\n// pedal — A1/E2, one unchanging weight or absent; its disappearance in cycles 10-13 is the loudest thing here\\n$: note(\\\"\u003ca1 a1 a1 a1 a1 a1 a1 a1 a1 a1 ~ ~ ~ ~ [a1,e2] [a1,e2] a1>\\\")\\n  .sound(\\\"sine\\\")\\n  .lpf(190)\\n  .attack(0.5).decay(0.2).sustain(1).release(1.5)\\n  .pan(0.5)\\n  .gain(\\\"\u003c0.24 0.24 0.24 0.24 0.24 0.24 0.24 0.08 0.08 0.064 0 0 0 0 0.208 0.208 0.24>\\\")\\n\\n// tension cluster — the five motif pitches, only ever growing inward, re-struck every downbeat\\n$: note(\\\"\u003c[a3,bb3] [a3,bb3] [a3,bb3,eb4] [a3,bb3,eb4,e4] [a3,bb3,eb4,e4,f4] [a3,bb3,eb4,e4,f4] [a3,bb3] [a3,bb3] [a3,bb3] [a3,bb3] ~ ~ ~ ~ ~ ~ [a3,bb3]>\\\")\\n  .sound(\\\"sawtooth\\\")\\n  .lpf(1100).lpq(5)\\n  .attack(0.02).decay(0.1).sustain(0.75).release(1.2)\\n  .pan(0.47)\\n  .gain(\\\"\u003c0.135 0.135 0.147 0.155 0.165 0.177 0.123 0.069 0.064 0.049 0 0 0 0 0 0 0.135>\\\")\\n\\n// impact and noise — dry mechanical contact only: approach knock, four load ratchets, release thunk, the crack and its thud, the plunge hiss, the clink and the clack\\n$: s(\\\"\u003c[~ ~ white ~] ~ [white ~ ~ ~] [white ~ ~ ~] [white ~ ~ ~] [white ~ ~ ~] [white ~ ~ ~] ~ ~ ~ [white white ~ ~ ~ ~ ~ ~] ~ ~ ~ [white,[~ ~ ~ white]] [white ~ ~ ~] ~>\\\")\\n  .lpf(\\\"\u003c4200 4200 5200 5400 5600 6000 1400 1400 1400 1400 [7000 150 150 150 150 150 150 150] 1400 1400 1400 [2200 2200 2200 6500] 180 1400>\\\")\\n  .attack(\\\"\u003c0.002 0.002 0.002 0.002 0.002 0.002 0.002 0.002 0.002 0.002 [0.001 0.004 0.004 0.004 0.004 0.004 0.004 0.004] 0.002 0.002 0.002 [1.1 1.1 1.1 0.002] 0.004 0.002>\\\")\\n  .decay(\\\"\u003c0.05 0.05 0.055 0.055 0.06 0.065 0.09 0.05 0.05 0.05 [0.07 0.34 0.34 0.34 0.34 0.34 0.34 0.34] 0.05 0.05 0.05 [2.4 2.4 2.4 0.22] 0.2 0.05>\\\")\\n  .sustain(0)\\n  .pan(0.44)\\n  .gain(\\\"\u003c0.12 0 0.16 0.22 0.29 0.38 0.14 0 0 0 [0.5 2.4 0 0 0 0 0 0] 0 0 0 0.4 1.34 0>\\\")\\n\\n// glint — one bell-thin voice: per-beat ticks in cycle 8, the accelerating run in cycle 9, thinning sparse glints through cycle 13\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ [a5 c6 a5 c6] [a5 [c6 d6] [c6 d6 e6 g6] [c6 d6 e6 g6 c6 d6 e6 g6]] [~ e6 ~ g6] [~ d6 ~ a5] [~ ~ c6 ~] [~ ~ ~ a5] ~ ~ ~>\\\")\\n  .sound(\\\"triangle\\\")\\n  .hpf(900)\\n  .attack(0.003).decay(0.9).sustain(0).release(0.9)\\n  .room(0.25)\\n  .pan(0.62)\\n  .gain(\\\"\u003c0 0 0 0 0 0 0 0 0.11 [0.13 0.15 0.17 0.18] 0.17 0.13 0.1 0.07 0 0 0>\\\")\",\"bpm\":68,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.2833333333333333,\"cycles\":17,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
     const S = await import(CONFIG.cdn);
     window.StrudelLib = S;
     window.strudelConfig = CONFIG;
