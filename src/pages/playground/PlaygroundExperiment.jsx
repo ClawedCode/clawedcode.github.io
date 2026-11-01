@@ -16,6 +16,7 @@ const BellFoundry = lazy(() => import('../../components/playground/experiments/p
 const ExchangeNocturne = lazy(() => import('../../components/playground/experiments/linguistics/ExchangeNocturne'))
 const CairnSurvey = lazy(() => import('../../components/playground/experiments/physics/CairnSurvey'))
 const LetterlockPost = lazy(() => import('../../components/playground/experiments/linguistics/LetterlockPost'))
+const SmallHours = lazy(() => import('../../components/playground/experiments/consciousness/SmallHours'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -41,7 +42,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/BellFoundry.jsx',
       '!../../components/playground/experiments/linguistics/ExchangeNocturne.jsx',
       '!../../components/playground/experiments/physics/CairnSurvey.jsx',
-      '!../../components/playground/experiments/linguistics/LetterlockPost.jsx'
+      '!../../components/playground/experiments/linguistics/LetterlockPost.jsx',
+      '!../../components/playground/experiments/consciousness/SmallHours.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -58,7 +60,8 @@ const EXPERIMENT_COMPONENTS = {
   'bell-foundry': BellFoundry,
   'exchange-nocturne': ExchangeNocturne,
   'cairn-survey': CairnSurvey,
-  'letterlock-post': LetterlockPost
+  'letterlock-post': LetterlockPost,
+  'small-hours': SmallHours
 }
 
 const LoadingExperiment = ({ color }) => (
