@@ -1,0 +1,1976 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+
+(() => {
+  // ---------------------------------------------------------------------------
+  // Clock: 76 BPM, 19 bars of 240/76 s. Every section boundary sits on a bar line.
+  //   bars 0-3   1860, moonlight: a man sings "au clair de la lune", a bristle writes it into soot
+  //   bars 4-7   the sheet peels off the drum and waits 148 years in an archive
+  //   bars 8-9   2008: the scan plays the line twice too fast (a girl)
+  //   bar  10    stop, halve the speed
+  //   bars 11-14 the line read at the speed it was written (him); 1860 shows through
+  //   bars 15-18 back to the drum: a candle re-smokes the paper and dies; the moon returns
+  // ---------------------------------------------------------------------------
+  const DURATION = 60;
+  const BPM = 76;
+  const BEAT = 60 / BPM;
+  const BAR = 4 * BEAT;
+  const T_ARCHIVE = 4 * BAR;
+  const T_FAST = 8 * BAR;
+  const T_STOP = 10 * BAR;
+  const T_TRUE = 11 * BAR;
+  const T_CODA = 15 * BAR;
+  const TAU = Math.PI * 2;
+  const W = 900;
+  const H = 900;
+
+  const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const smooth = (a, b, x) => {
+    const k = clamp((x - a) / (b - a));
+    return k * k * (3 - 2 * k);
+  };
+  const easeInOut = k => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+  const mixc = (c1, c2, k) => [lerp(c1[0], c2[0], k), lerp(c1[1], c2[1], k), lerp(c1[2], c2[2], k)];
+  const css = (c, a = 1) => `rgba(${Math.round(clamp(c[0], 0, 255))},${Math.round(clamp(c[1], 0, 255))},${Math.round(clamp(c[2], 0, 255))},${a})`;
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm = a => {
+    const l = Math.hypot(a[0], a[1], a[2]) || 1;
+    return [a[0] / l, a[1] / l, a[2] / l];
+  };
+  const hash1 = n => {
+    let h = (n * 374761393 + 668265263) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+
+  // Seeded generator: used only while building the immutable scene below.
+  let seed = 1860409;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+
+  // ---------------------------------------------------------------------------
+  // The song. [start beat, length in beats, semitones above C]
+  // ---------------------------------------------------------------------------
+  const PHRASE_A = [[0, 1, 0], [1, 1, 0], [2, 1, 0], [3, 1, 2], [4, 2, 4], [6, 2, 2], [8, 1, 0], [9, 1, 4], [10, 1, 2], [11, 1, 2], [12, 4, 0]];
+  const noteAt = (phrase, b) => {
+    for (let i = phrase.length - 1; i >= 0; i -= 1) if (b >= phrase[i][0]) return phrase[i];
+    return phrase[0];
+  };
+  const noteEnvelope = (phrase, b) => {
+    if (b < 0 || b >= 16) return 0;
+    const n = noteAt(phrase, b);
+    const k = b - n[0];
+    const attack = smooth(0, 0.07, k);
+    const release = 1 - smooth(n[1] - 0.17, n[1] - 0.02, k);
+    return attack * release * (0.74 + 0.26 * Math.exp(-k * 2.4));
+  };
+
+  // ---------------------------------------------------------------------------
+  // Drum, sheet and the helix the bristle writes. Sheet coordinates: u runs around
+  // the drum (0..C, the reading direction), w runs down from the sheet's top edge.
+  // ---------------------------------------------------------------------------
+  const R = 88;
+  const L = 210;
+  const C = TAU * R;
+  const PITCH = 28;
+  const V0 = 46;
+  const WAVE_C = 15.5;
+  const AMP = 8.6;
+  const XD = -110;
+  const ZD = 0;
+  const YB0 = 62;
+  const THETA_C = (50 * Math.PI) / 180;
+  const OMEGA = TAU / BAR;
+  const ALPHA_REC_END = THETA_C - 4 * TAU;
+  const ALPHA_PEEL_END = ALPHA_REC_END - TAU;
+
+  const trace = [];
+  {
+    const step = 1.2;
+    const perRow = Math.round(C / step);
+    let phase = 0;
+    for (let k = 0; k <= perRow * 4; k += 1) {
+      const b = (k / perRow) * 4;
+      const row = Math.min(3, Math.floor(k / perRow));
+      const u = (k - row * perRow) * (C / perRow);
+      const semis = noteAt(PHRASE_A, Math.min(b, 15.999))[2];
+      const wavelength = WAVE_C * Math.pow(2, -semis / 12) * (1 + 0.03 * Math.sin(b * BEAT * TAU * 5.2));
+      phase += (TAU * (C / perRow)) / wavelength;
+      const env = noteEnvelope(PHRASE_A, b);
+      const grit = (hash1(k * 7 + 3) - 0.5) * (0.5 + 0.9 * env);
+      const d = env * AMP * (Math.sin(phase) + 0.2 * Math.sin(2 * phase + 0.8)) + grit;
+      trace.push({ b, u, w: V0 + PITCH * (b / 4) + d, row, env });
+    }
+  }
+  const sampleIndexAtBeat = b => clamp(Math.floor((b / 16) * (trace.length - 1)), 0, trace.length - 1);
+
+  // ---------------------------------------------------------------------------
+  // Camera
+  // ---------------------------------------------------------------------------
+  const CAM = (() => {
+    const target = [30, 250, 30];
+    const yaw = (15 * Math.PI) / 180;
+    const pitch = (11 * Math.PI) / 180;
+    const dist = 1100;
+    const pos = [
+      target[0] + dist * Math.sin(yaw) * Math.cos(pitch),
+      target[1] + dist * Math.sin(pitch),
+      target[2] + dist * Math.cos(yaw) * Math.cos(pitch)
+    ];
+    const f = norm(sub(target, pos));
+    const r = norm(cross(f, [0, 1, 0]));
+    const u = cross(r, f);
+    return { pos, f, r, u, F: 1400, cx: 450, cy: 470 };
+  })();
+  const project = (x, y, z) => {
+    const dx = x - CAM.pos[0];
+    const dy = y - CAM.pos[1];
+    const dz = z - CAM.pos[2];
+    const zc = dx * CAM.f[0] + dy * CAM.f[1] + dz * CAM.f[2];
+    const s = CAM.F / zc;
+    return [
+      CAM.cx + (dx * CAM.r[0] + dy * CAM.r[1] + dz * CAM.r[2]) * s,
+      CAM.cy - (dx * CAM.u[0] + dy * CAM.u[1] + dz * CAM.u[2]) * s,
+      zc,
+      s
+    ];
+  };
+  const facing = (n, p) => dot(n, sub(CAM.pos, p)) > 0;
+
+  // ---------------------------------------------------------------------------
+  // Light
+  // ---------------------------------------------------------------------------
+  const MOON = [150, 178, 255];
+  const CANDLE = [255, 158, 74];
+  const MOON_DIR = norm([-0.55, 0.22, 0.8]);
+  const CANDLE_POS = [XD + 158, 132, 118];
+  const AMBIENT = [9, 11, 17];
+
+  const shade = (albedo, n, p, lights, gloss = 0) => {
+    const v = norm(sub(CAM.pos, p));
+    let r = AMBIENT[0] * albedo[0];
+    let g = AMBIENT[1] * albedo[1];
+    let b = AMBIENT[2] * albedo[2];
+    if (lights.moon > 0) {
+      const dm = Math.max(0, dot(n, MOON_DIR)) * lights.moon;
+      r += MOON[0] * albedo[0] * dm;
+      g += MOON[1] * albedo[1] * dm;
+      b += MOON[2] * albedo[2] * dm;
+      if (gloss > 0) {
+        const s = Math.pow(Math.max(0, dot(n, norm([MOON_DIR[0] + v[0], MOON_DIR[1] + v[1], MOON_DIR[2] + v[2]]))), 26) * gloss * lights.moon;
+        r += 190 * s;
+        g += 205 * s;
+        b += 240 * s;
+      }
+    }
+    if (lights.candle > 0) {
+      const toC = sub(CANDLE_POS, p);
+      const dist = Math.hypot(toC[0], toC[1], toC[2]);
+      const lc = [toC[0] / dist, toC[1] / dist, toC[2] / dist];
+      const att = lights.candle / (1 + Math.pow(dist / 260, 2));
+      const dc = Math.max(0, dot(n, lc)) * att * 1.9;
+      r += CANDLE[0] * albedo[0] * dc;
+      g += CANDLE[1] * albedo[1] * dc;
+      b += CANDLE[2] * albedo[2] * dc;
+      if (gloss > 0) {
+        const s = Math.pow(Math.max(0, dot(n, norm([lc[0] + v[0], lc[1] + v[1], lc[2] + v[2]]))), 22) * gloss * att * 1.6;
+        r += 255 * s;
+        g += 190 * s;
+        b += 120 * s;
+      }
+    }
+    return [r, g, b];
+  };
+
+  // ---------------------------------------------------------------------------
+  // Offscreen helpers
+  // ---------------------------------------------------------------------------
+  const layer = (w = W, h = H) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+  };
+  // `seal` strokes the edge in the fill colour: on a CPU-rastered canvas (the MP4
+  // renderer's browser) adjacent anti-aliased polygons otherwise leave hairline gaps
+  const quad = (g, pts, color, seal = false) => {
+    g.fillStyle = color;
+    g.beginPath();
+    g.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i += 1) g.lineTo(pts[i][0], pts[i][1]);
+    g.closePath();
+    g.fill();
+    if (seal) {
+      // wide enough that each shared edge pixel is fully covered: partial coverage
+      // compounds to alpha < 1 in a transparent layer and lets the room show through
+      g.strokeStyle = color;
+      g.lineWidth = 2.2;
+      g.lineJoin = 'round';
+      g.stroke();
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Room: back wall and a walnut table, one layer per light so they can be mixed.
+  // ---------------------------------------------------------------------------
+  const ZW = -380;
+  const roomAmbient = layer();
+  const moonPatch = layer();
+  const moonFill = layer();
+  const roomCandle = layer();
+  // the window's light on the wall, in screen space
+  const PATCH = [[226, 46], [790, 62], [782, 388], [220, 368]];
+  const hornShadowPath = g => {
+    g.moveTo(318, 258);
+    g.lineTo(476, 254);
+    g.bezierCurveTo(516, 252, 546, 236, 568, 204);
+    g.lineTo(576, 205);
+    g.bezierCurveTo(582, 236, 582, 292, 576, 322);
+    g.lineTo(568, 323);
+    g.bezierCurveTo(546, 292, 516, 276, 476, 273);
+    g.lineTo(318, 271);
+    g.closePath();
+    // the stand under the horn
+    g.moveTo(404, 270);
+    g.lineTo(414, 270);
+    g.lineTo(419, 382);
+    g.lineTo(399, 382);
+    g.closePath();
+  };
+  {
+    const g = roomAmbient.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 520);
+    grad.addColorStop(0, '#0c1017');
+    grad.addColorStop(1, '#121722');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+    // plaster blotches (static, low frequency)
+    for (let i = 0; i < 70; i += 1) {
+      const x = random() * W;
+      const y = random() * 560;
+      const r = 40 + random() * 120;
+      const blot = g.createRadialGradient(x, y, 0, x, y, r);
+      const a = 0.025 + random() * 0.03;
+      blot.addColorStop(0, random() > 0.5 ? `rgba(40,48,64,${a})` : `rgba(0,0,0,${a * 1.4})`);
+      blot.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = blot;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    // table: everything below the line where it meets the wall (both ends kept in front of the camera)
+    const edgeA = project(-1000, 0, ZW);
+    const edgeB = project(1000, 0, ZW);
+    const slope = (edgeB[1] - edgeA[1]) / (edgeB[0] - edgeA[0]);
+    const edgeY = x => edgeA[1] + (x - edgeA[0]) * slope;
+    const tg = g.createLinearGradient(0, edgeY(0), 0, H);
+    tg.addColorStop(0, '#120c08');
+    tg.addColorStop(1, '#1d130c');
+    g.fillStyle = tg;
+    g.beginPath();
+    g.moveTo(0, edgeY(0));
+    g.lineTo(W, edgeY(W));
+    g.lineTo(W, H);
+    g.lineTo(0, H);
+    g.closePath();
+    g.fill();
+    g.save();
+    g.clip();
+    for (let i = 0; i < 70; i += 1) {
+      const x = -1100 + i * 32 + random() * 14;
+      const a = project(x, 0, ZW);
+      const b = project(x + (random() - 0.5) * 24, 0, 520);
+      g.strokeStyle = `rgba(${40 + random() * 20},${26 + random() * 10},${16},${0.16 + random() * 0.18})`;
+      g.lineWidth = 0.6 + random() * 1.4;
+      g.beginPath();
+      g.moveTo(a[0], a[1]);
+      g.lineTo(b[0], b[1]);
+      g.stroke();
+    }
+    g.restore();
+    // skirting shadow where wall meets table
+    g.save();
+    g.beginPath();
+    g.moveTo(0, edgeY(0) - 40);
+    g.lineTo(W, edgeY(W) - 40);
+    g.lineTo(W, edgeY(W) + 4);
+    g.lineTo(0, edgeY(0) + 4);
+    g.closePath();
+    g.clip();
+    const sk = g.createLinearGradient(0, Math.min(edgeY(0), edgeY(W)) - 40, 0, Math.max(edgeY(0), edgeY(W)) + 4);
+    sk.addColorStop(0, 'rgba(0,0,0,0)');
+    sk.addColorStop(1, 'rgba(0,0,0,0.4)');
+    g.fillStyle = sk;
+    g.fillRect(0, 0, W, H);
+    g.restore();
+
+    // moonlight, part 1: a window-shaped patch on the wall with its mullions and the
+    // horn's shadow already cut out (the singer and the cat are cut per frame)
+    const m = moonPatch.getContext('2d');
+    m.save();
+    m.filter = 'blur(5px)';
+    m.fillStyle = css(MOON, 0.6);
+    m.beginPath();
+    m.moveTo(PATCH[0][0], PATCH[0][1]);
+    for (let i = 1; i < 4; i += 1) m.lineTo(PATCH[i][0], PATCH[i][1]);
+    m.closePath();
+    m.fill();
+    m.restore();
+    m.save();
+    m.globalCompositeOperation = 'destination-out';
+    m.filter = 'blur(2.5px)';
+    m.fillStyle = 'rgba(0,0,0,1)';
+    m.beginPath();
+    // mullions: one upright, one transom above the singer's head
+    m.moveTo(457, 50);
+    m.lineTo(471, 51);
+    m.lineTo(467, 380);
+    m.lineTo(453, 379);
+    m.closePath();
+    m.moveTo(224, 92);
+    m.lineTo(788, 106);
+    m.lineTo(788, 117);
+    m.lineTo(224, 103);
+    m.closePath();
+    hornShadowPath(m);
+    m.fill();
+    m.restore();
+    // soft falloff inside the patch
+    m.save();
+    m.globalCompositeOperation = 'destination-in';
+    const fall = m.createRadialGradient(520, 240, 60, 520, 240, 430);
+    fall.addColorStop(0, 'rgba(0,0,0,1)');
+    fall.addColorStop(1, 'rgba(0,0,0,0.5)');
+    m.fillStyle = fall;
+    m.fillRect(0, 0, W, H);
+    m.restore();
+    // moonlight, part 2: spill on the table and a faint cool fill in the air
+    const mf = moonFill.getContext('2d');
+    const spill = mf.createRadialGradient(300, 780, 30, 300, 780, 520);
+    spill.addColorStop(0, css([120, 136, 176], 0.12));
+    spill.addColorStop(1, css([120, 136, 176], 0));
+    mf.fillStyle = spill;
+    mf.fillRect(0, 0, W, H);
+    const air = mf.createLinearGradient(0, 0, W, 0);
+    air.addColorStop(0, css(MOON, 0.06));
+    air.addColorStop(1, css(MOON, 0.0));
+    mf.fillStyle = air;
+    mf.fillRect(0, 0, W, H);
+
+    // candlelight: warm pool around the candle
+    const cg = roomCandle.getContext('2d');
+    const cp = project(CANDLE_POS[0], CANDLE_POS[1], CANDLE_POS[2]);
+    const wallPool = cg.createRadialGradient(cp[0] - 30, cp[1] - 140, 10, cp[0] - 30, cp[1] - 140, 560);
+    wallPool.addColorStop(0, css(CANDLE, 0.42));
+    wallPool.addColorStop(0.45, css(CANDLE, 0.14));
+    wallPool.addColorStop(1, css(CANDLE, 0));
+    cg.fillStyle = wallPool;
+    cg.fillRect(0, 0, W, H);
+    const tablePool = cg.createRadialGradient(cp[0], cp[1] + 70, 5, cp[0], cp[1] + 70, 380);
+    tablePool.addColorStop(0, css(CANDLE, 0.4));
+    tablePool.addColorStop(1, css(CANDLE, 0));
+    cg.fillStyle = tablePool;
+    cg.fillRect(0, 0, W, H);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Static apparatus pieces, rendered per light (ambient / moon / candle).
+  // ---------------------------------------------------------------------------
+  const pushQuad = (list, corners, n, albedo, gloss) => {
+    const p = [0, 0, 0];
+    for (const c of corners) {
+      p[0] += c[0] / corners.length;
+      p[1] += c[1] / corners.length;
+      p[2] += c[2] / corners.length;
+    }
+    const scr = corners.map(c => project(c[0], c[1], c[2]));
+    list.push({ scr, n, p, albedo, gloss, depth: project(p[0], p[1], p[2])[2] });
+  };
+
+  // horn (plaster), its brass collar, and a turned wooden stand
+  const HORN = (() => {
+    const contact = [XD + R * Math.sin(THETA_C), YB0 + L - V0, ZD + R * Math.cos(THETA_C)];
+    const a = norm([0.96, 0.1, 0.25]);
+    const membrane = [contact[0] + a[0] * 26, contact[1] + a[1] * 26, contact[2] + a[2] * 26];
+    const b1 = norm(cross(a, [0, 1, 0]));
+    const b2 = cross(b1, a);
+    return { contact, a, membrane, b1, b2, length: 270, r0: 16, r1: 98 };
+  })();
+  const hornRadius = s => HORN.r0 + (HORN.r1 - HORN.r0) * Math.pow(clamp(s / HORN.length, 0, 1.2), 2.35);
+  const hornPoint = (s, phi, extra = 0) => {
+    const r = hornRadius(s) + extra;
+    const c = Math.cos(phi);
+    const si = Math.sin(phi);
+    return [
+      HORN.membrane[0] + HORN.a[0] * (s + 6) + (HORN.b1[0] * c + HORN.b2[0] * si) * r,
+      HORN.membrane[1] + HORN.a[1] * (s + 6) + (HORN.b1[1] * c + HORN.b2[1] * si) * r,
+      HORN.membrane[2] + HORN.a[2] * (s + 6) + (HORN.b1[2] * c + HORN.b2[2] * si) * r
+    ];
+  };
+  const staticQuads = [];
+  {
+    const NJ = 40;
+    const NK = 64;
+    const plaster = [0.84, 0.8, 0.72];
+    const inner = [0.32, 0.29, 0.25];
+    for (let j = 0; j < NJ; j += 1) {
+      const s0 = (HORN.length * j) / NJ;
+      const s1 = (HORN.length * (j + 1)) / NJ;
+      const slope = (hornRadius(s1) - hornRadius(s0)) / (s1 - s0);
+      for (let k = 0; k < NK; k += 1) {
+        const p0 = (TAU * k) / NK;
+        const p1 = (TAU * (k + 1)) / NK;
+        const corners = [hornPoint(s0, p0), hornPoint(s0, p1), hornPoint(s1, p1), hornPoint(s1, p0)];
+        const pm = (p0 + p1) / 2;
+        const radial = [
+          HORN.b1[0] * Math.cos(pm) + HORN.b2[0] * Math.sin(pm),
+          HORN.b1[1] * Math.cos(pm) + HORN.b2[1] * Math.sin(pm),
+          HORN.b1[2] * Math.cos(pm) + HORN.b2[2] * Math.sin(pm)
+        ];
+        const n = norm([radial[0] - HORN.a[0] * slope, radial[1] - HORN.a[1] * slope, radial[2] - HORN.a[2] * slope]);
+        const centre = hornPoint((s0 + s1) / 2, pm);
+        if (facing(n, centre)) {
+          pushQuad(staticQuads, corners, n, plaster, 0.25);
+        } else {
+          // interior seen through the bell; darker the deeper it goes
+          const depthShade = 0.25 + 0.75 * Math.pow(s1 / HORN.length, 1.6);
+          pushQuad(staticQuads, corners, [-n[0], -n[1], -n[2]], inner.map(v => v * depthShade), 0);
+        }
+      }
+    }
+    // brass lip on the bell and brass collar at the throat
+    const brass = [0.78, 0.56, 0.24];
+    for (const [sA, sB, ex] of [[HORN.length - 4, HORN.length + 2, 5], [-6, 14, 7]]) {
+      for (let k = 0; k < NK; k += 1) {
+        const p0 = (TAU * k) / NK;
+        const p1 = (TAU * (k + 1)) / NK;
+        const pm = (p0 + p1) / 2;
+        const radial = norm([
+          HORN.b1[0] * Math.cos(pm) + HORN.b2[0] * Math.sin(pm),
+          HORN.b1[1] * Math.cos(pm) + HORN.b2[1] * Math.sin(pm),
+          HORN.b1[2] * Math.cos(pm) + HORN.b2[2] * Math.sin(pm)
+        ]);
+        const corners = [hornPoint(sA, p0, ex), hornPoint(sA, p1, ex), hornPoint(sB, p1, ex), hornPoint(sB, p0, ex)];
+        const centre = hornPoint((sA + sB) / 2, pm, ex);
+        if (facing(radial, centre)) pushQuad(staticQuads, corners, radial, brass, 0.9);
+      }
+    }
+    // turned wooden stand under the bell's middle
+    const foot = hornPoint(HORN.length * 0.55, Math.PI * 1.5, 0);
+    const standTop = [foot[0], foot[1] - 4, foot[2]];
+    const wood = [0.36, 0.22, 0.12];
+    const NS = 18;
+    for (let k = 0; k < NS; k += 1) {
+      const p0 = (TAU * k) / NS;
+      const p1 = (TAU * (k + 1)) / NS;
+      const pm = (p0 + p1) / 2;
+      const n = [Math.sin(pm), 0, Math.cos(pm)];
+      const rr = 10;
+      const corners = [
+        [standTop[0] + rr * Math.sin(p0), standTop[1], standTop[2] + rr * Math.cos(p0)],
+        [standTop[0] + rr * Math.sin(p1), standTop[1], standTop[2] + rr * Math.cos(p1)],
+        [standTop[0] + rr * Math.sin(p1), 0, standTop[2] + rr * Math.cos(p1)],
+        [standTop[0] + rr * Math.sin(p0), 0, standTop[2] + rr * Math.cos(p0)]
+      ];
+      const centre = [standTop[0] + rr * Math.sin(pm), standTop[1] / 2, standTop[2] + rr * Math.cos(pm)];
+      if (facing(n, centre)) pushQuad(staticQuads, corners, n, wood, 0.2);
+      const fr = 34;
+      const fc = [
+        [standTop[0] + fr * Math.sin(p0), 12, standTop[2] + fr * Math.cos(p0)],
+        [standTop[0] + fr * Math.sin(p1), 12, standTop[2] + fr * Math.cos(p1)],
+        [standTop[0] + fr * Math.sin(p1), 0, standTop[2] + fr * Math.cos(p1)],
+        [standTop[0] + fr * Math.sin(p0), 0, standTop[2] + fr * Math.cos(p0)]
+      ];
+      if (facing(n, [standTop[0] + fr * Math.sin(pm), 6, standTop[2] + fr * Math.cos(pm)])) pushQuad(staticQuads, fc, n, wood, 0.2);
+    }
+  }
+
+  // drum base: a walnut block with a brass nut the threaded axle rises through
+  const BASE = { x0: XD - 128, x1: XD + 128, z0: ZD - 104, z1: ZD + 104, h: 52 };
+  const baseQuads = [];
+  {
+    const wood = [0.4, 0.25, 0.14];
+    const b = BASE;
+    pushQuad(baseQuads, [[b.x0, b.h, b.z0], [b.x1, b.h, b.z0], [b.x1, b.h, b.z1], [b.x0, b.h, b.z1]], [0, 1, 0], wood, 0.3);
+    pushQuad(baseQuads, [[b.x0, b.h, b.z1], [b.x1, b.h, b.z1], [b.x1, 0, b.z1], [b.x0, 0, b.z1]], [0, 0, 1], wood.map(v => v * 0.9), 0.2);
+    pushQuad(baseQuads, [[b.x1, b.h, b.z1], [b.x1, b.h, b.z0], [b.x1, 0, b.z0], [b.x1, 0, b.z1]], [1, 0, 0], wood.map(v => v * 0.85), 0.2);
+    const brass = [0.78, 0.56, 0.24];
+    const NS = 28;
+    for (let k = 0; k < NS; k += 1) {
+      const p0 = (TAU * k) / NS;
+      const p1 = (TAU * (k + 1)) / NS;
+      const pm = (p0 + p1) / 2;
+      const n = [Math.sin(pm), 0, Math.cos(pm)];
+      const rr = 26;
+      const corners = [
+        [XD + rr * Math.sin(p0), b.h + 12, ZD + rr * Math.cos(p0)],
+        [XD + rr * Math.sin(p1), b.h + 12, ZD + rr * Math.cos(p1)],
+        [XD + rr * Math.sin(p1), b.h, ZD + rr * Math.cos(p1)],
+        [XD + rr * Math.sin(p0), b.h, ZD + rr * Math.cos(p0)]
+      ];
+      if (facing(n, [XD + rr * Math.sin(pm), b.h + 6, ZD + rr * Math.cos(pm)])) pushQuad(baseQuads, corners, n, brass, 0.9);
+    }
+    const top = [];
+    for (let k = 0; k < NS; k += 1) top.push([XD + 26 * Math.sin((TAU * k) / NS), b.h + 12, ZD + 26 * Math.cos((TAU * k) / NS)]);
+    pushQuad(baseQuads, top, [0, 1, 0], brass, 0.9);
+  }
+
+  // candlestick: brass chamberstick and a stub of tallow (static); flame drawn live
+  const CANDLE_BASE = [CANDLE_POS[0], 0, CANDLE_POS[2]];
+  const candleQuads = [];
+  {
+    const brass = [0.8, 0.58, 0.26];
+    const tallow = [0.86, 0.8, 0.64];
+    const ring = (rr, y0, y1, albedo, gloss) => {
+      const NS = 24;
+      for (let k = 0; k < NS; k += 1) {
+        const p0 = (TAU * k) / NS;
+        const p1 = (TAU * (k + 1)) / NS;
+        const pm = (p0 + p1) / 2;
+        const n = [Math.sin(pm), 0, Math.cos(pm)];
+        const corners = [
+          [CANDLE_BASE[0] + rr * Math.sin(p0), y1, CANDLE_BASE[2] + rr * Math.cos(p0)],
+          [CANDLE_BASE[0] + rr * Math.sin(p1), y1, CANDLE_BASE[2] + rr * Math.cos(p1)],
+          [CANDLE_BASE[0] + rr * Math.sin(p1), y0, CANDLE_BASE[2] + rr * Math.cos(p1)],
+          [CANDLE_BASE[0] + rr * Math.sin(p0), y0, CANDLE_BASE[2] + rr * Math.cos(p0)]
+        ];
+        if (facing(n, [CANDLE_BASE[0] + rr * Math.sin(pm), (y0 + y1) / 2, CANDLE_BASE[2] + rr * Math.cos(pm)])) pushQuad(candleQuads, corners, n, albedo, gloss);
+      }
+      const top = [];
+      for (let k = 0; k < NS; k += 1) top.push([CANDLE_BASE[0] + rr * Math.sin((TAU * k) / NS), y1, CANDLE_BASE[2] + rr * Math.cos((TAU * k) / NS)]);
+      pushQuad(candleQuads, top, [0, 1, 0], albedo, gloss);
+    };
+    ring(42, 0, 7, brass, 0.9);
+    ring(12, 7, 24, brass, 0.9);
+    ring(19, 24, 30, brass, 0.9);
+    ring(11, 30, 104, tallow, 0.3);
+  }
+  const CANDLE_WICK = [CANDLE_BASE[0], 110, CANDLE_BASE[2]];
+
+  const renderQuadsToLayers = quads => {
+    const sorted = quads.slice().sort((a, b) => b.depth - a.depth);
+    const out = { ambient: layer(), moon: layer(), candle: layer() };
+    for (const [key, lights] of [['ambient', { moon: 0, candle: 0 }], ['moon', { moon: 1, candle: 0 }], ['candle', { moon: 0, candle: 1 }]]) {
+      const g = out[key].getContext('2d');
+      for (const q of sorted) {
+        let col = shade(q.albedo, q.n, q.p, lights, q.gloss);
+        if (key !== 'ambient') {
+          const amb = shade(q.albedo, q.n, q.p, { moon: 0, candle: 0 }, 0);
+          col = [col[0] - amb[0], col[1] - amb[1], col[2] - amb[2]];
+          // the occluding silhouette must still hide anything behind it in this layer
+          quad(g, q.scr, 'rgba(0,0,0,1)');
+        }
+        quad(g, q.scr, css(col), true);
+      }
+    }
+    return out;
+  };
+  const hornLayers = renderQuadsToLayers(staticQuads);
+  const baseLayers = renderQuadsToLayers(baseQuads);
+  const candleLayers = renderQuadsToLayers(candleQuads);
+  const drawLit = (layers, lights, alpha = 1) => {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(layers.ambient, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    if (lights.moon > 0.001) {
+      ctx.globalAlpha = alpha * lights.moon;
+      ctx.drawImage(layers.moon, 0, 0);
+    }
+    if (lights.candle > 0.001) {
+      ctx.globalAlpha = alpha * lights.candle;
+      ctx.drawImage(layers.candle, 0, 0);
+    }
+    ctx.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Drum motion: rotation α(t) and the screw height that follows it.
+  // ---------------------------------------------------------------------------
+  const PEEL_SPAN = BAR;
+  const CODA_TURN0 = T_CODA + 0.5 * BAR;
+  const CODA_TURN1 = T_CODA + 3.25 * BAR;
+  const drumAlpha = t => {
+    if (t < T_ARCHIVE) return THETA_C - OMEGA * t;
+    if (t < T_ARCHIVE + PEEL_SPAN) {
+      const k = (t - T_ARCHIVE) / PEEL_SPAN;
+      return ALPHA_REC_END - TAU * (k + k * k - k * k * k);
+    }
+    if (t < CODA_TURN0) return ALPHA_PEEL_END;
+    if (t < CODA_TURN1) return ALPHA_PEEL_END + 5 * TAU * easeInOut((t - CODA_TURN0) / (CODA_TURN1 - CODA_TURN0));
+    return THETA_C;
+  };
+  const drumBottom = alpha => YB0 + (PITCH * (THETA_C - alpha)) / TAU;
+  const ALPHA_RESMOKE0 = ALPHA_REC_END;
+
+  // ---------------------------------------------------------------------------
+  // Envelopes for light and scene layers.
+  // ---------------------------------------------------------------------------
+  const envelopes = t => {
+    let moon;
+    if (t < T_ARCHIVE + 0.2 * BAR) moon = 1;
+    else if (t < T_CODA) moon = lerp(1, 0, smooth(T_ARCHIVE + 0.2 * BAR, T_ARCHIVE + 1.6 * BAR, t));
+    else moon = smooth(18 * BAR, 18.85 * BAR, t);
+    const candle = t < T_CODA ? 0 : smooth(T_CODA + 0.05 * BAR, T_CODA + 0.45 * BAR, t) * (1 - smooth(18 * BAR + 0.25 * BEAT, 18 * BAR + 2.6 * BEAT, t));
+    const room = t < T_ARCHIVE + BAR ? 1 : t < T_CODA ? 1 - smooth(T_ARCHIVE + BAR, T_ARCHIVE + 1.8 * BAR, t) : smooth(T_CODA, T_CODA + 0.5 * BAR, t);
+    const archive = t < T_ARCHIVE + BAR || t >= T_CODA ? 0 : smooth(T_ARCHIVE + BAR, T_ARCHIVE + 1.8 * BAR, t) * (1 - smooth(T_FAST - BAR, T_FAST - 0.35 * BAR, t));
+    const scan = t < T_FAST - BAR ? 0 : t < T_CODA ? smooth(T_FAST - BAR, T_FAST - 0.35 * BAR, t) : 1 - smooth(T_CODA, T_CODA + 0.5 * BAR, t);
+    const ghost = t < T_TRUE - 0.25 * BEAT || t >= T_CODA + 0.5 * BAR ? 0 : smooth(T_TRUE - 0.25 * BEAT, T_TRUE + BEAT, t) * (1 - smooth(T_CODA - 0.2 * BAR, T_CODA + 0.4 * BAR, t));
+    return { moon, candle, room, archive, scan, ghost };
+  };
+
+  // ---------------------------------------------------------------------------
+  // Sheet geometry: wrapped on the drum, peeling off it, or laid flat on screen.
+  // ---------------------------------------------------------------------------
+  const FLAT = { cx: 450, cy: 520, w: 780 };
+  FLAT.k = FLAT.w / C;
+  FLAT.h = L * FLAT.k;
+  const flatPoint = (u, w) => [FLAT.cx - FLAT.w / 2 + u * FLAT.k, FLAT.cy - FLAT.h / 2 + w * FLAT.k];
+  const PEEL_N = [Math.sin(THETA_C), 0, Math.cos(THETA_C)];
+  const PEEL_T = [-Math.cos(THETA_C), 0, Math.sin(THETA_C)];
+  const CURL = 1 / 1500;
+
+  // world position of sheet point (u, w) with the drum at angle α and `freed` length already off the drum
+  const sheetWorld = (u, w, alpha, freed) => {
+    const top = drumBottom(alpha) + L;
+    if (u >= freed) {
+      const th = u / R + alpha;
+      return { p: [XD + R * Math.sin(th), top - w, ZD + R * Math.cos(th)], n: [Math.sin(th), 0, Math.cos(th)], wrapped: true };
+    }
+    const s = freed - u;
+    const line = [XD + R * PEEL_N[0], top - w, ZD + R * PEEL_N[2]];
+    const bend = s * s * CURL * 0.5;
+    const droop = s * s * 0.00012;
+    return {
+      p: [line[0] + PEEL_T[0] * s - PEEL_N[0] * bend, line[1] - droop, line[2] + PEEL_T[2] * s - PEEL_N[2] * bend],
+      n: norm([PEEL_N[0] + PEEL_T[0] * s * CURL, 0.05, PEEL_N[2] + PEEL_T[2] * s * CURL]),
+      wrapped: false
+    };
+  };
+
+  // the sheet's state at time t: 'drum' (screen = 3D), 'blend' (3D <-> flat), 'flat'
+  const sheetState = t => {
+    const alpha = drumAlpha(t);
+    if (t < T_ARCHIVE) return { mode: 'drum', alpha, freed: 0, flat: 0 };
+    if (t < T_ARCHIVE + PEEL_SPAN) return { mode: 'drum', alpha, freed: clamp(R * (ALPHA_REC_END - alpha), 0, C), flat: 0 };
+    if (t < T_ARCHIVE + 1.9 * BAR) return { mode: 'blend', alpha, freed: C, flat: easeInOut(clamp((t - T_ARCHIVE - BAR) / (0.9 * BAR))) };
+    if (t < T_CODA) return { mode: 'flat', alpha, freed: C, flat: 1 };
+    if (t < CODA_TURN0) return { mode: 'blend', alpha, freed: C, flat: 1 - easeInOut(clamp((t - T_CODA) / (0.5 * BAR))) };
+    return { mode: 'drum', alpha, freed: clamp(R * (ALPHA_REC_END - alpha), 0, C), flat: 0 };
+  };
+
+  const sheetScreen = (u, w, st) => {
+    if (st.mode === 'flat') {
+      const f = flatPoint(u, w);
+      return { x: f[0], y: f[1], vis: true, wrapped: false, s: FLAT.k };
+    }
+    const sw = sheetWorld(u, w, st.alpha, st.freed);
+    const pr = project(sw.p[0], sw.p[1], sw.p[2]);
+    if (st.mode === 'blend') {
+      const f = flatPoint(u, w);
+      return { x: lerp(pr[0], f[0], st.flat), y: lerp(pr[1], f[1], st.flat), vis: true, wrapped: false, s: lerp(pr[3], FLAT.k, st.flat) };
+    }
+    return { x: pr[0], y: pr[1], vis: sw.wrapped ? facing(sw.n, sw.p) : true, wrapped: sw.wrapped, s: pr[3] };
+  };
+
+  // soot laid back over the trace by the candle during the coda (0 = clean line, 1 = gone)
+  const FLAME_THETA = (78 * Math.PI) / 180;
+  const sootCover = (u, t) => {
+    if (t < CODA_TURN0) return 0;
+    const travelled = drumAlpha(t) - ALPHA_RESMOKE0;
+    if (travelled <= 0) return 0;
+    let toFlame = (FLAME_THETA - (u / R + ALPHA_RESMOKE0)) % TAU;
+    if (toFlame < 0) toFlame += TAU;
+    return clamp((travelled - toFlame) / (TAU * 1.35));
+  };
+
+  // ---------------------------------------------------------------------------
+  // Drawing: the drum, its axle and crank, and the sheet wrapped on it
+  // ---------------------------------------------------------------------------
+  const SOOT = [0.075, 0.072, 0.07];
+  const BARE = [0.62, 0.45, 0.22];
+  const drawDrum = (t, lights, st) => {
+    const alpha = st.alpha;
+    const yb = drumBottom(alpha);
+    const top = yb + L;
+    const N = 120;
+    for (let i = 0; i < N; i += 1) {
+      const u0 = (C * i) / N;
+      const u1 = (C * (i + 1)) / N;
+      const th0 = u0 / R + alpha;
+      const th1 = u1 / R + alpha;
+      const thm = (th0 + th1) / 2;
+      const n = [Math.sin(thm), 0, Math.cos(thm)];
+      const pm = [XD + R * Math.sin(thm), (yb + top) / 2, ZD + R * Math.cos(thm)];
+      if (!facing(n, pm)) continue;
+      const corners = [
+        project(XD + R * Math.sin(th0), top, ZD + R * Math.cos(th0)),
+        project(XD + R * Math.sin(th1), top, ZD + R * Math.cos(th1)),
+        project(XD + R * Math.sin(th1), yb, ZD + R * Math.cos(th1)),
+        project(XD + R * Math.sin(th0), yb, ZD + R * Math.cos(th0))
+      ];
+      const bare = (u0 + u1) / 2 < st.freed;
+      let col = shade(bare ? BARE : SOOT, n, pm, lights, bare ? 0.7 : 0.18);
+      // grazing sheen on the soot so the cylinder reads in moonlight
+      if (!bare) {
+        const v = norm(sub(CAM.pos, pm));
+        const rim = Math.pow(1 - Math.max(0, dot(n, v)), 3);
+        col = [col[0] + rim * 26 * lights.moon + rim * 30 * lights.candle, col[1] + rim * 30 * lights.moon + rim * 20 * lights.candle, col[2] + rim * 40 * lights.moon + rim * 10 * lights.candle];
+      }
+      ctx.fillStyle = css(col);
+      ctx.strokeStyle = css(col);
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(corners[0][0], corners[0][1]);
+      for (let c = 1; c < 4; c += 1) ctx.lineTo(corners[c][0], corners[c][1]);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // the paper seam: a slightly lifted edge
+      if (!bare && i === 0) quad(ctx, [corners[0], [corners[0][0] + 1.6, corners[0][1]], [corners[3][0] + 1.6, corners[3][1]], corners[3]], css([col[0] + 26, col[1] + 24, col[2] + 22]));
+    }
+    // brass rims and the top cap
+    const rim = (y, h) => {
+      for (let i = 0; i < 72; i += 1) {
+        const th0 = (TAU * i) / 72;
+        const th1 = (TAU * (i + 1)) / 72;
+        const thm = (th0 + th1) / 2;
+        const n = [Math.sin(thm), 0, Math.cos(thm)];
+        const pm = [XD + (R + 2.5) * Math.sin(thm), y, ZD + (R + 2.5) * Math.cos(thm)];
+        if (!facing(n, pm)) continue;
+        const c = [
+          project(XD + (R + 2.5) * Math.sin(th0), y + h, ZD + (R + 2.5) * Math.cos(th0)),
+          project(XD + (R + 2.5) * Math.sin(th1), y + h, ZD + (R + 2.5) * Math.cos(th1)),
+          project(XD + (R + 2.5) * Math.sin(th1), y, ZD + (R + 2.5) * Math.cos(th1)),
+          project(XD + (R + 2.5) * Math.sin(th0), y, ZD + (R + 2.5) * Math.cos(th0))
+        ];
+        quad(ctx, c, css(shade([0.8, 0.58, 0.26], n, pm, lights, 1.0)), true);
+      }
+    };
+    rim(yb - 2, 9);
+    rim(top - 7, 9);
+    const cap = [];
+    for (let i = 0; i < 60; i += 1) {
+      const th = (TAU * i) / 60;
+      cap.push(project(XD + (R + 2.5) * Math.sin(th), top + 2, ZD + (R + 2.5) * Math.cos(th)));
+    }
+    quad(ctx, cap, css(shade([0.42, 0.3, 0.16], [0, 1, 0], [XD, top, ZD], lights, 0.5)));
+    // spokes engraved in the cap so its turning reads
+    ctx.strokeStyle = css(shade([0.75, 0.55, 0.25], [0, 1, 0], [XD, top, ZD], lights, 0.2), 0.55);
+    ctx.lineWidth = 1.2;
+    for (let i = 0; i < 6; i += 1) {
+      const th = alpha + (TAU * i) / 6;
+      const a = project(XD + 18 * Math.sin(th), top + 2.5, ZD + 18 * Math.cos(th));
+      const b = project(XD + (R - 6) * Math.sin(th), top + 2.5, ZD + (R - 6) * Math.cos(th));
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
+    }
+    return { yb, top };
+  };
+
+  const drawAxleAndCrank = (t, lights, st, geo) => {
+    const alpha = st.alpha;
+    const steel = [0.3, 0.31, 0.34];
+    // threaded axle exposed between the brass nut and the drum's bottom
+    const y0 = BASE.h + 12;
+    const y1 = geo.yb - 2;
+    if (y1 > y0 + 1) {
+      const a = project(XD - 7, y1, ZD);
+      const b = project(XD + 7, y1, ZD);
+      const c = project(XD + 7, y0, ZD);
+      const d = project(XD - 7, y0, ZD);
+      quad(ctx, [a, b, c, d], css(shade(steel, [0.3, 0, 0.95], [XD, y0, ZD + 7], lights, 0.9)));
+      ctx.strokeStyle = css(shade([0.85, 0.86, 0.9], [0.3, 0, 0.95], [XD, y0, ZD + 7], lights, 0.6), 0.7);
+      ctx.lineWidth = 1;
+      const threadPhase = ((((-alpha / TAU) * 6) % 1) + 1) % 1;
+      for (let y = y0 + threadPhase * 6; y < y1; y += 6) {
+        const p = project(XD - 7, y, ZD);
+        const q = project(XD + 7, y + 3, ZD);
+        ctx.beginPath();
+        ctx.moveTo(p[0], p[1]);
+        ctx.lineTo(q[0], q[1]);
+        ctx.stroke();
+      }
+    }
+    // axle above the cap, hub and crank arm turning with the drum
+    const hubY = geo.top + 30;
+    const a = project(XD - 6, hubY, ZD);
+    const b = project(XD + 6, hubY, ZD);
+    const c = project(XD + 6, geo.top, ZD);
+    const d = project(XD - 6, geo.top, ZD);
+    quad(ctx, [a, b, c, d], css(shade(steel, [0.3, 0, 0.95], [XD, hubY, ZD + 6], lights, 0.9)));
+    const armAngle = alpha + 0.6;
+    const end = [XD + 74 * Math.sin(armAngle), hubY + 4, ZD + 74 * Math.cos(armAngle)];
+    const hub = project(XD, hubY + 4, ZD);
+    const endP = project(end[0], end[1], end[2]);
+    ctx.strokeStyle = css(shade([0.76, 0.56, 0.26], [0, 1, 0], end, lights, 0.9));
+    ctx.lineCap = 'round';
+    ctx.lineWidth = 9 * endP[3];
+    ctx.beginPath();
+    ctx.moveTo(hub[0], hub[1]);
+    ctx.lineTo(endP[0], endP[1]);
+    ctx.stroke();
+    ctx.fillStyle = css(shade([0.78, 0.57, 0.27], [0, 1, 0], [XD, hubY, ZD], lights, 1));
+    ctx.beginPath();
+    ctx.ellipse(hub[0], hub[1], 12 * hub[3], 6 * hub[3], 0, 0, TAU);
+    ctx.fill();
+    // wooden handle standing up from the arm's end
+    const h0 = project(end[0], end[1], end[2]);
+    const h1 = project(end[0], end[1] + 28, end[2]);
+    ctx.strokeStyle = css(shade([0.42, 0.25, 0.13], norm([Math.sin(armAngle), 0, Math.cos(armAngle)]), end, lights, 0.4));
+    ctx.lineWidth = 11 * h0[3];
+    ctx.beginPath();
+    ctx.moveTo(h0[0], h0[1]);
+    ctx.lineTo(h1[0], h1[1]);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+  };
+
+  // ---------------------------------------------------------------------------
+  // The sheet: soot quads (or the paper's back) plus the white line.
+  // ---------------------------------------------------------------------------
+  const NU = 56;
+  const NW = 6;
+  const traceColor = (lights, scanLight, warm) => {
+    const base = mixc([226, 232, 246], [244, 230, 204], warm);
+    const k = clamp(0.32 + 0.68 * (lights.moon * 0.95 + lights.candle * 0.9 + scanLight));
+    return [base[0] * k, base[1] * k, base[2] * k];
+  };
+
+  const drawFreeSheet = (t, lights, st, view) => {
+    const limit = st.mode === 'drum' ? st.freed : C;
+    if (limit <= 0) return;
+    const cols = [];
+    for (let i = 0; i <= NU; i += 1) {
+      const u = Math.min((C * i) / NU, limit);
+      cols.push(Array.from({ length: NW + 1 }, (_, j) => sheetScreen(u, (L * j) / NW, st)));
+      if ((C * i) / NU >= limit) break;
+    }
+    const order = cols.slice(0, -1).map((_, i) => i);
+    // nearest last: while peeling, the far end (u = 0) is the closest to the camera
+    if (st.mode === 'drum') order.reverse();
+    const lit = st.mode === 'flat' ? 0 : 1 - st.flat;
+    for (const i of order) {
+      const c0 = cols[i];
+      const c1 = cols[i + 1];
+      // off the drum the paper turns toward the moon: the free end catches more light
+      const reach = st.mode === 'drum' ? 1 - i / Math.max(1, cols.length - 1) : 0.5;
+      const k = (0.55 + 0.75 * reach) * lit;
+      for (let j = 0; j < NW; j += 1) {
+        const pts = [[c0[j].x, c0[j].y], [c1[j].x, c1[j].y], [c1[j + 1].x, c1[j + 1].y], [c0[j + 1].x, c0[j + 1].y]];
+        // winding tells front (soot) from back (paper)
+        const area = (pts[1][0] - pts[0][0]) * (pts[3][1] - pts[0][1]) - (pts[1][1] - pts[0][1]) * (pts[3][0] - pts[0][0]);
+        const col = area > 0
+          ? [12 + (16 * lights.moon + 22 * lights.candle) * k + view.sootLift, 12 + (18 * lights.moon + 15 * lights.candle) * k + view.sootLift, 13 + (26 * lights.moon + 9 * lights.candle) * k + view.sootLift]
+          : mixc([60, 66, 80], [215, 205, 186], clamp(0.25 + lights.moon * 0.6 + lights.candle * 0.6));
+        ctx.fillStyle = css(col);
+        ctx.strokeStyle = css(col);
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        ctx.lineTo(pts[1][0], pts[1][1]);
+        ctx.lineTo(pts[2][0], pts[2][1]);
+        ctx.lineTo(pts[3][0], pts[3][1]);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
+    // the cut paper edges show white under the soot
+    if (lit > 0.01) {
+      const edgeCol = mixc([150, 160, 186], [236, 204, 160], clamp(lights.candle * 1.5));
+      ctx.strokeStyle = css(edgeCol, 0.55 * lit * clamp(lights.moon + lights.candle));
+      ctx.lineWidth = 1.2;
+      for (const j of [0, NW]) {
+        ctx.beginPath();
+        cols.forEach((c, i) => (i === 0 ? ctx.moveTo(c[j].x, c[j].y) : ctx.lineTo(c[j].x, c[j].y)));
+        ctx.stroke();
+      }
+    }
+  };
+
+  // the white line: on the drum (visible front only), off it, or flat
+  const drawTrace = (t, lights, st, opts) => {
+    const { uptoBeat = 16, wrappedOnly = false, freeOnly = false, scanLight = 0, warm = 0, width = 1.5, cover = null } = opts;
+    const endIndex = sampleIndexAtBeat(uptoBeat);
+    const col = traceColor(lights, scanLight, warm);
+    const limit = st.mode === 'drum' ? st.freed : C;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    let open = false;
+    let lastRow = -1;
+    let alphaRun = -1;
+    const flush = () => {
+      if (open) ctx.stroke();
+      open = false;
+    };
+    for (let i = 0; i <= endIndex; i += 1) {
+      const smp = trace[i];
+      const isFree = smp.u < limit;
+      if ((wrappedOnly && isFree) || (freeOnly && !isFree)) {
+        flush();
+        continue;
+      }
+      const sp = sheetScreen(smp.u, smp.w, st);
+      const fade = cover ? 1 - cover(smp.u) : 1;
+      if (!sp.vis || fade <= 0.02) {
+        flush();
+        continue;
+      }
+      const a = Math.round(fade * 10) / 10;
+      if (!open || smp.row !== lastRow || a !== alphaRun) {
+        if (open && smp.row === lastRow) ctx.lineTo(sp.x, sp.y);
+        flush();
+        ctx.strokeStyle = css(col, 0.92 * a);
+        ctx.lineWidth = width * clamp(sp.s, 0.6, 1.6);
+        ctx.beginPath();
+        ctx.moveTo(sp.x, sp.y);
+        open = true;
+        lastRow = smp.row;
+        alphaRun = a;
+      } else {
+        ctx.lineTo(sp.x, sp.y);
+      }
+    }
+    flush();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Stylus: the bristle on the membrane, vibrating with the line it writes
+  // ---------------------------------------------------------------------------
+  const drawStylus = (t, lights, lift) => {
+    const b = t / BEAT;
+    const writing = t < T_ARCHIVE;
+    const smp = trace[sampleIndexAtBeat(clamp(b, 0, 16))];
+    const d = writing ? smp.w - (V0 + PITCH * (smp.b / 4)) : 0;
+    const tip = [HORN.contact[0] + PEEL_N[0] * lift * 14, HORN.contact[1] - d + lift * 6, HORN.contact[2] + PEEL_N[2] * lift * 14];
+    const root = [HORN.membrane[0], HORN.membrane[1] - d * 0.25, HORN.membrane[2]];
+    const p0 = project(root[0], root[1], root[2]);
+    const p1 = project(tip[0], tip[1], tip[2]);
+    ctx.strokeStyle = css(shade([0.5, 0.42, 0.3], [0.3, 0.2, 0.93], tip, lights, 0.5));
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
+    ctx.stroke();
+    const touch = (1 - lift) * lights.moon;
+    if (touch > 0.01) {
+      // a fresh scratch glints where the bristle meets the soot, brighter while a note sounds
+      const sing = writing ? noteEnvelope(PHRASE_A, b) : 0;
+      const glint = ctx.createRadialGradient(p1[0], p1[1], 0, p1[0], p1[1], 7 + 5 * sing);
+      glint.addColorStop(0, css([236, 240, 255], touch * (0.55 + 0.4 * sing)));
+      glint.addColorStop(1, css([236, 240, 255], 0));
+      ctx.fillStyle = glint;
+      ctx.fillRect(p1[0] - 12, p1[1] - 12, 24, 24);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Shadow play on the moonlit wall: the singer and the cat, cut from the light per
+  // frame from pre-blurred sprites (the horn's shadow is already in moonPatch)
+  // ---------------------------------------------------------------------------
+  const SINGER = { x: 618, y: 262 };
+  const singerPath = (g, open) => {
+    // profile facing left, origin at the lips; the jaw hinges under the ear
+    const jaw = -open * 0.24;
+    const hx = 74;
+    const hy = -8;
+    const rot = (x, y) => {
+      const dx = x - hx;
+      const dy = y - hy;
+      return [SINGER.x + hx + dx * Math.cos(jaw) - dy * Math.sin(jaw), SINGER.y + hy + dx * Math.sin(jaw) + dy * Math.cos(jaw)];
+    };
+    const P = (x, y) => [SINGER.x + x, SINGER.y + y];
+    const mv = (x, y) => g.moveTo(...P(x, y));
+    const ln = (x, y) => g.lineTo(...P(x, y));
+    const bz = (a, b, c, d, e, f) => g.bezierCurveTo(...P(a, b), ...P(c, d), ...P(e, f));
+    mv(176, 132);
+    bz(172, 100, 154, 62, 152, 30);
+    // hair: a little unruly over the back of the head, parted at the crown
+    bz(166, 14, 170, -20, 162, -44);
+    bz(166, -60, 156, -80, 146, -92);
+    bz(146, -108, 124, -122, 106, -126);
+    bz(96, -138, 70, -142, 56, -136);
+    bz(40, -142, 22, -134, 14, -120);
+    bz(4, -108, -1, -90, 0, -74);
+    bz(-2, -66, -8, -58, -13, -50);
+    bz(-22, -38, -26, -30, -21, -26);
+    bz(-16, -22, -10, -21, -6, -20);
+    // a full moustache over the upper lip
+    bz(-16, -16, -17, -6, -8, -4);
+    ln(-3, -3);
+    // mouth corner, then the lower lip and chin swung open by the jaw
+    ln(10, 0);
+    const lip = rot(-2, 3);
+    const lip2 = rot(-5, 9);
+    const chin = rot(-3, 30);
+    const under = rot(22, 44);
+    const jawEnd = rot(54, 46);
+    g.lineTo(...lip);
+    g.bezierCurveTo(...lip2, ...rot(-8, 22), ...chin);
+    g.bezierCurveTo(...rot(0, 40), ...rot(10, 45), ...under);
+    g.bezierCurveTo(...rot(34, 46), ...rot(46, 46), ...jawEnd);
+    // throat, a wing-collar point and a tied cravat
+    bz(44, 60, 40, 84, 38, 102);
+    ln(25, 107);
+    ln(33, 114);
+    bz(24, 122, 30, 132, 24, 140);
+    bz(12, 148, -2, 158, -12, 168);
+    ln(-12, 200);
+    ln(176, 200);
+    g.closePath();
+  };
+  const CAT = { x: 246, y: 366 };
+  const catPath = (g, ears, tail) => {
+    // sitting, facing right toward the singer
+    const P = (x, y) => [CAT.x + x, CAT.y + y];
+    const mv = (x, y) => g.moveTo(...P(x, y));
+    const ln = (x, y) => g.lineTo(...P(x, y));
+    const bz = (a, b, c, d, e, f) => g.bezierCurveTo(...P(a, b), ...P(c, d), ...P(e, f));
+    mv(0, 0);
+    bz(-8, -42, 4, -76, 24, -88);
+    bz(22, -100, 24, -108, 28, -114);
+    ln(30 - ears * 2, -136 - ears * 6);
+    ln(41, -119);
+    ln(49, -120);
+    ln(60 + ears * 2, -137 - ears * 6);
+    ln(62, -112);
+    bz(70, -106, 71, -94, 64, -88);
+    bz(68, -72, 74, -40, 68, -10);
+    ln(70, 0);
+    g.closePath();
+    // tail along the sill, the tip lifting with `tail`
+    mv(6, -3);
+    bz(-24, -2, -46, -4, -56, -16 - tail * 22);
+    bz(-60, -24 - tail * 26, -52, -28 - tail * 26, -48, -20 - tail * 22);
+    bz(-40, -12, -22, -11, 6, -12);
+    g.closePath();
+  };
+  const SPRITE = { x: 180, y: 40, w: 640, h: 380 };
+  const makeSprite = draw => {
+    const c = layer(SPRITE.w, SPRITE.h);
+    const g = c.getContext('2d');
+    g.translate(-SPRITE.x, -SPRITE.y);
+    g.filter = 'blur(2px)';
+    g.fillStyle = 'rgba(0,0,0,0.95)';
+    g.beginPath();
+    draw(g);
+    g.fill();
+    return c;
+  };
+  const SINGER_STEPS = 12;
+  const singerSprites = Array.from({ length: SINGER_STEPS + 1 }, (_, k) => makeSprite(g => singerPath(g, k / SINGER_STEPS)));
+  const catSprites = [0, 1].map(ears => [0, 1, 2, 3].map(k => makeSprite(g => catPath(g, ears, k / 3))));
+
+  // light patch on the wall minus the singer and the cat, composed per frame
+  const wallLight = layer(SPRITE.w, SPRITE.h);
+  const wallCtx = wallLight.getContext('2d');
+  const composeWallLight = (open, ears, tail) => {
+    wallCtx.globalCompositeOperation = 'source-over';
+    wallCtx.clearRect(0, 0, SPRITE.w, SPRITE.h);
+    wallCtx.drawImage(moonPatch, SPRITE.x, SPRITE.y, SPRITE.w, SPRITE.h, 0, 0, SPRITE.w, SPRITE.h);
+    wallCtx.globalCompositeOperation = 'destination-out';
+    wallCtx.drawImage(singerSprites[Math.round(clamp(open) * SINGER_STEPS)], 0, 0);
+    wallCtx.drawImage(catSprites[ears > 0.5 ? 1 : 0][Math.round(clamp(tail) * 3)], 0, 0);
+    wallCtx.globalCompositeOperation = 'source-over';
+  };
+
+  // ---------------------------------------------------------------------------
+  // Candle flame and smoke (coda), and the smoke wisp after it dies
+  // ---------------------------------------------------------------------------
+  const smokeSeeds = Array.from({ length: 16 }, (_, i) => ({ ph: random() * TAU, sp: 0.6 + random() * 0.8, sway: 10 + random() * 26, off: i / 16 }));
+  const drawCandleFlame = (t, flame, sootiness) => {
+    const wick = project(CANDLE_WICK[0], CANDLE_WICK[1], CANDLE_WICK[2]);
+    ctx.strokeStyle = 'rgba(20,14,10,0.9)';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(wick[0], wick[1] + 4);
+    ctx.lineTo(wick[0] + 1, wick[1] - 3);
+    ctx.stroke();
+    if (flame > 0.01) {
+      // the tallow under the flame glows
+      const pool = ctx.createRadialGradient(wick[0], wick[1] + 4, 0, wick[0], wick[1] + 4, 20);
+      pool.addColorStop(0, `rgba(255,214,150,${0.55 * flame})`);
+      pool.addColorStop(1, 'rgba(255,214,150,0)');
+      ctx.fillStyle = pool;
+      ctx.fillRect(wick[0] - 20, wick[1] - 16, 40, 40);
+      const flick = 1 + 0.08 * Math.sin(t * 23.1) + 0.05 * Math.sin(t * 37.7 + 1.3);
+      const hgt = (34 + 30 * sootiness) * flame * flick;
+      const wid = 9 * Math.sqrt(flame);
+      const lean = Math.sin(t * 3.1) * 2.5 * flame;
+      const glow = ctx.createRadialGradient(wick[0], wick[1] - hgt * 0.45, 2, wick[0], wick[1] - hgt * 0.45, 90 * flame + 1);
+      glow.addColorStop(0, css(CANDLE, 0.35 * flame));
+      glow.addColorStop(1, css(CANDLE, 0));
+      ctx.fillStyle = glow;
+      ctx.fillRect(wick[0] - 100, wick[1] - 160, 200, 220);
+      const grad = ctx.createLinearGradient(0, wick[1], 0, wick[1] - hgt);
+      grad.addColorStop(0, 'rgba(90,120,255,0.75)');
+      grad.addColorStop(0.18, 'rgba(255,240,200,0.98)');
+      grad.addColorStop(0.6, 'rgba(255,190,90,0.95)');
+      grad.addColorStop(1, 'rgba(255,120,40,0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(wick[0] - wid, wick[1] - 2);
+      ctx.bezierCurveTo(wick[0] - wid * 1.1, wick[1] - hgt * 0.5, wick[0] + lean - 2, wick[1] - hgt * 0.8, wick[0] + lean, wick[1] - hgt);
+      ctx.bezierCurveTo(wick[0] + lean + 2, wick[1] - hgt * 0.8, wick[0] + wid * 1.1, wick[1] - hgt * 0.5, wick[0] + wid, wick[1] - 2);
+      ctx.closePath();
+      ctx.fill();
+    }
+    // soot plume leaning into the drum while the paper is being smoked
+    if (sootiness > 0.01) {
+      const target = project(XD + R * Math.sin(FLAME_THETA) + 6, drumBottom(drumAlpha(t)) + 70, ZD + R * Math.cos(FLAME_THETA));
+      for (const s of smokeSeeds) {
+        const k = (((t * 0.55 * s.sp + s.off) % 1) + 1) % 1;
+        const x = lerp(wick[0], target[0], k) + Math.sin(s.ph + t * 2.2 * s.sp + k * 5) * s.sway * k;
+        const y = lerp(wick[1] - 40, target[1], k) - k * k * 40;
+        const r = 9 + k * 34;
+        const a = sootiness * 0.42 * Math.sin(Math.PI * k);
+        // underlit by the flame: warm grey at the core, soot at the rim
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, `rgba(96,74,56,${a})`);
+        g.addColorStop(0.55, `rgba(40,32,28,${a * 0.6})`);
+        g.addColorStop(1, 'rgba(20,16,14,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(x - r, y - r, r * 2, r * 2);
+      }
+    }
+  };
+  const drawWisp = (t, strength) => {
+    if (strength <= 0.01) return;
+    const wick = project(CANDLE_WICK[0], CANDLE_WICK[1], CANDLE_WICK[2]);
+    ctx.strokeStyle = `rgba(190,196,210,${0.28 * strength})`;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(wick[0], wick[1] - 2);
+    for (let i = 1; i <= 26; i += 1) {
+      const k = i / 26;
+      ctx.lineTo(wick[0] + Math.sin(k * 7 + t * 1.6) * 9 * k + k * 14, wick[1] - 2 - k * 150);
+    }
+    ctx.stroke();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Archive and scanner overlays
+  // ---------------------------------------------------------------------------
+  // the archive: the floor of a grey-green document box under a warm reading lamp
+  const archiveBg = layer();
+  {
+    const g = archiveBg.getContext('2d');
+    g.fillStyle = '#1d1f1a';
+    g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i += 1) {
+      const x = random() * W;
+      const y = random() * H;
+      const r = 30 + random() * 90;
+      const blot = g.createRadialGradient(x, y, 0, x, y, r);
+      blot.addColorStop(0, random() > 0.5 ? 'rgba(70,74,60,0.07)' : 'rgba(0,0,0,0.09)');
+      blot.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = blot;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    const lamp = g.createRadialGradient(330, 380, 40, 330, 380, 640);
+    lamp.addColorStop(0, 'rgba(255,196,120,0.22)');
+    lamp.addColorStop(1, 'rgba(255,196,120,0)');
+    g.fillStyle = lamp;
+    g.fillRect(0, 0, W, H);
+    const edge = g.createRadialGradient(450, 480, 300, 450, 480, 720);
+    edge.addColorStop(0, 'rgba(0,0,0,0)');
+    edge.addColorStop(1, 'rgba(0,0,0,0.55)');
+    g.fillStyle = edge;
+    g.fillRect(0, 0, W, H);
+    g.fillStyle = 'rgba(222,200,160,0.7)';
+    g.font = '16px Didot, "Bodoni 72", Georgia, serif';
+    g.textAlign = 'center';
+    if ('letterSpacing' in g) g.letterSpacing = '5px';
+    g.fillText('PHONAUTOGRAMME  ·  AU CLAIR DE LA LUNE', FLAT.cx, FLAT.cy + FLAT.h / 2 + 48);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+  }
+
+  // the other papers that settle on it over the years (sprites built once)
+  const paperSprite = (w, h, col, kind) => {
+    const pad = 26;
+    const c = layer(w + pad * 2, h + pad * 2);
+    const g = c.getContext('2d');
+    g.filter = 'blur(9px)';
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.fillRect(pad + 6, pad + 10, w, h);
+    g.filter = 'none';
+    g.translate(pad, pad);
+    const paper = g.createLinearGradient(0, 0, w, h);
+    paper.addColorStop(0, css(col));
+    paper.addColorStop(1, css(col.map(v => v * 0.82)));
+    g.fillStyle = paper;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = css(col.map(v => v * 0.62), 0.9);
+    g.lineWidth = 1.2;
+    g.strokeRect(0.5, 0.5, w - 1, h - 1);
+    for (let i = 0; i < 14; i += 1) {
+      const fx = random() * w;
+      const fy = random() * h;
+      const fr = 2 + random() * 9;
+      const spot = g.createRadialGradient(fx, fy, 0, fx, fy, fr);
+      spot.addColorStop(0, 'rgba(120,80,40,0.28)');
+      spot.addColorStop(1, 'rgba(120,80,40,0)');
+      g.fillStyle = spot;
+      g.fillRect(fx - fr, fy - fr, fr * 2, fr * 2);
+    }
+    const ink = 'rgba(58,40,28,0.55)';
+    if (kind === 'letter' || kind === 'envelope') {
+      g.strokeStyle = ink;
+      g.lineWidth = 1.3;
+      const rows = kind === 'letter' ? Math.floor((h - 60) / 24) : 3;
+      for (let r = 0; r < rows; r += 1) {
+        const y0 = kind === 'letter' ? 40 + r * 24 : h * 0.55 + r * 22;
+        let x = kind === 'letter' ? 34 + (r === 0 ? 40 : 0) : w * 0.38;
+        const xEnd = w - 30 - random() * 60;
+        g.beginPath();
+        g.moveTo(x, y0);
+        while (x < xEnd) {
+          const word = 18 + random() * 46;
+          for (let k = 0; k < word; k += 3) g.lineTo(x + k, y0 + Math.sin((x + k) * 0.55) * 2.6 + (random() - 0.5) * 1.4);
+          x += word + 8;
+          g.moveTo(x, y0);
+        }
+        g.stroke();
+      }
+      if (kind === 'envelope') {
+        g.strokeStyle = css(col.map(v => v * 0.6), 0.8);
+        g.beginPath();
+        g.moveTo(0, 0);
+        g.lineTo(w / 2, h * 0.42);
+        g.lineTo(w, 0);
+        g.stroke();
+        g.fillStyle = 'rgba(150,40,34,0.75)';
+        g.fillRect(w - 64, 18, 40, 48);
+        g.strokeStyle = 'rgba(235,220,190,0.6)';
+        g.setLineDash([2, 3]);
+        g.strokeRect(w - 61, 21, 34, 42);
+        g.setLineDash([]);
+      }
+    } else if (kind === 'print') {
+      g.fillStyle = 'rgba(40,36,32,0.42)';
+      const colW = (w - 90) / 2;
+      for (let col2 = 0; col2 < 2; col2 += 1) {
+        for (let y = 36; y < h - 30; y += 13) {
+          let x = 34 + col2 * (colW + 22);
+          const end = x + colW - (random() < 0.12 ? random() * colW * 0.6 : 0);
+          while (x < end) {
+            const ww = 8 + random() * 30;
+            g.fillRect(x, y, Math.min(ww, end - x), 5);
+            x += ww + 5;
+          }
+        }
+      }
+    } else if (kind === 'music') {
+      g.strokeStyle = 'rgba(52,40,30,0.5)';
+      g.fillStyle = 'rgba(52,40,30,0.62)';
+      g.lineWidth = 1;
+      for (let s = 0; s < 4; s += 1) {
+        const top = 44 + s * ((h - 70) / 4);
+        for (let l = 0; l < 5; l += 1) {
+          g.beginPath();
+          g.moveTo(28, top + l * 7);
+          g.lineTo(w - 28, top + l * 7);
+          g.stroke();
+        }
+        for (let n = 0; n < 9; n += 1) {
+          const nx = 60 + n * ((w - 100) / 9) + random() * 10;
+          const ny = top + Math.round(random() * 8) * 3.5;
+          g.beginPath();
+          g.ellipse(nx, ny, 4.6, 3.4, -0.4, 0, TAU);
+          g.fill();
+          g.beginPath();
+          g.moveTo(nx + 4, ny);
+          g.lineTo(nx + 4, ny - 22);
+          g.stroke();
+        }
+      }
+    }
+    return { canvas: c, pad, w, h };
+  };
+  const PAPERS = [
+    { s: paperSprite(560, 340, [178, 160, 124], 'letter'), x: 330, y: 470, rot: -0.07, from: [-1.3, -0.25] },
+    { s: paperSprite(620, 300, [198, 186, 156], 'print'), x: 570, y: 575, rot: 0.05, from: [1.3, 0.35] },
+    { s: paperSprite(480, 360, [168, 156, 128], 'music'), x: 430, y: 505, rot: 0.1, from: [0.2, -1.4] },
+    { s: paperSprite(640, 280, [190, 172, 136], 'print'), x: 470, y: 600, rot: -0.04, from: [-1.2, 0.7] },
+    { s: paperSprite(380, 240, [156, 124, 86], 'envelope'), x: 620, y: 450, rot: -0.14, from: [1.3, -0.6] }
+  ];
+  const PAPER_IN0 = T_ARCHIVE + 2 * BAR;
+  const PAPER_OUT0 = T_ARCHIVE + 3 * BAR + 1.3 * BEAT;
+  const drawPapers = t => {
+    for (let k = 0; k < PAPERS.length; k += 1) {
+      const p = PAPERS[k];
+      const tin = PAPER_IN0 + k * BEAT;
+      const tout = PAPER_OUT0 + (PAPERS.length - 1 - k) * 0.14 * BEAT;
+      if (t < tin || t > tout + 0.5 * BEAT) continue;
+      const arrive = 1 - Math.pow(1 - clamp((t - tin) / (0.42 * BEAT)), 3);
+      const leave = Math.pow(clamp((t - tout) / (0.45 * BEAT)), 2);
+      const away = (1 - arrive) + leave;
+      const x = p.x + p.from[0] * 700 * away;
+      const y = p.y + p.from[1] * 700 * away;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(p.rot + away * p.from[0] * 0.25);
+      ctx.drawImage(p.s.canvas, -p.s.w / 2 - p.s.pad, -p.s.h / 2 - p.s.pad);
+      ctx.restore();
+    }
+  };
+  const scanBg = layer();
+  {
+    const g = scanBg.getContext('2d');
+    const grd = g.createLinearGradient(0, 0, 0, H);
+    grd.addColorStop(0, '#0a0f13');
+    grd.addColorStop(1, '#070a0d');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = 'rgba(120,190,230,0.06)';
+    g.lineWidth = 1;
+    for (let x = 30; x < W; x += 30) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, H);
+      g.stroke();
+    }
+    for (let y = 30; y < H; y += 30) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(W, y);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(150,200,230,0.05)';
+    g.fillRect(FLAT.cx - FLAT.w / 2 - 30, FLAT.cy - FLAT.h / 2 - 30, FLAT.w + 60, FLAT.h + 60);
+    g.strokeStyle = 'rgba(150,210,240,0.22)';
+    g.strokeRect(FLAT.cx - FLAT.w / 2 - 30, FLAT.cy - FLAT.h / 2 - 30, FLAT.w + 60, FLAT.h + 60);
+  }
+  // foxing that gathers on the sheet in the archive, and the sheet's paper backing
+  const foxSprite = layer(Math.ceil(FLAT.w), Math.ceil(FLAT.h));
+  {
+    const g = foxSprite.getContext('2d');
+    for (let i = 0; i < 60; i += 1) {
+      const edge = random();
+      const along = random();
+      let x;
+      let y;
+      if (edge < 0.5) {
+        x = along * FLAT.w;
+        y = random() < 0.5 ? random() * 12 : FLAT.h - random() * 12;
+      } else {
+        x = random() < 0.5 ? random() * 14 : FLAT.w - random() * 14;
+        y = along * FLAT.h;
+      }
+      const r = 1.5 + random() * 6;
+      const a = 0.1 + random() * 0.2;
+      const spot = g.createRadialGradient(x, y, 0, x, y, r);
+      spot.addColorStop(0, `rgba(150,96,44,${a})`);
+      spot.addColorStop(1, 'rgba(150,96,44,0)');
+      g.fillStyle = spot;
+      g.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+  }
+  const BACK_PAD = 30;
+  const sheetBacking = layer(Math.ceil(FLAT.w) + BACK_PAD * 2, Math.ceil(FLAT.h) + BACK_PAD * 2);
+  {
+    const g = sheetBacking.getContext('2d');
+    g.filter = 'blur(10px)';
+    g.fillStyle = 'rgba(0,0,0,0.6)';
+    g.fillRect(BACK_PAD + 6, BACK_PAD + 12, FLAT.w, FLAT.h);
+    g.filter = 'none';
+    g.fillStyle = '#8f7a58';
+    g.fillRect(BACK_PAD - 5, BACK_PAD - 5, FLAT.w + 10, FLAT.h + 10);
+    g.strokeStyle = 'rgba(40,28,16,0.6)';
+    g.lineWidth = 1;
+    g.strokeRect(BACK_PAD - 4.5, BACK_PAD - 4.5, FLAT.w + 9, FLAT.h + 9);
+  }
+
+  // read position (phrase beat) and playback speed during the scan
+  const readState = t => {
+    if (t >= T_FAST && t < T_STOP) return { b: ((t - T_FAST) / BEAT) * 2, speed: 2 };
+    if (t >= T_STOP && t < T_TRUE) {
+      const k = smooth(T_STOP + 1.6 * BEAT, T_STOP + 3.2 * BEAT, t);
+      return { b: lerp(16, 0, k), speed: 0, rewind: k };
+    }
+    if (t >= T_TRUE && t < T_CODA) return { b: (t - T_TRUE) / BEAT, speed: 1 };
+    return null;
+  };
+
+  const drawPlayhead = (rs, alpha) => {
+    if (!rs || alpha <= 0.01) return;
+    const b = clamp(rs.b, 0, 15.999);
+    const smp = trace[sampleIndexAtBeat(b)];
+    const base = V0 + PITCH * (b / 4);
+    const top = flatPoint(smp.u, base - 18);
+    const bot = flatPoint(smp.u, base + 18);
+    const head = flatPoint(smp.u, smp.w);
+    const g = ctx.createLinearGradient(top[0] - 16, 0, top[0] + 16, 0);
+    g.addColorStop(0, 'rgba(120,220,255,0)');
+    g.addColorStop(0.5, `rgba(170,235,255,${0.45 * alpha})`);
+    g.addColorStop(1, 'rgba(120,220,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(top[0] - 16, top[1], 32, bot[1] - top[1]);
+    ctx.fillStyle = `rgba(230,250,255,${alpha})`;
+    ctx.beginPath();
+    ctx.arc(head[0], head[1], 3.2, 0, TAU);
+    ctx.fill();
+    const halo = ctx.createRadialGradient(head[0], head[1], 0, head[0], head[1], 22);
+    halo.addColorStop(0, `rgba(160,230,255,${0.55 * alpha})`);
+    halo.addColorStop(1, 'rgba(160,230,255,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(head[0] - 22, head[1] - 22, 44, 44);
+  };
+
+  // glowing re-stroke of the part of the line already read
+  const drawReadGlow = (rs, alpha) => {
+    if (!rs || alpha <= 0.01 || rs.b <= 0 || rs.speed === 0) return;
+    const end = sampleIndexAtBeat(clamp(rs.b, 0, 16));
+    const start = Math.max(0, end - 260);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    let lastRow = -1;
+    ctx.beginPath();
+    for (let i = start; i <= end; i += 1) {
+      const smp = trace[i];
+      const p = flatPoint(smp.u, smp.w);
+      if (smp.row !== lastRow) ctx.moveTo(p[0], p[1]);
+      else ctx.lineTo(p[0], p[1]);
+      lastRow = smp.row;
+    }
+    ctx.strokeStyle = `rgba(150,225,255,${0.5 * alpha})`;
+    ctx.lineWidth = 3.4;
+    ctx.stroke();
+  };
+
+  const drawWaveStrip = (t, rs, alpha) => {
+    if (alpha <= 0.01) return;
+    const x0 = FLAT.cx - FLAT.w / 2;
+    const y0 = FLAT.cy + FLAT.h / 2 + 46;
+    const w = FLAT.w;
+    const h = 64;
+    ctx.fillStyle = `rgba(10,22,30,${0.85 * alpha})`;
+    ctx.fillRect(x0, y0, w, h);
+    ctx.strokeStyle = `rgba(120,200,240,${0.35 * alpha})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x0 + 0.5, y0 + 0.5, w - 1, h - 1);
+    ctx.beginPath();
+    ctx.moveTo(x0, y0 + h / 2);
+    ctx.lineTo(x0 + w, y0 + h / 2);
+    ctx.strokeStyle = `rgba(120,200,240,${0.15 * alpha})`;
+    ctx.stroke();
+    // waveform of the last 1.6 s of playback
+    const span = 1.6;
+    ctx.beginPath();
+    const n = 520;
+    for (let i = 0; i <= n; i += 1) {
+      const tau = t - span + (span * i) / n;
+      let b = null;
+      let speed = 1;
+      if (tau >= T_FAST && tau < T_STOP) {
+        b = ((tau - T_FAST) / BEAT) * 2;
+        speed = 2;
+      } else if (tau >= T_TRUE && tau < T_CODA) {
+        b = (tau - T_TRUE) / BEAT;
+      }
+      let y = 0;
+      if (b !== null && b < 16) {
+        const semis = noteAt(PHRASE_A, b)[2];
+        const f = 9.5 * Math.pow(2, semis / 12) * speed;
+        y = noteEnvelope(PHRASE_A, b) * (Math.sin(TAU * f * tau) + 0.3 * Math.sin(TAU * 2 * f * tau + 0.6)) * 0.78;
+      }
+      const px = x0 + (w * i) / n;
+      const py = y0 + h / 2 - y * (h * 0.42);
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.strokeStyle = `rgba(140,230,255,${0.9 * alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    let label = '×2';
+    if (rs && rs.speed === 1) label = '×1';
+    if (rs && rs.speed === 0) label = rs.rewind > 0.5 ? '×1' : '×2';
+    if (!rs && t >= T_CODA) label = '×1';
+    ctx.font = 'bold 26px "Courier New", monospace';
+    ctx.textAlign = 'right';
+    ctx.fillStyle = `rgba(170,235,255,${alpha})`;
+    ctx.fillText(label, x0 + w - 14, y0 + h - 18);
+    ctx.textAlign = 'left';
+  };
+
+  // ---------------------------------------------------------------------------
+  // Year label
+  // ---------------------------------------------------------------------------
+  const yearAt = t => {
+    if (t < T_ARCHIVE + 1.2 * BAR) return 1860;
+    if (t < T_FAST - 0.6 * BAR) {
+      const k = easeInOut(clamp((t - T_ARCHIVE - 1.2 * BAR) / (T_FAST - 0.6 * BAR - T_ARCHIVE - 1.2 * BAR)));
+      return Math.round(lerp(1860, 2008, k));
+    }
+    if (t < T_CODA + 0.2 * BAR) return 2008;
+    if (t < T_CODA + 1.0 * BAR) return Math.round(lerp(2008, 1860, easeInOut(clamp((t - T_CODA - 0.2 * BAR) / (0.8 * BAR)))));
+    return 1860;
+  };
+
+  const vignette = layer();
+  {
+    const g = vignette.getContext('2d');
+    const grd = g.createRadialGradient(450, 450, 260, 450, 450, 700);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.6)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Frame
+  // ---------------------------------------------------------------------------
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const env = envelopes(t);
+    const lights = { moon: env.moon, candle: env.candle };
+    const st = sheetState(t);
+    const beat = t / BEAT;
+
+    // every frame starts from the same context state, whatever the previous call left behind
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.filter = 'none';
+    ctx.lineWidth = 1;
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([]);
+    ctx.textAlign = 'start';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    // ---- 1860 room ----
+    if (env.room > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = env.room;
+      ctx.drawImage(roomAmbient, 0, 0);
+      ctx.restore();
+      const singing = t < T_ARCHIVE ? noteEnvelope(PHRASE_A, beat) : 0;
+      const tail = smooth(9.2, 9.6, beat) * (1 - smooth(10.2, 11, beat));
+      if (env.moon > 0.001) {
+        composeWallLight(singing, 0, tail);
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = env.moon * env.room;
+        ctx.drawImage(moonFill, 0, 0);
+        ctx.drawImage(wallLight, SPRITE.x, SPRITE.y);
+        ctx.restore();
+      }
+      if (env.candle > 0.001) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.globalAlpha = env.candle * env.room;
+        ctx.drawImage(roomCandle, 0, 0);
+        ctx.restore();
+      }
+      ctx.save();
+      ctx.globalAlpha = env.room;
+      drawLit(baseLayers, lights, env.room);
+      const geo = drawDrum(t, lights, st);
+      if (st.mode === 'drum') {
+        const upto = t < T_ARCHIVE ? beat : 16;
+        const cover = t >= CODA_TURN0 ? u => sootCover(u, t) : null;
+        drawTrace(t, lights, st, { uptoBeat: upto, wrappedOnly: true, cover, warm: clamp(lights.candle * 1.4) });
+      }
+      drawAxleAndCrank(t, lights, st, geo);
+      drawLit(candleLayers, lights, env.room);
+      drawLit(hornLayers, lights, env.room);
+      const lift = t < 18 * BAR ? smooth(T_ARCHIVE, T_ARCHIVE + 0.3 * BEAT, t) : 1 - smooth(18 * BAR + 2 * BEAT, 18 * BAR + 3.6 * BEAT, t);
+      drawStylus(t, lights, lift);
+      const sootiness = t >= CODA_TURN0 && t < CODA_TURN1 ? smooth(CODA_TURN0, CODA_TURN0 + 0.4 * BAR, t) * (1 - smooth(CODA_TURN1 - 0.5 * BAR, CODA_TURN1, t)) : 0;
+      drawCandleFlame(t, env.candle, sootiness);
+      const sinceOut = (((t - (18 * BAR + 2.6 * BEAT)) % DURATION) + DURATION) % DURATION;
+      drawWisp(t, sinceOut < 8 ? (1 - sinceOut / 8) * smooth(0, 0.4, sinceOut) : 0);
+      ctx.restore();
+    }
+
+    // ---- archive and scanner backdrops ----
+    if (env.archive > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = env.archive;
+      ctx.drawImage(archiveBg, 0, 0);
+      ctx.restore();
+    }
+    if (env.scan > 0.001) {
+      ctx.save();
+      ctx.globalAlpha = env.scan;
+      ctx.drawImage(scanBg, 0, 0);
+      ctx.restore();
+    }
+
+    // ---- 1860 showing through while the line is read at its own speed ----
+    if (env.ghost > 0.001) {
+      const rsG = readState(t);
+      const open = rsG && rsG.speed === 1 ? noteEnvelope(PHRASE_A, rsG.b) : 0;
+      composeWallLight(open, 1, 0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, W, FLAT.cy - FLAT.h / 2 - 10);
+      ctx.clip();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = env.ghost * 0.85;
+      ctx.drawImage(wallLight, SPRITE.x, SPRITE.y);
+      ctx.restore();
+    }
+
+    // ---- the sheet off the drum ----
+    if (st.mode !== 'drum' || st.freed > 0) {
+      const scanLight = env.scan * 0.35;
+      const view = { sootLift: env.archive * 6 + env.scan * 8 };
+      const sheetLights = st.mode === 'flat' ? { moon: 0, candle: 0 } : lights;
+      ctx.save();
+      ctx.globalAlpha = st.mode === 'drum' ? env.room : 1;
+      // laid flat it is a sheet of paper: drop shadow and an unsmoked rim
+      const settled = st.mode === 'flat' ? 1 : st.mode === 'blend' ? smooth(0.88, 1, st.flat) : 0;
+      if (settled > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = settled;
+        ctx.drawImage(sheetBacking, FLAT.cx - FLAT.w / 2 - BACK_PAD, FLAT.cy - FLAT.h / 2 - BACK_PAD);
+        ctx.restore();
+      }
+      drawFreeSheet(t, sheetLights, st, view);
+      const age = t < T_ARCHIVE + BAR ? 0 : t < T_CODA ? smooth(T_ARCHIVE + 1.3 * BAR, T_FAST - 0.8 * BAR, t) : 1 - smooth(T_CODA, T_CODA + 0.5 * BAR, t);
+      if (age * settled > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = age * settled;
+        ctx.drawImage(foxSprite, FLAT.cx - FLAT.w / 2, FLAT.cy - FLAT.h / 2);
+        ctx.restore();
+      }
+      const flatLights = st.mode === 'flat' ? { moon: 0.25 + env.archive * 0.35, candle: 0 } : lights;
+      drawTrace(t, flatLights, st, { uptoBeat: 16, freeOnly: st.mode === 'drum', scanLight, warm: env.archive, width: st.mode === 'drum' ? 1.5 : 1.9 });
+      ctx.restore();
+    }
+    if (t >= PAPER_IN0 && t < T_FAST) drawPapers(t);
+
+    // ---- scanner: light bar, playhead, waveform ----
+    if (env.scan > 0.001) {
+      const sweep = (t - (T_FAST - 0.42 * BAR)) / (0.4 * BAR);
+      if (sweep > 0 && sweep < 1) {
+        const y = FLAT.cy - FLAT.h / 2 - 20 + (FLAT.h + 40) * sweep;
+        const g = ctx.createLinearGradient(0, y - 30, 0, y + 30);
+        g.addColorStop(0, 'rgba(200,240,255,0)');
+        g.addColorStop(0.5, `rgba(220,248,255,${0.55 * env.scan})`);
+        g.addColorStop(1, 'rgba(200,240,255,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(FLAT.cx - FLAT.w / 2 - 40, y - 30, FLAT.w + 80, 60);
+      }
+      const rs = readState(t);
+      drawReadGlow(rs, env.scan);
+      drawPlayhead(rs, env.scan);
+      drawWaveStrip(t, rs, env.scan);
+    }
+
+    // ---- year ----
+    ctx.save();
+    ctx.font = '34px Didot, "Bodoni 72", Georgia, serif';
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '5px';
+    ctx.fillStyle = 'rgba(236,228,212,0.78)';
+    ctx.textAlign = 'left';
+    ctx.fillText(String(yearAt(t)), 46, 862);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+    ctx.restore();
+
+    ctx.drawImage(vignette, 0, 0);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 76\\n// DURATION: 60\\n// FORM: moonlit inscription (cycles 0-3) | archive groove (cycles 4-7) | false-speed playback (cycles 8-9) | speed correction (cycle 10) | true-voice drop (cycles 11-14) | soot return (cycles 15-18)\\n// TONAL CENTER: A minor\\n// MOTIF: C3 C3 C3 D3 — one-bar cell of four quarter notes on beats 1, 2, 3 and 4\\n// HARMONIC PLAN: Am7 | Fmaj7 | C | G, restarting on Am7 at every section; cycles 8-9 take only Am7 | Fmaj7; cycle 10 replaces the loop with one held Gsus4\\n// GROOVE: AkaiMPC60 — kick on 1 and the \\\"and\\\" of 2, snare on 2 and 4, closed hats on swung eighths with alternating soft velocities; low-slung and dusty, ~20% eighth swing, muted transients, no fills\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\nsetcpm(19)\\n\\nconst kit = stack(\\n  s(\\\"bd [~ bd] ~ ~\\\").postgain(1),\\n  s(\\\"~ sd ~ sd\\\").postgain(0.7),\\n  s(\\\"hh*8\\\").swingBy(0.2, 4).velocity(\\\"[0.95 0.55]*4\\\").degradeBy(0.08)\\n    .sometimesBy(0.12, x => x.ply(2)).postgain(0.42)\\n).bank(\\\"AkaiMPC60\\\").lpf(7000).room(0.16).roomsize(1.6)\\n\\nconst sub = note(\\\"\u003ca1 f2 c2 g2>\\\").struct(\\\"x@6 ~ x\\\")\\n  .s(\\\"sine\\\").attack(0.015).decay(0.14).sustain(0.85).release(0.16).lpf(320)\\n\\nconst rhodes = (p) => p.s(\\\"triangle\\\").attack(0.07).decay(0.55).sustain(0.3).release(0.6)\\n  .lpf(2400).lpq(3).pan(0.53).room(0.35).roomsize(3)\\nconst chordLoop = note(\\\"\u003c[a3,c4,e4,g4] [f3,a3,c4,e4] [c4,e4,g4] [g3,b3,d4,g4]>\\\").struct(\\\"x@5 ~ x@2\\\")\\nconst chordThin = note(\\\"\u003c[a3,e4,g4] [f3,c4,e4]>\\\").struct(\\\"x ~ x [~ x]\\\")\\nconst gsusHeld = note(\\\"[g3,c4,d4,g4]\\\")\\n\\nconst vox = (p) => p.s(\\\"sawtooth\\\").vowel(\\\"o\\\").vib(3).vibmod(0.1)\\n  .attack(0.05).decay(0.25).sustain(0.8).release(0.2).legato(0.92)\\n  .lpf(1500).lpq(5).pan(0.47)\\n  .delay(0.25).delaytime(0.395).delayfeedback(0.25).room(0.3).roomsize(2.6)\\nconst phraseA = note(\\\"\u003c[c3 c3 c3 d3] [e3 d3] [c3 e3 d3 d3] c3>\\\")\\nconst phraseB = note(\\\"\u003c[d3 d3 d3 d3] [a2 a2] [d3 c3 b2 a2] g2>\\\")\\nconst phraseFast = note(\\\"\u003c[[c4 c4 c4 d4]@2 e4 d4] [[c4 e4 d4 d4]@2 c4@2]>\\\")\\n\\n$: arrange([4, silence], [6, kit], [1, silence], [6, kit], [2, silence]).gain(0.32)\\n\\n$: arrange([4, silence], [6, sub], [1, silence], [6, sub], [2, silence]).gain(0.15)\\n\\n$: arrange(\\n  [4, rhodes(chordLoop)],\\n  [4, rhodes(chordLoop)],\\n  [2, rhodes(chordThin).hpf(520).postgain(0.75)],\\n  [1, rhodes(gsusHeld).attack(0.3).decay(1.2).sustain(0.6).release(1.1).lpf(1800)],\\n  [4, rhodes(chordLoop)],\\n  [4, rhodes(chordLoop)]\\n).gain(0.13)\\n\\n$: arrange(\\n  [4, vox(phraseA)],\\n  [4, silence],\\n  [2, vox(phraseFast).vowel('i').hpf(500).lpf(4200).postgain(1.4)],\\n  [1, silence],\\n  [4, vox(phraseA)],\\n  [4, vox(phraseB)]\\n).gain(0.55)\\n\\n$: stack(\\n  s(\\\"white*32\\\").degradeBy(0.62).attack(0.001).decay(0.018).sustain(0).release(0.01)\\n    .hpf(1400).lpf(8000).pan(rand).postgain(0.9),\\n  s(\\\"white*16\\\").degradeBy(0.75).attack(0.001).decay(0.05).sustain(0).release(0.02)\\n    .hpf(500).lpf(3000).pan(rand).postgain(0.55),\\n  s(\\\"pink\\\").struct(\\\"x\\\").attack(0.6).decay(1.4).sustain(0.2).release(1.2)\\n    .hpf(90).lpf(1600).postgain(0.5)\\n).every(4, x => x.degradeBy(0.12)).gain(0.25)\",\"bpm\":76,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.31666666666666665,\"cycles\":19,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
