@@ -18,6 +18,7 @@ const CairnSurvey = lazy(() => import('../../components/playground/experiments/p
 const LetterlockPost = lazy(() => import('../../components/playground/experiments/linguistics/LetterlockPost'))
 const SmallHours = lazy(() => import('../../components/playground/experiments/consciousness/SmallHours'))
 const StepwellLens = lazy(() => import('../../components/playground/experiments/physics/StepwellLens'))
+const VoxHumana = lazy(() => import('../../components/playground/experiments/linguistics/VoxHumana'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -45,7 +46,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/CairnSurvey.jsx',
       '!../../components/playground/experiments/linguistics/LetterlockPost.jsx',
       '!../../components/playground/experiments/consciousness/SmallHours.jsx',
-      '!../../components/playground/experiments/physics/StepwellLens.jsx'
+      '!../../components/playground/experiments/physics/StepwellLens.jsx',
+      '!../../components/playground/experiments/linguistics/VoxHumana.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -64,7 +66,8 @@ const EXPERIMENT_COMPONENTS = {
   'cairn-survey': CairnSurvey,
   'letterlock-post': LetterlockPost,
   'small-hours': SmallHours,
-  'stepwell-lens': StepwellLens
+  'stepwell-lens': StepwellLens,
+  'vox-humana': VoxHumana
 }
 
 const LoadingExperiment = ({ color }) => (
