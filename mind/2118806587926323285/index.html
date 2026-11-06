@@ -1,0 +1,1134 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/OutputPass.js';
+
+// UPWARD, NOT NORTHWARD. Abbott's Flatland (1884) is a sheet of paper floating in the void,
+// and its citizens are polygons one paper-thickness tall. ClawedCode rises through the page.
+// Two clipping planes and a stencil cap show what the plane contains at every moment: the
+// exact cross-section of the cat's one skinned surface. Until the camera goes "upward" the
+// cat is clipped to the page's own thickness, so the viewer sees only what the Square sees.
+
+const DUR = 60, TAU = Math.PI * 2;
+const S = 2;          // the cat is modelled one unit tall to the ear tips, shown two
+const SLAB = 0.035;   // half the thickness of Flatland
+const INK = '#3a2a1d';
+
+let seed = 1884;
+const random = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const smooth = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+const smoother = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * u * (u * (6 * u - 15) + 10); };
+const mix = (a, b, u) => a + (b - a) * u;
+const D2R = Math.PI / 180;
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: false, stencil: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+renderer.localClippingEnabled = true;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.style.margin = '0';
+document.body.style.background = '#08070c';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const VOID = new THREE.Color('#0a0812');
+scene.background = VOID;
+scene.fog = new THREE.FogExp2(VOID, 0.024);
+
+const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 140);
+
+// ---------- the void beyond the page: dark, with one luminous horizon ----------
+const sky = new THREE.Mesh(
+  new THREE.SphereGeometry(70, 48, 24),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      uDeep: { value: new THREE.Color('#0a0812') },
+      uGlow: { value: new THREE.Color('#5b4c78') },
+      uCore: { value: new THREE.Color('#b9a6c4') }
+    },
+    vertexShader: `varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uDeep, uGlow, uCore; varying vec3 vW;
+      void main(){ vec3 d = normalize(vW - cameraPosition); float e = abs(d.y);
+        vec3 c = uDeep + uGlow * exp(-e * 9.0) * 0.5 + uCore * exp(-e * 140.0) * 0.55;
+        gl_FragColor = vec4(c, 1.0); }`
+  })
+);
+sky.renderOrder = -1;
+sky.frustumCulled = false;
+scene.add(sky);
+
+// ---------- light ----------
+const key = new THREE.DirectionalLight('#ffeed6', 2.6);
+key.position.set(-5.5, 10, 4.2);
+key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 30 });
+key.shadow.bias = -0.0004;
+key.shadow.normalBias = 0.015;
+scene.add(key, key.target);
+scene.add(new THREE.HemisphereLight('#e6dccd', '#3d3123', 0.55));
+const rim = new THREE.DirectionalLight('#9d8bd8', 0.22);
+rim.position.set(6, 3.5, -5);
+scene.add(rim);
+
+// ---------- the page ----------
+function makePaperTexture() {
+  const N = 2048, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d');
+  g.fillStyle = '#f1e2c2';
+  g.fillRect(0, 0, N, N);
+  const vig = g.createRadialGradient(N / 2, N / 2, N * 0.18, N / 2, N / 2, N * 0.52);
+  vig.addColorStop(0, 'rgba(255,250,236,0.35)');
+  vig.addColorStop(1, 'rgba(120,92,58,0.22)');
+  g.fillStyle = vig;
+  g.fillRect(0, 0, N, N);
+  // laid paper: fine laid lines and the wider chain lines of a mould
+  g.strokeStyle = 'rgba(110,86,56,0.05)';
+  g.lineWidth = 1;
+  for (let y = 0; y < N; y += 5) { g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(N, y + 0.5); g.stroke(); }
+  g.strokeStyle = 'rgba(110,86,56,0.07)';
+  g.lineWidth = 2;
+  for (let x = 40; x < N; x += 112) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, N); g.stroke(); }
+  for (let i = 0; i < 2600; i++) {
+    const x = random() * N, y = random() * N, a = random() * TAU, l = 6 + random() * 22;
+    g.strokeStyle = `rgba(${90 + random() * 50},${70 + random() * 30},${45 + random() * 20},${0.03 + random() * 0.05})`;
+    g.lineWidth = 0.6 + random() * 0.8;
+    g.beginPath(); g.moveTo(x, y);
+    g.quadraticCurveTo(x + Math.cos(a + 0.6) * l * 0.5, y + Math.sin(a + 0.6) * l * 0.5, x + Math.cos(a) * l, y + Math.sin(a) * l);
+    g.stroke();
+  }
+  for (let i = 0; i < 700; i++) {
+    g.fillStyle = `rgba(90,66,40,${0.05 + random() * 0.12})`;
+    g.beginPath(); g.arc(random() * N, random() * N, 0.6 + random() * 1.4, 0, TAU); g.fill();
+  }
+  // engraved compass rose: in Flatland the rain comes from the north
+  const cx = N * 0.79, cy = N * 0.24, R = 70;
+  g.save(); g.translate(cx, cy);
+  g.strokeStyle = 'rgba(80,58,36,0.55)'; g.fillStyle = 'rgba(80,58,36,0.55)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(0, 0, R, 0, TAU); g.stroke();
+  g.beginPath(); g.arc(0, 0, R * 0.82, 0, TAU); g.stroke();
+  for (let i = 0; i < 8; i++) {
+    const a = i * TAU / 8 - Math.PI / 2, l = i % 2 ? R * 0.55 : R * 1.05, w = i % 2 ? 7 : 11;
+    g.beginPath();
+    g.moveTo(Math.cos(a) * l, Math.sin(a) * l);
+    g.lineTo(Math.cos(a + Math.PI / 2) * w, Math.sin(a + Math.PI / 2) * w);
+    g.lineTo(Math.cos(a - Math.PI / 2) * w, Math.sin(a - Math.PI / 2) * w);
+    g.closePath();
+    i === 0 ? g.fill() : g.stroke();
+  }
+  g.font = 'italic 600 44px Baskerville, Georgia, serif';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('N', 0, -R - 34);
+  g.restore();
+  // rim inscription, as on a title page
+  const text = 'FLATLAND · A ROMANCE OF MANY DIMENSIONS · BY A SQUARE · MDCCCLXXXIV · UPWARD, NOT NORTHWARD · ';
+  g.save(); g.translate(N / 2, N / 2);
+  g.font = '600 30px Baskerville, Georgia, serif';
+  g.fillStyle = 'rgba(78,56,34,0.5)';
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  const rr = N * 0.43, step = TAU / text.length;
+  for (let i = 0; i < text.length; i++) {
+    const a = -Math.PI / 2 + i * step;
+    g.save(); g.rotate(a + Math.PI / 2); g.translate(0, -rr); g.fillText(text[i], 0, 0); g.restore();
+  }
+  g.strokeStyle = 'rgba(78,56,34,0.35)'; g.lineWidth = 2;
+  g.beginPath(); g.arc(0, 0, rr + 26, 0, TAU); g.stroke();
+  g.beginPath(); g.arc(0, 0, rr - 26, 0, TAU); g.stroke();
+  g.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  return tex;
+}
+
+const PAGE_R = 8.6;
+const pageShape = new THREE.Shape();
+for (let i = 0; i <= 360; i++) {
+  const a = i * TAU / 360;
+  const r = PAGE_R + 0.07 * Math.sin(a * 7 + 1.3) + 0.045 * Math.sin(a * 19 + 0.4) + (random() - 0.5) * 0.05;
+  const x = Math.cos(a) * r, y = Math.sin(a) * r;
+  i === 0 ? pageShape.moveTo(x, y) : pageShape.lineTo(x, y);
+}
+const pageGeo = new THREE.ShapeGeometry(pageShape, 1);
+{
+  const p = pageGeo.attributes.position, uv = pageGeo.attributes.uv;
+  for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / (2 * PAGE_R * 1.02) + 0.5, p.getY(i) / (2 * PAGE_R * 1.02) + 0.5);
+}
+pageGeo.rotateX(-Math.PI / 2);
+const page = new THREE.Mesh(pageGeo, new THREE.MeshStandardMaterial({ map: makePaperTexture(), roughness: 0.93, metalness: 0 }));
+page.receiveShadow = true;
+scene.add(page);
+
+// the title plate, engraved on its own decal so it stays sharp up close
+{
+  const c = document.createElement('canvas');
+  c.width = 1400; c.height = 460;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(62,42,24,0.72)'; g.strokeStyle = 'rgba(62,42,24,0.5)';
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  g.font = '600 168px Baskerville, Georgia, serif';
+  if ('letterSpacing' in g) g.letterSpacing = '30px';
+  g.fillText('FLATLAND', 715, 190);
+  if ('letterSpacing' in g) g.letterSpacing = '3px';
+  g.font = 'italic 64px Baskerville, Georgia, serif';
+  g.fillText('a Romance of Many Dimensions', 700, 300);
+  if ('letterSpacing' in g) g.letterSpacing = '12px';
+  g.font = '46px Baskerville, Georgia, serif';
+  g.fillText('BY A SQUARE · 1884', 706, 392);
+  g.lineWidth = 3;
+  g.beginPath(); g.moveTo(170, 228); g.lineTo(1230, 228); g.stroke();
+  g.beginPath(); g.moveTo(440, 420); g.lineTo(960, 420); g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(3.1, 3.1 * 460 / 1400),
+    new THREE.MeshStandardMaterial({ map: tex, transparent: true, depthWrite: false, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2 }));
+  // laid flat, reading left to right for the opening camera at azimuth -40 degrees
+  const az = -40 * D2R;
+  plate.rotation.set(-Math.PI / 2, 0, 0);
+  plate.rotateZ(Math.PI / 2 - az);
+  plate.position.set(4.35, 0.002, -0.62);
+  plate.receiveShadow = true;
+  scene.add(plate);
+}
+
+// ---------- the citizens: polygons exactly one page-thickness tall ----------
+const shadeOf = (hex, k) => new THREE.Color(hex).multiplyScalar(k);
+function polygon(n, r, rot = 0) {
+  const pts = [];
+  for (let i = 0; i < n; i++) { const a = rot + i * TAU / n; pts.push([Math.cos(a) * r, Math.sin(a) * r]); }
+  return pts;
+}
+function makeFigure(pts, color, opts = {}) {
+  const shape = new THREE.Shape();
+  pts.forEach(([x, y], i) => (i ? shape.lineTo(x, y) : shape.moveTo(x, y)));
+  shape.closePath();
+  if (opts.hole) {
+    const h = new THREE.Path();
+    opts.hole.forEach(([x, y], i) => (i ? h.lineTo(x, y) : h.moveTo(x, y)));
+    h.closePath();
+    shape.holes.push(h);
+  }
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: SLAB * 2, bevelEnabled: false, curveSegments: 48 });
+  geo.rotateX(-Math.PI / 2);
+  geo.translate(0, -SLAB, 0);
+  const top = new THREE.MeshStandardMaterial({ color, roughness: 0.82 });
+  const side = new THREE.MeshStandardMaterial({ color: shadeOf(color, 0.7), emissive: shadeOf(color, 0.42), roughness: 0.9 });
+  const mesh = new THREE.Mesh(geo, [top, side]);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const group = new THREE.Group();
+  group.add(mesh);
+  const outline = (loop, col) => {
+    const g = new THREE.BufferGeometry().setFromPoints(loop.map(([x, y]) => new THREE.Vector3(x, SLAB + 0.002, -y)));
+    group.add(new THREE.LineLoop(g, new THREE.LineBasicMaterial({ color: col })));
+  };
+  outline(pts, opts.edge || INK);
+  if (opts.hole) outline(opts.hole, opts.edge || INK);
+  if (opts.eye) {
+    const eye = new THREE.Mesh(new THREE.CircleGeometry(0.03, 16), new THREE.MeshBasicMaterial({ color: '#1b130d' }));
+    eye.rotation.x = -Math.PI / 2;
+    eye.position.set(opts.eye[0], SLAB + 0.003, -opts.eye[1]);
+    group.add(eye);
+  }
+  group.userData.top = top;
+  return group;
+}
+
+const citizens = [];
+function citizen(kind, color, spec) {
+  let pts, eye, opts = {};
+  if (kind === 'square') { pts = polygon(4, 0.33, Math.PI / 4); eye = [0.17, 0.1]; }
+  else if (kind === 'iso') { pts = [[0.3, 0], [-0.22, 0.09], [-0.22, -0.09]]; eye = [0.19, 0]; }
+  else if (kind === 'equi') { pts = polygon(3, 0.25); eye = [0.16, 0]; }
+  else if (kind === 'penta') { pts = polygon(5, 0.27); eye = [0.2, 0]; }
+  else if (kind === 'hexa') { pts = polygon(6, 0.29); eye = [0.22, 0]; }
+  else { pts = polygon(64, 0.31); eye = [0.24, 0]; opts.edge = '#b8902f'; }
+  const fig = makeFigure(pts.map(([x, y]) => [x * 1.15, y * 1.15]), color, { eye: [eye[0] * 1.15, eye[1] * 1.15], ...opts });
+  scene.add(fig);
+  const c = { kind, fig, ...spec };
+  citizens.push(c);
+  return c;
+}
+
+// home loops are periodic over the whole film; alpha is where each stands around the event
+const theSquare = citizen('square', '#dc8a38', {});
+citizen('iso', '#6c7d97', { home: [2.7, 2.6], r: 0.85, k: 1, ph: 0.3, alpha: 62, ring: 0 });
+citizen('iso', '#6c7d97', { home: [-2.9, 2.1], r: 0.7, k: 2, ph: 2.1, alpha: 148, ring: 0.1 });
+citizen('iso', '#6c7d97', { home: [-0.9, -3.0], r: 1.25, k: 1, ph: 4.0, alpha: 248, ring: 0 });
+citizen('equi', '#8da47a', { home: [3.1, -2.1], r: 0.8, k: 1, ph: 1.2, alpha: 318, ring: 0.15 });
+citizen('equi', '#8da47a', { home: [-3.4, -1.3], r: 0.6, k: 1, ph: 5.1, alpha: 205, ring: 0.05 });
+citizen('penta', '#b8634b', { home: [0.7, 3.5], r: 1.0, k: 1, ph: 3.3, alpha: 96, ring: 0.2 });
+citizen('hexa', '#9a5884', { home: [-1.8, 3.7], r: 0.55, k: 1, ph: 0.9, alpha: 122, ring: 0.35 });
+citizen('circle', '#f3ead6', { home: [-3.7, 0.5], r: 0.4, k: 1, ph: 2.6, alpha: 178, ring: 0.6 });
+
+// houses are pentagons in Flatland; these are hollow, walls and a door gap
+function house(x, z, rot) {
+  const outer = polygon(5, 1.05, Math.PI / 2), inner = polygon(5, 0.94, Math.PI / 2);
+  const fig = makeFigure(outer, '#e6d7b8', { hole: inner, edge: '#5a4430' });
+  fig.position.set(x, 0, z);
+  fig.rotation.y = rot;
+  scene.add(fig);
+}
+house(-4.7, 3.1, 0.15);
+house(4.5, 3.8, -0.2);
+house(-0.6, -5.2, 0.05);
+
+// ---------- the cat: one signed distance field, meshed once, skinned ----------
+const v3 = (x, y, z) => [x, y, z];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
+
+function ellipsoid(c, r) {
+  return {
+    f: (x, y, z) => {
+      const px = (x - c[0]) / r[0], py = (y - c[1]) / r[1], pz = (z - c[2]) / r[2];
+      const k0 = Math.sqrt(px * px + py * py + pz * pz);
+      const qx = px / r[0], qy = py / r[1], qz = pz / r[2];
+      const k1 = Math.sqrt(qx * qx + qy * qy + qz * qz);
+      return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -Math.min(r[0], r[1], r[2]);
+    },
+    box: [c[0] - r[0], c[1] - r[1], c[2] - r[2], c[0] + r[0], c[1] + r[1], c[2] + r[2]]
+  };
+}
+function roundCone(a, b, r1, r2) {
+  const ba = sub(b, a), l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1 / l2;
+  return {
+    f: (x, y, z) => {
+      const pax = x - a[0], pay = y - a[1], paz = z - a[2];
+      const yy = pax * ba[0] + pay * ba[1] + paz * ba[2], zz = yy - l2;
+      const xx = pax * l2 - ba[0] * yy, xy = pay * l2 - ba[1] * yy, xz = paz * l2 - ba[2] * yy;
+      const x2 = xx * xx + xy * xy + xz * xz, y2 = yy * yy * l2, z2 = zz * zz * l2;
+      const k = Math.sign(rr) * rr * rr * x2;
+      if (Math.sign(zz) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
+      if (Math.sign(yy) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
+      return (Math.sqrt(x2 * a2 * il2) + yy * rr) * il2 - r1;
+    },
+    box: [Math.min(a[0] - r1, b[0] - r2), Math.min(a[1] - r1, b[1] - r2), Math.min(a[2] - r1, b[2] - r2),
+      Math.max(a[0] + r1, b[0] + r2), Math.max(a[1] + r1, b[1] + r2), Math.max(a[2] + r1, b[2] + r2)]
+  };
+}
+// a cat ear is a three-sided pyramid, so every horizontal slice of it is a triangle; its edges
+// are rounded by a smooth max, because a mesh grid cannot follow a knife edge without stair-steps
+const smax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
+function pyramid(A, B0, B1, B2, round = 0.022) {
+  const cen = [(A[0] + B0[0] + B1[0] + B2[0]) / 4, (A[1] + B0[1] + B1[1] + B2[1]) / 4, (A[2] + B0[2] + B1[2] + B2[2]) / 4];
+  const faces = [[A, B0, B1], [A, B1, B2], [A, B2, B0], [B0, B2, B1]].map(([p, q, r]) => {
+    let n = norm(cross(sub(q, p), sub(r, p)));
+    if (dot(n, sub(cen, p)) > 0) n = [-n[0], -n[1], -n[2]];
+    return [n, dot(n, p)];
+  });
+  const xs = [A, B0, B1, B2];
+  return {
+    f: (x, y, z) => {
+      let d = -1e9;
+      for (const [n, o] of faces) d = smax(d, n[0] * x + n[1] * y + n[2] * z - o, round);
+      return d;
+    },
+    box: [Math.min(...xs.map((p) => p[0])), Math.min(...xs.map((p) => p[1])), Math.min(...xs.map((p) => p[2])),
+      Math.max(...xs.map((p) => p[0])), Math.max(...xs.map((p) => p[1])), Math.max(...xs.map((p) => p[2]))]
+  };
+}
+
+// unit cat: x forward, y up, z to the cat's right; ear tips at y = 1
+const prims = [];
+const add = (p, k, bone) => prims.push({ ...p, k, bone });
+add(ellipsoid(v3(0.2, 0.5, 0), v3(0.2, 0.18, 0.15)), 0.06, 'root');            // chest
+add(ellipsoid(v3(-0.05, 0.52, 0), v3(0.22, 0.14, 0.13)), 0.07, 'root');        // waist
+add(ellipsoid(v3(-0.28, 0.53, 0), v3(0.17, 0.155, 0.14)), 0.07, 'root');       // hips
+for (const s of [-1, 1]) {
+  add(ellipsoid(v3(-0.29, 0.4, 0.09 * s), v3(0.13, 0.17, 0.068)), 0.05, 'root'); // thigh
+  add(roundCone(v3(-0.22, 0.27, 0.092 * s), v3(-0.33, 0.12, 0.086 * s), 0.046, 0.034), 0.04, 'root');
+  add(roundCone(v3(-0.33, 0.12, 0.086 * s), v3(-0.29, 0.045, 0.083 * s), 0.033, 0.031), 0.03, 'root');
+  add(ellipsoid(v3(-0.268, 0.035, 0.083 * s), v3(0.056, 0.035, 0.046)), 0.03, 'root');
+  const fl = s < 0;                                                              // the left forepaw does the touching
+  add(roundCone(v3(0.24, 0.42, 0.086 * s), v3(0.25, 0.25, 0.08 * s), 0.064, 0.044), 0.05, fl ? 'flU' : 'root');
+  add(roundCone(v3(0.25, 0.25, 0.08 * s), v3(0.262, 0.07, 0.078 * s), 0.044, 0.034), 0.035, fl ? 'flL' : 'root');
+  add(ellipsoid(v3(0.287, 0.035, 0.078 * s), v3(0.056, 0.035, 0.046)), 0.03, fl ? 'flL' : 'root');
+}
+add(roundCone(v3(0.27, 0.58, 0), v3(0.4, 0.73, 0), 0.1, 0.082), 0.07, 'neck');
+const HC = v3(0.45, 0.78, 0), HS = 1.1;
+const hp = (x, y, z) => v3(HC[0] + (x - HC[0]) * HS, HC[1] + (y - HC[1]) * HS, z * HS);
+const hr = (x, y, z) => v3(x * HS, y * HS, z * HS);
+add(ellipsoid(hp(0.45, 0.78, 0), hr(0.12, 0.11, 0.12)), 0.06, 'head');
+for (const s of [-1, 1]) add(ellipsoid(hp(0.492, 0.735, 0.055 * s), hr(0.07, 0.055, 0.06)), 0.035, 'head');
+add(ellipsoid(hp(0.556, 0.742, 0), hr(0.05, 0.044, 0.058)), 0.03, 'head');
+add(ellipsoid(hp(0.528, 0.703, 0), hr(0.05, 0.034, 0.044)), 0.03, 'head');
+for (const s of [-1, 1]) {
+  // ears 1.25x the head scale, so their slices read as triangles at a glance
+  const EA = (x, y, z) => hp(0.44 + (x - 0.44) * 1.25, 0.84 + (y - 0.84) * 1.25, (0.1 + (Math.abs(z) - 0.1) * 1.25) * Math.sign(z));
+  add(pyramid(EA(0.43, 1.0, 0.108 * s), EA(0.488, 0.84, 0.042 * s), EA(0.472, 0.832, 0.158 * s), EA(0.37, 0.852, 0.092 * s)), 0.028, 'head');
+}
+const TAIL = [v3(-0.42, 0.56, 0), v3(-0.55, 0.62, 0), v3(-0.63, 0.72, 0.02), v3(-0.645, 0.82, 0.04), v3(-0.6, 0.886, 0.05), v3(-0.56, 0.892, 0.05)];
+const TAIL_R = [0.046, 0.042, 0.038, 0.034, 0.031, 0.028];
+for (let i = 0; i < TAIL.length - 1; i++) add(roundCone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1]), i ? 0.02 : 0.05, 't' + i);
+
+const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+const MARGIN = 0.07;
+function catSdf(x, y, z) {
+  let d = 1e9, any = false;
+  for (const p of prims) {
+    const b = p.box;
+    if (x < b[0] - MARGIN || x > b[3] + MARGIN || y < b[1] - MARGIN || y > b[4] + MARGIN || z < b[2] - MARGIN || z > b[5] + MARGIN) continue;
+    const v = p.f(x, y, z);
+    d = any ? smin(d, v, p.k) : v;
+    any = true;
+  }
+  return any ? d : MARGIN;
+}
+const catGrad = (x, y, z) => {
+  const e = 0.0015;
+  return norm([
+    catSdf(x + e, y, z) - catSdf(x - e, y, z),
+    catSdf(x, y + e, z) - catSdf(x, y - e, z),
+    catSdf(x, y, z + e) - catSdf(x, y, z - e)
+  ]);
+};
+
+// naive surface nets: one vertex per sign-changing cell, one quad per sign-changing edge
+function meshCat(h) {
+  const o = [-0.74, -0.03, -0.27];
+  const nx = Math.ceil(1.44 / h) + 1, ny = Math.ceil(1.14 / h) + 1, nz = Math.ceil(0.54 / h) + 1;
+  const F = new Float32Array(nx * ny * nz);
+  const id = (i, j, k) => i + nx * (j + ny * k);
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    F[id(i, j, k)] = catSdf(o[0] + i * h, o[1] + j * h, o[2] + k * h);
+  }
+  const C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cell = new Int32Array(nx * ny * nz).fill(-1);
+  const pos = [], val = new Float32Array(8);
+  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    let mask = 0;
+    for (let c = 0; c < 8; c++) { val[c] = F[id(i + C[c][0], j + C[c][1], k + C[c][2])]; if (val[c] < 0) mask |= 1 << c; }
+    if (mask === 0 || mask === 255) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of E) {
+      if ((val[a] < 0) === (val[b] < 0)) continue;
+      const t = val[a] / (val[a] - val[b]);
+      sx += C[a][0] + t * (C[b][0] - C[a][0]);
+      sy += C[a][1] + t * (C[b][1] - C[a][1]);
+      sz += C[a][2] + t * (C[b][2] - C[a][2]);
+      n++;
+    }
+    cell[id(i, j, k)] = pos.length / 3;
+    pos.push(o[0] + (i + sx / n) * h, o[1] + (j + sy / n) * h, o[2] + (k + sz / n) * h);
+  }
+  // pull each vertex onto the true surface, so the ear tips stay sharp
+  for (let v = 0; v < pos.length; v += 3) {
+    for (let it = 0; it < 2; it++) {
+      const d = catSdf(pos[v], pos[v + 1], pos[v + 2]);
+      const g = catGrad(pos[v], pos[v + 1], pos[v + 2]);
+      const step = Math.max(-h, Math.min(h, d));
+      pos[v] -= g[0] * step; pos[v + 1] -= g[1] * step; pos[v + 2] -= g[2] * step;
+    }
+  }
+  const index = [];
+  const quad = (a, b, c, d, axis, inside) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return;
+    const P = (q) => [pos[q * 3], pos[q * 3 + 1], pos[q * 3 + 2]];
+    const nrm = cross(sub(P(c), P(a)), sub(P(d), P(b)));
+    const want = axis.map((x) => x * (inside ? 1 : -1));
+    let q = [a, b, c, d];
+    if (dot(nrm, want) < 0) q = [a, d, c, b];
+    const d02 = dot(sub(P(q[0]), P(q[2])), sub(P(q[0]), P(q[2]))), d13 = dot(sub(P(q[1]), P(q[3])), sub(P(q[1]), P(q[3])));
+    if (d02 < d13) index.push(q[0], q[1], q[2], q[0], q[2], q[3]);
+    else index.push(q[0], q[1], q[3], q[1], q[2], q[3]);
+  };
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const inside = F[id(i, j, k)] < 0;
+    if (i < nx - 1 && j > 0 && k > 0 && inside !== (F[id(i + 1, j, k)] < 0)) {
+      quad(cell[id(i, j - 1, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i, j - 1, k)], [1, 0, 0], inside);
+    }
+    if (j < ny - 1 && i > 0 && k > 0 && inside !== (F[id(i, j + 1, k)] < 0)) {
+      quad(cell[id(i - 1, j, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 1, 0], inside);
+    }
+    if (k < nz - 1 && i > 0 && j > 0 && inside !== (F[id(i, j, k + 1)] < 0)) {
+      quad(cell[id(i - 1, j - 1, k)], cell[id(i, j - 1, k)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 0, 1], inside);
+    }
+  }
+  return { pos, index };
+}
+
+// bones in unit coordinates; a vertex follows the primitives it sits closest to
+const BONES = {
+  root: { at: v3(0, 0, 0) },
+  neck: { at: v3(0.3, 0.6, 0), parent: 'root' },
+  head: { at: v3(0.42, 0.74, 0), parent: 'neck' },
+  flU: { at: v3(0.24, 0.42, -0.086), parent: 'root' },
+  flL: { at: v3(0.25, 0.25, -0.08), parent: 'flU' },
+  t0: { at: TAIL[0], parent: 'root' },
+  t1: { at: TAIL[1], parent: 't0' },
+  t2: { at: TAIL[2], parent: 't1' },
+  t3: { at: TAIL[3], parent: 't2' },
+  t4: { at: TAIL[4], parent: 't3' }
+};
+const boneNames = Object.keys(BONES);
+const bone = {};
+for (const name of boneNames) {
+  const b = new THREE.Bone();
+  b.name = name;
+  const spec = BONES[name], par = spec.parent ? BONES[spec.parent].at : [0, 0, 0];
+  b.position.set((spec.at[0] - par[0]) * S, (spec.at[1] - par[1]) * S, (spec.at[2] - par[2]) * S);
+  bone[name] = b;
+  if (spec.parent) bone[spec.parent].add(b);
+}
+const skeleton = new THREE.Skeleton(boneNames.map((n) => bone[n]));
+
+const { pos: catPos, index: catIndex } = meshCat(0.0095);
+const vcount = catPos.length / 3;
+let catTop = 0;
+for (let v = 1; v < catPos.length; v += 3) catTop = Math.max(catTop, catPos[v] * S);
+const P = new Float32Array(vcount * 3), N = new Float32Array(vcount * 3);
+const SI = new Uint16Array(vcount * 4), SW = new Float32Array(vcount * 4);
+for (let v = 0; v < vcount; v++) {
+  const x = catPos[v * 3], y = catPos[v * 3 + 1], z = catPos[v * 3 + 2];
+  P[v * 3] = x * S; P[v * 3 + 1] = y * S; P[v * 3 + 2] = z * S;
+  const g = catGrad(x, y, z);
+  N[v * 3] = g[0]; N[v * 3 + 1] = g[1]; N[v * 3 + 2] = g[2];
+  const ds = prims.map((p) => p.f(x, y, z)), m = Math.min(...ds);
+  const acc = {};
+  prims.forEach((p, i) => { acc[p.bone] = (acc[p.bone] || 0) + Math.exp(-(ds[i] - m) / 0.016); });
+  const top = Object.entries(acc).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const total = top.reduce((s, e) => s + e[1], 0);
+  top.forEach(([name, w], i) => { SI[v * 4 + i] = boneNames.indexOf(name); SW[v * 4 + i] = w / total; });
+}
+const catGeo = new THREE.BufferGeometry();
+catGeo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+catGeo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+catGeo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+catGeo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+catGeo.setIndex(catIndex);
+
+// what Flatland can contain: y between -SLAB and U. U rises when the camera goes upward.
+const planeTop = new THREE.Plane(new THREE.Vector3(0, -1, 0), SLAB);
+const planeBottom = new THREE.Plane(new THREE.Vector3(0, 1, 0), SLAB);
+
+const fur = new THREE.MeshPhysicalMaterial({
+  color: '#100d17', roughness: 0.55, metalness: 0,
+  sheen: 0.7, sheenColor: new THREE.Color('#7d6ad8'), sheenRoughness: 0.4,
+  clippingPlanes: [planeTop, planeBottom], clipShadows: true, shadowSide: THREE.DoubleSide
+});
+fur.onBeforeCompile = (sh) => {
+  sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    float furRim = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+    totalEmissiveRadiance += vec3(0.26, 0.19, 0.55) * pow(furRim, 3.0) * 0.55;`);
+};
+
+const catRig = new THREE.Group();
+scene.add(catRig);
+const catMesh = new THREE.SkinnedMesh(catGeo, fur);
+catMesh.add(bone.root);
+catMesh.bind(skeleton);
+catMesh.castShadow = true;
+catMesh.frustumCulled = false;
+catRig.add(catMesh);
+
+// the stencil pair counts the surfaces behind the cut; the cap paints where they do not cancel
+const stencilBase = {
+  depthWrite: false, depthTest: false, colorWrite: false, stencilWrite: true,
+  stencilFunc: THREE.AlwaysStencilFunc, clippingPlanes: [planeTop]
+};
+const backCount = new THREE.MeshBasicMaterial({
+  ...stencilBase, side: THREE.BackSide,
+  stencilFail: THREE.IncrementWrapStencilOp, stencilZFail: THREE.IncrementWrapStencilOp, stencilZPass: THREE.IncrementWrapStencilOp
+});
+const frontCount = new THREE.MeshBasicMaterial({
+  ...stencilBase, side: THREE.FrontSide,
+  stencilFail: THREE.DecrementWrapStencilOp, stencilZFail: THREE.DecrementWrapStencilOp, stencilZPass: THREE.DecrementWrapStencilOp
+});
+for (const m of [backCount, frontCount]) {
+  const s = new THREE.SkinnedMesh(catGeo, m);
+  s.bind(skeleton, catMesh.bindMatrix);
+  s.frustumCulled = false;
+  s.renderOrder = 1;
+  catRig.add(s);
+}
+const cap = new THREE.Mesh(
+  new THREE.PlaneGeometry(7.5, 7.5).rotateX(-Math.PI / 2),
+  new THREE.MeshBasicMaterial({
+    color: '#100b1c', clippingPlanes: [planeBottom],
+    stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+    stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp
+  })
+);
+cap.renderOrder = 1.1;
+cap.onAfterRender = (r) => r.clearStencil();
+scene.add(cap);
+
+// eyes, pupils and whiskers ride the head bone
+const headAt = BONES.head.at;
+const eyes = new THREE.Group();
+bone.head.add(eyes);
+const eyeMat = new THREE.MeshStandardMaterial({
+  color: '#ffb23a', emissive: '#ff9516', emissiveIntensity: 1.7, roughness: 0.3,
+  clippingPlanes: [planeTop, planeBottom]
+});
+const pupilMat = new THREE.MeshBasicMaterial({ color: '#050307', clippingPlanes: [planeTop, planeBottom] });
+const eyeList = [];
+for (const s of [-1, 1]) {
+  const e = new THREE.Mesh(new THREE.SphereGeometry(0.026 * HS * S, 24, 16), eyeMat);
+  const ep = hp(0.548, 0.8, 0.058 * s);
+  e.position.set((ep[0] - headAt[0]) * S, (ep[1] - headAt[1]) * S, ep[2] * S);
+  const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.026 * HS * S, 16, 12), pupilMat);
+  pupil.scale.set(0.3, 0.86, 0.32);
+  pupil.position.set(0.021 * HS * S, 0, 0.004 * s * S);
+  e.add(pupil);
+  eyes.add(e);
+  eyeList.push(e);
+}
+const whiskerMat = new THREE.LineBasicMaterial({ color: '#efe8f5', transparent: true, opacity: 0.8, clippingPlanes: [planeTop, planeBottom] });
+const whiskerPts = [];
+for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+  const wr = hp(0.578, 0.736 - i * 0.01, 0.036 * s);
+  const root = new THREE.Vector3(wr[0] - headAt[0], wr[1] - headAt[1], wr[2]).multiplyScalar(S);
+  const dir = new THREE.Vector3(0.38, 0.08 - i * 0.12, s).normalize();
+  for (let k = 0; k < 6; k++) {
+    const u0 = k / 6, u1 = (k + 1) / 6, L = 0.2 * S;
+    const p0 = root.clone().addScaledVector(dir, u0 * L); p0.y -= u0 * u0 * 0.03 * S;
+    const p1 = root.clone().addScaledVector(dir, u1 * L); p1.y -= u1 * u1 * 0.03 * S;
+    whiskerPts.push(p0, p1);
+  }
+}
+bone.head.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(whiskerPts), whiskerMat));
+const pawTip = new THREE.Object3D();
+pawTip.position.set((0.3 - BONES.flL.at[0]) * S, (0.0 - BONES.flL.at[1]) * S, (-0.078 - BONES.flL.at[2]) * S);
+bone.flL.add(pawTip);
+
+// ---------- the cat's timeline ----------
+// The score runs at 96 BPM, one 2.5 s bar per cycle: the ears arrive on bar 3, the third
+// dimension on bar 7, and the paw touches the Square on the downbeat of bar 14.
+const BAR = 2.5, BOOP_T = 14 * BAR;
+// the page's height on the cat's body (0 = paws, 2.13 = ear tips)
+const HOVER = -0.85;
+const CUT = [[0, 2.3], [6.6, 2.3], [7.5, 2.13], [10, 1.98], [13.6, 1.84], [15.2, 1.62], [16.4, 1.4], [19.6, 0.62],
+  [24.6, -0.06], [26.4, HOVER], [37.8, HOVER], [41.2, 0.95], [45, 1.62], [48.6, 2.3], [60, 2.3]];
+const cutAt = monotone(CUT.map((k) => k[0]), CUT.map((k) => k[1]));
+const reach = (t) => smooth(32.6, BOOP_T - 0.1, t) * (1 - smooth(36.4, 37.8, t));
+const reveal = (t) => smoother(17.5, 20.7, t) * (1 - smoother(42.4, 45, t));
+
+function poseCat(t, bodyDrop) {
+  const r = reach(t), hover = smooth(24.6, 27.2, t) * (1 - smooth(37.8, 39.6, t));
+  catRig.position.set(0, -cutAt(t) + hover * 0.035 * Math.sin(TAU * t / BAR) * (1 - r) + bodyDrop * r, 0);
+  bone.root.rotation.set(0, 0, -0.1 * r);
+  // looking: down at the page while rising, around at the town, then at the Square
+  const lookYaw = 0.35 * Math.sin(TAU * (t - 25) / 10) * hover * (1 - r) - 0.42 * r;
+  const lookPitch = -0.12 - 0.32 * r + 0.08 * hover * Math.sin(TAU * t / 5);
+  bone.neck.rotation.set(0, lookYaw * 0.5, lookPitch * 0.5);
+  bone.head.rotation.set(0.22 * hover * smooth(27.5, 29, t) * (1 - smooth(30.5, 32, t)) + 0.1 * r, lookYaw * 0.5, lookPitch * 0.5);
+  bone.flU.rotation.set(0.12 * r, 0.1 * r, 0.95 * r);
+  bone.flL.rotation.set(0, 0, -0.42 * r);
+  for (let i = 0; i < 5; i++) {
+    bone['t' + i].rotation.set(0, 0.11 * Math.sin(TAU * t * 12 / DUR + i * 0.7), 0.06 * Math.sin(TAU * t * 8 / DUR + i * 0.5));
+  }
+  const blink = Math.max(
+    1 - smooth(0, 0.09, Math.abs(t - 28.6)),
+    1 - smooth(0, 0.09, Math.abs(t - 31.2)),
+    1 - smooth(0, 0.09, Math.abs(t - 39.4))
+  );
+  for (const e of eyeList) e.scale.set(1, 1 - 0.88 * blink, 1);
+}
+
+// where the left forepaw lands: solve the drop so its tip just enters the page
+poseCat(BOOP_T + 0.6, 0);
+scene.updateMatrixWorld(true);
+const tipAt = pawTip.getWorldPosition(new THREE.Vector3());
+const DROP = -0.012 - tipAt.y;
+const BOOP = new THREE.Vector2(tipAt.x, tipAt.z);
+
+// ---------- the citizens' timeline ----------
+const attend = (t) => smooth(7.6, 10.5, t) * (1 - smooth(47, 52, t));
+const RING = [[0, 2.6], [15, 2.6], [17.5, 3.0], [21, 3.0], [24.8, 1.75], [34, 1.8], [35, 1.85], [36.6, 3.1],
+  [38.4, 3.1], [43, 2.9], [60, 2.9]];
+const ringRadius = monotone(RING.map((k) => k[0]), RING.map((k) => k[1]));
+const eventCentre = (t) => mix(0.85, 0.05, smooth(15.5, 19.5, t));
+const unwrap = (a, ref) => a + TAU * Math.round((ref - a) / TAU);
+
+function placeCitizen(c, t) {
+  const a = TAU * t / DUR * c.k + c.ph;
+  const bx = c.home[0] + Math.cos(a) * c.r, bz = c.home[1] + Math.sin(a) * c.r * 0.7;
+  const bh = Math.atan2(Math.cos(a) * c.r * 0.7 * c.k, -Math.sin(a) * c.r * c.k);
+  const w = attend(t);
+  const R = ringRadius(t) + c.ring;
+  const al = c.alpha * D2R + 0.05 * Math.sin(TAU * t * 3 / DUR + c.ph);
+  const ex = eventCentre(t);
+  const jit = 0.06 * Math.sin(TAU * t * 7 / DUR + c.ph * 3) * smooth(24, 27, t) * (1 - smooth(33, 35, t));
+  const tx = ex + Math.cos(al) * (R + jit), tz = Math.sin(al) * (R + jit);
+  const x = mix(bx, tx, w), z = mix(bz, tz, w);
+  const face = Math.atan2(-tz, ex - tx);
+  const h = mix(bh, unwrap(face, bh), smooth(0.25, 0.75, w));
+  c.fig.position.set(x, 0, z);
+  c.fig.rotation.y = -h;
+}
+
+// the Square's own walk: in from the house, feel an ear, back away, be touched, retreat, home
+const SQ = [
+  [0, 2.95, 1.25, 200], [4.5, 2.5, 1.0, 205], [7.5, 2.15, 0.85, 196], [9.6, 1.9, 0.8, 196],
+  [11.4, 1.48, 0.78, 212], [12.6, 1.3, 0.6, 218], [13.4, 1.17, 0.49, 222], [14.3, 1.55, 0.68, 206], [15.8, 2.42, 0.62, 196],
+  [19.8, 2.52, 0.22, 186], [24.8, 2.0, -0.08, 182], [28.8, 1.72, -0.3, 168],
+  [32.8, BOOP.x + 0.05, BOOP.y - 0.04, 158], [33.8, BOOP.x, BOOP.y, 154], [36.6, BOOP.x, BOOP.y, 154],
+  [38, BOOP.x + 0.75, BOOP.y - 0.45, 250], [41.4, 2.75, -0.62, 205], [46.5, 2.62, -0.2, 190],
+  [53, 2.86, 0.62, 205], [60, 2.95, 1.25, 200]
+];
+const sqCh = [1, 2, 3].map((c) => monotone(SQ.map((k) => k[0]), SQ.map((k) => k[c]), true));
+function placeSquare(t) {
+  const [x, z, h] = sqCh.map((f) => f(t));
+  const shake = t > BOOP_T ? Math.exp(-(t - BOOP_T) * 2.2) : 0;
+  theSquare.fig.position.set(x, 0, z);
+  theSquare.fig.rotation.y = -h * D2R + 0.2 * shake * Math.sin((t - BOOP_T) * 46);
+  theSquare.fig.userData.top.emissive.set('#ff9a3c').multiplyScalar(0.55 * shake);
+}
+
+// a ripple inside the Square where it was touched
+const ripples = [0, 1].map(() => {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 48).rotateX(-Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: '#fff3dc', transparent: true, opacity: 0, depthWrite: false }));
+  m.position.y = SLAB + 0.004;
+  scene.add(m);
+  return m;
+});
+function placeRipples(t) {
+  ripples.forEach((m, i) => {
+    const u = (t - BOOP_T - 0.05 - i * 0.35) / 0.9;
+    const on = u > 0 && u < 1;
+    m.visible = on;
+    if (!on) return;
+    m.position.x = BOOP.x; m.position.z = BOOP.y;
+    const r = 0.03 + 0.19 * u;
+    m.scale.set(r, 1, r);
+    m.material.opacity = 0.75 * (1 - u);
+  });
+}
+
+// ---------- camera: Flatland-bound, edge-on, then upward ----------
+// [t, azimuth deg, elevation deg, distance, target x, target y, target z, fov, vertical squeeze]
+const CAM = [
+  [0, -40, 34, 9.6, 2.3, 0, 0.55, 30, 1],
+  [4.2, -26, 28, 10.4, 1.6, 0, 0.35, 30, 1],
+  [6.6, -6, 7, 11, 0.9, 0, 0, 28, 1.6],
+  [7.8, 0, 0, 10, 0.86, 0, 0, 26, 5],
+  [9.8, 0, 0, 10, 0.86, 0, 0, 26, 5],
+  [11.6, 10, 32, 5, 0.95, 0, 0.2, 30, 1],
+  [14, 13, 34, 5.3, 0.9, 0, 0.2, 30, 1],
+  [16.4, 16, 27, 8.4, 0.6, 0.15, 0, 30, 1],
+  [20.4, 34, 46, 10.6, 0.25, 0.75, 0, 30, 1],
+  [25.4, 56, 30, 10.6, 0.2, 1.2, 0, 30, 1],
+  [30.4, 18, 22, 9.6, 0.45, 1.35, -0.1, 30, 1],
+  [BOOP_T, -38, 56, 7.4, BOOP.x - 0.25, 0.4, BOOP.y + 0.1, 30, 1],
+  [38, -30, 47, 8.8, BOOP.x - 0.45, 0.5, BOOP.y + 0.15, 30, 1],
+  [42.4, -26, 33, 11.2, 0.4, 0.25, 0, 30, 1],
+  [47.4, -30, 32, 11.8, 0.6, 0, 0.1, 30, 1],
+  [53.6, -37, 34, 10.6, 2.0, 0, 0.5, 30, 1],
+  [60, -40, 34, 9.6, 2.3, 0, 0.55, 30, 1]
+];
+
+// monotone cubic (Fritsch-Carlson) per channel, so the camera never dips under the page
+// with periodic keys (first == last) the end slopes are shared, so the loop has no kink
+function monotone(xs, ys, periodic = false) {
+  const n = xs.length, d = [], m = new Array(n);
+  for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  if (periodic) m[0] = m[n - 1] = d[n - 2] * d[0] <= 0 ? 0 : (d[n - 2] + d[0]) / 2;
+  for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * d[i]; m[i + 1] = k * b * d[i]; }
+  }
+  return (x) => {
+    let i = 0;
+    while (i < n - 2 && x > xs[i + 1]) i++;
+    const h = xs[i + 1] - xs[i], u = clamp01((x - xs[i]) / h);
+    const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
+    return h00 * ys[i] + h10 * h * m[i] + h01 * ys[i + 1] + h11 * h * m[i + 1];
+  };
+}
+// the loop is closed by repeating the first key; zero slopes at both ends keep the seam smooth
+const camT = CAM.map((k) => k[0]);
+const camCh = [1, 2, 3, 4, 5, 6, 7, 8].map((c) => monotone(camT, CAM.map((k) => k[c]), true));
+const camTarget = new THREE.Vector3();
+function placeCamera(t) {
+  const [az, el, dist, tx, ty, tz, fov, squeeze] = camCh.map((f) => f(t));
+  camTarget.set(tx, ty, tz);
+  const a = az * D2R, e = Math.max(0, el) * D2R;
+  camera.position.set(tx + dist * Math.cos(e) * Math.cos(a), ty + dist * Math.sin(e), tz + dist * Math.cos(e) * Math.sin(a));
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  camera.lookAt(camTarget);
+  // edge-on, the world is a line; squeeze the frame vertically so the line can be read
+  camera.projectionMatrix.elements[5] *= squeeze;
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  sky.position.copy(camera.position);
+}
+
+// ---------- captions, set like the figures in the 1884 edition ----------
+const captionBox = document.createElement('div');
+Object.assign(captionBox.style, {
+  position: 'fixed', left: '0', right: '0', bottom: '34px', display: 'flex', justifyContent: 'center',
+  pointerEvents: 'none', zIndex: '5'
+});
+const caption = document.createElement('div');
+Object.assign(caption.style, {
+  font: 'italic 25px Baskerville, "Baskerville Old Face", Georgia, serif', color: '#2f2216',
+  background: 'rgba(239,229,204,0.93)', padding: '7px 18px 8px', letterSpacing: '0.2px',
+  boxShadow: '0 1px 0 rgba(58,42,29,0.35), 0 0 18px rgba(10,8,18,0.35)', opacity: '0', whiteSpace: 'nowrap'
+});
+captionBox.appendChild(caption);
+document.body.appendChild(captionBox);
+const CAPTIONS = [
+  [5.6, 9.8, 'Fig. 1. — Flatland, as a Square sees it.'],
+  [10.6, 14.4, 'Fig. 2. — Two Isosceles Triangles?'],
+  [19, 24.4, 'Fig. 3. — Upward, not Northward.'],
+  [33.9, 38.6, 'Fig. 4. — “just the least touch, in your stomach”']
+];
+function placeCaption(t) {
+  let text = '', a = 0;
+  for (const [t0, t1, s] of CAPTIONS) {
+    const k = smooth(t0, t0 + 0.6, t) * (1 - smooth(t1 - 0.6, t1, t));
+    if (k > a) { a = k; text = s; }
+  }
+  if (caption.textContent !== text) caption.textContent = text;
+  caption.style.opacity = a.toFixed(3);
+}
+
+// ---------- post ----------
+const target = new THREE.WebGLRenderTarget(900, 900, { type: THREE.HalfFloatType, samples: 4, stencilBuffer: true });
+const composer = new EffectComposer(renderer, target);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.42, 0.55, 0.88));
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); float d = length(vUv - 0.5);
+      c.rgb *= mix(1.0, 0.62, smoothstep(0.38, 0.78, d)); gl_FragColor = c; }`
+}));
+composer.addPass(new OutputPass());
+
+// ---------- one frame, from absolute time only ----------
+window.renderFrame = (time) => {
+  const t = ((time % DUR) + DUR) % DUR;
+  poseCat(t, DROP);
+  const cut = cutAt(t);
+  const topY = catTop - cut + 0.12;
+  planeTop.constant = mix(SLAB, Math.max(SLAB, topY), reveal(t));
+  cap.position.set(catRig.position.x, planeTop.constant, catRig.position.z);
+  for (const c of citizens) if (c !== theSquare) placeCitizen(c, t);
+  placeSquare(t);
+  placeRipples(t);
+  placeCamera(t);
+  placeCaption(t);
+  composer.render();
+};
+
+// live playback for the draft preview; the MP4 renderer calls renderFrame(t) itself
+let liveStart = null;
+(function loop(now) {
+  if (liveStart === null) liveStart = now;
+  window.renderFrame(((now - liveStart) / 1000) % DUR);
+  requestAnimationFrame(loop);
+})(performance.now());
+window.ready = true;
+
+
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 60\\n// FORM: single line 0-3 | flat canon 3-7 | dimensional ascent 7-13 | interior touch 13-16 | flattening canon 16-20 | return to one line 20-24\\n// TONAL CENTER: G major\\n// MOTIF: G4 B4 D5 G5 F#5 D5 - one-bar cell of running eighths on beats 1, 1.5, 2, 2.5, 3 and 3.5, then two eighth rests; lower canon answers an octave down, staggered off the bar\\n// HARMONIC PLAN: G | Em | C | D looping every 4 bars - D held for cycle 13, C for cycle 14, D for cycle 15\\n// GROOVE: LinnDrum - kick on beats 1 and 3, rim on 2 and 4, closed hats on every offbeat eighth, straight and clockwork-bright with no swing\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst subject = note(\\\"g4 b4 d5 g5 f#5 \u003cd5 d6> ~ ~\\\")\\nconst lead = subject.sometimesBy(0.12, x => x.ply(2))\\nconst answer = note(\\\"g3 b3 d4 g4 f#4 d4 ~ ~\\\").late(0.5)\\nconst walk = note(\\\"\u003c[d2 f#2 a2 d3 a2 f#2 d2 a2] [g1 b1 d2 g2 d2 b1 g1 d2] [e1 g1 b1 e2 b1 g1 e1 b1] [c2 e2 g2 c3 g2 e2 c2 g2]>\\\")\\nconst pad = note(\\\"\u003c[d4,f#4,a4] [g3,b3,d4] [e4,g4,b4] [c4,e4,g4]>\\\")\\nconst kit = stack(\\n  s(\\\"bd ~ bd ~\\\"),\\n  s(\\\"~ rim ~ rim\\\").postgain(1),\\n  s(\\\"[~ hh]*4\\\").postgain(0.65)\\n).bank(\\\"LinnDrum\\\")\\n// supersaw renders digital silence offline, so the pad is three sawtooth layers detuned by 11 cents\\nconst wide = (p) => stack(p, p.add(note(0.11)), p.add(note(-0.11)))\\n\\n$: arrange([7, silence], [6, kit], [1, silence], [2, kit], [8, silence]).gain(0.16)\\n\\n$: arrange([7, silence], [6, walk], [1, silence], [2, walk.early(3)], [8, silence])\\n  .s(\\\"sawtooth\\\").clip(0.85).lpf(620).lpq(5).lpenv(3.2).lpa(0.006).lpd(0.1)\\n  .adsr(\\\"0.005:0.1:0.45:0.07\\\").pan(0.5).gain(0.24)\\n\\n$: arrange([7, silence], [6, wide(pad)], [3, wide(note(\\\"\u003c[d4,f#4,a4] [c4,e4,g4] [d4,f#4,a4]>\\\"))], [8, silence])\\n  .s(\\\"sawtooth\\\").lpf(2000).attack(0.35).decay(0.4).sustain(0.65).release(0.6)\\n  .room(0.3).roomsize(2.2).pan(0.5).gain(0.09)\\n\\n$: arrange([13, lead], [1, note(\\\"f#5 ~ ~ ~\\\")], [1, note(\\\"d6 ~ ~ ~\\\")], [9, lead])\\n  .s(\\\"square\\\").lpf(1800).lpq(7).lpenv(4).lpa(0.004).lpd(0.11)\\n  .adsr(\\\"0.004:0.13:0.12:0.09\\\").room(0.16).pan(0.42).gain(0.36)\\n\\n$: arrange([3, silence], [10, answer], [1, note(\\\"d4 ~ ~ ~\\\")], [1, answer.mask(\\\"0 1\\\")], [1, answer], [4, answer.clip(\\\"\u003c0.9 0.7 0.5 0.35>\\\")], [4, silence])\\n  .s(\\\"square\\\").lpf(1100).lpq(6).lpenv(3).lpa(0.005).lpd(0.13)\\n  .adsr(\\\"0.005:0.16:0.1:0.1\\\").room(0.12).pan(0.58).gain(0.25)\",\"bpm\":96,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

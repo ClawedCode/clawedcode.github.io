@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+document.body.appendChild(canvas);
+// Declared by name so preview QA samples the authored loop, not its 60s default.
+const loopDuration = 48;
+
+// alpha:false matches twigl — geekest shaders leave o.a at 0, so an alpha-enabled
+// drawing buffer would composite the whole piece to nothing.
+const glOptions = { alpha: false, antialias: false, preserveDrawingBuffer: true };
+const gl = canvas.getContext('webgl2', glOptions);
+
+function shaderFailure(message) {
+  console.error(message);
+  document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + message + '</pre>';
+  window.ready = false;
+}
+
+if (!gl) {
+  shaderFailure('WebGL2 not supported');
+} else {
+  const fragmentShaderSource = "#version 300 es\n#define FC gl_FragCoord\nprecision highp float;uniform vec2 r;uniform vec2 m;uniform float t;uniform float f;uniform float s;uniform sampler2D b;\nout vec4 o;\n//\n// Description : Array and textureless GLSL 2D simplex noise function.\n//      Author : Ian McEwan, Ashima Arts.\n//  Maintainer : stegu\n//     Lastmod : 20110822 (ijm)\n//     License : Copyright (C) 2011 Ashima Arts. All rights reserved.\n//               Distributed under the MIT License. See LICENSE file.\n//               https://github.com/ashima/webgl-noise\n//               https://github.com/stegu/webgl-noise\n//\n\n// (sqrt(5) - 1)/4 = F4, used once below\n#define F4 0.309016994374947451\nfloat mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0;}\nvec2  mod289(vec2 x) {return x - floor(x * (1.0 / 289.0)) * 289.0;}\nvec3  mod289(vec3 x) {return x - floor(x * (1.0 / 289.0)) * 289.0;}\nvec4  mod289(vec4 x) {return x - floor(x * (1.0 / 289.0)) * 289.0;}\nfloat permute(float x){return mod289(((x*34.0)+1.0)*x);}\nvec3  permute(vec3 x) {return mod289(((x*34.0)+1.0)*x);}\nvec4  permute(vec4 x) {return mod289(((x*34.0)+1.0)*x);}\nfloat taylorInvSqrt(float r){return 1.79284291400159 - 0.85373472095314 * r;}\nvec4  taylorInvSqrt(vec4 r) {return 1.79284291400159 - 0.85373472095314 * r;}\nfloat snoise2D(vec2 v){\n  const vec4 C = vec4(0.211324865405187,  // (3.0-sqrt(3.0))/6.0\n                      0.366025403784439,  // 0.5*(sqrt(3.0)-1.0)\n                     -0.577350269189626,  // -1.0 + 2.0 * C.x\n                      0.024390243902439); // 1.0 / 41.0\n  // First corner\n  vec2 i  = floor(v + dot(v, C.yy) );\n  vec2 x0 = v -   i + dot(i, C.xx);\n\n  // Other corners\n  vec2 i1;\n  //i1.x = step( x0.y, x0.x ); // x0.x > x0.y ? 1.0 : 0.0\n  //i1.y = 1.0 - i1.x;\n  i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);\n  // x0 = x0 - 0.0 + 0.0 * C.xx ;\n  // x1 = x0 - i1 + 1.0 * C.xx ;\n  // x2 = x0 - 1.0 + 2.0 * C.xx ;\n  vec4 x12 = x0.xyxy + C.xxzz;\n  x12.xy -= i1;\n\n  // Permutations\n  i = mod289(i); // Avoid truncation effects in permutation\n  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0 )) + i.x + vec3(0.0, i1.x, 1.0 ));\n  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);\n  m = m * m;\n  m = m * m;\n\n  // Gradients: 41 points uniformly over a line, mapped onto a diamond.\n  // The ring size 17*17 = 289 is close to a multiple of 41 (41*7 = 287)\n\n  vec3 x = 2.0 * fract(p * C.www) - 1.0;\n  vec3 h = abs(x) - 0.5;\n  vec3 ox = floor(x + 0.5);\n  vec3 a0 = x - ox;\n\n  // Normalise gradients implicitly by scaling m\n  // Approximation of: m *= inversesqrt( a0*a0 + h*h );\n  m *= 1.79284291400159 - 0.85373472095314 * ( a0*a0 + h*h );\n\n  // Compute final noise value at P\n  vec3 g;\n  g.x  = a0.x  * x0.x  + h.x  * x0.y;\n  g.yz = a0.yz * x12.xz + h.yz * x12.yw;\n  return 130.0 * dot(m, g);\n}\nfloat snoise3D(vec3 v){\n  const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);\n  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);\n\n  // First corner\n  vec3 i  = floor(v + dot(v, C.yyy) );\n  vec3 x0 =   v - i + dot(i, C.xxx) ;\n\n  // Other corners\n  vec3 g = step(x0.yzx, x0.xyz);\n  vec3 l = 1.0 - g;\n  vec3 i1 = min( g.xyz, l.zxy );\n  vec3 i2 = max( g.xyz, l.zxy );\n\n  //   x0 = x0 - 0.0 + 0.0 * C.xxx;\n  //   x1 = x0 - i1  + 1.0 * C.xxx;\n  //   x2 = x0 - i2  + 2.0 * C.xxx;\n  //   x3 = x0 - 1.0 + 3.0 * C.xxx;\n  vec3 x1 = x0 - i1 + C.xxx;\n  vec3 x2 = x0 - i2 + C.yyy; // 2.0*C.x = 1/3 = C.y\n  vec3 x3 = x0 - D.yyy;      // -1.0+3.0*C.x = -0.5 = -D.y\n\n  // Permutations\n  i = mod289(i);\n  vec4 p = permute( permute( permute(\n             i.z + vec4(0.0, i1.z, i2.z, 1.0 ))\n           + i.y + vec4(0.0, i1.y, i2.y, 1.0 ))\n           + i.x + vec4(0.0, i1.x, i2.x, 1.0 ));\n\n  // Gradients: 7x7 points over a square, mapped onto an octahedron.\n  // The ring size 17*17 = 289 is close to a multiple of 49 (49*6 = 294)\n  float n_ = 0.142857142857; // 1.0/7.0\n  vec3  ns = n_ * D.wyz - D.xzx;\n\n  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);  //  mod(p,7*7)\n\n  vec4 x_ = floor(j * ns.z);\n  vec4 y_ = floor(j - 7.0 * x_ );    // mod(j,N)\n\n  vec4 x = x_ *ns.x + ns.yyyy;\n  vec4 y = y_ *ns.x + ns.yyyy;\n  vec4 h = 1.0 - abs(x) - abs(y);\n\n  vec4 b0 = vec4( x.xy, y.xy );\n  vec4 b1 = vec4( x.zw, y.zw );\n\n  //vec4 s0 = vec4(lessThan(b0,0.0))*2.0 - 1.0;\n  //vec4 s1 = vec4(lessThan(b1,0.0))*2.0 - 1.0;\n  vec4 s0 = floor(b0)*2.0 + 1.0;\n  vec4 s1 = floor(b1)*2.0 + 1.0;\n  vec4 sh = -step(h, vec4(0.0));\n\n  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;\n  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;\n\n  vec3 p0 = vec3(a0.xy,h.x);\n  vec3 p1 = vec3(a0.zw,h.y);\n  vec3 p2 = vec3(a1.xy,h.z);\n  vec3 p3 = vec3(a1.zw,h.w);\n\n  //Normalise gradients\n  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n  p0 *= norm.x;\n  p1 *= norm.y;\n  p2 *= norm.z;\n  p3 *= norm.w;\n\n  // Mix final noise value\n  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);\n  m = m * m;\n  return 42.0 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );\n}\nvec4 grad4(float j, vec4 ip){\n  const vec4 ones = vec4(1.0, 1.0, 1.0, -1.0);\n  vec4 p,s;\n\n  p.xyz = floor( fract (vec3(j) * ip.xyz) * 7.0) * ip.z - 1.0;\n  p.w = 1.5 - dot(abs(p.xyz), ones.xyz);\n  s = vec4(lessThan(p, vec4(0.0)));\n  p.xyz = p.xyz + (s.xyz*2.0 - 1.0) * s.www;\n\n  return p;\n}\nfloat snoise4D(vec4 v){\n  const vec4  C = vec4( 0.138196601125011,  // (5 - sqrt(5))/20  G4\n                        0.276393202250021,  // 2 * G4\n                        0.414589803375032,  // 3 * G4\n                       -0.447213595499958); // -1 + 4 * G4\n\n  // First corner\n  vec4 i  = floor(v + dot(v, vec4(F4)) );\n  vec4 x0 = v -   i + dot(i, C.xxxx);\n\n  // Other corners\n\n  // Rank sorting originally contributed by Bill Licea-Kane, AMD (formerly ATI)\n  vec4 i0;\n  vec3 isX = step( x0.yzw, x0.xxx );\n  vec3 isYZ = step( x0.zww, x0.yyz );\n  //  i0.x = dot( isX, vec3( 1.0 ) );\n  i0.x = isX.x + isX.y + isX.z;\n  i0.yzw = 1.0 - isX;\n  //  i0.y += dot( isYZ.xy, vec2( 1.0 ) );\n  i0.y += isYZ.x + isYZ.y;\n  i0.zw += 1.0 - isYZ.xy;\n  i0.z += isYZ.z;\n  i0.w += 1.0 - isYZ.z;\n\n  // i0 now contains the unique values 0,1,2,3 in each channel\n  vec4 i3 = clamp( i0, 0.0, 1.0 );\n  vec4 i2 = clamp( i0-1.0, 0.0, 1.0 );\n  vec4 i1 = clamp( i0-2.0, 0.0, 1.0 );\n\n  //  x0 = x0 - 0.0 + 0.0 * C.xxxx\n  //  x1 = x0 - i1  + 1.0 * C.xxxx\n  //  x2 = x0 - i2  + 2.0 * C.xxxx\n  //  x3 = x0 - i3  + 3.0 * C.xxxx\n  //  x4 = x0 - 1.0 + 4.0 * C.xxxx\n  vec4 x1 = x0 - i1 + C.xxxx;\n  vec4 x2 = x0 - i2 + C.yyyy;\n  vec4 x3 = x0 - i3 + C.zzzz;\n  vec4 x4 = x0 + C.wwww;\n\n  // Permutations\n  i = mod289(i);\n  float j0 = permute( permute( permute( permute(i.w) + i.z) + i.y) + i.x);\n  vec4 j1 = permute( permute( permute( permute (\n             i.w + vec4(i1.w, i2.w, i3.w, 1.0 ))\n           + i.z + vec4(i1.z, i2.z, i3.z, 1.0 ))\n           + i.y + vec4(i1.y, i2.y, i3.y, 1.0 ))\n           + i.x + vec4(i1.x, i2.x, i3.x, 1.0 ));\n\n  // Gradients: 7x7x6 points over a cube, mapped onto a 4-cross polytope\n  // 7*7*6 = 294, which is close to the ring size 17*17 = 289.\n  vec4 ip = vec4(1.0/294.0, 1.0/49.0, 1.0/7.0, 0.0) ;\n\n  vec4 p0 = grad4(j0,   ip);\n  vec4 p1 = grad4(j1.x, ip);\n  vec4 p2 = grad4(j1.y, ip);\n  vec4 p3 = grad4(j1.z, ip);\n  vec4 p4 = grad4(j1.w, ip);\n\n  // Normalise gradients\n  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n  p0 *= norm.x;\n  p1 *= norm.y;\n  p2 *= norm.z;\n  p3 *= norm.w;\n  p4 *= taylorInvSqrt(dot(p4,p4));\n\n  // Mix contributions from the five corners\n  vec3 m0 = max(0.6 - vec3(dot(x0,x0), dot(x1,x1), dot(x2,x2)), 0.0);\n  vec2 m1 = max(0.6 - vec2(dot(x3,x3), dot(x4,x4)            ), 0.0);\n  m0 = m0 * m0;\n  m1 = m1 * m1;\n  return 49.0 * ( dot(m0*m0, vec3( dot( p0, x0 ), dot( p1, x1 ), dot( p2, x2 )))\n                + dot(m1*m1, vec2( dot( p3, x3 ), dot( p4, x4 ) ) ) ) ;\n}\nfloat fsnoise      (vec2 c){return fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453);}\nfloat fsnoiseDigits(vec2 c){return fract(sin(dot(c, vec2(0.129898, 0.78233))) * 437.585453);}\nvec3 hsv(float h, float s, float v){\n    vec4 t = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);\n    vec3 p = abs(fract(vec3(h) + t.xyz) * 6.0 - vec3(t.w));\n    return v * mix(vec3(t.x), clamp(p - vec3(t.x), 0.0, 1.0), s);\n}\nmat2 rotate2D(float r){\n    return mat2(cos(r), sin(r), -sin(r), cos(r));\n}\nmat3 rotate3D(float angle, vec3 axis){\n    vec3 a = normalize(axis);\n    float s = sin(angle);\n    float c = cos(angle);\n    float r = 1.0 - c;\n    return mat3(\n        a.x * a.x * r + c,\n        a.y * a.x * r + a.z * s,\n        a.z * a.x * r - a.y * s,\n        a.x * a.y * r - a.z * s,\n        a.y * a.y * r + c,\n        a.z * a.y * r + a.x * s,\n        a.x * a.z * r + a.y * s,\n        a.y * a.z * r - a.x * s,\n        a.z * a.z * r + c\n    );\n}\nconst float PI = 3.141592653589793;\nconst float PI2 = PI * 2.0;\n\n\n// stalacpipe karst: a vault answering itself one fold deeper\nvec4 vault(vec2 uv,float T,float GAP){\n  float push=1.-cos(T),up=step(0.,uv.y),g=0.,e,s;\n  vec3 c=vec3(0);\n  for(float i;++i\u003c99.;){\n    vec3 p=vec3(uv.x+.31*up,GAP-1.25*abs(uv.y-.03*sin(T)*sin(2.*T)),g-1.-.2*push-.13*up);\n    p.xz*=rotate2D(.2*(1.-cos(2.*T))-.12*push+.4*up);\n    s=2.;\n    for(int j;j++\u003c17;p=vec3(0,3.95,-.5)-abs(abs(p)*e-vec3(1.5,3.95+e*.09+.035*(1.-cos(3.*T)),3.8)))s*=e=4.5/dot(p,p*.5);\n    g+=p.y/s;s=log(s)-g*.6;\n    c+=hsv(.58,p.y-.3,s/9e2);\n  }\n  vec3 b=clamp(.99-c,0.,1.);\n  float l=dot(b,vec3(.3,.55,.15));\n  vec3 st=mix(vec3(.05,.034,.024),vec3(.5,.33,.17),smoothstep(.05,.5,l));\n  st=mix(st,vec3(.9,.82,.68),smoothstep(.45,.95,l));\n  return vec4(st,smoothstep(.5,1.7,g));\n}\nvoid main(){\n  float T=t*PI2/48.;\n  vec2 uv=(FC.xy-.5*r)/r.y;\n  vec4 a=vault(uv,T,1.36);\n  float cd=exp(-14.*dot(uv*vec2(.8,2.2),uv*vec2(.8,2.2)));\n  vec3 air=vec3(.045,.03,.022)+vec3(.42,.26,.1)*cd*(.8+.2*cos(2.*T));\n  if(a.w>.02){\n    // the answer: the same vault, smaller and later, deeper in the passage\n    vec4 k=vault(uv*2.5,T-PI2/8.,1.3);\n    vec3 echo=mix(k.rgb*vec3(1.,.8,.55)*.62,air,.25+.75*k.w);\n    air=mix(air,echo,smoothstep(.55,.95,a.w)*exp(-dot(uv*vec2(1.5,2.6),uv*vec2(1.5,2.6))));\n  }\n  o.rgb=mix(a.rgb,air,a.w);\n  o.rgb*=1.-.35*dot(uv,uv);\n  o.a=1.;\n}";
+  const vertexShaderSource = "#version 300 es\nin vec3 p;void main(){gl_Position=vec4(p,1.);}";
+  const postVertexSource = "#version 300 es\nin vec3 p;out vec2 v;void main(){v=(p+1.).xy/2.;gl_Position=vec4(p,1.);}";
+  const postFragmentSource = "#version 300 es\nprecision mediump float;uniform sampler2D tex;in vec2 v;out vec4 c;void main(){c=texture(tex,v);}";
+
+  gl.getExtension('EXT_color_buffer_float');
+  const floatLinear = gl.getExtension('OES_texture_float_linear') != null;
+
+  function compile(type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      gl.deleteShader(shader);
+      shaderFailure('Shader compile error: ' + log);
+      return null;
+    }
+    return shader;
+  }
+
+  function linkProgram(vertexSource, fragmentSource) {
+    const vertex = compile(gl.VERTEX_SHADER, vertexSource);
+    if (!vertex) return null;
+    const fragment = compile(gl.FRAGMENT_SHADER, fragmentSource);
+    if (!fragment) return null;
+    const program = gl.createProgram();
+    gl.attachShader(program, vertex);
+    gl.attachShader(program, fragment);
+    gl.linkProgram(program);
+    gl.deleteShader(vertex);
+    gl.deleteShader(fragment);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      shaderFailure('Program link error: ' + gl.getProgramInfoLog(program));
+      return null;
+    }
+    return program;
+  }
+
+  function createTarget() {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, canvas.width, canvas.height, 0, gl.RGBA, gl.FLOAT, null);
+    const filter = floatLinear ? gl.LINEAR : gl.NEAREST;
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      shaderFailure('Float framebuffer unavailable (status ' + status + ') — the backbuffer needs float render targets');
+      return null;
+    }
+    return { framebuffer, texture };
+  }
+
+  const program = linkProgram(vertexShaderSource, fragmentShaderSource);
+  const postProgram = program ? linkProgram(postVertexSource, postFragmentSource) : null;
+  const targets = postProgram ? [createTarget(), createTarget()] : [];
+
+  if (targets.every(Boolean) && targets.length === 2) {
+    const quad = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, 1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0]), gl.STATIC_DRAW);
+
+    const uniformLocation = {
+      resolution: gl.getUniformLocation(program, 'r'),
+      mouse: gl.getUniformLocation(program, 'm'),
+      time: gl.getUniformLocation(program, 't'),
+      frame: gl.getUniformLocation(program, 'f'),
+      sound: gl.getUniformLocation(program, 's'),
+      backbuffer: gl.getUniformLocation(program, 'b')
+    };
+    const attribute = gl.getAttribLocation(program, 'p');
+    const postAttribute = gl.getAttribLocation(postProgram, 'p');
+    const postTexture = gl.getUniformLocation(postProgram, 'tex');
+
+    let [front, back] = targets;
+    let frameIndex = 0;
+    let lastTime = null;
+
+    function bindQuad(location) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, quad);
+      gl.enableVertexAttribArray(location);
+      gl.vertexAttribPointer(location, 3, gl.FLOAT, false, 0, 0);
+    }
+
+    function clearTargets() {
+      for (const target of [front, back]) {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+      }
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    }
+    clearTargets();
+
+    // The capture loop probes renderFrame(0) before replaying times in order, and
+    // clamps time during the audio tail. Swapping on strictly-increasing time only
+    // means a repeat re-renders identically and a rewind restarts the feedback.
+    function drawFrame(time) {
+      if (lastTime !== null && time < lastTime) {
+        clearTargets();
+        frameIndex = 0;
+      } else if (lastTime !== null && time > lastTime) {
+        const swap = front;
+        front = back;
+        back = swap;
+        frameIndex++;
+      }
+      lastTime = time;
+
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.useProgram(program);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, front.framebuffer);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, back.texture);
+      gl.uniform1i(uniformLocation.backbuffer, 0);
+      bindQuad(attribute);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.uniform2f(uniformLocation.resolution, canvas.width, canvas.height);
+      gl.uniform2f(uniformLocation.mouse, 0, 0);
+      gl.uniform1f(uniformLocation.time, time % loopDuration);
+      gl.uniform1f(uniformLocation.frame, frameIndex);
+      gl.uniform1f(uniformLocation.sound, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      gl.useProgram(postProgram);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, front.texture);
+      gl.uniform1i(postTexture, 0);
+      bindQuad(postAttribute);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.flush();
+
+      return canvas.toDataURL('image/png');
+    }
+
+    // Feedback shaders are order-dependent, so the preview loop must yield the
+    // moment the capture harness starts driving frames itself.
+    window.__twiglAutoplay = true;
+    window.renderFrame = function(time) {
+      window.__twiglAutoplay = false;
+      return drawFrame(time);
+    };
+
+    drawFrame(0);
+    window.ready = true;
+
+    const startTime = Date.now();
+    (function animate() {
+      if (window.__twiglAutoplay) {
+        drawFrame(((Date.now() - startTime) / 1000) % loopDuration);
+      }
+      requestAnimationFrame(animate);
+    })();
+  }
+}
+
+window.audioDuration = 48;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 75\\n// DURATION: 48\\n// FORM: A 0-3 | A' 3-6.5 | B 6.5-10 | A'' 10-13 | A-coda 13-15 (15 cycles @ 3.2s = 48s)\\n// TONAL CENTER: C Aeolian (C Eb F G Ab Bb)\\n// MOTIF: G3 C4 Eb4 D4 G3 — struck G3 on beat 1 (let ring), C4 on the and-of-2, Eb4 on beat 3, D4 on the and-of-4, then a beat of air before the answer; two mallet gestures separated by silence, never a line\\n// HARMONIC PLAN: A = Cm pedal, bare C1/C2 + open fifth G2, lithophone outlines Cm(add9) | A' = Cm pedal, pad adds Ab(maj7) on cycles 4-5, bass static | B = bass steps C→Bb (Eb and G held as common tones), Bb/Cm flat-seven opening, returns to C pedal on last half-cycle | A'' = Cm pedal alternating Ab(maj7) every 1.5 cycles, Bb lingering in the pad as a suspended seventh | A-coda = open Cm, bare C1/C2 fifth exactly as cycle 0\\n// PHRASE RULE: 3+3+2 eighth-note dripstone cell, beat 4 always left empty for reverb tail; at each seam the karst drone sustains through the boundary, the bass moves by step only with a common tone held, and exactly one other dimension changes — motif speed/register OR the cell's orchestration, never both\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\nsetcps(75/60/4)\\n\\n// lithophone call (motif lead) — struck detuned triangle, long hall, never sustained\\n$: note(\\\"\u003c[g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ eb4 ~ ~ ~ ~] [g3 ~ ~ ~ eb4 ~ ~ ~] [g3 ~ ~ ~ ~ ~ eb4 ~] [g3 ~ ~ eb4 ~ ~ ~ ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~] [g3 ~ ~ c4 eb4 ~ d4 ~]>\\\")\\n  .add(note(\\\"\u003c0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0>\\\"))\\n  .s(\\\"triangle\\\")\\n  .detune(\\\"\u003c0.07 0.07 0.07 0.07>\\\")\\n  .attack(0.006).decay(0.5).sustain(0).release(2.6)\\n  .lpf(sine.range(1500, 2400).slow(9))\\n  .gain(\\\"\u003c0.15 0.15 0.16 0.16 0.16 0.16 0.15 0.14 0.13 0.13 0.14 0.16 0.16 0.16 0.15 0.12>\\\")\\n  .room(0.85).roomsize(9).pan(0.44).orbit(1)\\n\\n// answering echo — same contour down a fourth, darker, arriving late through ping-pong delay\\n$: note(\\\"\u003c[~ ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ d3 ~ ~ g3] [bb3 ~ a3 ~ d3 ~ ~ ~] [~ ~ ~ ~ d3 ~ ~ g3] [bb3 ~ a3 ~ d3 ~ ~ ~] [~ ~ ~ ~ d3 ~ ~ ~] [~ ~ ~ ~ ~ ~ bb3 ~] [~ ~ ~ ~ d3 ~ ~ ~] [~ ~ ~ d3 ~ g3 bb3 ~] [~ ~ a3 ~ d3 ~ ~ ~] [~ ~ ~ d3 ~ g3 bb3 ~] [~ ~ a3 ~ d3 ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~]>\\\")\\n  .s(\\\"triangle\\\")\\n  .detune(0.05)\\n  .attack(0.008).decay(0.6).sustain(0).release(2.2)\\n  .lpf(\\\"\u003c900 900 900 880 860 840 820 760 700 680 720 800 780 800 760 740>\\\")\\n  .gain(0.115)\\n  .delay(0.42).delaytime(0.36).delayfeedback(\\\"\u003c0.3 0.3 0.3 0.34 0.36 0.38 0.4 0.44 0.46 0.46 0.42 0.4 0.4 0.38 0.3 0.28>\\\")\\n  .room(0.7).roomsize(8).pan(0.6).orbit(2)\\n\\n// karst drone (sub-bass foundation) — never stops, moves only by step at seams\\n$: note(\\\"\u003c[c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [bb0,bb1,g2] [bb0,bb1,g2] [bb0,bb1,g2] [bb0,bb1,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2] [c1,c2,g2]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .attack(1.4).decay(1).sustain(0.92).release(3.2)\\n  .lpf(sine.range(115, 185).slow(11))\\n  .gain(0.215)\\n  .room(0.4).roomsize(6).orbit(3)\\n\\n// vault pad (harmonic body) — the only voice carrying mixture; enters in A'\\n$: note(\\\"\u003c~ ~ [c3,g3,eb4] [c3,g3,eb4] [ab2,c3,eb4,g4] [ab2,c3,eb4,g4] [c3,g3,eb4] [bb2,eb3,g3,d4] [bb2,eb3,g3,d4] [bb2,eb3,g3,f4] [bb2,eb3,g3,d4] [c3,g3,eb4,bb4] [ab2,c3,eb4,g4] [c3,g3,eb4,bb4] [c3,g3,eb4] [c3,g3,eb4]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-4 3 -3 4>/8\\\")\\n  .attack(0.62).decay(1.4).sustain(0.75).release(3.5)\\n  .lpf(sine.range(620, 980).slow(13))\\n  .gain(\\\"\u003c0 0 0.085 0.095 0.105 0.105 0.1 0.115 0.12 0.12 0.115 0.11 0.11 0.1 0.085 0.06>\\\")\\n  .room(0.75).roomsize(8).pan(0.5).orbit(4)\\n\\n// dripstone percussion — 3+3+2 cell, beat 4 always empty, water on stone\\n$: s(\\\"\u003c[~ ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~] [rim ~ ~ ~ ~ ~ ~ ~] [rim ~ ~ hh ~ ~ ~ ~] [rim ~ ~ hh ~ rim ~ ~] [rim ~ ~ hh ~ rim ~ ~] [rim ~ ~ hh ~ rim ~ ~] [lt ~ ~ ~ ~ rim ~ ~] [lt ~ ~ ~ ~ ~ ~ ~] [lt ~ ~ ~ ~ rim ~ ~] [rim ~ ~ hh ~ ~ ~ ~] [rim ~ ~ hh ~ rim ~ ~] [rim ~ ~ hh ~ rim ~ ~] [rim ~ ~ hh ~ rim ~ ~] [rim ~ ~ ~ ~ ~ ~ ~] [~ ~ ~ ~ ~ ~ ~ ~]>\\\")\\n  .bank(\\\"RolandCR78\\\")\\n  .speed(\\\"\u003c1.6 1.6 1.55 1.6 1.5 1.6>\\\")\\n  .gain(0.26)\\n  .lpf(5200)\\n  .room(0.8).roomsize(9).pan(\\\"\u003c0.35 0.65 0.45 0.7>\\\").orbit(0)\",\"bpm\":75,\"durationSec\":48,\"renderDurationSec\":51,\"cps\":0.3125,\"cycles\":15,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

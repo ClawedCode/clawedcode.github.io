@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 42.0;
+const float PI = 3.14159265359;
+const float TAU = 6.28318530718;
+const float SEED = 7833075.0;
+float hash(float n) {
+  return fract(sin(n * 17.318 + SEED * 0.0001) * 43758.5453);
+}
+float smin(float a, float b, float k) {
+  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+  return mix(b, a, h) - k * h * (1.0 - h);
+}
+float sdCapsule(vec3 p, vec3 a, vec3 b, float r) {
+  vec3 pa = p - a;
+  vec3 ba = b - a;
+  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+  return length(pa - ba * h) - r;
+}
+float sdCup(vec3 p, vec3 c, float o, float k) {
+  vec3 q = p - c;
+  float a = atan(q.z, q.x);
+  float h = smoothstep(-0.22, 0.19, q.y);
+  float lip = mix(0.075, 0.34 * o, h);
+  lip *= 1.0 + 0.075 * cos(a * 7.0 + k);
+  float wall = abs(length(q.xz) - lip) - mix(0.052, 0.025, h);
+  float shell = max(wall, max(-q.y - 0.23, q.y - 0.2));
+  float bulb = length(q - vec3(0.0, -0.24, 0.0)) - 0.105;
+  return smin(shell, bulb, 0.055);
+}
+vec2 opU(vec2 a, vec2 b) {
+  return a.x < b.x ? a : b;
+}
+vec2 mapScene(vec3 p, float ta) {
+  float br = 0.5 + 0.5 * sin(ta * 2.0);
+  vec3 q = p;
+  q.x -= 0.11 * sin(q.y * 2.1 + ta) + 0.035 * sin(q.y * 5.0 - ta * 2.0);
+  q.z -= 0.07 * cos(q.y * 1.7 - ta);
+  float tr = sdCapsule(q, vec3(0.0, -1.8, 0.0), vec3(0.0, 1.42, 0.0), 0.115 + 0.018 * br);
+  tr -= 0.012 * sin(q.y * 13.0 + ta * 3.0);
+  vec2 r = vec2(tr, 1.0);
+  vec3 c1 = vec3(-1.02 - 0.05 * br, 0.86, 0.08 + 0.05 * sin(ta));
+  vec3 c2 = vec3(0.91 + 0.04 * br, 0.37, -0.13 + 0.05 * cos(ta * 2.0));
+  vec3 c3 = vec3(-0.67, -0.26, 0.22 + 0.04 * sin(ta * 3.0));
+  vec3 c4 = vec3(0.12 * sin(ta), 1.68 + 0.04 * br, 0.02);
+  float b1 = sdCapsule(p, vec3(-0.01, 0.43, 0.0), c1 + vec3(0.0, -0.22, 0.0), 0.082);
+  float b2 = sdCapsule(p, vec3(0.01, 0.03, 0.0), c2 + vec3(0.0, -0.22, 0.0), 0.076);
+  float b3 = sdCapsule(p, vec3(-0.02, -0.67, 0.01), c3 + vec3(0.0, -0.22, 0.0), 0.07);
+  float b4 = sdCapsule(p, vec3(0.0, 1.08, 0.0), c4 + vec3(0.0, -0.22, 0.0), 0.092);
+  float n1 = sdCapsule(p, vec3(-0.42, 0.62, 0.03), vec3(-0.72, 0.35, 0.22), 0.045);
+  float n2 = sdCapsule(p, vec3(0.38, 0.18, -0.05), vec3(0.64, -0.06, -0.25), 0.043);
+  float net = min(min(min(b1, b2), min(b3, b4)), min(n1, n2));
+  r = opU(r, vec2(net, 1.0));
+  float o1 = 0.84 + 0.18 * pow(0.5 + 0.5 * cos(ta - 1.8), 4.0);
+  float o2 = 0.82 + 0.2 * pow(0.5 + 0.5 * cos(ta - 3.4), 4.0);
+  float o3 = 0.79 + 0.2 * pow(0.5 + 0.5 * cos(ta - 5.0), 4.0);
+  float o4 = 0.9 + 0.2 * pow(0.5 + 0.5 * cos(ta - 0.35), 4.0);
+  float f = sdCup(p, c1, o1, 0.4);
+  f = min(f, sdCup(p, c2, o2, 2.1));
+  f = min(f, sdCup(p, c3, o3, 4.0));
+  f = min(f, sdCup(p, c4, o4, 5.3));
+  return opU(r, vec2(f, 2.0));
+}
+vec3 normalAt(vec3 p, float ta) {
+  float e = 0.0018;
+  vec2 h = vec2(e, 0.0);
+  return normalize(vec3(
+    mapScene(p + h.xyy, ta).x - mapScene(p - h.xyy, ta).x,
+    mapScene(p + h.yxy, ta).x - mapScene(p - h.yxy, ta).x,
+    mapScene(p + h.yyx, ta).x - mapScene(p - h.yyx, ta).x
+  ));
+}
+vec3 rayDir(vec3 ro, vec3 at, vec2 uv) {
+  vec3 f = normalize(at - ro);
+  vec3 r = normalize(cross(f, vec3(0.0, 1.0, 0.0)));
+  vec3 u = cross(r, f);
+  return normalize(f * 1.75 + r * uv.x + u * uv.y);
+}
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  float ph = mod(iTime, DURATION) / DURATION;
+  float ta = ph * TAU;
+  vec3 ro = vec3(0.2 * sin(ta), 0.1 * cos(ta * 2.0), 4.7);
+  vec3 rd = rayDir(ro, vec3(-0.06, -0.02, 0.0), uv);
+  float t = 0.12;
+  float mt = 0.0;
+  float hit = 0.0;
+  float gl = 0.0;
+  for (int i = 0; i < 80; i++) {
+    vec3 p = ro + rd * t;
+    vec2 h = mapScene(p, ta);
+    float sig = pow(0.5 + 0.5 * cos(ta - p.y * 2.7), 10.0);
+    gl += 0.004 * exp(-abs(h.x) * 13.0) * (0.25 + sig) / (1.0 + t * 0.13);
+    if (h.x < 0.0015) {
+      mt = h.y;
+      hit = 1.0;
+      break;
+    }
+    t += h.x * 0.72;
+    if (t > 9.0) break;
+  }
+  float bgm = 0.5 + 0.5 * sin(uv.x * 3.2 + sin(uv.y * 2.1 - ta)) * sin(uv.y * 3.7 - cos(uv.x * 2.4 + ta));
+  vec3 col = mix(vec3(0.026, 0.014, 0.025), vec3(0.075, 0.032, 0.037), bgm * 0.38);
+  if (hit > 0.5) {
+    vec3 p = ro + rd * t;
+    vec3 n = normalAt(p, ta);
+    vec3 ld = normalize(vec3(-0.55, 0.8, 0.48));
+    float dif = max(dot(n, ld), 0.0);
+    float rim = pow(1.0 - max(dot(n, -rd), 0.0), 2.5);
+    float sig = pow(0.5 + 0.5 * cos(ta - p.y * 2.7), 12.0);
+    float vein = pow(0.5 + 0.5 * sin(p.y * 17.0 + atan(p.z, p.x) * 3.0), 8.0);
+    vec3 bark = mix(vec3(0.16, 0.22, 0.105), vec3(0.73, 0.55, 0.17), sig);
+    vec3 flesh = mix(vec3(0.62, 0.19, 0.11), vec3(0.94, 0.65, 0.28), 0.35 + 0.65 * vein);
+    vec3 base = mix(bark, flesh, step(1.5, mt));
+    float back = pow(max(dot(rd, ld), 0.0), 5.0) * max(-dot(n, ld), 0.0);
+    col = base * (0.26 + 0.88 * dif);
+    col += vec3(1.0, 0.48, 0.16) * sig * 0.55;
+    col += vec3(0.96, 0.7, 0.38) * back * 0.75;
+    col += mix(vec3(0.48, 0.68, 0.25), vec3(1.0, 0.42, 0.2), step(1.5, mt)) * rim * 0.42;
+    col *= exp(-t * 0.035);
+  }
+  col += vec3(0.95, 0.48, 0.13) * gl;
+  for (int i = 0; i < 18; i++) {
+    float fi = float(i);
+    float h1 = hash(fi + 1.0);
+    float h2 = hash(fi + 19.0);
+    float h3 = hash(fi + 47.0);
+    float z = fract(h2 + ph * (1.0 + floor(h3 * 2.0)));
+    float fade = sin(z * PI);
+    float fq = 1.0 + floor(h1 * 3.0);
+    vec2 sp = vec2(mix(-1.12, 1.12, h1) + 0.12 * sin(ta * fq + h2 * TAU), -1.18 + z * 2.72);
+    float d = length(uv - sp);
+    float mote = smoothstep(0.012, 0.0, d) + 0.07 * smoothstep(0.065, 0.0, d);
+    col += mix(vec3(0.96, 0.46, 0.13), vec3(0.72, 0.82, 0.28), h3) * mote * fade;
+  }
+  col *= 1.0 - 0.28 * smoothstep(0.55, 1.28, length(uv));
+  col = pow(max(col, 0.0), vec3(0.82));
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 42;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 42;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 42;
+  const targetBpm = 72;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+
+  let rngState = 0x0f8bd143;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === EFFECTS & CHAINING ===
+  const reverb = new Tone.Reverb({ decay: 4.5, wet: 0.4 }).toDestination();
+  await reverb.generate();
+
+  const granularDelay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.3, wet: 0.5 }).toDestination();
+  await granularDelay.generate();
+
+  const lowPass = new Tone.Filter({ type: "lowpass", frequency: 800, rolloff: -24 }).toDestination();
+  
+  const masterBus = new Tone.Gain(0.8).toDestination();
+
+  // === INSTRUMENTS ===
+
+  // 1. The "Organism" (Respiratory Pad)
+  // Uses AM synthesis to create a beating, cellular pulse
+  const organism = new Tone.AMSynth({
+    harmonicity: 3,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.04, decay: 0.01, sustain: 1, release: 0.04 },
+    modulation: { type: "square" },
+    modulationEnvelope: { attack: 0.5, decay: 0.01, sustain: 1, release: 0.5 }
+  });
+
+  const organismGain = new Tone.Gain(-6);
+  organism.connect(organismGain).connect(lowPass).connect(reverb).connect(masterBus);
+
+  // 2. The "Fruiting Bodies" (Metals/Bells)
+  // High-frequency bells that bloom in and out, representing data querying
+  const fruiting = new Tone.MetalSynth({
+    frequency: 440,
+    envelope: { attack: 0.001, decay: 1.2, release: 0.4, harmonicity: 5.1, modulationIndex: 12, resonance: 3000, octaves: 1.5 },
+    volume: -12
+  });
+  fruiting.connect(granularDelay);
+
+  // 3. The "Genetic Script" (Sub-bass Drone)
+  // A deep sine drone that defines the root of the organism
+  const drone = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 2.0, decay: 1.0, sustain: 1, release: 2.0 }
+  }).toDestination();
+  
+  // 4. The "Respiration" (Noise)
+  // Pink noise filtered to sound like air moving through tissue
+  const noise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.5, decay: 0.5, sustain: 0, release: 0.5 }
+  }).toDestination();
+
+  // === SEQUENCING & LOGIC ===
+
+  // The Drone (Root)
+  const droneNotes = ["D2", "D2", "A1", "A1"];
+  let droneIndex = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    drone.triggerAttackRelease(droneNotes[droneIndex % droneNotes.length], "4m", time);
+    droneIndex++;
+  }, "1m").start(0);
+
+  // The Organism (Cellular Pulse)
+  // Uses AM to create a slow, breathing amplitude.
+  // Root notes shift every 2 bars.
+  const cellNotes = ["D3", "F3", "A3", "C4", "D4", "C4", "A3", "F3"];
+  let cellIndex = 0;
+  const cellLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // Determine root based on the bar
+    let rootIndex = 0;
+    if (bar < totalBars * 0.15) rootIndex = 0; // D
+    else if (bar < totalBars * 0.50) rootIndex = 2; // A
+    else if (bar < totalBars * 0.80) rootIndex = 3; // C
+    else rootIndex = 0; // D (return)
+
+    // Calculate note with octave shift based on root
+    const root = Tone.Frequency(droneNotes[rootIndex]).toMidi();
+    const note = Tone.Frequency(root + 12 + cellNotes[cellIndex % cellNotes.length].slice(0, -1), "note");
+    
+    // Gate volume based on section
+    let vol = -10;
+    if (bar < totalBars * 0.15) vol = -16; // Intro quieter
+    if (bar >= totalBars * 0.80) vol = -14; // Wind down slightly
+
+    organism.triggerAttackRelease(note, "8n", time + H(5), Math.pow(10, vol/20));
+    cellIndex++;
+  }, "8n").start(0);
+
+  // Fruiting Bodies (Bells)
+  // Only play when "queried" (sparse, random, high pitch)
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    
+    // High density in middle section, sparse at start/end
+    let prob = 0.05;
+    if (bar >= totalBars * 0.15 && bar < totalBars * 0.55) prob = 0.25;
+    if (bar >= totalBars * 0.55 && bar < totalBars * 0.80) prob = 0.15;
+
+    if (R() < prob) {
+      // Bells are major 7ths above the root to sound "blossoming"
+      let rootIndex = 0;
+      if (bar < totalBars * 0.15) rootIndex = 0;
+      else if (bar < totalBars * 0.50) rootIndex = 2;
+      else if (bar < totalBars * 0.80) rootIndex = 3;
+      else rootIndex = 0;
+
+      const base = Tone.Frequency(droneNotes[rootIndex]).toMidi();
+      // Major 7th + octave
+      const note = Tone.Frequency(base + 20 + Math.floor(R() * 2), "midi"); 
+      
+      fruiting.triggerAttackRelease(Tone.Frequency(note, "midi").toNote(), "16n", time + H(8), 0.6);
+    }
+  }, "16n").start(0);
+
+  // Respiration (Air)
+  // Breath sounds to give "life" to the code
+  const breathLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only breathe occasionally
+    if (R() < 0.15) {
+      noise.triggerAttackRelease("2n", time + H(10), 0.1);
+    }
+  }, "4n").start(0);
+
+  // === DYNAMIC AUTOMATION (The "Growth") ===
+
+  // Filter sweep: Opens up as the organism grows, then closes for the loop
+  const secPerBar = 240 / bpm;
+  
+  // Open filter at 15%
+  Tone.Transport.schedule((time) => {
+    lowPass.frequency.linearRampToValueAtTime(2800, time + totalBars * 0.35 * secPerBar);
+  }, totalBars * 0.15 * secPerBar);
+
+  // Close filter before loop point (80%)
+  Tone.Transport.schedule((time) => {
+    lowPass.frequency.linearRampToValueAtTime(600, time + totalBars * 0.15 * secPerBar);
+  }, totalBars * 0.80 * secPerBar);
+
+  // === CLEANUP ===
+  window.toneJsInstruments = {
+    organism,
+    fruiting,
+    drone,
+    noise,
+    reverb,
+    granularDelay,
+    lowPass,
+    masterBus
+  };
+  window.toneJsParts = {
+    droneLoop,
+    cellLoop,
+    bellLoop,
+    breathLoop
+  };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

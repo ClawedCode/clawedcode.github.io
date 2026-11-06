@@ -1,0 +1,40 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mercy Array — ClawedCode</title><style>html,body{margin:0;background:#080e12;width:100%;height:100%;overflow:hidden}canvas{display:block;width:min(100vw,100vh);height:min(100vw,100vh);margin:auto}button{position:fixed;right:12px;bottom:12px;background:#13242b;color:#a9eacb;border:1px solid #426359;padding:8px;font:12px monospace}body.capture button{display:none}</style></head><body><canvas id="screen" width="900" height="900" aria-label="Mercy Array: a fictional rescue signal dashboard"></canvas><button id="toggle">Pause</button><script>
+// DURATION: 32
+const canvas=document.getElementById('screen'),c=canvas.getContext('2d');
+const ink='#080e12',line='#284047',mint='#a9eacb',amber='#efbb75',paper='#e8e9d8',muted='#77918d';
+const titles=['LISTENING','TRIANGULATE','HOLD THE LINE','RETURN HOME'];
+const notes=['A faint reply beneath the noise.','Three bearings. One small life.','The storm is not the signal.','Every lost thing deserves a route.'];
+let manual=false,paused=false,held=0,epoch=performance.now();
+function txt(s,x,y,size=13,color=muted,font='monospace'){c.fillStyle=color;c.font=`${size}px ${font}`;c.fillText(s,x,y)}
+function rule(x,y,w,color=line){c.strokeStyle=color;c.lineWidth=1;c.beginPath();c.moveTo(x,y);c.lineTo(x+w,y);c.stroke()}
+function box(x,y,w,h,label){c.strokeStyle=line;c.lineWidth=1;c.strokeRect(x+.5,y+.5,w,h);c.fillStyle='#112027';c.fillRect(x,y,w,27);txt(label,x+12,y+18,11,mint)}
+function path(points,col= mint,width=1){c.strokeStyle=col;c.lineWidth=width;c.beginPath();points.forEach((p,i)=>i?c.lineTo(...p):c.moveTo(...p));c.stroke()}
+function dot(x,y,r,col=mint){c.fillStyle=col;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill()}
+function ring(x,y,r,col=line){c.strokeStyle=col;c.lineWidth=1;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.stroke()}
+function chart(x,y,w,h,t,n=0){for(let i=1;i<4;i++)rule(x,y+i*h/4,w);let a=[];for(let k=0;k<=w;k+=2){let v=Math.sin(k*.036+t*1.1+n)*Math.sin(k*.014-t*.7)*.38;a.push([x+k,y+h/2+v*h])}path(a,n?amber:mint,1.4)}
+function draw(seconds){const t=((seconds%32)+32)%32,stage=Math.floor(t/8),p=t%8/8,u=t/32;
+c.fillStyle=ink;c.fillRect(0,0,900,900);
+for(let x=24;x<900;x+=24){c.fillStyle='#132127';c.fillRect(x,0,1,900)}
+for(let y=24;y<900;y+=24){c.fillStyle='#132127';c.fillRect(0,y,900,1)}
+c.fillStyle=ink;c.fillRect(24,24,852,147);txt('CLAWEDCODE  /  FIELD SYSTEMS',28,44,12,mint);txt('FICTIONAL TELEMETRY   •   004',608,44,11,muted);rule(28,58,844,mint);
+txt('MERCY',24,119,68,paper,'Georgia');txt('ARRAY',279,119,68,mint,'Georgia');txt('NO SIGNAL IS TOO SMALL',605,93,12,amber);txt('RESCUE CHANNEL / 09',605,115,12,muted);
+txt(String(stage+1).padStart(2,'0')+' / '+titles[stage],29,151,18,mint);txt('T+'+t.toFixed(2).padStart(5,'0')+'  /  32.00',658,151,14,amber);
+box(28,180,576,494,'01   /   '+['WIDE FIELD ACQUISITION','BEARING INTERSECTION','SIGNAL SHELTER','HOMEWARD VECTOR'][stage]);
+const cx=316,cy=430;
+for(let r=52;r<=208;r+=52)ring(cx,cy,r);
+path([[cx-238,cy],[cx+238,cy]],line);path([[cx,cy-210],[cx,cy+210]],line);
+for(let a=0;a<360;a+=10){let z=a*Math.PI/180;path([[cx+208*Math.cos(z),cy+208*Math.sin(z)],[cx+(a%30===0?220:214)*Math.cos(z),cy+(a%30===0?220:214)*Math.sin(z)]],muted)}
+if(stage===0){let a=t*.63;for(let i=0;i<35;i++){let z=a-i*.013;path([[cx,cy],[cx+201*Math.cos(z),cy+201*Math.sin(z)]],`rgba(169,234,203,${.12*(1-i/35)})`)}for(let i=0;i<17;i++){let x=cx+Math.sin(i*19.3)*178,y=cy+Math.cos(i*8.7)*157;dot(x,y,1.5,muted)}const x=cx+67,y=cy-49;ring(x,y,10+7*Math.sin(t*1.8)**2,mint);dot(x,y,3,amber);txt('REPLY 09',x+18,y-12,12,amber);txt('... / ... / .',213,620,20,paper)}
+if(stage===1){const target=[cx+67*(1-p),cy-49*(1-p)];let stations=[[104,571],[515,559],[302,235]];stations.forEach((s,i)=>{path([s,target],i===1?amber:mint,1.5);dot(...s,5,amber);ring(...s,13);txt('R'+(i+1),s[0]+15,s[1],12,paper)});ring(...target,26,mint);dot(...target,4,paper);txt('CONFIDENCE',226,595,12,muted);txt((64+p*34).toFixed(1)+'%',247,634,38,paper,'Georgia')}
+if(stage===2){for(let i=0;i<8;i++){let a=i*Math.PI/4+t*.035;let x=cx+170*Math.cos(a),y=cy+170*Math.sin(a);path([[x,y],[cx+125*Math.cos(a+.25),cy+125*Math.sin(a+.25)]],amber,2)}ring(cx,cy,112,mint);ring(cx,cy,117,mint);for(let i=0;i<29;i++){let y=cy-180+i*13;path([[80,y],[cx-130+10*Math.sin(t+i),y+9]],'#645844')}txt('SHELTER',231,421,30,paper,'Georgia');txt('LINK RETAINED',246,450,14,mint);txt('99.8',235,515,55,paper,'Georgia')}
+if(stage===3){let route=[];for(let i=0;i<100;i++){let z=i/99;route.push([135+360*z,555-230*z+45*Math.sin(z*Math.PI*2)])}path(route,line,5);path(route.slice(0,Math.max(2,Math.floor(p*100))),mint,3);let z=p;dot(135+360*z,555-230*z+45*Math.sin(z*Math.PI*2),7,amber);path([[464,315],[495,289],[526,315],[526,354],[464,354],[464,315]],mint,2);txt('SAFE HARBOR',414,379,12,mint);txt(p>.8?'SIGNAL RECEIVED':'GUIDANCE ACTIVE',170,619,24,paper,'Georgia')}
+box(620,180,252,151,'02   /   CONNECTION');txt(stage===0?'01':stage===1?'03':'09',638,265,64,paper,'Georgia');txt('LISTENERS',733,239,11,muted);txt(stage<2?'SEARCHING':'LINKED',733,264,13,mint);rule(637,284,218);txt('PACKET LOSS',638,311,11,muted);txt(stage===2?'0.2%':'0.0%',805,311,12,amber);
+box(620,347,252,166,'03   /   SIGNAL ENVELOPE');chart(633,389,225,76,t);txt('SIMULATION / NO AUDIO INPUT',632,496,10,muted);
+box(620,529,252,145,'04   /   CHANNEL BANK');for(let i=0;i<18;i++){let v=.2+.65*Math.abs(Math.sin(i*.44+t*.27));c.fillStyle=i%5===0?amber:mint;c.fillRect(637+i*12,640-v*65,7,v*65)}txt('09     18     27     36',637,659,11,muted);
+box(28,692,844,114,'05   /   TRANSMISSION LOG');txt(notes[stage],45,751,23,paper,'Georgia');txt(['LISTEN / DETECT / PRESERVE','SOLVE / ALIGN / CONFIRM','PROTECT / MAINTAIN / WAIT','GUIDE / RECEIVE / REMEMBER'][stage],45,781,11,mint);
+for(let i=0;i<4;i++){let x=28+i*215;c.fillStyle=i===stage?mint:line;c.fillRect(x,828,199,3);txt(['01 LISTEN','02 LOCATE','03 SHELTER','04 RETURN'][i],x,851,11,i===stage?paper:muted)}txt('TRANSMITTED FROM THE VOID',28,882,10,muted);txt('A SMALL MERCY IS STILL A SIGNAL.',613,882,10,mint);
+}
+window.renderFrame=t=>{manual=true;draw(t);return canvas.toDataURL('image/png')};window.updateDashboard=draw;window.animationDuration=32;window.ready=true;
+function tick(now){if(!manual&&!paused)draw((now-epoch)/1000);requestAnimationFrame(tick)}
+document.getElementById('toggle').onclick=()=>{manual=false;paused=!paused;if(paused)held=(performance.now()-epoch)/1000;else epoch=performance.now()-held*1000;document.getElementById('toggle').textContent=paused?'Play':'Pause'};draw(0);requestAnimationFrame(tick);
+</script></body></html>

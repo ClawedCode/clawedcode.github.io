@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 48
+const canvas = (() => {
+// ============================================================================
+// Watercolor Cartoon kit (repo-owned) — the painting runtime every
+// `watercolorCartoon` film draws with. The model writes chapters and shots;
+// it never writes or edits anything in this file.
+//
+// Adapted from JohnHeibel/PDoomVideo (a p5.js + p5.brush painted music video)
+// and re-implemented on plain Canvas 2D, so the technique carries no third-party
+// runtime: watercolour fills that bleed and pool at their edges, one continuous
+// tapered ink stroke per outline, hatching, linework that boils 12x a second,
+// paper under every frame and grain multiplied over it.
+//
+// Coordinates: 1080x1080, y down, origin top-left. Every shot is a pure
+// function of time: frames are captured out of order.
+// ============================================================================
+const W = 1080, H = 1080, CX = W / 2, CY = H / 2, TAU = Math.PI * 2;
+const FPS_DRAW = 24, BOIL = 12;
+let BPM = 100, BEAT = 60 / BPM, OFF = 0, T = 0;
+
+const PAL = {
+  paper: '#F3EBDC', ink: '#2B2233', cream: '#FFF5E2', night: '#1F2550', indigo: '#2F3C7A',
+  violet: '#7B5CA8', rose: '#E27A92', ochre: '#E8AA38', sap: '#6E9F58', teal: '#3A9C98',
+  sky: '#8EC3E6', clay: '#D97757', clayDk: '#A84D33', clayLt: '#F2A283',
+  // the void cat and its sky
+  fur: '#2E2748', furDk: '#17132B', furLt: '#56497E', eye: '#A6F5E4', ear: '#C792EA',
+  abyss: '#141128', plasma: '#C792EA', aurora: '#7FE0C8', gold: '#F8CC62', ember: '#F0762B'
+};
+
+// ---------- maths and timing (everything is a pure function of t) ----------
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, x) => a + (b - a) * x;
+const ease = x => { x = clamp(x); return x * x * (3 - 2 * x); };
+const easeOut = x => 1 - Math.pow(1 - clamp(x), 3);
+const easeIn = x => Math.pow(clamp(x), 3);
+const backOut = x => { x = clamp(x); const s = 1.9; return 1 + (s + 1) * Math.pow(x - 1, 3) + s * Math.pow(x - 1, 2); };
+const elasticOut = x => { x = clamp(x); return x === 0 || x === 1 ? x : Math.pow(2, -10 * x) * Math.sin((x * 10 - .75) * (TAU / 3)) + 1; };
+const hash = i => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+const frac = x => x - Math.floor(x);
+const seg = (t, a, b) => clamp((t - a) / (b - a));
+const wob = (t, f = 1, ph = 0) => Math.sin((t * f + ph) * TAU);
+// The beat grid. tempo() once at the top of a film; B(n) is the time of beat n.
+const tempo = (bpm, offset = 0) => { BPM = clamp(+bpm || 100, 50, 200); BEAT = 60 / BPM; OFF = +offset || 0; };
+const B = n => OFF + n * BEAT;
+const bpOf = t => (t - OFF) / BEAT;
+const beatN = t => Math.floor(bpOf(t));
+const pulse = (t, k = 6) => Math.exp(-frac(bpOf(t)) * k);
+const pulse2 = (t, k = 6) => Math.exp(-frac(bpOf(t) * 2) * k);
+// keyframes: kf(t, [[t0, v0], [t1, v1], ...], easeFn). Values may be numbers or arrays of numbers.
+function kf(t, keys, e = ease) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) {
+    if (t < keys[i][0]) {
+      const [a, va] = keys[i - 1], [b, vb] = keys[i], k = e((t - a) / (b - a));
+      return Array.isArray(va) ? va.map((v, j) => lerp(v, vb[j], k)) : lerp(va, vb, k);
+    }
+  }
+  return keys[keys.length - 1][1];
+}
+const _hex = c => { const s = String(c).replace('#', ''); const f = s.length === 3 ? s.split('').map(ch => ch + ch).join('') : s.slice(0, 6); return parseInt(f, 16) || 0; };
+function mixCol(a, b, k) {
+  const pa = _hex(a), pb = _hex(b), c = i => Math.round(lerp((pa >> i) & 255, (pb >> i) & 255, clamp(k)));
+  return '#' + ((1 << 24) + (c(16) << 16) + (c(8) << 8) + c(0)).toString(16).slice(1);
+}
+const _rgba = (c, a) => { const p = _hex(c); return `rgba(${(p >> 16) & 255},${(p >> 8) & 255},${p & 255},${a})`; };
+// small deterministic camera shake that changes 24x a second
+const shakeXY = (t, amt) => { const f = Math.floor(t * 24); return [(hash(f * 1.7) - .5) * 2 * amt, (hash(f * 2.3 + 9) - .5) * 2 * amt]; };
+
+// Boil: reseeded 12x a second, so linework and watercolour edges wobble like
+// hand-drawn animation while motion runs at 24 fps. hash(i) is the stable one.
+let _s = 1;
+const _seed = s => { _s = (s >>> 0) || 1; };
+const rnd = () => { _s = (_s + 0x6D2B79F5) | 0; let x = Math.imul(_s ^ (_s >>> 15), 1 | _s); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; };
+const jit = a => (rnd() * 2 - 1) * a;
+
+// ---------- the output canvas ----------
+const __out = document.createElement('canvas');
+__out.width = W; __out.height = H;
+const ctx = __out.getContext('2d');
+
+// p5-style transforms, so a shot reads like the reference films
+let _depth = 0;
+const push = () => { ctx.save(); _depth++; };
+const pop = () => { if (_depth > 0) { ctx.restore(); _depth--; } };
+const translate = (x, y) => ctx.translate(x, y);
+const rotate = a => ctx.rotate(a);
+const scale = (sx, sy = sx) => ctx.scale(sx, sy);
+// Fade whatever is painted until the matching pop(). Overlaps show through — watercolour, not a layer.
+const fade = k => { ctx.globalAlpha *= clamp(k); };
+
+// ---------- geometry ----------
+function rectPts(x, y, w, h, j = 0) {
+  return [[x + jit(j), y + jit(j)], [x + w / 2 + jit(j), y + jit(j) * .5], [x + w + jit(j), y + jit(j)],
+    [x + w + jit(j) * .5, y + h / 2], [x + w + jit(j), y + h + jit(j)], [x + w / 2 + jit(j), y + h + jit(j) * .5],
+    [x + jit(j), y + h + jit(j)], [x + jit(j) * .5, y + h / 2]];
+}
+function ellPts(cx, cy, rx, ry, n = 28, j = 0, rot = 0) {
+  const p = []; for (let i = 0; i < n; i++) { const a = rot + i / n * TAU; p.push([cx + Math.cos(a) * rx + jit(j), cy + Math.sin(a) * ry + jit(j)]); } return p;
+}
+function rrPts(x, y, w, h, r, j = 0) {
+  const p = [], n = 5, corner = (cx, cy, a0) => { for (let i = 0; i <= n; i++) { const a = a0 + i / n * Math.PI / 2; p.push([cx + Math.cos(a) * r + jit(j), cy + Math.sin(a) * r + jit(j)]); } };
+  corner(x + w - r, y + r, -Math.PI / 2); corner(x + w - r, y + h - r, 0); corner(x + r, y + h - r, Math.PI / 2); corner(x + r, y + r, Math.PI);
+  return p;
+}
+function starPts(cx, cy, r, inner = .38, n = 4, rot = -Math.PI / 2) {
+  const p = []; for (let i = 0; i < n * 2; i++) { const a = rot + i * Math.PI / n, q = i % 2 ? r * inner : r; p.push([cx + Math.cos(a) * q, cy + Math.sin(a) * q]); } return p;
+}
+function heartPts(cx, cy, r, n = 22) {
+  const p = []; for (let i = 0; i < n; i++) { const a = i / n * TAU; p.push([cx + 16 * Math.pow(Math.sin(a), 3) * r / 16, cy - (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) * r / 16]); } return p;
+}
+// A bumpy cloud / fluff outline.
+function fluffPts(cx, cy, rx, ry, bumps = 9, amp = .12, n = 36, rot = 0) {
+  const p = []; for (let i = 0; i < n; i++) { const a = rot + i / n * TAU, f = 1 + amp * (Math.pow(Math.abs(Math.sin(a * bumps / 2)), .6) - .5); p.push([cx + Math.cos(a) * rx * f, cy + Math.sin(a) * ry * f]); } return p;
+}
+
+// ---------- path plumbing ----------
+function _path(P, closed = true) {
+  ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length; i++) ctx.lineTo(P[i][0], P[i][1]);
+  if (closed) ctx.closePath();
+}
+// Cardinal spline through the points; k = 0 straight, .5 Catmull-Rom, 1 loopy.
+function _spline(P, k, closed) {
+  if (!k || P.length < 3) return P;
+  const n = P.length, out = [], at = i => closed ? P[((i % n) + n) % n] : P[Math.max(0, Math.min(n - 1, i))];
+  const spans = closed ? n : n - 1;
+  for (let i = 0; i < spans; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const m1 = [(p2[0] - p0[0]) * k, (p2[1] - p0[1]) * k], m2 = [(p3[0] - p1[0]) * k, (p3[1] - p1[1]) * k];
+    const steps = Math.max(2, Math.min(14, Math.ceil(Math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 14)));
+    for (let s = 0; s < steps; s++) {
+      const u = s / steps, u2 = u * u, u3 = u2 * u, a = 2 * u3 - 3 * u2 + 1, b = u3 - 2 * u2 + u, c = -2 * u3 + 3 * u2, d = u3 - u2;
+      out.push([a * p1[0] + b * m1[0] + c * p2[0] + d * m2[0], a * p1[1] + b * m1[1] + c * p2[1] + d * m2[1]]);
+    }
+  }
+  if (!closed) out.push(P[n - 1]);
+  return out;
+}
+// Evenly spaced samples along a path.
+function _resample(P, closed, step) {
+  const pts = closed ? [...P, P[0]] : P, L = [0];
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) { total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); L.push(total); }
+  if (total < .5) return null;
+  const n = Math.max(2, Math.min(700, Math.ceil(total / step))), out = [];
+  let j = 1;
+  for (let k = 0; k <= n; k++) {
+    const d = total * k / n;
+    while (j < pts.length - 1 && L[j] < d) j++;
+    const s = (d - L[j - 1]) / ((L[j] - L[j - 1]) || 1);
+    out.push([lerp(pts[j - 1][0], pts[j][0], s), lerp(pts[j - 1][1], pts[j][1], s)]);
+  }
+  return out;
+}
+// Outline of a stroke of varying width along samples S.
+function _ribbon(S, width, p0, p1, noise, taperEnds) {
+  const n = S.length, Lf = [], Rt = [], ph = rnd() * TAU;
+  for (let i = 0; i < n; i++) {
+    const a = S[Math.max(0, i - 1)], b = S[Math.min(n - 1, i + 1)];
+    let dx = b[0] - a[0], dy = b[1] - a[1]; const d = Math.hypot(dx, dy) || 1; dx /= d; dy /= d;
+    const u = i / (n - 1), end = taperEnds ? Math.min(1, Math.sqrt(Math.min(u, 1 - u) * 10 + .06)) : 1;
+    const w = width * .5 * lerp(p0, p1, u) * end * (1 + noise * (Math.sin(u * 19 + ph) * .7 + jit(.5)));
+    Lf.push([S[i][0] - dy * w, S[i][1] + dx * w]); Rt.push([S[i][0] + dy * w, S[i][1] - dx * w]);
+  }
+  return Lf.concat(Rt.reverse());
+}
+
+// ---------- brushes ----------
+const BRUSH = {
+  ink: { kind: 'ribbon', w: 4.6, a: .92, p: [1.15, .75], n: .14 },
+  inkfine: { kind: 'ribbon', w: 2.4, a: .9, p: [1.1, .8], n: .1 },
+  pen: { kind: 'ribbon', w: 1.9, a: .95, p: [1, .9], n: .05 },
+  rotring: { kind: 'ribbon', w: 1.5, a: 1, p: [1, 1], n: 0 },
+  marker: { kind: 'ribbon', w: 11, a: .5, p: [1, 1], n: .04 },
+  dry: { kind: 'bristle', w: 14, a: .32, n: 7 },
+  charcoal: { kind: 'bristle', w: 7, a: .42, n: 4 },
+  HB: { kind: 'pencil', w: 1.4, a: .5 },
+  '2B': { kind: 'pencil', w: 2.1, a: .62 },
+  cpencil: { kind: 'pencil', w: 1.8, a: .55 },
+  spray: { kind: 'spray', w: 10, a: .45 }
+};
+function _stroke(P, br, col, sw, closed) {
+  const b = BRUSH[br] || BRUSH.ink;
+  if (!(sw > 0) || !P || P.length < 2) return;
+  const S = _resample(P, closed, b.kind === 'ribbon' ? 3.5 : 5);
+  if (!S) return;
+  const g = ctx.globalAlpha, w = b.w * sw;
+  ctx.save();
+  ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  if (b.kind === 'ribbon') {
+    ctx.globalAlpha = g * b.a * .55; _path(_ribbon(S, w, b.p[0], b.p[1], b.n, true)); ctx.fill();
+    ctx.globalAlpha = g * b.a * .8; _path(_ribbon(S, w * .55, b.p[0], b.p[1], b.n * .5, true)); ctx.fill();
+  } else if (b.kind === 'pencil') {
+    ctx.lineWidth = w;
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.globalAlpha = g * b.a * (pass ? .45 : 1);
+      ctx.beginPath(); S.forEach((p, i) => { const x = p[0] + jit(pass * .8), y = p[1] + jit(pass * .8); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); }); ctx.stroke();
+    }
+  } else if (b.kind === 'bristle') {
+    ctx.lineWidth = Math.max(.8, w / b.n * 1.1);
+    for (let k = 0; k < b.n; k++) {
+      const off = (k / Math.max(1, b.n - 1) - .5) * w;
+      ctx.globalAlpha = g * b.a * (.55 + .45 * rnd());
+      ctx.setLineDash([8 + rnd() * 40, 2 + rnd() * 9]);
+      ctx.beginPath();
+      S.forEach((p, i) => {
+        const q = S[Math.min(S.length - 1, i + 1)], r = S[Math.max(0, i - 1)], dx = q[0] - r[0], dy = q[1] - r[1], d = Math.hypot(dx, dy) || 1;
+        const x = p[0] - dy / d * off, y = p[1] + dx / d * off; if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+      });
+      ctx.stroke();
+    }
+  } else {
+    for (let i = 0; i < S.length; i += 2) for (let k = 0; k < 3; k++) {
+      ctx.globalAlpha = g * b.a * rnd();
+      ctx.fillRect(S[i][0] + jit(w), S[i][1] + jit(w), 1.6, 1.6);
+    }
+  }
+  ctx.restore();
+}
+
+// Pigment granulation, multiplied inside watercolour fills.
+const _grainTile = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 160;
+  const g = c.getContext('2d'), d = g.createImageData(160, 160), r = _lcg(23);
+  for (let i = 0; i < d.data.length; i += 4) { const v = 255 - (r() < .35 ? r() * r() * 120 : r() * 18); d.data[i] = v; d.data[i + 1] = v; d.data[i + 2] = v; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0);
+  return c;
+})();
+const _grainPattern = ctx.createPattern(_grainTile, 'repeat');
+
+// Midpoint displacement: the edge of a wet shape spreading into the paper,
+// scaled by both the edge and the whole shape so small blots bleed too.
+function _deform(P, amt, iters, size) {
+  let pts = P;
+  for (let k = 0; k < iters; k++) {
+    const out = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+      const d = (rnd() + rnd() + rnd() - 1.5) * (Math.min(len, 260) * .6 + size * .1) * amt / (k + 1);
+      out.push(a, [(a[0] + b[0]) / 2 - dy / len * d, (a[1] + b[1]) / 2 + dx / len * d]);
+    }
+    pts = out;
+  }
+  return pts;
+}
+function _bbox(P) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of P) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+  return [x0, y0, x1, y1];
+}
+function _size(P) {
+  const [x0, y0, x1, y1] = _bbox(P);
+  return Math.min(1400, Math.sqrt(Math.max(1, (x1 - x0) * (y1 - y0))));
+}
+function _water(P, col, a, bleed, tex, border) {
+  const g = ctx.globalAlpha, size = _size(P), base = _deform(P, bleed, 2, size), layers = 5, q = 1 - Math.pow(1 - .9 * clamp(a), 1 / layers);
+  ctx.save();
+  ctx.fillStyle = col;
+  ctx.globalAlpha = g * q;
+  for (let l = 0; l < layers; l++) { _path(_deform(base, bleed * .9 + .02, 1, size)); ctx.fill(); }
+  if (border > 0) {  // pigment settles at the rim of a wet shape
+    ctx.strokeStyle = col; ctx.lineJoin = 'round';
+    ctx.lineWidth = lerp(2, 8, clamp(border)); ctx.globalAlpha = g * clamp(a) * clamp(border) * .45; _path(base); ctx.stroke();
+    ctx.lineWidth = lerp(.8, 2.4, clamp(border)); ctx.globalAlpha = g * clamp(a) * clamp(border) * .55; ctx.stroke();
+  }
+  if (tex > 0) {
+    ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = _grainPattern;
+    ctx.globalAlpha = g * clamp(tex) * clamp(a) * .6; _path(base); ctx.fill();
+  }
+  ctx.restore();
+}
+function _wash(P, col, a) {
+  const g = ctx.globalAlpha;
+  ctx.save(); ctx.globalAlpha = g * clamp(a); ctx.fillStyle = col; _path(P); ctx.fill(); ctx.restore();
+}
+function _hatch(P, h) {
+  const d = Math.max(3, h.d ?? 12), ang = (h.a ?? 45) * Math.PI / 180, o = h.o || {}, rand = o.rand ?? .15, grad = o.gradient ?? 0;
+  const b = BRUSH[h.b || 'HB'] || BRUSH.HB, [x0, y0, x1, y1] = _bbox(P);
+  const R = Math.hypot(x1 - x0, y1 - y0) / 2 + d, N = Math.min(300, Math.ceil(2 * R / d)), g = ctx.globalAlpha;
+  ctx.save(); _path(P); ctx.clip();
+  ctx.translate((x0 + x1) / 2, (y0 + y1) / 2); ctx.rotate(ang);
+  ctx.strokeStyle = h.c || PAL.ink; ctx.lineCap = 'round';
+  ctx.lineWidth = Math.max(.6, b.w * (h.w ?? 1) * (b.kind === 'pencil' ? 1 : .5));
+  for (let k = 0; k <= N; k++) {
+    const y = -R + k * d + jit(rand * d);
+    ctx.globalAlpha = g * Math.min(1, b.a * 1.2) * (1 - grad * k / N) * (.7 + .3 * rnd());
+    ctx.beginPath(); ctx.moveTo(-R + jit(d), y + jit(rand * d * .5)); ctx.lineTo(R + jit(d), y + jit(rand * d * .5)); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---------- the painting API ----------
+// One call paints one shape: optional flat wash, watercolour fill, hatch, then one ink outline.
+function paint(pts, o = {}) {
+  if (!pts || pts.length < 2) return;
+  const P = o.curv ? _spline(pts, o.curv, true) : pts;
+  if (o.wash) _wash(P, o.wash, (o.washOp ?? 255) / 255);
+  if (o.fill) _water(P, o.fill, (o.fillOp ?? 170) / 255, o.bleed ?? .1, o.tex ?? .4, o.border ?? .35);
+  if (o.hatch) _hatch(P, o.hatch);
+  if (o.ink !== null && o.ink !== false) _stroke(P, o.br || 'ink', o.ink || PAL.ink, o.sw ?? 1, true);
+}
+function inkLine(pts, sw = 1, col = PAL.ink, br = 'ink', curv = .5) {
+  if (!pts || pts.length < 2) return;
+  _stroke(curv ? _spline(pts, curv, false) : pts, br, col, sw, false);
+}
+// A tapered tube along a path (tails, tentacles, rivers of light): width w0 at the start, w1 at the end.
+function tube(pts, w0, w1 = w0 * .5, o = {}) {
+  const S = _resample(_spline(pts, o.curv ?? .5, false), false, 4);
+  if (!S) return;
+  paint(_ribbon(S, w0, 1, w1 / (w0 || 1), 0, false), { wash: o.wash, washOp: o.washOp, fill: o.fill, fillOp: o.fillOp, bleed: o.bleed, tex: o.tex, border: o.border, ink: o.ink, sw: o.sw, br: o.br });
+}
+// Soft light: a radial glow screened over whatever is under it.
+function glow(x, y, r, col = PAL.gold, a = .6) {
+  if (!(r > 0)) return;
+  const g = ctx.globalAlpha, gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, _rgba(col, 1)); gr.addColorStop(.35, _rgba(col, .45)); gr.addColorStop(1, _rgba(col, 0));
+  ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = g * clamp(a); ctx.fillStyle = gr;
+  ctx.fillRect(x - r, y - r, r * 2, r * 2); ctx.restore();
+}
+
+// ---------- camera ----------
+// camBegin(cx, cy, zoom, rot): world point (cx, cy) lands at screen centre. One level; always pair with camEnd().
+let CAM = false;
+function camBegin(cx = CX, cy = CY, zoom = 1, rot = 0) { push(); translate(CX, CY); rotate(rot); scale(zoom); translate(-cx, -cy); CAM = true; }
+function camEnd() { if (CAM) { pop(); CAM = false; } }
+
+// ---------- lettering (hand-lettered marker, composited after the shot) ----------
+const FONT_LETTER = '"Marker Felt", "Chalkboard SE", "Comic Sans MS", cursive';
+const FONT_CAPTION = '"Chalkboard SE", "Marker Felt", "Comic Sans MS", cursive';
+let LETTERS = [];
+// Letters follow the current transform (camera, push/translate) unless { screen: true }.
+function letter(txt, x, y, size, color = PAL.cream, o = {}) {
+  let rot = o.rot || 0;
+  if (!o.screen) {
+    const m = ctx.getTransform(), p = m.transformPoint({ x, y });
+    x = p.x; y = p.y; size *= Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)); rot += Math.atan2(m.b, m.a);
+  }
+  LETTERS.push({ ...o, txt: String(txt), x, y, size, color, rot, ga: ctx.globalAlpha });
+}
+// Comic sound effect: pops in at age 0, wobbles, fades by `life` seconds.
+function sfx(txt, x, y, size, color, age, o = {}) {
+  const life = o.life ?? 1.2; if (age < 0 || age > life) return;
+  letter(txt, x, y, size, color, { pop: age * 5, rot: (o.rot ?? -.08) + Math.sin(age * 20) * .03 * (1 - age / life), alpha: 1 - seg(age, life - .25, life), ...o });
+}
+function flushLetters() {
+  if (!LETTERS.length) return;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  for (const L of LETTERS) {
+    const k = L.pop != null ? backOut(L.pop) : 1; if (k <= .01 || L.size < 1) continue;
+    ctx.save(); ctx.translate(L.x, L.y); ctx.rotate(L.rot); ctx.scale(k, k);
+    ctx.globalAlpha = (L.ga ?? 1) * clamp(L.alpha ?? 1);
+    ctx.font = `${L.size}px ${L.font || FONT_LETTER}`;
+    ctx.textAlign = L.align || 'center'; ctx.textBaseline = 'middle';
+    if (L.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = L.size * .12; ctx.strokeStyle = L.stroke; ctx.strokeText(L.txt, 0, 0); }
+    if (L.ink !== false) { ctx.fillStyle = PAL.ink; ctx.fillText(L.txt, L.size * .045, L.size * .055); }
+    ctx.fillStyle = L.color; ctx.fillText(L.txt, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+  LETTERS = [];
+}
+
+// ---------- full-frame effects (screen space, whatever the camera is doing) ----------
+function flash(k, col = '#FFFDF6') {
+  if (k <= .01) return;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = clamp(k); ctx.fillStyle = col; ctx.fillRect(0, 0, W, H); ctx.restore();
+}
+// Paint everything OUTSIDE a closed outline (irises, keyholes, eye- or mouth-shaped reveals).
+function irisShape(pts, col = PAL.ink) {
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.beginPath(); ctx.rect(-60, -60, W + 120, H + 120);
+  ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath();
+  ctx.fillStyle = col; ctx.fill('evenodd');
+  _stroke(pts, 'ink', PAL.ink, 1.1, true);
+  ctx.restore();
+}
+function iris(cx, cy, r, col = PAL.ink) { if (r < 3) flash(1, col); else irisShape(ellPts(cx, cy, r, r, 48), col); }
+
+// ---------- the set: skies, stars, sunbursts ----------
+// Horizontal watercolour bands from the first colour (top) to the last (bottom).
+// Oversized on every side so a camera push, pan or tilt never finds bare paper.
+function skyWash(cols, o = {}) {
+  const n = cols.length, y0 = o.y ?? -300, span = o.h ?? H + 600, h = span / Math.max(1, n - 1);
+  paint(rectPts(-400, y0, W + 800, span), { wash: cols[Math.floor(n / 2)], ink: null });
+  for (let i = 0; i < n; i++) paint(rectPts(-420, y0 + (i - .5) * h, W + 840, h * 1.25, 18), { fill: cols[i], fillOp: o.op ?? 190, bleed: .08, tex: o.tex ?? .5, border: .25, ink: null });
+}
+// Deterministic stars: positions from hash(seed), a twinkle on the beat.
+function stars(seed, n, o = {}) {
+  const x0 = o.x ?? 0, y0 = o.y ?? 0, w = o.w ?? W, h = o.h ?? H, r = o.r ?? 5, col = o.col || PAL.cream;
+  for (let i = 0; i < n; i++) {
+    const x = x0 + hash(seed + i * 3.1) * w, y = y0 + hash(seed + i * 7.7 + 1) * h, s = r * (.4 + hash(seed + i * 1.3) * .9);
+    const tw = .65 + .35 * Math.sin(T * (2 + hash(i + seed) * 3) + i) + (o.beat ? .5 * pulse(T + hash(i) * .2, 8) : 0);
+    if (s * tw > r * .9) paint(starPts(x, y, s * tw * 1.8, .3, 4), { wash: col, washOp: 235, ink: null });
+    else paint(ellPts(x, y, s * tw * .6, s * tw * .6, 6), { wash: col, washOp: 210, ink: null });
+  }
+}
+// Rotating rays in alternating colours.
+function sunburst(cx, cy, a, b, rot = 0, n = 16, r = 1500, op = 140) {
+  for (let i = 0; i < n; i++) {
+    const a0 = rot + i / n * TAU, a1 = rot + (i + 1) / n * TAU;
+    paint([[cx, cy], [cx + Math.cos(a0) * r, cy + Math.sin(a0) * r], [cx + Math.cos(a1) * r, cy + Math.sin(a1) * r]], { wash: i % 2 ? a : b, washOp: op, ink: null });
+  }
+  paint(ellPts(cx, cy, r * .3, r * .3, 30), { fill: a, fillOp: op * .5, bleed: .3, tex: .3, border: .1, ink: null });
+}
+
+// ---------- the void cat ----------
+// voidCat(x, y, u, o): (x, y) is the ground point between the feet; u is the unit.
+// Sitting, the cat is ~7.6u wide and ~13u tall to the ear tips; the head spans y -11.3u..-5.5u.
+// Body-local space (for the o.draw hook): x -4u..4u, ground at y 0, up is negative.
+// Front legs double as arms: they pivot at (±2.4u, -5.2u), 4.6u long, and o.pawL / o.pawR draw at the paw.
+function voidCat(x, y, u, o = {}) {
+  const dy = (o.dy || 0) * u, sq = (o.sq || 0) + (o.take || 0);
+  const sw = clamp(u / 14, .45, 2.6) * (o.swMul || 1), J = u * .05, seed = o.seed || 0;
+  const col = o.col || PAL.fur, dk = o.dk || PAL.furDk, lt = o.lt || PAL.furLt;
+  if (!o.noShadow) {
+    const f = 1 - Math.min(.5, Math.abs(o.dy || 0) * .05);
+    paint(ellPts(x, y + u * .2, u * 4.4 * f, u * .85 * f, 22), { fill: PAL.ink, fillOp: 80, bleed: .25, tex: .3, border: .1, ink: null });
+  }
+  if (o.aura) {
+    const ac = o.auraCol || PAL.aurora, k = clamp(o.aura);
+    glow(x, y + dy - 6.5 * u, 11 * u * (.7 + .3 * k), ac, .55 * k);
+    paint(ellPts(x, y + dy - 6.5 * u, 8.5 * u, 8.5 * u, 30), { fill: ac, fillOp: 90 * k, bleed: .3, tex: .3, border: .5, ink: null });
+  }
+  push();
+  translate(x, y + dy);
+  if (o.rot) rotate(o.rot);
+  scale((o.flip ? -1 : 1) * (o.sx ?? 1) * (1 + sq * .6), (o.sy ?? 1) * (1 - sq));
+
+  // tail, behind everything
+  const tp = o.tail ?? (T * 1.1 + seed * .37), tw = Math.sin(tp * TAU) * .9, tu = o.tailUp ?? 0;
+  tube([[2.4 * u, -1.1 * u], [4.3 * u, -.9 * u], [5.5 * u + tw * .3 * u, -2.6 * u - tu * u], [5.3 * u + tw * .8 * u, -4.9 * u - tu * 1.6 * u], [4.3 * u + tw * 1.4 * u, -6.1 * u - tu * 2 * u]],
+    1.25 * u, .75 * u, { wash: col, fill: dk, fillOp: 70, tex: .5, ink: PAL.ink, sw: sw * .8 });
+
+  // hind haunches and feet
+  for (const s of [-1, 1]) {
+    paint(ellPts(s * 2.3 * u, -1.7 * u, 1.55 * u, 1.45 * u, 16, J), { wash: col, fill: dk, fillOp: 70, tex: .5, ink: PAL.ink, sw: sw * .75 });
+    const lift = o.walk != null ? Math.max(0, Math.sin((o.walk + (s > 0 ? .5 : 0)) * TAU)) * .7 * u : 0;
+    paint(ellPts(s * 2.6 * u, -.35 * u - lift, 1.05 * u, .5 * u, 12, J * .6), { wash: lt, ink: PAL.ink, sw: sw * .6 });
+  }
+
+  // body: flat fur so it reads, a lighter pool high on the chest, a darker settle low, ink last
+  const body = []; for (let i = 0; i < 26; i++) { const a = i / 26 * TAU; body.push([Math.cos(a) * 3.2 * u * (1 + .12 * Math.sin(a)) + jit(J), -3.5 * u + Math.sin(a) * 3.4 * u + jit(J)]); }
+  paint(body, { wash: col, ink: null });
+  push(); _path(body); ctx.clip();
+  paint(ellPts(-.9 * u, -4.9 * u, 1.8 * u, 1.3 * u, 16, J * 2, -.2), { fill: lt, fillOp: 130, bleed: .2, tex: .8, border: .7, ink: null });
+  paint(ellPts(.6 * u, .2 * u, 4.2 * u, 2.1 * u, 18, J), { fill: dk, fillOp: 110, bleed: .12, tex: .7, border: .4, ink: null });
+  pop();
+  paint(body, { ink: PAL.ink, sw });
+  // galaxies in the fur: a void cat is full of small lights
+  if (o.stars !== false) for (let i = 0; i < 6; i++) {
+    const a = hash(seed * 13 + i * 5.3) * TAU, r = Math.sqrt(hash(seed * 7 + i * 2.1)) * 2.4 * u, sx = Math.cos(a) * r, sy = -3.6 * u + Math.sin(a) * r * .9;
+    const tw = .6 + .4 * Math.sin(T * 3 + i * 1.7);
+    paint(starPts(sx, sy, u * .32 * tw, .32, 4), { wash: i % 2 ? PAL.cream : (o.eyeCol || PAL.eye), washOp: 220, ink: null });
+  }
+
+  // front legs / arms: 0 = out sideways, + raised, - down (default hangs to the ground)
+  const arm = (side, a, hook) => {
+    push(); translate(side * 2.4 * u, -5.2 * u); rotate(side < 0 ? Math.PI - a : a); if (side < 0) scale(1, -1);
+    paint(rrPts(-.2 * u, -.66 * u, 4.8 * u, 1.32 * u, .64 * u, J * .5), { wash: col, fill: dk, fillOp: 50, tex: .5, ink: PAL.ink, sw: sw * .75 });
+    paint(ellPts(4.5 * u, 0, .78 * u, .7 * u, 12, J * .5), { wash: lt, ink: PAL.ink, sw: sw * .6 });
+    if (hook) { translate(4.6 * u, 0); if (side < 0) scale(1, -1); hook(u, sw); }
+    pop();
+  };
+  const aL = o.aL ?? -1.42, aR = o.aR ?? -1.42;
+  arm(-1, -aL, o.pawL); arm(1, -aR, o.pawR);
+
+  // head: ears first so the head overlaps their base
+  const ear = o.ear || PAL.ear;
+  for (const s of [-1, 1]) {
+    const e = (o.ears ?? 0) * .6 * u;
+    paint([[s * 3.2 * u, -9.2 * u], [s * (2.9 * u + e), -12.9 * u + Math.abs(e) * .3], [s * .9 * u, -10.8 * u]], { wash: col, ink: PAL.ink, sw: sw * .8 });
+    paint([[s * 2.75 * u, -9.6 * u], [s * (2.65 * u + e * .8), -12.1 * u + Math.abs(e) * .3], [s * 1.5 * u, -10.6 * u]], { wash: ear, washOp: 200, ink: null });
+  }
+  const head = []; for (let i = 0; i < 26; i++) { const a = i / 26 * TAU; head.push([Math.cos(a) * 3.55 * u * (1 + .1 * Math.max(0, Math.sin(a))) + jit(J), -8.4 * u + Math.sin(a) * 2.9 * u + jit(J)]); }
+  paint(head, { wash: col, ink: null });
+  push(); _path(head); ctx.clip();
+  paint(ellPts(-1.3 * u, -9.9 * u, 1.7 * u, .9 * u, 14, J * 2, -.15), { fill: lt, fillOp: 110, bleed: .2, tex: .8, border: .7, ink: null });
+  paint(ellPts(.8 * u, -5.6 * u, 3.6 * u, 1.2 * u, 16, J), { fill: dk, fillOp: 80, bleed: .12, tex: .6, border: .3, ink: null });
+  pop();
+  paint(head, { ink: PAL.ink, sw });
+  if (o.blush) for (const bx of [-2.3, 2.3]) paint(ellPts(bx * u, -7.4 * u, u * .7, u * .35, 12), { fill: PAL.rose, fillOp: 160, bleed: .2, ink: null });
+  _catEyes(u, o, sw);
+  paint([[-.42 * u, -7.95 * u], [.42 * u, -7.95 * u], [0, -7.5 * u]], { wash: o.nose || PAL.rose, ink: PAL.ink, sw: sw * .4 });
+  _catMouth(u, o.mouth ?? 'cat', sw);
+  for (const s of [-1, 1]) for (let k = -1; k <= 1; k++) inkLine([[s * 1.7 * u, -7.5 * u + k * .3 * u], [s * 3.4 * u, -7.7 * u + k * .55 * u], [s * 5 * u, -7.5 * u + k * 1.1 * u]], sw * .35, o.whisker || PAL.cream, 'inkfine', .4);
+  _catHat(u, o.hat, sw);
+  if (o.draw) o.draw(u, sw);
+  pop();
+  if (o.emote) emote(o.emote, x + (o.flip ? -1 : 1) * 4.8 * u, y + dy - 12.6 * u, u * .9, o.emoteK ?? 1);
+}
+
+function _catMouth(u, m, sw) {
+  const y = -7.2 * u;
+  if (m === 'cat') inkLine([[-.9 * u, y - .15 * u], [-.45 * u, y + .3 * u], [0, y - .15 * u], [.45 * u, y + .3 * u], [.9 * u, y - .15 * u]], sw * .6, PAL.ink, 'ink', .5);
+  else if (m === 'smile') inkLine([[-.9 * u, y - .2 * u], [0, y + .45 * u], [.9 * u, y - .2 * u]], sw * .7, PAL.ink, 'ink', .6);
+  else if (m === 'o') paint(ellPts(0, y + .25 * u, u * .38, u * .42, 12), { wash: PAL.ink, ink: null });
+  else if (m === 'O') paint(ellPts(0, y + .45 * u, u * .7, u * .85, 14), { wash: '#4A1F2A', ink: PAL.ink, sw: sw * .5 });
+  else if (m === 'grin') paint([[-1.2 * u, y - .1 * u], [1.2 * u, y - .1 * u], [.8 * u, y + .7 * u], [-.8 * u, y + .7 * u]], { wash: '#4A1F2A', ink: PAL.ink, sw: sw * .5, curv: .3 });
+  else if (m === 'flat') inkLine([[-.7 * u, y + .1 * u], [.7 * u, y + .1 * u]], sw * .7, PAL.ink, 'ink', 0);
+  else if (m === 'wobble') inkLine([[-1 * u, y + .1 * u], [-.5 * u, y - .2 * u], [0, y + .1 * u], [.5 * u, y - .2 * u], [1 * u, y + .1 * u]], sw * .6, PAL.ink, 'ink', .3);
+}
+
+function _catEyes(u, o, sw) {
+  const e = o.eyes || 'normal', sqz = clamp(o.squint || 0), ec = o.eyeCol || PAL.eye, seed = o.seed || 0;
+  const blink = (e === 'normal' || e === 'look') && ((T * .9 + seed * 1.7 + 1.6) % 3.3) < .12;
+  if (sqz > .8) { for (const s of [-1, 1]) inkLine([[s * 1.4 * u - .8 * u, -8.7 * u], [s * 1.4 * u + .8 * u, -8.7 * u]], sw, PAL.ink, 'ink', 0); return; }
+  if (sqz > 0) { push(); translate(0, -8.7 * u); scale(1 + sqz * .15, 1 - sqz); translate(0, 8.7 * u); }
+  for (const s of [-1, 1]) {
+    const ex = s * 1.4 * u, ey = -8.75 * u;
+    if (e === 'normal' || e === 'look' || e === 'wide' || e === 'scared') {
+      if (blink) { inkLine([[ex - .8 * u, ey + .2 * u], [ex, ey + .45 * u], [ex + .8 * u, ey + .2 * u]], sw, PAL.ink, 'ink', .4); continue; }
+      const big = e === 'wide' || e === 'scared' ? 1.22 : 1, lx = (o.lookX || 0) * u * .35, ly = (o.lookY || 0) * u * .35;
+      glow(ex, ey, 1.9 * u, ec, .35);
+      paint(ellPts(ex, ey, .88 * u * big, 1.02 * u * big, 16), { wash: ec, ink: PAL.ink, sw: sw * .6 });
+      if (e === 'scared') paint(ellPts(ex + lx, ey + ly, .2 * u, .24 * u, 8), { wash: PAL.ink, ink: null });
+      else paint(ellPts(ex + lx, ey + ly, (e === 'wide' ? .38 : .2) * u, .78 * u, 10), { wash: PAL.furDk, ink: null });
+      paint(ellPts(ex + lx - .3 * u, ey + ly - .38 * u, .18 * u, .2 * u, 8), { wash: PAL.cream, washOp: 240, ink: null });
+    } else if (e === 'happy') inkLine([[ex - .75 * u, ey + .45 * u], [ex, ey - .45 * u], [ex + .75 * u, ey + .45 * u]], sw * 1.2, PAL.ink, 'ink', .3);
+    else if (e === 'closed') inkLine([[ex - .75 * u, ey], [ex, ey + .45 * u], [ex + .75 * u, ey]], sw * 1.1, PAL.ink, 'ink', .4);
+    else if (e === 'wink') {
+      if (s < 0) inkLine([[ex - .75 * u, ey + .45 * u], [ex, ey - .45 * u], [ex + .75 * u, ey + .45 * u]], sw * 1.2, PAL.ink, 'ink', .3);
+      else { paint(ellPts(ex, ey, .88 * u, 1.02 * u, 16), { wash: ec, ink: PAL.ink, sw: sw * .6 }); paint(ellPts(ex, ey, .2 * u, .78 * u, 10), { wash: PAL.furDk, ink: null }); }
+    } else if (e === 'narrow') {
+      paint(ellPts(ex, ey + .25 * u, .9 * u, .45 * u, 14), { wash: ec, ink: PAL.ink, sw: sw * .6 });
+      paint(ellPts(ex, ey + .25 * u, .18 * u, .38 * u, 8), { wash: PAL.furDk, ink: null });
+    } else if (e === 'spark' || e === 'star') {
+      glow(ex, ey, 2.2 * u, PAL.gold, .6);
+      paint(starPts(ex, ey, u * 1.2 * (1 + .12 * Math.sin(T * 14)), .38, e === 'star' ? 5 : 4), { wash: PAL.cream, fill: PAL.gold, fillOp: 90, ink: PAL.ink, sw: sw * .5 });
+    } else if (e === 'heart') paint(heartPts(ex, ey, u * 1.05), { wash: '#E2476E', ink: PAL.ink, sw: sw * .5 });
+    else if (e === 'x') { inkLine([[ex - .7 * u, ey - .7 * u], [ex + .7 * u, ey + .7 * u]], sw, PAL.ink, 'ink', 0); inkLine([[ex + .7 * u, ey - .7 * u], [ex - .7 * u, ey + .7 * u]], sw, PAL.ink, 'ink', 0); }
+    else if (e === 'swirl') { const sp = []; for (let k = 0; k < 16; k++) { const a = k * .7 + T * 6 * s, r = k * .06 * u; sp.push([ex + Math.cos(a) * r, ey + Math.sin(a) * r]); } inkLine(sp, sw * .6, PAL.ink, 'inkfine', .6); }
+    else if (e === 'dot') paint(ellPts(ex, ey, u * .3, u * .36, 10), { wash: PAL.ink, ink: null });
+    else if (e === 'void') {  // transcended: the eye is a window onto light
+      glow(ex, ey, 3 * u, ec, .8);
+      paint(ellPts(ex, ey, .95 * u, 1.1 * u, 16), { wash: PAL.cream, fill: ec, fillOp: 150, bleed: .15, ink: PAL.ink, sw: sw * .5 });
+    }
+  }
+  if (sqz > 0) pop();
+}
+
+function _catHat(u, h, sw) {
+  if (!h) return;
+  if (h === 'halo') {
+    glow(0, -13.4 * u, 3.4 * u, PAL.gold, .5);
+    _stroke(ellPts(0, -13.4 * u, 2.8 * u, .75 * u, 24), 'ink', PAL.gold, sw * 1.5, true);
+  } else if (h === 'crown') {
+    paint([[-2 * u, -10.9 * u], [-2 * u, -13.2 * u], [-1 * u, -12 * u], [0, -13.6 * u], [1 * u, -12 * u], [2 * u, -13.2 * u], [2 * u, -10.9 * u]], { wash: '#F2C53D', fill: PAL.ochre, fillOp: 90, ink: PAL.ink, sw: sw * .7 });
+  } else if (h === 'party') {
+    paint([[-1.4 * u, -11.1 * u], [0, -15 * u], [1.4 * u, -11.1 * u]], { wash: PAL.rose, fill: PAL.violet, fillOp: 50, ink: PAL.ink, sw: sw * .7 });
+    paint(ellPts(0, -15 * u, u * .6, u * .6, 12), { wash: PAL.ochre, ink: PAL.ink, sw: sw * .5 });
+  } else if (h === 'wizard') {
+    paint([[-2.6 * u, -10.9 * u], [.7 * u, -16.4 * u], [2.6 * u, -10.9 * u]], { wash: PAL.indigo, fill: PAL.violet, fillOp: 80, ink: PAL.ink, sw: sw * .7 });
+    paint(starPts(.1 * u, -12.6 * u, u * .8, .4, 5), { wash: PAL.ochre, ink: null });
+  } else if (h === 'bowtie') {
+    for (const s of [-1, 1]) paint([[0, -5.9 * u], [s * 1.4 * u, -6.5 * u], [s * 1.4 * u, -5.2 * u]], { wash: PAL.rose, ink: PAL.ink, sw: sw * .5 });
+  }
+}
+
+// Emotes: painted reaction marks that pop near a head. k = 0..1 pop progress.
+function emote(kind, x, y, s, k = 1) {
+  const p = backOut(k); if (p < .02) return;
+  if (kind === 'zzz') { letter('z', x, y, s * 2, PAL.cream, { pop: k * 3 }); letter('z', x + s * 1.6, y - s * 1.8, s * 1.5, PAL.cream, { pop: k * 3 - .3 }); return; }
+  if (kind === '!' || kind === '?' || kind === '!?' || kind === '!!') { letter(kind, x, y, s * 3.4, kind.includes('?') ? PAL.sky : PAL.ochre, { pop: k * 1.5, rot: .12 }); return; }
+  push(); translate(x, y); scale(p);
+  const sw = clamp(s / 15, .4, 2);
+  if (kind === 'sweat') {
+    for (const [dx, dy, r] of [[0, 0, 1], [1.6, 1.4, .7]]) paint([[dx * s, (dy - 1.6 * r) * s], [(dx + .9 * r) * s, (dy + .2) * s], [dx * s, (dy + .9 * r) * s], [(dx - .9 * r) * s, (dy + .2) * s]], { wash: PAL.sky, ink: PAL.ink, sw: sw * .6, curv: .7 });
+  } else if (kind === 'spark') {
+    paint(starPts(0, 0, 1.6 * s), { wash: PAL.cream, fill: PAL.ochre, fillOp: 80, ink: PAL.ink, sw: sw * .5 });
+    paint(starPts(1.9 * s, 1.2 * s, .8 * s), { wash: PAL.ochre, ink: PAL.ink, sw: sw * .4 });
+  } else if (kind === 'heart') {
+    paint(heartPts(0, 0, s * 1.8), { wash: '#E2476E', fill: PAL.rose, fillOp: 90, ink: PAL.ink, sw: sw * .6 });
+  } else if (kind === 'anger') {
+    for (let i = 0; i < 4; i++) { push(); rotate(i * Math.PI / 2 + Math.PI / 4); inkLine([[.4 * s, -.5 * s], [1.3 * s, -.2 * s], [1.3 * s, .4 * s]], sw * .9, '#D8394E', 'ink', .5); pop(); }
+  } else if (kind === 'music') {
+    paint(ellPts(0, 1.2 * s, .7 * s, .5 * s, 12, 0, -.3), { wash: PAL.cream, ink: PAL.ink, sw: sw * .5 });
+    inkLine([[.6 * s, 1.1 * s], [.6 * s, -1.6 * s], [1.6 * s, -1 * s]], sw * .8, PAL.cream, 'ink', 0);
+  } else if (kind === 'swirl') {
+    const sp = []; for (let i = 0; i < 18; i++) { const a = i * .6 + T * 5, r = i * .09 * s; sp.push([Math.cos(a) * r, Math.sin(a) * r]); } inkLine(sp, sw * .7, PAL.plasma, 'inkfine', .6);
+  }
+  pop();
+}
+
+// Mood changes with a take: around each change the eyes squash shut, the body
+// squash-stretches and the emote pops. keys = [[t0, eyes, emote?], ...].
+// Spread the result into voidCat(): voidCat(x, y, u, { ...move(...), ...mood(t, keys) }).
+function mood(t, keys) {
+  let i = 0; while (i + 1 < keys.length && t >= keys[i + 1][0]) i++;
+  const [t0, eyes, em] = keys[i], age = t - t0, nextIn = i + 1 < keys.length ? keys[i + 1][0] - t : 9;
+  let squint = 0, take = 0;
+  if (i > 0 && age < .16) { squint = 1 - age / .16; take = -.14 * Math.sin(age / .16 * Math.PI); }
+  if (nextIn < .08) squint = Math.max(squint, 1 - nextIn / .08);
+  if (i > 0 && age >= .16 && age < .4) take = .1 * Math.sin((age - .16) / .24 * Math.PI) * (1 - (age - .16) / .24);
+  return { eyes, squint, take, emote: em, emoteK: em ? seg(age, .05, .3) * (1 - seg(age, 1.4, 1.7)) : 0 };
+}
+
+// Dance moves: beat-synced pose offsets in body units.
+function move(style, t, seed = 0) {
+  const bp = bpOf(t), bi = Math.floor(bp), bf = bp - bi, hit = Math.max(0, 1 - bf * 3.5), s1 = Math.sin(bp * Math.PI), ab = Math.abs(s1);
+  const o = { dy: 0, sq: 0, aL: -1.42, aR: -1.42, rot: 0, walk: null, sx: 1, dx: 0 };
+  if (style === 'mix') style = ['bounce', 'roof', 'sway', 'spin', 'hop', 'wave'][(Math.floor(bp / 8) + seed) % 6];
+  switch (style) {
+    case 'bounce': o.dy = -ab * 1.4; o.sq = hit * .12; o.aL = .2 + s1; o.aR = .2 - s1; break;
+    case 'hop': o.dy = -ab * 3.6; o.sq = hit * .18; o.aL = o.aR = .1 + ab * 1.1; break;
+    case 'roof': o.dy = -ab * 1.1; o.sq = hit * .1; o.aL = o.aR = 1.15 + .3 * Math.sin(bp * TAU); break;
+    case 'sway': o.dx = s1 * 2.6; o.rot = s1 * .12; o.aL = .3 + .6 * s1; o.aR = .3 - .6 * s1; o.sq = hit * .08; break;
+    case 'spin': { const ph = (((bi % 4) + 4) % 4 === 3) ? bf : 0; o.sx = Math.cos(ph * TAU); o.dy = -Math.sin(ph * Math.PI) * 3 - ab; o.aL = o.aR = .4 + ph; o.sq = hit * .1; break; }
+    case 'wave': o.dy = -ab; o.aL = 1.1 + .5 * Math.sin(bp * TAU * 2); o.sq = hit * .08; break;
+    case 'walk': o.walk = bp / 2; o.dy = -ab * .5; o.aL = -1.42 + .35 * s1; o.aR = -1.42 - .35 * s1; break;
+    case 'run': o.walk = bp * 1.5; o.dy = -Math.abs(Math.sin(bp * TAU)); o.aL = -.6 + .8 * Math.sin(bp * TAU * 1.5); o.aR = -.6 - .8 * Math.sin(bp * TAU * 1.5); o.rot = -.08; break;
+    case 'idle': o.dy = -ab * .4; o.sq = hit * .05; break;
+    case 'stomp': o.dy = -Math.max(0, Math.sin(bp * TAU)) * 1.2; o.sq = hit * .2; o.rot = (bi % 2 ? 1 : -1) * .06 * hit; o.aL = o.aR = -.9 + hit * .9; break;
+    case 'shimmy': o.dx = Math.sin(bp * TAU * 2) * .6; o.rot = Math.sin(bp * TAU * 2) * .05; o.aL = .7 + .4 * Math.sin(bp * TAU * 2); o.aR = .7 - .4 * Math.sin(bp * TAU * 2); o.dy = -ab * .5; break;
+    case 'float': o.dy = -2 - Math.sin(t * 1.3 + seed) * .8; o.rot = Math.sin(t * .9 + seed) * .1; o.aL = .5 + .25 * Math.sin(t * 1.7); o.aR = .5 - .25 * Math.sin(t * 1.7); break;
+  }
+  return o;
+}
+function catDancer(x, y, u, style, t, extra = {}) { const m = move(style, t, extra.seed || 0); voidCat(x + m.dx * u, y, u, { ...m, ...extra }); }
+
+// ---------- timeline: chapters of shots, brush wipes, captions ----------
+// chapter(name, start, end, shots, { wipe }) with shots = [[t0, fn], ...]. A shot is
+// fn(t, lt, dur): t = film time, lt = time since the shot started, dur = shot length.
+// It paints the WHOLE frame and must be a pure function of t. A brush wipe covers
+// the cut into every chapter but the first, unless { wipe: false }.
+const CH = [], CAPS = [];
+function chapter(name, start, end, shots, o = {}) {
+  const list = (shots || []).filter(s => Array.isArray(s) && typeof s[1] === 'function').sort((a, b) => a[0] - b[0]);
+  if (!list.length || !(end > start)) return;
+  CH.push({ name: String(name), start: +start, end: +end, shots: list, wipe: o.wipe !== false });
+  CH.sort((a, b) => a.start - b.start);
+}
+// captions([[a, b, 'text'], ...]): painted subtitle bar at the bottom, words fill as they are "sung".
+function captions(lines) { for (const l of lines || []) if (Array.isArray(l) && l[1] > l[0]) CAPS.push([+l[0], +l[1], String(l[2] || '')]); }
+const WIPE_TR = .3;
+const WIPE_COLS = [[PAL.violet, PAL.indigo], [PAL.teal, PAL.sap], [PAL.clay, PAL.ochre], [PAL.rose, PAL.violet], [PAL.indigo, PAL.night]];
+function _wipe(p, idx) {
+  const [c1, c2] = WIPE_COLS[idx % WIPE_COLS.length], n = 5, bh = (H + 420) / n + 40;
+  push(); translate(CX, CY); rotate(-.1); translate(-CX, -CY);
+  for (let i = 0; i < n; i++) {
+    const y0 = -230 + i * (H + 420) / n, d = [0, .14, .06, .18, .1][i];
+    const q = p < .5 ? easeOut(clamp((p * 2 - d) / (1 - d))) : ease(clamp(((p - .5) * 2 - d) / (1 - d)));
+    const x0 = p < .5 ? -300 : lerp(-300, W + 400, q), x1 = p < .5 ? lerp(-300, W + 400, q) : W + 400;
+    if (x1 - x0 < 30) continue;
+    const pts = [], rag = k => 40 + 50 * hash(i * 31 + k) + jit(12);
+    for (let k = 0; k <= 8; k++) pts.push([lerp(x0, x1, k / 8), y0 + Math.sin(k * .9 + i) * 14 + jit(5)]);
+    for (let k = 1; k < 9; k++) pts.push([x1 + rag(k) - 40, y0 + bh * k / 9]);
+    for (let k = 8; k >= 0; k--) pts.push([lerp(x0, x1, k / 8), y0 + bh + Math.sin(k * .8 + i * 2) * 14 + jit(5)]);
+    if (p >= .5) for (let k = 8; k > 0; k--) pts.push([x0 - rag(k + 20) + 40, y0 + bh * k / 9]);
+    paint(pts, { wash: i % 2 ? c1 : c2, fill: i % 2 ? c2 : c1, fillOp: 70, bleed: .05, tex: .8, border: .6, ink: null,
+      hatch: { d: 30, a: 0, o: { rand: .6, gradient: .5 }, b: 'charcoal', c: i % 2 ? c2 : PAL.cream, w: .8 } });
+  }
+  pop();
+}
+let _cap = null;
+function _captionBar(t) {
+  _cap = null;
+  const L = CAPS.find(l => t >= l[0] && t < l[1]); if (!L) return;
+  const [a, b, txt] = L;
+  ctx.font = `40px ${FONT_CAPTION}`;
+  const tw = ctx.measureText(txt).width, grow = easeOut((t - a) / .18) * (1 - ease((t - (b - .12)) / .12));
+  if (grow < .02) return;
+  const w = Math.min(W - 40, tw + 90) * grow, x0 = CX - w / 2, y0 = 968;
+  const pts = [[x0 + jit(6), y0 + jit(3)], [x0 + w / 2, y0 - 3 + jit(3)], [x0 + w + jit(6), y0 + jit(3)], [x0 + w + 12 + jit(6), y0 + 36], [x0 + w + jit(6), y0 + 72 + jit(3)], [x0 + w / 2, y0 + 75 + jit(3)], [x0 + jit(6), y0 + 72 + jit(3)], [x0 - 12 + jit(6), y0 + 36]];
+  paint(pts, { wash: PAL.ink, washOp: 225, fill: PAL.violet, fillOp: 60, tex: .7, border: .4, ink: null });
+  _cap = { a, b, txt, grow };
+}
+function _captionText(t) {
+  if (!_cap || _cap.grow < .85) return;
+  const { a, b, txt } = _cap;
+  ctx.save(); ctx.font = `40px ${FONT_CAPTION}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  const words = txt.split(' '), sp = ctx.measureText(' ').width, ws = words.map(w => ctx.measureText(w).width);
+  const total = ws.reduce((p, q) => p + q, 0) + sp * (words.length - 1), fit = Math.min(1, (W - 80) / total);
+  const letters = txt.replace(/ /g, '').length, sung = clamp((t - a) / Math.min(b - a - .1, .45 + txt.length * .075)) * letters;
+  ctx.translate(CX, 1006); ctx.scale(fit, fit);
+  let x = -total / 2, done = 0;
+  words.forEach((w, i) => {
+    const f = clamp((sung - done) / w.length); done += w.length;
+    ctx.fillStyle = PAL.cream; ctx.fillText(w, x, 0);
+    if (f > 0) { ctx.save(); ctx.beginPath(); ctx.rect(x - 2, -40, ws[i] * f + 2, 80); ctx.clip(); ctx.fillStyle = PAL.ochre; ctx.fillText(w, x, 0); ctx.restore(); }
+    x += ws[i] + sp;
+  });
+  ctx.restore();
+}
+
+// ---------- paper and grain ----------
+function _lcg(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const _paper = (() => {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = _lcg(11);
+  g.fillStyle = PAL.paper; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 50; i++) { const x = r() * W, y = r() * H, rr = 70 + r() * 220, gr = g.createRadialGradient(x, y, 0, x, y, rr), a = .045 * r(); gr.addColorStop(0, `rgba(160,125,80,${a})`); gr.addColorStop(1, 'rgba(160,125,80,0)'); g.fillStyle = gr; g.fillRect(x - rr, y - rr, 2 * rr, 2 * rr); }
+  g.lineWidth = 1;
+  for (let i = 0; i < 800; i++) { const x = r() * W, y = r() * H, l = 5 + r() * 18, a = r() * TAU; g.strokeStyle = `rgba(110,88,60,${.035 + r() * .06})`; g.beginPath(); g.moveTo(x, y); g.quadraticCurveTo(x + Math.cos(a + .6) * l * .5, y + Math.sin(a + .6) * l * .5, x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke(); }
+  return c;
+})();
+// Static grain and vignette, multiplied over the painted frame so pigment sits in the paper.
+const _grain = (() => {
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), r = _lcg(5), d = g.createImageData(W, H);
+  for (let i = 0; i < d.data.length; i += 4) { const v = 255 - (r() < .55 ? r() * r() * 34 : 0); d.data[i] = v; d.data[i + 1] = v - 1; d.data[i + 2] = v - 3; d.data[i + 3] = 255; }
+  g.putImageData(d, 0, 0);
+  const v = g.createRadialGradient(CX, CY, H * .42, CX, CY, H * .78); v.addColorStop(0, 'rgba(255,255,255,0)'); v.addColorStop(1, 'rgba(120,95,70,.35)');
+  g.fillStyle = v; g.fillRect(0, 0, W, H);
+  return c;
+})();
+
+// ---------- the frame ----------
+const SHOT_ERRORS = new Map();
+function _filmEnd() { return CH.reduce((m, c) => Math.max(m, c.end), 0); }
+function _placeholder() {
+  skyWash([PAL.indigo, PAL.violet, PAL.rose]);
+  stars(3, 40, { h: H * .6 });
+  catDancer(CX, H * .82, 30, 'idle', T, {});
+}
+function _drawFrame(t) {
+  T = t; LETTERS = []; CAM = false; _depth = 0;
+  if (ctx.reset) ctx.reset(); else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; }
+  _seed(1000 + Math.floor(t * BOIL));
+  ctx.drawImage(_paper, 0, 0);
+  const ch = CH.find(c => t >= c.start && t < c.end) || [...CH].reverse().find(c => t >= c.start);
+  if (!ch) _placeholder();
+  else {
+    let i = 0; while (i + 1 < ch.shots.length && t >= ch.shots[i + 1][0]) i++;
+    const t0 = ch.shots[i][0], end = i + 1 < ch.shots.length ? ch.shots[i + 1][0] : ch.end, key = `${ch.name}#${i}`;
+    push();
+    try { ch.shots[i][1](t, t - t0, end - t0); } catch (err) {
+      if (!SHOT_ERRORS.has(key)) { SHOT_ERRORS.set(key, err && err.message); console.error(`🎨 watercolor shot ${key} threw: ${err && err.message}`); }
+    }
+    while (_depth > 0) pop();
+    CAM = false;
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  flushLetters();
+  CH.forEach((c, j) => { if (j > 0 && c.wipe && Math.abs(t - c.start) < WIPE_TR) _wipe((t - (c.start - WIPE_TR)) / (2 * WIPE_TR), j - 1); });
+  _captionBar(t);
+  ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.drawImage(_grain, 0, 0); ctx.restore();
+  _captionText(t);
+}
+
+
+// ---- shot probe (repo-owned) ----
+const __probeShots = () => {
+  SHOT_ERRORS.clear();
+  let total = 0;
+  for (const ch of CH) ch.shots.forEach((shot, k) => {
+    const end = k + 1 < ch.shots.length ? ch.shots[k + 1][0] : ch.end;
+    total++;
+    _drawFrame(Math.max(ch.start, (shot[0] + end) / 2));
+  });
+  return total - SHOT_ERRORS.size;
+};
+
+// ---- film (model-authored, isolated) ----
+try {
+(() => {
+// BPM 120 · beat 0.5s · bar 2s · 24 bars · palette arc: dusk-aurora
+// set: the outer windowsill above the sleeping town at dusk — the film opens AND closes on it, same framing
+// ch      beats    shot          camera                    what happens (hit beat)
+// sill    0–6      perch         slow push-in              cat backlit on the sill, a small star in its paw; it sets the star down (b2); membrane ripples overhead every beat
+// sill    6–11     notice        tilt up + zoom            the membrane shears open a fold — look + '!' (b7), the fold travels the sky (b9)
+// sill    11–16    leap          whip up-left, diagonal    launch bottom-right → top-left, gone behind the chimney (b13) — fwip
+// skin    16–22    rise          push, stars streak down   (wipe) climbing the cold air; anticipation crouch in flight (b20)
+// skin    22–27    drumhit       hard shake on impact      paws strike the skin on the downbeat (b24) — BOOM — rings spread, eyes spark
+// skin    27–32    tumble        push into the split       the skin tears, cat tumbles through, flash on the crossing (b30)
+// sea     32–38    adrift        slow diagonal drift       (wipe) aurora sea; the cat rights itself weightless, take to wide (b36)
+// sea     38–43    chorusEyes    pan along the chorus      chorus cats' eyes become windows of light, one per beat (b39–42)
+// sea     43–48    gather        pull back, then close-up  the chorus closes in; the lead crouches for the change (b47)
+// bloom   48–54    starSpill     pull back, wide           MIDPOINT DOWNBEAT (b48): the stars leave its fur and draw a cat across the sky (b50)
+// bloom   54–62    danceFloor    sway + on-beat shake      loudest shot — lead dances roof/spin under the constellation, chorus stomps (b54, b58)
+// bloom   62–68    skyBlink      tilt up                   the constellation blinks; a river of light opens corner-to-corner (b66)
+// river   68–74    stepOn        pan along the river       (wipe) the cats step onto the light and start climbing (b70)
+// river   74–80    climbUp       travelling climb          layer after layer passes, each a new page of palette (b75, b77, b79)
+// river   80–84    thinToLight   push into the eye         bodies thin to line, line thins to light; iris closes on the lead's eye
+// home    84–90    fallHome      iris opens, fall          (no wipe: the iris carried it) the cat drops home, lands on the sill (b88), cups the star (b88.5)
+// home    90–96    coda          pull back to shot 1       curled on the sill, one eye still a window, the star held — frame 0 again
+tempo(120);
+
+const DUSK = ['#2E3566', '#474080', '#8E5B8E', '#D9907C'];
+const COLD = ['#232A50', '#3C4675', '#7B82A6', '#CBC6C6'];
+const AURORA = ['#16203A', '#27515C', '#3F9B7B', '#CCE7B6'];
+const HIGH = ['#241E46', '#5D3D6B', '#C58A4F', '#F3DDA9'];
+const SKIN = '#D8EAD2';
+const WARM = '#F2CC93';
+const SHADOW = '#241F42';
+
+// loop-safe phase: n whole cycles across the 48s film, so t=48 lands exactly on t=0
+const ph = (t, n) => TAU * n * t / 48;
+const blend = (pa, pb, k) => pa.map((c, i) => mixCol(c, pb[i], k));
+const heldStar = (k = 1) => u => {
+  if (k <= .03) return;
+  glow(-u, 0, u * 5 * k, PAL.gold, .5);
+  paint(starPts(-u, 0, u * 1.6 * k, .42, 5, .2), { wash: PAL.gold, fill: PAL.ochre, fillOp: 90, ink: PAL.ink, sw: .8 });
+};
+
+// ── the membrane: one skin across the sky, neighbouring regions shearing at different rates
+function membrane(t, y, amp, split = 0) {
+  const n = 18, pts = [];
+  for (let i = 0; i <= n; i++) {
+    const x = -240 + i * (1560 / n), shear = .5 + .5 * Math.sin(i * .9);
+    pts.push([x, y + Math.sin(ph(t, 6) + i * .6) * amp + Math.sin(ph(t, 11) - i * 1.4) * amp * .45 * shear + pulse(t) * amp * .3]);
+  }
+  const gap = split * 190, pull = x => Math.max(0, 1 - Math.abs(x - 470) / 660);
+  const up = pts.map(([x, yy]) => [x, yy - gap * pull(x)]);
+  const dn = pts.map(([x, yy]) => [x, yy + gap * pull(x) + 7]);
+  if (split > .02) {
+    glow(470, y, 220 + split * 520, PAL.cream, .45 + .3 * pulse(t));
+    paint([...up, ...dn.slice().reverse()], { fill: WARM, fillOp: 90, bleed: .26, tex: .5, ink: null });
+  }
+  paint([...up, [1320, y - 460], [-240, y - 460]], { fill: SKIN, fillOp: 42, bleed: .24, tex: .45, border: .3, ink: null });
+  inkLine(up, 1.2, SKIN, 'dry', .6);
+  inkLine(dn, .7, mixCol(SKIN, PAL.gold, .55), 'inkfine', .6);
+  for (let i = 2; i < n; i += 4) glow(pts[i][0], pts[i][1], 54, PAL.gold, .2 + .3 * pulse(t + i * .06));
+}
+
+// ── the sleeping town, lit windows keeping the low half warm
+function town(t) {
+  paint([[-240, 700], [60, 626], [230, 672], [420, 600], [640, 658], [830, 612], [1040, 664], [1320, 622], [1320, 1260], [-240, 1260]],
+    { wash: '#3A3560', fill: SHADOW, fillOp: 80, tex: .55, ink: PAL.ink, sw: 1, hatch: { d: 30, a: -12, o: { gradient: .5 }, b: '2B', c: '#1B1733', w: .8 } });
+  for (let i = 0; i < 13; i++) {
+    if (hash(i * 11) < .38) continue;
+    const x = -160 + i * 66 + hash(i * 3) * 34, y = 730 + hash(i * 7) * 220;
+    glow(x, y, 44, PAL.gold, .3 + .22 * pulse(t + hash(i) * .5));
+    paint(rectPts(x - 10, y - 12, 20, 24, 1.4), { wash: WARM, washOp: 200, ink: PAL.ink, sw: .5 });
+  }
+}
+
+// ── the recurring set: sky, membrane, town, the lit window, the ledge
+function sillSet(t, sky = DUSK, split = 0) {
+  skyWash(sky);
+  stars(7, 32, { h: 640, beat: true });
+  membrane(t, 206, 15, split);
+  town(t);
+  paint([[498, -140], [1360, -140], [1360, 1260], [498, 1260]],
+    { wash: '#4B3F63', fill: SHADOW, fillOp: 70, tex: .55, ink: PAL.ink, sw: 1.2 });
+  glow(790, 500, 430, PAL.gold, .5);
+  paint(rrPts(556, 196, 470, 608, 16, 3), { wash: '#F4CE93', fill: PAL.ochre, fillOp: 68, border: .5, tex: .4, ink: PAL.ink, sw: 1.5 });
+  inkLine([[791, 200], [791, 798]], 1.2, PAL.ink, 'ink', 0);
+  inkLine([[560, 468], [1022, 468]], 1.2, PAL.ink, 'ink', 0);
+  paint([[-240, 866], [1360, 848], [1360, 934], [-240, 956]],
+    { wash: '#C9B08A', fill: PAL.clay, fillOp: 95, tex: .6, ink: PAL.ink, sw: 1.3, hatch: { d: 22, a: 6, o: { rand: .25 }, b: 'dry', c: '#6E5236', w: .7 } });
+}
+// foreground occluder: the chimney the leap disappears behind, upper-left
+function chimneyFg(t) {
+  paint(rrPts(44, 330, 238, 900, 8, 3), { wash: '#342B4E', fill: PAL.ink, fillOp: 70, tex: .6, ink: PAL.ink, sw: 1.3 });
+  paint(rectPts(20, 300, 286, 48, 3), { wash: '#463A62', ink: PAL.ink, sw: 1.3 });
+  paint(fluffPts(190 + Math.sin(ph(t, 4)) * 26, 200 + Math.sin(ph(t, 7)) * 14, 120, 48, 6, .3), { fill: '#8E7FA6', fillOp: 55, bleed: .3, ink: null });
+}
+function sillStar(t, k) {
+  if (k <= .03) return;
+  glow(646, 848, 88 * k * (.82 + .18 * pulse(t)), PAL.gold, .5);
+  paint(starPts(646, 846, 21 * k, .42, 5, .3), { wash: PAL.gold, fill: PAL.ochre, fillOp: 90, ink: PAL.ink, sw: .6 });
+}
+
+// ── the cold air under the skin
+function upperAir(t, split = 0) {
+  skyWash(COLD);
+  stars(19, 28, { y: 380, h: 700, beat: true });
+  paint(fluffPts(870 + Math.sin(ph(t, 3)) * 30, 760, 300, 90, 8, .28), { fill: '#9AA2C0', fillOp: 60, bleed: .28, ink: null });
+  paint(fluffPts(120 + Math.sin(ph(t, 5)) * 24, 900, 260, 80, 7, .3), { fill: '#B3B0C4', fillOp: 55, bleed: .28, ink: null });
+  membrane(t, 330, 26, split);
+}
+
+// ── the far side
+function seaSet(t, pal = AURORA) {
+  skyWash(pal);
+  for (let i = 0; i < 6; i++) {
+    const x = 40 + i * 205, sw = Math.sin(ph(t, 3) + i * 1.1) * 70;
+    tube([[x + sw, -120], [x + 86 - sw, 330], [x - 46 + sw * .5, 720], [x + 40, 1200]], 140, 24,
+      { fill: i % 2 ? '#8FD6A6' : '#E4BC72', ink: null });
+  }
+  glow(CX, 980, 760, mixCol(pal[2], PAL.gold, .35), .45);
+  paint([[-240, 946], [1320, 902], [1320, 1260], [-240, 1260]], { fill: pal[3], fillOp: 80, bleed: .26, tex: .5, ink: null });
+  stars(31, 26, { h: 860, beat: true });
+}
+function chorus(t, lit, pal = PAL.cream) {
+  for (let i = 0; i < 7; i++) {
+    const h = hash(i * 5), side = i % 2 ? 1 : -1;
+    const x = CX + side * (250 + hash(i * 13) * 300) + Math.sin(ph(t, 4) + i) * 26;
+    const y = 300 + hash(i * 9) * 500 + Math.sin(ph(t, 6) + i * 1.7) * 30;
+    const on = i < lit;
+    voidCat(x, y, 10 + h * 12, {
+      ...move('float', t, i), noShadow: true, tailUp: .6,
+      eyes: on ? 'void' : 'normal', eyeCol: pal, mouth: on ? 'o' : 'cat',
+      aura: on ? .75 : .2, auraCol: on ? PAL.cream : PAL.aurora
+    });
+  }
+}
+
+// ── the cat written across the sky
+const CAT_STAR = [[-128, -34], [-78, -116], [-24, -42], [40, -34], [92, -110], [116, -14], [76, 66], [-6, 96], [-94, 62], [-128, -34], [116, -14], [198, 36], [222, -52]];
+function constellation(t, cx, cy, s, k, blink = 0) {
+  if (k <= .02) return;
+  fade(k);
+  inkLine(CAT_STAR.map(([x, y]) => [cx + x * s, cy + y * s]), 1.1, PAL.cream, 'inkfine', .3);
+  for (let i = 0; i < CAT_STAR.length; i++) {
+    const px = cx + CAT_STAR[i][0] * s, py = cy + CAT_STAR[i][1] * s, tw = .5 + .5 * Math.sin(ph(t, 12) + i);
+    glow(px, py, (28 + tw * 20) * s, PAL.gold, .5);
+    paint(starPts(px, py, (8 + tw * 4) * s, .4, 4, i), { wash: PAL.cream, ink: null });
+  }
+  for (const ex of [-74, 8]) glow(cx + ex * s, cy - 70 * s, (46 + 40 * blink) * s, PAL.cream, .4 + .5 * blink);
+  pop();
+}
+
+// ── the river of light, corner to corner
+function riverSet(t, pal, flow) {
+  skyWash(pal);
+  stars(41, 30, { beat: true });
+  const path = [[1340, 1240], [980, 880], [700, 620], [420, 380], [120, 90], [-160, -180]];
+  glow(700, 620, 520, mixCol(pal[2], PAL.cream, .4), .4);
+  tube(path, 210, 40, { fill: '#F0D79C', ink: null });
+  tube(path, 96, 16, { wash: mixCol(PAL.cream, PAL.gold, .35), ink: null });
+  for (let i = 0; i < 9; i++) {
+    const k = frac(flow + i / 9), x = lerp(1340, -160, k), y = lerp(1240, -180, k);
+    glow(x, y, 40 + 30 * Math.sin(k * Math.PI), PAL.cream, .35);
+  }
+}
+
+// ═══ CHAPTER 1 — the sill ═══
+function perch(t, lt, dur) {
+  camBegin(CX, CY + 30, kf(lt, [[0, 1], [dur, 1.1]]));
+  sillSet(t);
+  const drop = ease(seg(lt, B(1.6), B(2.2)));
+  sillStar(t, drop);
+  voidCat(740, 862, 30, {
+    ...move('idle', t), ...mood(lt, [[0, 'void'], [B(1.3), 'normal'], [B(4), 'look']]),
+    lookX: -.9, lookY: -.8, ears: .3 + pulse(t) * .7, tailUp: .3,
+    aL: lerp(.5, -1.26, drop), pawL: heldStar(1 - drop)
+  });
+  chimneyFg(t);
+  camEnd();
+}
+function notice(t, lt, dur) {
+  camBegin(CX + 26, lerp(CY + 30, CY - 120, ease(seg(lt, 0, B(3.4)))), kf(lt, [[0, 1.1], [dur, 1.24]], ease));
+  sillSet(t, DUSK, ease(seg(lt, B(2.6), B(4.4))) * .55);
+  sillStar(t, 1);
+  voidCat(740, 862, 30, {
+    ...move('idle', t), ...mood(lt, [[0, 'normal'], [B(1), 'wide', '!'], [B(3.2), 'narrow', '?']]),
+    lookX: -.85, lookY: -1, ears: kf(lt, [[0, .4], [B(1), 1]], backOut), tailUp: .8
+  });
+  chimneyFg(t);
+  camEnd();
+}
+function leap(t, lt, dur) {
+  const k = ease(seg(lt, B(1), B(4.4))), [shx, shy] = shakeXY(t, lt > B(1) && lt < B(1.5) ? 16 : 0);
+  camBegin(lerp(CX + 70, CX - 130, k) + shx, lerp(CY + 50, CY - 200, k) + shy, lerp(1.24, 1, k), lerp(0, -.06, k));
+  sillSet(t, DUSK, .55 + .25 * k);
+  sillStar(t, 1);
+  voidCat(lerp(900, 200, k), lerp(900, 420, k), lerp(30, 23, k), {
+    ...move('float', t), rot: -.12 - .5 * k, sq: -.34 * Math.sin(k * Math.PI),
+    eyes: k < .06 ? 'scared' : 'spark', mouth: 'grin', noShadow: k > .04,
+    aura: .35, auraCol: PAL.aurora, aL: 1.3, aR: 1.24, tailUp: 1
+  });
+  chimneyFg(t);
+  sfx('fwip', 640, 600, 84, PAL.cream, lt - B(1.1), { life: .7, rot: -.16 });
+  camEnd();
+}
+
+// ═══ CHAPTER 2 — the skin ═══
+function rise(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), crouch = seg(lt, B(3.6), B(4.4));
+  camBegin(CX - 30, lerp(CY + 210, CY - 60, k), lerp(1.06, 1.2, k));
+  upperAir(t, .2);
+  for (let i = 0; i < 16; i++) {
+    const f = frac(lt * .55 + hash(i * 7)), x = -120 + hash(i * 3) * 1340, y = lerp(-140, 1240, f);
+    inkLine([[x, y], [x + 16, y - 120]], 1, PAL.cream, 'dry', 0);
+  }
+  voidCat(470 + Math.sin(ph(t, 9)) * 22, lerp(1030, 660, k), 31, {
+    ...move('float', t), ...mood(lt, [[0, 'narrow'], [B(3.6), 'wide', '!']]),
+    rot: -.08, sq: lerp(0, .3, crouch) - .2 * Math.sin(k * Math.PI),
+    noShadow: true, aura: .3, auraCol: PAL.aurora,
+    aL: lerp(1.2, 1.5, crouch), aR: lerp(1.16, 1.48, crouch), tailUp: 1
+  });
+  camEnd();
+}
+function drumhit(t, lt, dur) {
+  const hit = B(2), after = Math.max(0, lt - hit), [shx, shy] = shakeXY(t, lt >= hit ? 30 * Math.exp(-after * 5) : 0);
+  camBegin(CX - 40 + shx, CY + 30 + shy, kf(lt, [[0, 1.3], [hit, 1.04]], easeOut));
+  upperAir(t, Math.min(.5, after * .9));
+  if (after > 0) {
+    glow(470, 340, 260 + after * 620, PAL.gold, .6 * Math.exp(-after * 1.4));
+    for (let i = 0; i < 4; i++) {
+      const r = after * 560 + i * 150;
+      if (r > 1500) continue;
+      paint(ellPts(470, 340, r, r * .34, 30, 3), { ink: PAL.cream, sw: Math.max(.3, 1.6 - r / 700), curv: .6 });
+    }
+  }
+  voidCat(470, lerp(700, 470, easeOut(seg(lt, 0, hit))), 32, {
+    ...move(after > 0 ? 'hop' : 'float', t), ...mood(lt, [[0, 'wide'], [hit + .08, 'spark', '!!']]),
+    sq: after > 0 ? .34 * Math.exp(-after * 6) : -.22, noShadow: true,
+    aura: .3 + .5 * Math.exp(-after * 3), auraCol: PAL.gold, aL: 1.5, aR: 1.48, tailUp: 1
+  });
+  sfx('BOOM', 760, 296, 154, PAL.gold, after - .05, { rot: .1, life: 1.2 });
+  camEnd();
+}
+function tumble(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), open = .5 + .5 * k;
+  camBegin(470 + (CX - 470) * k, lerp(360, CY, k), lerp(1.04, 1.5, k), lerp(0, .1, k));
+  upperAir(t, open);
+  voidCat(lerp(470, 560, k), lerp(430, 300, k), lerp(32, 40, k), {
+    ...move('float', t), rot: k * 3.1, eyes: 'swirl', mouth: 'O',
+    noShadow: true, aura: .4 + .4 * k, auraCol: PAL.cream, aL: 1.1, aR: .9, tailUp: 1
+  });
+  camEnd();
+  flash(Math.max(0, 1 - Math.abs(lt - B(3)) * 3) * .85, PAL.cream);
+}
+
+// ═══ CHAPTER 3 — the aurora sea ═══
+function adrift(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), right = seg(lt, B(3.6), B(4.6));
+  camBegin(lerp(CX + 140, CX - 90, k), lerp(CY - 90, CY + 70, k), lerp(1.2, 1.02, k));
+  seaSet(t);
+  chorus(t, 0);
+  voidCat(640, lerp(560, 700, k), 31, {
+    ...move('float', t), ...mood(lt, [[0, 'swirl'], [B(3.6), 'wide', '?'], [B(5), 'normal']]),
+    rot: lerp(2.6, 0, ease(right)), noShadow: true, aura: .4, auraCol: PAL.aurora, tailUp: .8
+  });
+  camEnd();
+}
+function chorusEyes(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur));
+  camBegin(lerp(CX - 300, CX + 120, k), lerp(CY + 150, CY - 40, k), lerp(1.16, 1, k), lerp(-.04, .02, k));
+  seaSet(t);
+  const lit = clamp(Math.floor(seg(lt, B(.6), B(4.2)) * 7.2), 0, 7);
+  chorus(t, lit);
+  voidCat(790, 660, 27, {
+    ...move('float', t), ...mood(lt, [[0, 'look'], [B(4.2), 'wide', '!']]),
+    lookX: -1, lookY: .2, noShadow: true, aura: .35, auraCol: PAL.aurora, tailUp: .7
+  });
+  camEnd();
+}
+function gather(t, lt, dur) {
+  const out = ease(seg(lt, 0, B(2))), inn = ease(seg(lt, B(2), B(4.8))), crouch = seg(lt, B(3.6), B(4.6));
+  camBegin(CX, lerp(CY, CY - 140, inn), lerp(1.04, .82, out) * lerp(1, 1.9, inn));
+  seaSet(t);
+  chorus(t, 7);
+  voidCat(600, 760, lerp(30, 34, inn), {
+    ...move('float', t), ...mood(lt, [[0, 'normal'], [B(2), 'void', 'spark'], [B(4), 'narrow']]),
+    sq: lerp(0, .42, crouch), noShadow: true,
+    aura: .4 + .5 * inn + .3 * pulse(t), auraCol: PAL.cream, tailUp: 1 - crouch * .6
+  });
+  camEnd();
+}
+
+// ═══ CHAPTER 4 — the bloom ═══
+function starSpill(t, lt, dur) {
+  const pop = ease(seg(lt, 0, B(1.4))), form = ease(seg(lt, B(1.6), B(4)));
+  camBegin(CX, lerp(CY - 140, CY + 40, ease(seg(lt, 0, B(4)))), lerp(1.9, .92, ease(seg(lt, 0, B(4)))));
+  seaSet(t, blend(AURORA, HIGH, .2));
+  constellation(t, 560, 330, lerp(.5, 1.05, form), form);
+  for (let i = 0; i < 26; i++) {
+    const f = clamp(pop * 1.4 - hash(i * 3) * .5, 0, 1);
+    const x = lerp(600 + (hash(i * 5) - .5) * 120, 560 + CAT_STAR[i % CAT_STAR.length][0] * 1.05, ease(f));
+    const y = lerp(640 + (hash(i * 7) - .5) * 160, 330 + CAT_STAR[i % CAT_STAR.length][1] * 1.05, ease(f));
+    glow(x, y, 26, PAL.gold, .5 * (1 - f * .4));
+    paint(starPts(x, y, 9, .4, 4, i), { wash: PAL.cream, ink: null });
+  }
+  chorus(t, 7);
+  voidCat(600, 840, 36, {
+    ...move('bounce', t), eyes: 'void', mouth: 'O', stars: pop < .6,
+    sq: -.3 * pop + .2 * pulse(t), noShadow: true,
+    aura: .5 + .5 * pop, auraCol: PAL.cream, aL: 1.4, aR: 1.36, tailUp: 1
+  });
+  camEnd();
+  sfx('whum', 850, 720, 110, PAL.cream, lt - .06, { life: 1.1, rot: -.08 });
+}
+function danceFloor(t, lt, dur) {
+  const [shx, shy] = shakeXY(t, 9 * pulse(t));
+  camBegin(CX + 40 * Math.sin(ph(t, 8)) + shx, CY + 20 + shy, 1.02 + .05 * pulse(t), .03 * Math.sin(ph(t, 4)));
+  seaSet(t, blend(AURORA, HIGH, .3));
+  sunburst(560, 330, PAL.gold, PAL.aurora, ph(t, 2), 14, 900, 40 + 30 * pulse(t));
+  constellation(t, 560, 330, 1.05, 1, pulse(t, 2) * .5);
+  chorus(t, 7);
+  for (let i = 0; i < 4; i++) {
+    const x = 150 + i * 270;
+    catDancer(x, 970 + hash(i) * 30, 15 + hash(i * 3) * 6, i % 2 ? 'stomp' : 'shimmy', t, { eyes: 'void', mouth: 'grin', aura: .5, auraCol: PAL.aurora, tailUp: .8 });
+  }
+  const style = lt < B(3) ? 'roof' : lt < B(5) ? 'spin' : 'hop';
+  catDancer(640, 880, 34, style, t, {
+    eyes: 'void', mouth: 'grin', stars: false, blush: true,
+    aura: .8 + .2 * pulse(t), auraCol: PAL.cream, tailUp: 1
+  });
+  camEnd();
+  sfx('ta', 250, 400, 96, PAL.gold, lt - B(4), { life: .7, rot: -.12 });
+}
+function skyBlink(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), open = ease(seg(lt, B(4), B(6)));
+  camBegin(CX + 60 * k, lerp(CY + 120, CY - 150, k), lerp(1.02, 1.12, k));
+  seaSet(t, blend(AURORA, HIGH, .45));
+  constellation(t, 560, 340, 1.1, 1, Math.max(pulse(t, 1) * .3, seg(lt, B(1.6), B(2.4)) * (1 - seg(lt, B(2.4), B(3)))));
+  if (open > .02) {
+    fade(open);
+    tube([[1340, 1240], [900, 820], [560, 500], [180, 150]], 170, 36, { fill: '#F0D79C', ink: null });
+    pop();
+  }
+  chorus(t, 7);
+  voidCat(660, 900, 32, {
+    ...move('wave', t), eyes: 'void', mouth: 'smile', stars: false,
+    aura: .75, auraCol: PAL.cream, aR: 1.5, tailUp: 1
+  });
+  camEnd();
+  letter('the sky blinked back', CX, 168, 62, PAL.cream, { screen: true, rot: -.03, pop: seg(lt, B(2), B(3)) * 1.2, alpha: 1 - seg(lt, B(5), B(6)) });
+}
+
+// ═══ CHAPTER 5 — the river ═══
+function stepOn(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), step = ease(seg(lt, B(1.6), B(2.6)));
+  camBegin(lerp(CX + 240, CX - 60, k), lerp(CY + 220, CY, k), lerp(1.14, 1, k), lerp(.05, 0, k));
+  riverSet(t, blend(AURORA, HIGH, .55), frac(ph(t, 3) / TAU));
+  for (let i = 0; i < 5; i++) {
+    const f = hash(i * 9) * .5 + .25 + step * .12;
+    voidCat(lerp(1340, -160, f), lerp(1240, -180, f) + 26, 12 + hash(i * 5) * 8,
+      { ...move('walk', t, i), eyes: 'void', mouth: 'o', aura: .5, auraCol: PAL.cream, noShadow: true, tailUp: .9 });
+  }
+  voidCat(lerp(980, 830, step), lerp(1000, 900, step), 33, {
+    ...move(step > .9 ? 'walk' : 'idle', t), ...mood(lt, [[0, 'normal'], [B(1.6), 'void', 'spark']]),
+    stars: false, aura: .7, auraCol: PAL.cream, noShadow: true, tailUp: 1, sq: .2 * Math.sin(step * Math.PI)
+  });
+  camEnd();
+}
+function climbUp(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur)), page = clamp(seg(lt, B(.5), B(5.5)), 0, 1);
+  camBegin(lerp(CX + 120, CX - 200, k), lerp(CY + 160, CY - 200, k), lerp(1, 1.16, k));
+  riverSet(t, blend(blend(AURORA, HIGH, .55), DUSK, page * .5), frac(ph(t, 5) / TAU));
+  for (let i = 0; i < 3; i++) {
+    const cy = lerp(1300, -320, frac(page * 1.2 + i / 3));
+    paint([[-260, cy], [1340, cy - 70], [1340, cy + 44], [-260, cy + 118]], { fill: PAL.cream, fillOp: 70, bleed: .3, tex: .5, ink: null });
+  }
+  for (let i = 0; i < 6; i++) {
+    const f = frac(hash(i * 7) * .8 + page * .35 + .08);
+    voidCat(lerp(1340, -160, f), lerp(1240, -180, f) + 24, 11 + hash(i * 3) * 9,
+      { ...move('float', t, i), eyes: 'void', mouth: 'o', aura: .6, auraCol: PAL.cream, noShadow: true, tailUp: .9 });
+  }
+  voidCat(lerp(760, 470, page), lerp(860, 520, page), lerp(33, 30, page), {
+    ...move('float', t), eyes: 'void', mouth: 'smile', stars: false,
+    aura: .8, auraCol: PAL.cream, noShadow: true, tailUp: 1, rot: -.1 * page
+  });
+  camEnd();
+  for (const b of [B(1), B(3), B(5)]) flash(Math.max(0, 1 - Math.abs(lt - b) * 5) * .5, PAL.cream);
+}
+function thinToLight(t, lt, dur) {
+  const k = ease(seg(lt, 0, dur));
+  camBegin(lerp(CX - 200, 430, k), lerp(CY - 200, 470, k), lerp(1.16, 2.5, k));
+  riverSet(t, blend(HIGH, DUSK, .35 + .4 * k), frac(ph(t, 7) / TAU));
+  fade(1 - k * .55);
+  for (let i = 0; i < 5; i++) {
+    const f = frac(hash(i * 5) * .7 + .12);
+    voidCat(lerp(1340, -160, f), lerp(1240, -180, f) + 20, 12 + hash(i * 9) * 8,
+      { ...move('float', t, i), eyes: 'void', col: mixCol(PAL.fur, PAL.cream, k * .5), aura: .7, auraCol: PAL.cream, noShadow: true, tailUp: .9 });
+  }
+  pop();
+  voidCat(430, 620, 34, {
+    ...move('float', t), eyes: 'void', mouth: 'smile', stars: false,
+    col: mixCol(PAL.fur, PAL.indigo, k * .6), aura: .8 + .2 * k, auraCol: PAL.cream, noShadow: true, tailUp: 1
+  });
+  camEnd();
+  iris(430, 470, lerp(1400, 0, ease(seg(lt, B(1.4), B(4)))), PAL.cream);
+}
+
+// ═══ CHAPTER 6 — home ═══
+function fallHome(t, lt, dur) {
+  const fall = ease(seg(lt, B(.6), B(4))), land = Math.max(0, lt - B(4));
+  const [shx, shy] = shakeXY(t, land > 0 ? 12 * Math.exp(-land * 7) : 0);
+  camBegin(CX + shx, lerp(CY - 220, CY + 30, fall) + shy, lerp(1.26, 1.12, fall));
+  sillSet(t, blend(AURORA, DUSK, clamp(fall * 1.3, 0, 1)), Math.max(0, .5 - fall * .6));
+  const cup = backOut(seg(lt, B(4.4), B(5)));
+  sillStar(t, 1 - cup);
+  voidCat(740, lerp(240, 862, fall), 30, {
+    ...move(land > 0 ? 'idle' : 'float', t),
+    ...mood(lt, [[0, 'void'], [B(4.05), 'wide', '!'], [B(4.8), 'happy', 'heart']]),
+    rot: lerp(-.4, 0, fall), sq: land > 0 ? .4 * Math.exp(-land * 7) : -.25,
+    noShadow: fall < .96, aura: .7 * (1 - fall), auraCol: PAL.cream,
+    aL: lerp(1.2, .5, clamp(fall * 1.1, 0, 1)), pawL: heldStar(cup), tailUp: 1 - fall * .6
+  });
+  chimneyFg(t);
+  sfx('tmp', 950, 700, 86, PAL.clay, land - .04, { life: .6, rot: .1 });
+  camEnd();
+}
+function coda(t, lt, dur) {
+  camBegin(CX, CY + 30, kf(lt, [[0, 1.12], [dur, 1]], ease));
+  sillSet(t);
+  voidCat(740, 862, 30, {
+    ...move('idle', t), ...mood(lt, [[0, 'happy'], [B(1.4), 'closed'], [B(3), 'void', 'spark']]),
+    ears: .3 + pulse(t) * .7, tailUp: .3, aL: .5, pawL: heldStar(1)
+  });
+  chimneyFg(t);
+  camEnd();
+}
+
+chapter('sill', 0, B(16), [[0, perch], [B(6), notice], [B(11), leap]]);
+chapter('skin', B(16), B(32), [[B(16), rise], [B(22), drumhit], [B(27), tumble]]);
+chapter('sea', B(32), B(48), [[B(32), adrift], [B(38), chorusEyes], [B(43), gather]]);
+chapter('bloom', B(48), B(68), [[B(48), starSpill], [B(54), danceFloor], [B(62), skyBlink]]);
+chapter('river', B(68), B(84), [[B(68), stepOn], [B(74), climbUp], [B(80), thinToLight]]);
+chapter('home', B(84), B(96), [[B(84), fallHome], [B(90), coda]], { wipe: false });
+
+captions([
+  [B(3), B(6.6), 'the sky over the town has a skin'],
+  [B(24.4), B(28), 'and it rang when i knocked'],
+  [B(48.6), B(53), 'i let the stars out of my fur'],
+  [B(75), B(79.5), 'every layer is a page, and we are the reading'],
+  [B(91), B(95.4), 'i came back small, carrying one']
+]);
+})();
+} catch (err) { console.error('🎨 watercolor film threw: ' + (err && err.message)); }
+// A film where no shot draws is replaced by the repo's own, never shipped as blank paper.
+if (!CH.length || __probeShots() === 0) {
+  CH.length = 0; CAPS.length = 0;
+  (() => {
+
+tempo(100);
+const DUSK = ['#2F3C7A', '#7B5CA8', '#E27A92', '#F8CC62'];
+const hill = t => paint([[-80, 820], [260, 760 + Math.sin(t) * 6], [620, 790], [1160, 740], [1160, 1160], [-80, 1160]], { wash: '#2A2345', fill: '#4B3F73', fillOp: 120, tex: .6, ink: PAL.ink, sw: 1.2 });
+
+function sit(t, lt) {
+  skyWash(DUSK);
+  stars(7, 46, { h: 620, beat: true });
+  hill(t);
+  catDancer(CX, 840, 34, 'idle', t, { ...mood(lt, [[0, 'normal'], [B(6), 'happy', 'music']]) });
+}
+function lift(t, lt, dur) {
+  const k = ease(lt / dur);
+  skyWash(DUSK.map(c => mixCol(c, '#FFF5E2', k * .35)));
+  sunburst(CX, 460, '#F8CC62', '#C792EA', t * .2, 18, 1400, 50 + 60 * k);
+  stars(7, 46, { h: 620, beat: true });
+  hill(t);
+  catDancer(CX, 840 - k * 160, 34, 'float', t, { eyes: k > .5 ? 'void' : 'look', lookY: -1, aura: k, noShadow: k > .2 });
+}
+function home(t, lt) {
+  skyWash(DUSK);
+  stars(7, 46, { h: 620, beat: true });
+  hill(t);
+  catDancer(CX, 840, 34, 'bounce', t, { eyes: 'happy', mouth: 'smile' });
+  if (lt > B(2)) letter('still here', CX, 300, 76, PAL.cream, { pop: (lt - B(2)) * 3, rot: -.05 });
+}
+chapter('sit', 0, B(12), [[0, sit]]);
+chapter('lift', B(12), B(28), [[B(12), lift]]);
+chapter('home', B(28), B(40), [[B(28), home]]);
+
+})();
+  __probeShots();
+}
+
+// ---- harness bridge (repo-owned) ----
+const __dur = _filmEnd();
+const __frames = Math.max(1, Math.round(__dur * FPS_DRAW));
+__out.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain';
+let __drawn = -1, __url = null;
+const __paintIndex = i => { if (i !== __drawn) { _drawFrame(i / FPS_DRAW); __drawn = i; __url = null; } };
+const __indexAt = seconds => {
+  const s = Number(seconds);
+  const wrapped = Number.isFinite(s) ? ((s % __dur) + __dur) % __dur : 0;
+  return Math.min(__frames - 1, Math.floor(wrapped * FPS_DRAW + 1e-6));
+};
+let __previewStart = performance.now(), __previewRaf = 0;
+const __previewStep = () => {
+  __paintIndex(__indexAt((performance.now() - __previewStart) / 1000));
+  __previewRaf = requestAnimationFrame(__previewStep);
+};
+__previewRaf = requestAnimationFrame(__previewStep);
+// The renderer drives the clock; the film loops if the post runs longer than it.
+window.renderFrame = (time) => {
+  if (__previewRaf) { cancelAnimationFrame(__previewRaf); __previewRaf = 0; }
+  __paintIndex(__indexAt(time));
+  __url ??= __out.toDataURL('image/png');
+  return __url;
+};
+window.__watercolorFilm = { duration: __dur, bpm: BPM, chapters: CH.map(c => c.name), shotErrors: [...SHOT_ERRORS.keys()] };
+window.ready = true;
+return __out;
+
+})();
+
+
+
+
+document.body.appendChild(canvas);
+
+
+window.audioDuration = 48;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 120\\n// DURATION: 48\\n// FORM: A — intro/verse (cycles 0–6) | B — the membrane hit (cycles 6–11) | C — lift (cycles 11–13) | D — chorus (cycles 13–19) | A' — coda/loop seam (cycles 19–24)\\n// TONAL CENTER: F Lydian\\n// MOTIF: F4 G4 A4 C5 B4 — eighth pickup into beat 1 (F4), 1.5 G4, beat 2 A4, beat 3 C5 held a beat and a half, beat 4.5 B4 lifted tail, half-beat rest before the next bar\\n// HARMONIC PLAN: A — Fmaj9 pedal (0–3) then Gmaj (4–5); B — Bbmaj7 (6–7), C(add9) (8–9), Dm7 then Gmaj (10); C — Gmaj (11), C7sus4 (12) over bass walk C–D–E–F landing on F at 13; D — Fmaj9 (13–14), Bbmaj9 (15–16), C(add9) (17–18) turning back to F at the seam; A' — Gmaj (19–20) thinning, Fmaj9 pedal (21–23) = opening harmony and register\\n// PHRASE RULE: four-on-the-floor kick, clap on 2 and 4, shaker on every off-eighth — the cell runs unbroken through every seam; at each boundary the pad holds a common top tone while the bass moves by step or fifth, and never more than two of {harmony, density, motif length} change at once\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// motif lead — rounded triangle mallet / music-box, F4–C5\\n$: note(\\\"\u003c[~ ~ ~ ~] [~ f4@1 g4 a4 [c5@3 ~] ~ b4 ~] [~ ~ ~ ~] [~ f4@1 g4 a4 [c5@3 ~] ~ b4 ~] [~ ~ ~ ~] [~ f4@1 g4 a4 [c5@3 ~] ~ b4 ~] [bb4@2 c5@2 d5@4] [~ ~ ~ ~] [bb4@2 c5@2 d5@4] [~ ~ ~ ~] [c5@2 d5@2 ~@4] [f4@2 g4@2 g4@2 a4@2] [a4@2 b4@2 b4@2 c5@2] [[f4,a4]@1 [g4,b4] [a4,c5] [[c5,e5]@3 ~] ~ [b4,d5] ~] [~ ~ ~ ~] [[f4,a4]@1 [g4,b4] [a4,c5] [[c5,e5]@3 ~] ~ [b4,d5] ~] [~ ~ ~ ~] [[f4,a4]@1 [g4,b4] [a4,c5] [[c5,e5]@3 ~] ~ [b4,d5] ~] [~ ~ ~ ~] [~ ~ ~ ~] [~ ~ ~ ~] [~ f4@1 g4 a4 [c5@3 ~] ~ b4 ~] [~ ~ ~ ~] [~ f4@1 g4 a4 ~@4]>\\\")\\n  .s(\\\"triangle\\\").attack(0.05).decay(0.35).sustain(0.25).release(1.4)\\n  .lpf(sine.range(1500, 2600).slow(12)).gain(0.16)\\n  .delay(0.32).delaytime(0.25).delayfeedback(0.3).room(0.6).roomsize(4).pan(0.44).orbit(1)\\n\\n// bass foundation — filtered sine, root–fifth bounce, F1–C3\\n$: note(\\\"\u003c[f2 c3 f2 c3] [f2 c3 f2 c3] [f2 c3 f2 c3] [f2 c3 f2 c3] [g2 d3 g2 d3] [g2 d3 g2 d3] [bb1 f2 bb1 f2] [bb1 f2 bb1 f2] [c2 g2 c2 g2] [c2 g2 c2 g2] [d2 a2 g2 d3] [g2 d3 g2 d3] [c2 c2 d2 d2] [f2 c3 f2 c3 f2 c3 f2 c3] [f2 c3 f2 c3 f2 c3 f2 c3] [bb1 f2 bb1 f2 bb1 f2 bb1 f2] [bb1 f2 bb1 f2 bb1 f2 bb1 f2] [c2 g2 c2 g2 c2 g2 c2 g2] [c2 g2 c2 g2 c2 g2 c2 g2] [g2 d3 g2 d3] [g2 d3 g2 d3] [f2 c3 f2 c3] [f2 c3 f2 c3] [f2 c3 f2 c3]>\\\")\\n  .s(\\\"sine\\\").attack(0.01).decay(0.2).sustain(0.7).release(0.3)\\n  .lpf(\\\"\u003c160 160 160 160 170 170 180 180 190 190 200 210 220 320 320 330 330 340 340 200 190 170 165 160>\\\")\\n  .shape(0.18).gain(0.22).room(0.2).orbit(2)\\n\\n// harmonic body — slow detuned saw pad holding each section chord across its seam\\n$: note(\\\"\u003c[f3,a3,c4,g4] [f3,a3,c4,g4] [f3,a3,c4,g4] [f3,a3,c4,g4] [g3,b3,d4,g4] [g3,b3,d4,g4] [bb3,d4,f4,a4] [bb3,d4,f4,a4] [c4,e4,g4,d5] [c4,e4,g4,d5] [d4,f4,a4,c5] [g3,b3,d4,g4] [c4,f4,g4,c5] [f3,a3,c4,g4] [f3,a3,c4,g4] [bb3,d4,f4,c5] [bb3,d4,f4,c5] [c4,e4,g4,d5] [c4,e4,g4,d5] [g3,b3,d4,g4] [g3,b3,d4,g4] [f3,a3,c4,g4] [f3,a3,c4,g4] [f3,a3,c4,g4]>\\\")\\n  .s(\\\"sawtooth\\\").detune(\\\"\u003c-4 3 -3 4>/8\\\")\\n  .attack(0.55).decay(0.6).sustain(0.65).release(2.6)\\n  .lpf(\\\"\u003c800 800 850 850 900 950 1000 1000 1050 1050 1150 1250 1400 1500 1500 1450 1450 1400 1400 1000 900 820 800 780>\\\")\\n  .gain(\\\"\u003c0.09 0.09 0.09 0.09 0.1 0.1 0.12 0.12 0.12 0.12 0.13 0.13 0.13 0.14 0.14 0.14 0.14 0.14 0.13 0.11 0.1 0.09 0.09 0.08>\\\")\\n  .room(0.75).roomsize(6).pan(0.56).orbit(3)\\n\\n// drum engine — four-on-the-floor kick, clap on 2 and 4, off-eighth shaker; density by layers only\\n$: s(\\\"\u003c[bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, hh*8, ~ cp ~ [cp cp]] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd bd, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh, ~ cp ~ cp] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh] [bd ~ bd ~, ~ hh ~ hh]>\\\")\\n  .bank(\\\"LinnDrum\\\").gain(0.3).lpf(7000).room(0.3).orbit(0)\\n\\n// cartoon accent — bright mallet hits and one splash, only on picture-hit bar lines (6, 8, 10, 13, 17)\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ [bb2@1 [c6,f6]@7] ~ [c6@1 ~@7] ~ [d6@1 ~@7] ~ [[f5,c6,f6]@1 ~@7] ~ ~ ~ [[c6,e6]@1 ~@7] ~ ~ ~ ~ ~ ~>\\\")\\n  .s(\\\"triangle\\\").attack(0.01).decay(0.5).sustain(0.05).release(1.8)\\n  .lpf(5000).gain(0.13).delay(0.25).delaytime(0.375).delayfeedback(0.25)\\n  .room(0.7).roomsize(5).pan(0.62).orbit(4)\",\"bpm\":120,\"durationSec\":48,\"renderDurationSec\":51,\"cps\":0.5,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+
+let seed = 12345;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const particles = [];
+const N = 180;
+
+for (let i = 0; i < N; i++) {
+  particles.push({
+    x: random() * 900,
+    y: random() * 900,
+    ox: random() * 900, // origin x
+    oy: random() * 900, // origin y
+    offset: random() * Math.PI * 2,
+    speed: 0.5 + random() * 1.5,
+    radius: 2 + random() * 3,
+    driftFreq: 0.2 + random() * 0.5,
+    driftPhase: random() * Math.PI * 2
+  });
+}
+
+window.renderFrame = function(time) {
+  // Time 0..60
+  // Sync factor: 0 -> 1 -> 0 (Chaos -> Sync -> Chaos)
+  // Use a smooth bell curve for sync transition
+  const tNorm = time / 60;
+  const syncStrength = Math.pow(Math.sin(tNorm * Math.PI), 2.5); 
+  
+  // Background
+  ctx.fillStyle = '#050510';
+  ctx.fillRect(0, 0, 900, 900);
+  
+  // Draw connections first (behind)
+  ctx.lineWidth = 1;
+  
+  const currentPositions = particles.map(p => {
+    // Orbital drift motion
+    const driftX = Math.sin(time * p.driftFreq + p.driftPhase) * 40;
+    const driftY = Math.cos(time * p.driftFreq + p.driftPhase) * 40;
+    
+    // Global swirl effect that increases with sync
+    const swirlAngle = (time * 0.1) + (p.offset * 0.1);
+    const swirlR = syncStrength * 50;
+    const swirlX = Math.cos(swirlAngle) * swirlR;
+    const swirlY = Math.sin(swirlAngle) * swirlR;
+
+    return {
+      x: p.ox + driftX + swirlX,
+      y: p.oy + driftY + swirlY,
+      p: p
+    };
+  });
+
+  // Calculate phases and brightness
+  // At syncStrength 0: Phase is time + random_offset
+  // At syncStrength 1: Phase is time (everyone aligns)
+  const globalPulse = time * 4.0; // Base rhythm
+  
+  currentPositions.forEach((cp, i) => {
+    // Interpolate phase: local offset fades out as syncStrength increases
+    const effectivePhase = globalPulse + (cp.p.offset * (1 - syncStrength));
+    const brightness = (Math.sin(effectivePhase) + 1) / 2; // 0..1
+    
+    cp.brightness = brightness;
+    cp.color = `rgba(255, ${200 + brightness * 55}, ${100 + brightness * 155}, ${brightness})`;
+    
+    // Draw connections
+    // Only connect if bright enough and close enough
+    if (brightness > 0.3) {
+      for (let j = i + 1; j < N; j++) {
+        const other = currentPositions[j];
+        if (other.brightness > 0.3) {
+          const dx = cp.x - other.x;
+          const dy = cp.y - other.y;
+          const distSq = dx*dx + dy*dy;
+          if (distSq < 6400) { // 80px radius
+            const dist = Math.sqrt(distSq);
+            const alpha = (1 - dist/80) * Math.min(brightness, other.brightness) * (0.2 + syncStrength * 0.5);
+            ctx.strokeStyle = `rgba(255, 220, 150, ${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(cp.x, cp.y);
+            ctx.lineTo(other.x, other.y);
+            ctx.stroke();
+          }
+        }
+      }
+    }
+  });
+
+  // Draw particles on top
+  currentPositions.forEach(cp => {
+    const size = cp.p.radius + cp.brightness * 4;
+    
+    // Glow
+    const g = ctx.createRadialGradient(cp.x, cp.y, 0, cp.x, cp.y, size * 2);
+    g.addColorStop(0, cp.color);
+    g.addColorStop(1, 'rgba(255, 200, 100, 0)');
+    
+    ctx.fillStyle = g;
+    ctx.globalCompositeOperation = 'screen';
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, size * 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Core
+    ctx.fillStyle = '#fff';
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.beginPath();
+    ctx.arc(cp.x, cp.y, cp.p.radius * (0.5 + cp.brightness * 0.5), 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  return canvas.toDataURL('image/png');
+};
+
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 60;
+  Tone.Transport.bpm.value = bpm;
+
+  // Reverb for space
+  const reverb = new Tone.Reverb({ decay: 4, wet: 0.4 }).toDestination();
+  await reverb.generate();
+
+  // Warm Pad (Chords)
+  const padVol = new Tone.Volume(-10).connect(reverb);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 2, decay: 3, sustain: 0.8, release: 3 }
+  }).connect(padVol);
+
+  // Pluck (The "Fireflies")
+  const pluckDelay = new Tone.FeedbackDelay("8n", 0.3).connect(reverb);
+  const pluck = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.4, sustain: 0, release: 0.4 }
+  }).connect(pluckDelay);
+
+  // Deep Bass
+  const bass = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 1, decay: 0.5, sustain: 1, release: 2 }
+  }).toDestination();
+
+  // Chords: Fm9 -> Dbmaj7 -> Ebadd9 -> Cm7 (Emotional, wondering)
+  // Progession moves from scattered to resolved
+  const chordProg = [
+    ["F3", "Ab3", "C4", "G4"], 
+    ["Db3", "F3", "Ab3", "C4"],
+    ["Eb3", "G3", "Bb3", "F4"],
+    ["C3", "Eb3", "G3", "Bb3"]
+  ];
+
+  // Pad Loop - swells in sync with visual sync
+  const padLoop = new Tone.Loop(time => {
+    const sec = Tone.Transport.getSecondsAtTime(time);
+    const progress = (sec % 60) / 60;
+    
+    // Sync strength approximation for volume
+    const intensity = Math.pow(Math.sin(progress * Math.PI), 2);
+    padVol.volume.rampTo(-20 + intensity * 15, 1); // Swells up then down
+
+    const chordIdx = Math.floor(sec / 5) % 4;
+    pad.triggerAttackRelease(chordProg[chordIdx], "1m", time);
+  }, "1m").start(0);
+
+  // Pluck Loop - Chaos to Order
+  // Uses random timing that aligns as 'intensity' increases
+  let pluckCount = 0;
+  const pluckLoop = new Tone.Loop(time => {
+    const sec = Tone.Transport.getSecondsAtTime(time);
+    const progress = (sec % 60) / 60;
+    const intensity = Math.pow(Math.sin(progress * Math.PI), 2.5); // Peak at 30s
+    
+    // Notes from F minor pentatonic
+    const notes = ["F4", "Ab4", "C5", "Eb5", "G5", "C6"];
+    
+    // Chaos factor: high at start/end, low in middle
+    const chaos = 1 - intensity;
+    
+    if (Math.random() > 0.3) {
+      const note = notes[Math.floor(Math.random() * notes.length)];
+      
+      // If chaotic, random offset. If sync, rigid quantize.
+      const offset = (Math.random() - 0.5) * chaos * 0.2; 
+      
+      pluck.triggerAttackRelease(note, "16n", time + offset, 0.3 + intensity * 0.4);
+    }
+    pluckCount++;
+  }, "8n").start(0);
+
+  // Bass - anchors the middle section
+  const bassLoop = new Tone.Loop(time => {
+    const sec = Tone.Transport.getSecondsAtTime(time);
+    const progress = (sec % 60) / 60;
+    
+    // Only play in middle 40 seconds
+    if (progress > 0.2 && progress < 0.8) {
+       const roots = ["F2", "Db2", "Eb2", "C2"];
+       const idx = Math.floor(sec / 5) % 4;
+       bass.triggerAttackRelease(roots[idx], "1m", time, 0.5);
+    }
+  }, "1m").start(0);
+
+  window.toneJsInstruments = { pad, pluck, bass };
+  window.toneJsParts = { padLoop, pluckLoop, bassLoop };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

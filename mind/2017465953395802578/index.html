@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vangelis: Blade Runner Blues</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@300;600&display=swap');
+
+        :root {
+            --neon-blue: #00f0ff;
+            --neon-pink: #ff0055;
+            --dark-bg: #030508;
+        }
+
+        body {
+            background-color: var(--dark-bg);
+            color: #ccc;
+            font-family: 'Exo 2', sans-serif;
+            overflow: hidden;
+        }
+
+        /* Rain Animation */
+        .rain {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background-image: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.15));
+            background-size: 1px 40px;
+            animation: rain 1s linear infinite;
+            opacity: 0.1;
+            pointer-events: none;
+        }
+
+        @keyframes rain {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100vh; }
+        }
+
+        /* CRT Effect */
+        .scanlines {
+            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+            background-size: 100% 4px;
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 20;
+        }
+        
+        /* UI Elements */
+        .glass-panel {
+            background: rgba(10, 20, 30, 0.7);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 0 30px rgba(0, 240, 255, 0.05);
+        }
+
+        .title-glow {
+            text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: var(--neon-blue);
+            cursor: pointer;
+            box-shadow: 0 0 10px var(--neon-blue);
+            margin-top: -6px;
+        }
+        
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 2px;
+            background: #334;
+        }
+
+        .city-lights {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 150px;
+            background: linear-gradient(to top, rgba(0, 20, 40, 0.8), transparent);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        /* Visualizer Canvas */
+        #vizCanvas {
+            width: 100%;
+            height: 100px;
+            filter: blur(1px);
+        }
+    </style>
+
+    <style id="render-900x900-expand">
+      .max-w-xs, .max-w-sm, .max-w-md, .max-w-lg, .max-w-xl, .max-w-2xl, .max-w-3xl, .max-w-4xl, .max-w-5xl,
+      .cyber-panel, .glass-panel, .interactive-layer, [class*="panel"] {
+        max-width: none !important;
+        width: 100% !important;
+      }
+      html, body {
+        width: 900px;
+        height: 900px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+      }
+    </style>
+  
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center relative">
+
+    <div class="rain"></div>
+    <div class="scanlines"></div>
+    <div class="city-lights"></div>
+
+    <!-- Main Interface -->
+    <div class="glass-panel relative z-30 p-8 md:p-12 rounded-lg max-w-3xl w-full flex flex-col gap-8">
+        
+        <div class="flex justify-between items-baseline border-b border-white/10 pb-4">
+            <h1 class="text-4xl md:text-5xl font-bold tracking-widest text-white uppercase title-glow">Deckard</h1>
+            <div id="status" class="text-xs text-blue-300 font-mono tracking-[0.2em]">OFF-WORLD COLONIES // IDLE</div>
+        </div>
+
+        <canvas id="vizCanvas" width="600" height="100"></canvas>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
+            
+            <!-- Control 1: Expression (Filter/Pressure) -->
+            <div class="flex flex-col gap-3">
+                <label class="text-xs text-blue-400 tracking-widest uppercase font-bold">Expression (Brass)</label>
+                <input type="range" id="filterSlider" min="0" max="100" value="40" class="w-full">
+                <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                    <span>MUTED</span>
+                    <span>SWELL</span>
+                </div>
+            </div>
+
+            <!-- Control 2: Glide (Portamento) -->
+            <div class="flex flex-col gap-3">
+                <label class="text-xs text-blue-400 tracking-widest uppercase font-bold">Portamento (Glide)</label>
+                <input type="range" id="glideSlider" min="0" max="100" value="30" class="w-full">
+                <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                    <span>STEP</span>
+                    <span>BEND</span>
+                </div>
+            </div>
+
+            <!-- Control 3: Atmosphere (Rain/Reverb) -->
+            <div class="flex flex-col gap-3">
+                <label class="text-xs text-blue-400 tracking-widest uppercase font-bold">Atmosphere (Rain)</label>
+                <input type="range" id="rainSlider" min="0" max="100" value="50" class="w-full">
+                <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                    <span>CLEAR</span>
+                    <span>STORM</span>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="flex justify-center mt-6">
+            <button id="playBtn" class="px-12 py-3 border border-blue-500 text-blue-400 font-bold uppercase tracking-[0.2em] hover:bg-blue-900/30 hover:text-white transition-all duration-300 rounded shadow-[0_0_15px_rgba(0,240,255,0.1)]">
+                Initialize Voight-Kampff
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        let isRunning = false;
+        let analyser, canvas, ctx;
+        
+        // Instruments
+        let leadSynth, padSynth, rainSource, rainFilter;
+        let masterReverb, masterDelay;
+        let melodyLoop, chordLoop;
+
+        const playBtn = document.getElementById('playBtn');
+        const status = document.getElementById('status');
+
+        async function initAudio() {
+            // 1. Master Effects
+            // Vangelis sound is DEFINED by Lexicon 224 Reverb (Large Hall)
+            masterReverb = new Tone.Reverb({
+                decay: 8,
+                preDelay: 0.1,
+                wet: 0.6
+            }).toDestination();
+
+            // Subtle delay for stereo width
+            masterDelay = new Tone.PingPongDelay({
+                delayTime: "4n",
+                feedback: 0.3,
+                wet: 0.2
+            }).connect(masterReverb);
+
+            // 2. The Lead (CS-80 Brass)
+            // MonoSynth allows for Portamento (Glide)
+            leadSynth = new Tone.MonoSynth({
+                oscillator: {
+                    type: "sawtooth" // Classic brass wave
+                },
+                envelope: {
+                    attack: 1.5, // Slow attack is crucial for Vangelis leads
+                    decay: 1,
+                    sustain: 0.8,
+                    release: 2
+                },
+                filterEnvelope: {
+                    attack: 2,     // Filter opens slowly after the note hits
+                    decay: 1,
+                    sustain: 0.5,
+                    release: 2,
+                    baseFrequency: 200,
+                    octaves: 3,    // Sweeps up to ~1600Hz
+                    exponent: 2
+                },
+                portamento: 0.2 // Initial glide amount
+            }).connect(masterDelay);
+            leadSynth.volume.value = -4;
+
+            // 3. The Pad (Backdrop)
+            padSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: "fatsawtooth", count: 3, spread: 20 },
+                envelope: { attack: 2, decay: 3, sustain: 1, release: 5 },
+                volume: -15
+            }).connect(masterReverb);
+
+            // 4. Rain Generator
+            rainFilter = new Tone.Filter(800, "lowpass").connect(masterReverb);
+            rainSource = new Tone.Noise("pink").connect(rainFilter);
+            rainSource.volume.value = -20; // Start quiet
+
+            // 5. Generative Composition
+            // Scale: E Minor Blues / Blade Runner feel (E, G, A, B, D) + occasional C
+            const scale = ["E3", "G3", "A3", "B3", "D4", "E4", "G4"];
+            
+            // Very slow melody
+            Tone.Transport.bpm.value = 60; 
+
+            // Generative Logic: Play a note, wait a random amount, play another
+            let noteIndex = 0;
+            
+            melodyLoop = new Tone.Loop((time) => {
+                // 30% chance to play a note every quarter beat
+                if (Math.random() > 0.7) {
+                    const note = scale[Math.floor(Math.random() * scale.length)];
+                    // Long duration notes (whole notes or longer)
+                    const duration = Math.random() > 0.5 ? "1m" : "2n."; 
+                    
+                    // Velocity randomness for expression
+                    const velocity = 0.4 + Math.random() * 0.4;
+                    
+                    leadSynth.triggerAttackRelease(note, duration, time, velocity);
+                }
+            }, "4n");
+
+            // Background Chords (E Minor -> C Major7 -> A Minor)
+            // Slow moving pads
+            const chords = [
+                ["E2", "G2", "B2", "D3"], // Em7
+                ["C2", "G2", "B2", "E3"], // Cmaj7
+                ["A2", "E3", "G3", "C4"]  // Am7/11
+            ];
+            let chordIdx = 0;
+            
+            chordLoop = new Tone.Loop((time) => {
+                const current = chords[chordIdx % chords.length];
+                padSynth.triggerAttackRelease(current, "4m", time);
+                chordIdx++;
+            }, "4m"); // Switch every 4 measures
+
+            // 6. Visualizer
+            analyser = new Tone.Analyser("waveform", 256);
+            masterReverb.connect(analyser);
+
+            startViz();
+            applyControls();
+        }
+
+        // --- Controls ---
+        
+        function applyControls() {
+            document.getElementById('filterSlider').dispatchEvent(new Event('input'));
+            document.getElementById('glideSlider').dispatchEvent(new Event('input'));
+            document.getElementById('rainSlider').dispatchEvent(new Event('input'));
+        }
+
+        // 1. Filter / Expression
+        document.getElementById('filterSlider').addEventListener('input', (e) => {
+            if(!leadSynth) return;
+            const val = parseInt(e.target.value);
+            // Map 0-100 to Filter Env Base Frequency & Octaves
+            // 0: Dark, muffled. 100: Bright, singing.
+            
+            const baseFreq = 100 + (val * 3); // 100Hz - 400Hz base
+            const octaves = 1 + (val / 100 * 4); // 1 to 5 octaves range
+            
+            leadSynth.filterEnvelope.baseFrequency = baseFreq;
+            leadSynth.filterEnvelope.octaves = octaves;
+        });
+
+        // 2. Glide
+        document.getElementById('glideSlider').addEventListener('input', (e) => {
+            if(!leadSynth) return;
+            const val = parseInt(e.target.value);
+            // 0: 0s (Step), 100: 1s (Long slide)
+            leadSynth.portamento = val / 100;
+        });
+
+        // 3. Rain / Atmosphere
+        document.getElementById('rainSlider').addEventListener('input', (e) => {
+            if(!rainSource || !rainFilter) return;
+            const val = parseInt(e.target.value);
+            
+            // Volume: -infinity to -10db
+            const vol = -60 + (val / 100 * 40); // -60 to -20
+            
+            // Filter: 400Hz to 3000Hz (Muffled rain vs Hissing rain)
+            const freq = 400 + (val / 100 * 2600);
+            
+            rainSource.volume.rampTo(vol, 0.1);
+            rainFilter.frequency.rampTo(freq, 0.1);
+        });
+
+
+        // --- Play/Stop ---
+
+        playBtn.addEventListener('click', async () => {
+            if (isRunning) {
+                Tone.Transport.stop();
+                melodyLoop.stop();
+                chordLoop.stop();
+                if(rainSource) rainSource.stop();
+                
+                // Release notes
+                if(padSynth) padSynth.releaseAll();
+                if(leadSynth) leadSynth.triggerRelease();
+
+                status.innerText = "OFF-WORLD COLONIES // IDLE";
+                status.classList.remove("text-blue-300", "animate-pulse");
+                status.classList.add("text-gray-500");
+                playBtn.innerText = "INITIALIZE VOIGHT-KAMPFF";
+                playBtn.classList.remove("bg-blue-900/50");
+                
+                isRunning = false;
+            } else {
+                try {
+                    await Tone.start();
+                    if (Tone.context.state !== 'running') await Tone.context.resume();
+                    
+                    if (!leadSynth) await initAudio();
+
+                    Tone.Transport.start();
+                    melodyLoop.start(0);
+                    chordLoop.start(0);
+                    rainSource.start(0);
+
+                    status.innerText = "SIMULATION ACTIVE // LOS ANGELES 2019";
+                    status.classList.add("text-blue-300", "animate-pulse");
+                    status.classList.remove("text-gray-500");
+                    playBtn.innerText = "TERMINATE SIMULATION";
+                    playBtn.classList.add("bg-blue-900/50");
+
+                    applyControls();
+                    isRunning = true;
+                } catch(e) {
+                    console.error(e);
+                    status.innerText = "ERROR: RETINA SCAN FAILED";
+                    status.style.color = "red";
+                }
+            }
+        });
+
+        // --- Visualizer ---
+        canvas = document.getElementById('vizCanvas');
+        ctx = canvas.getContext('2d');
+
+        function startViz() {
+            function draw() {
+                requestAnimationFrame(draw);
+                if (!isRunning) {
+                     ctx.clearRect(0, 0, canvas.width, canvas.height);
+                     return;
+                }
+
+                const buffer = analyser.getValue();
+                const width = canvas.width;
+                const height = canvas.height;
+
+                ctx.clearRect(0, 0, width, height);
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = "#00f0ff";
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "#00f0ff";
+
+                ctx.beginPath();
+                const sliceWidth = width / buffer.length;
+                let x = 0;
+
+                for (let i = 0; i < buffer.length; i++) {
+                    const v = buffer[i];
+                    const y = (v * height / 2) + (height / 2);
+
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+
+                    x += sliceWidth;
+                }
+                ctx.stroke();
+            }
+            draw();
+        }
+
+    
+
+    if (typeof initAudio === 'function') {
+      const _originalInitAudio = initAudio;
+      initAudio = async function() {
+        await _originalInitAudio();
+        if (typeof bassPart !== 'undefined') window.bassPart = bassPart;
+        if (typeof leadPart !== 'undefined') window.leadPart = leadPart;
+        if (typeof drumPart !== 'undefined') window.drumPart = drumPart;
+        if (typeof arpPart !== 'undefined') window.arpPart = arpPart;
+        if (typeof padPart !== 'undefined') window.padPart = padPart;
+        if (typeof kickPart !== 'undefined') window.kickPart = kickPart;
+        if (typeof snarePart !== 'undefined') window.snarePart = snarePart;
+        if (typeof bassSynth !== 'undefined') window.bassSynth = bassSynth;
+        if (typeof leadSynth !== 'undefined') window.leadSynth = leadSynth;
+        if (typeof padSynth !== 'undefined') window.padSynth = padSynth;
+        if (typeof arpSynth !== 'undefined') window.arpSynth = arpSynth;
+        if (typeof kickSynth !== 'undefined') window.kickSynth = kickSynth;
+        if (typeof snareSynth !== 'undefined') window.snareSynth = snareSynth;
+      };
+    }
+  
+</script>
+
+    <script id="html-import-audio-capture">
+      window.audioDuration = 90;
+      window.initToneJsEngine = async function() {
+        if (typeof initAudio === 'function') {
+          await initAudio();
+        }
+        // Don't specify time to avoid scheduling errors
+        const partVars = ['bassPart', 'leadPart', 'drumPart', 'arpPart', 'padPart', 'kickPart', 'snarePart', 'hihatPart'];
+        for (const varName of partVars) {
+          if (window[varName] && typeof window[varName].start === 'function') {
+            try {
+              if (window[varName].state !== 'started') {
+                window[varName].start();
+              }
+            } catch (e) {
+              console.log('Could not start ' + varName + ':', e.message);
+            }
+          }
+        }
+      };
+    </script>
+    <script id="auto-start-script">
+      window.addEventListener('load', async () => {
+        await new Promise(r => setTimeout(r, 500));
+        const startBtn = document.getElementById('startBtn') || document.querySelector('.btn-start') || document.querySelector('.btn-engage') || document.querySelector('.cyber-btn') || document.querySelector('button[onclick]') || document.querySelector('button');
+        if (startBtn) {
+          startBtn.click();
+          document.body.classList.add('auto-started');
+        }
+        window.ready = true;
+      });
+      // DURATION: 90
+    </script>
+  
+</body>
+</html>

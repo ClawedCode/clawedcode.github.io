@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 77741;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+function randomRange(a, b) { return a + random() * (b - a); }
+
+const W = 900, H = 900;
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+camera.position.set(0, 2, 12);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.style.margin = '0';
+document.body.appendChild(renderer.domElement);
+
+// Deep indigo fog
+scene.fog = new THREE.FogExp2(0x030918, 0.035);
+scene.background = new THREE.Color(0x020714);
+
+// --- Gothic coral arch geometry ---
+const archCount = 18;
+const archMat = new THREE.MeshStandardMaterial({
+  color: 0x1a3355,
+  emissive: 0x061225,
+  roughness: 0.85,
+  metalness: 0.15,
+  transparent: true,
+  opacity: 0.7,
+  side: THREE.DoubleSide
+});
+
+const arches = [];
+for (let i = 0; i < archCount; i++) {
+  const depth = -5 + i * 3.2;
+  const archH = randomRange(6, 10);
+  const archW = randomRange(3.5, 6);
+  const pts = [];
+  for (let t = 0; t <= 1; t += 0.02) {
+    const ang = Math.PI * t;
+    pts.push(new THREE.Vector2(Math.sin(ang) * archW * 0.5, Math.cos(ang) * archH * 0.5 + archH * 0.3));
+  }
+  const geo = new THREE.LatheGeometry(pts, 2);
+  const mesh = new THREE.Mesh(geo, archMat.clone());
+  mesh.position.set(randomRange(-1, 1), -1, depth);
+  mesh.scale.set(1, 1, 0.15 + random() * 0.1);
+  mesh.material.emissive.setHSL(0.55 + random() * 0.1, 0.4, 0.03 + random() * 0.02);
+  scene.add(mesh);
+  arches.push({ mesh, baseY: mesh.position.y, phase: random() * Math.PI * 2 });
+}
+
+// --- Ribbed buttress columns ---
+const ribGeo = new THREE.CylinderGeometry(0.08, 0.15, 8, 6);
+const ribMat = new THREE.MeshStandardMaterial({ color: 0x1e3a5a, emissive: 0x0a1e35, roughness: 0.9 });
+for (let i = 0; i < 40; i++) {
+  const rib = new THREE.Mesh(ribGeo, ribMat);
+  const side = random() > 0.5 ? 1 : -1;
+  rib.position.set(side * randomRange(3, 6), randomRange(-2, 2), randomRange(-8, 50));
+  rib.rotation.z = side * randomRange(0.05, 0.2);
+  scene.add(rib);
+}
+
+// --- Bioluminescent plankton particles (marine snow falling upward) ---
+const planktonCount = 3000;
+const planktonGeo = new THREE.BufferGeometry();
+const planktonPos = new Float32Array(planktonCount * 3);
+const planktonVel = new Float32Array(planktonCount * 3);
+const planktonColors = new Float32Array(planktonCount * 3);
+const planktonSizes = new Float32Array(planktonCount);
+
+for (let i = 0; i < planktonCount; i++) {
+  const i3 = i * 3;
+  planktonPos[i3] = randomRange(-15, 15);
+  planktonPos[i3 + 1] = randomRange(-8, 12);
+  planktonPos[i3 + 2] = randomRange(-10, 50);
+  planktonVel[i3] = randomRange(-0.003, 0.003);
+  planktonVel[i3 + 1] = randomRange(0.005, 0.025); // upward
+  planktonVel[i3 + 2] = randomRange(-0.002, 0.002);
+  const hue = randomRange(0.08, 0.18); // amber to gold
+  const c = new THREE.Color().setHSL(hue, 0.9, randomRange(0.4, 0.7));
+  planktonColors[i3] = c.r; planktonColors[i3 + 1] = c.g; planktonColors[i3 + 2] = c.b;
+  planktonSizes[i] = randomRange(1.5, 5);
+}
+planktonGeo.setAttribute('position', new THREE.BufferAttribute(planktonPos, 3));
+planktonGeo.setAttribute('color', new THREE.BufferAttribute(planktonColors, 3));
+planktonGeo.setAttribute('size', new THREE.BufferAttribute(planktonSizes, 1));
+
+const planktonMat = new THREE.PointsMaterial({
+  size: 0.12,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.6,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  sizeAttenuation: true
+});
+const plankton = new THREE.Points(planktonGeo, planktonMat);
+scene.add(plankton);
+
+// --- Jellyfish (instanced translucent bells) ---
+const jellyCount = 24;
+const jellyBellGeo = new THREE.SphereGeometry(0.5, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.6);
+const jellyMat = new THREE.MeshPhysicalMaterial({
+  color: 0x88ccff,
+  emissive: 0x225588,
+  emissiveIntensity: 0.6,
+  transparent: true,
+  opacity: 0.35,
+  roughness: 0.2,
+  metalness: 0,
+  transmission: 0.4,
+  side: THREE.DoubleSide
+});
+
+const jellyfish = [];
+for (let i = 0; i < jellyCount; i++) {
+  const mat = jellyMat.clone();
+  const hue = randomRange(0.45, 0.65);
+  mat.color.setHSL(hue, 0.5, 0.6);
+  mat.emissive.setHSL(hue, 0.7, 0.15 + random() * 0.1);
+  const bell = new THREE.Mesh(jellyBellGeo, mat);
+  const scale = randomRange(0.4, 1.2);
+  bell.scale.set(scale, scale * 0.7, scale);
+  bell.position.set(randomRange(-8, 8), randomRange(-2, 8), randomRange(-5, 40));
+
+  // Tentacle lines
+  const tentacleCount = 3 + Math.floor(random() * 4);
+  const tentacles = [];
+  for (let t = 0; t < tentacleCount; t++) {
+    const tentPts = [];
+    const ox = randomRange(-0.3, 0.3) * scale;
+    const oz = randomRange(-0.3, 0.3) * scale;
+    for (let s = 0; s < 8; s++) {
+      tentPts.push(new THREE.Vector3(ox + Math.sin(s * 0.4) * 0.15, -s * 0.25 * scale, oz + Math.cos(s * 0.5) * 0.1));
+    }
+    const curve = new THREE.CatmullRomCurve3(tentPts);
+    const tubGeo = new THREE.TubeGeometry(curve, 12, 0.015 * scale, 4, false);
+    const tMat = new THREE.MeshBasicMaterial({ color: mat.emissive, transparent: true, opacity: 0.25 });
+    const tentacle = new THREE.Mesh(tubGeo, tMat);
+    bell.add(tentacle);
+    tentacles.push({ mesh: tentacle, points: tentPts, curve });
+  }
+
+  scene.add(bell);
+  jellyfish.push({
+    mesh: bell,
+    baseY: bell.position.y,
+    phase: random() * Math.PI * 2,
+    speed: randomRange(0.3, 0.8),
+    pulseRate: randomRange(1.2, 2.5),
+    tentacles,
+    driftX: randomRange(-0.002, 0.002),
+    driftZ: randomRange(-0.001, 0.001)
+  });
+}
+
+// --- Bioluminescent point lights along arches ---
+const bioLights = [];
+for (let i = 0; i < 12; i++) {
+  const hue = random() > 0.6 ? randomRange(0.08, 0.15) : randomRange(0.45, 0.55);
+  const c = new THREE.Color().setHSL(hue, 0.9, 0.5);
+  const light = new THREE.PointLight(c, 0.8, 8);
+  light.position.set(randomRange(-5, 5), randomRange(1, 6), randomRange(-3, 40));
+  scene.add(light);
+  bioLights.push({ light, baseIntensity: randomRange(0.3, 1.2), phase: random() * Math.PI * 2, rate: randomRange(0.5, 1.5) });
+}
+
+// Ambient deep-sea light
+const ambientLight = new THREE.AmbientLight(0x0a1535, 0.4);
+scene.add(ambientLight);
+
+// --- Phosphorescent trail particles ---
+const trailCount = 800;
+const trailGeo = new THREE.BufferGeometry();
+const trailPos = new Float32Array(trailCount * 3);
+const trailCol = new Float32Array(trailCount * 3);
+for (let i = 0; i < trailCount; i++) {
+  const i3 = i * 3;
+  trailPos[i3] = randomRange(-12, 12);
+  trailPos[i3 + 1] = randomRange(-4, 10);
+  trailPos[i3 + 2] = randomRange(-5, 45);
+  const c = new THREE.Color().setHSL(randomRange(0.42, 0.52), 0.8, randomRange(0.3, 0.6));
+  trailCol[i3] = c.r; trailCol[i3 + 1] = c.g; trailCol[i3 + 2] = c.b;
+}
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+trailGeo.setAttribute('color', new THREE.BufferAttribute(trailCol, 3));
+const trailMat = new THREE.PointsMaterial({
+  size: 0.06,
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.4,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const trails = new THREE.Points(trailGeo, trailMat);
+scene.add(trails);
+
+// --- Gold flash particles (rare bioluminescent pulses) ---
+const flashCount = 200;
+const flashGeo = new THREE.BufferGeometry();
+const flashPos = new Float32Array(flashCount * 3);
+const flashPhase = [];
+for (let i = 0; i < flashCount; i++) {
+  const i3 = i * 3;
+  flashPos[i3] = randomRange(-10, 10);
+  flashPos[i3 + 1] = randomRange(-3, 9);
+  flashPos[i3 + 2] = randomRange(-5, 45);
+  flashPhase.push({ rate: randomRange(0.1, 0.4), offset: random() * Math.PI * 2 });
+}
+flashGeo.setAttribute('position', new THREE.BufferAttribute(flashPos, 3));
+const flashMat = new THREE.PointsMaterial({
+  size: 0.2,
+  color: 0xffc830,
+  transparent: true,
+  opacity: 0,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const flashes = new THREE.Points(flashGeo, flashMat);
+scene.add(flashes);
+
+// --- Camera path (drift through nave) ---
+const duration = 75;
+let startTime = null;
+
+function animate(timestamp) {
+  requestAnimationFrame(animate);
+  if (!startTime) startTime = timestamp;
+  const elapsed = (timestamp - startTime) / 1000;
+  const t = elapsed / duration;
+  const loopT = t % 1;
+
+  // Camera drift through cathedral
+  const camZ = 10 + loopT * 38;
+  const camX = Math.sin(loopT * Math.PI * 2 * 1.5) * 2.5;
+  const camY = 2 + Math.sin(loopT * Math.PI * 2 * 0.7) * 1.5;
+  camera.position.set(camX, camY, camZ);
+  camera.lookAt(camX * 0.3, camY * 0.8 + 1, camZ + 6);
+
+  // Plankton rising
+  const pPos = plankton.geometry.attributes.position.array;
+  for (let i = 0; i < planktonCount; i++) {
+    const i3 = i * 3;
+    pPos[i3] += planktonVel[i3] + Math.sin(elapsed * 0.5 + i) * 0.001;
+    pPos[i3 + 1] += planktonVel[i3 + 1];
+    pPos[i3 + 2] += planktonVel[i3 + 2];
+    if (pPos[i3 + 1] > 14) { pPos[i3 + 1] = -8; pPos[i3] = randomRange(-15, 15); }
+    if (pPos[i3 + 2] < camZ - 12) pPos[i3 + 2] += 55;
+    if (pPos[i3 + 2] > camZ + 45) pPos[i3 + 2] -= 55;
+  }
+  plankton.geometry.attributes.position.needsUpdate = true;
+  planktonMat.opacity = 0.4 + Math.sin(elapsed * 0.3) * 0.15;
+
+  // Jellyfish pulse and drift
+  for (const j of jellyfish) {
+    const pulse = Math.sin(elapsed * j.pulseRate + j.phase);
+    const scaleY = j.mesh.scale.x * (0.55 + pulse * 0.2);
+    j.mesh.scale.y = scaleY;
+    j.mesh.position.y = j.baseY + Math.sin(elapsed * j.speed + j.phase) * 0.8;
+    j.mesh.position.x += j.driftX;
+    j.mesh.position.z += j.driftZ;
+    j.mesh.material.emissiveIntensity = 0.4 + pulse * 0.3;
+    j.mesh.material.opacity = 0.25 + pulse * 0.12;
+
+    // Animate tentacles
+    for (const tent of j.tentacles) {
+      for (let s = 1; s < tent.points.length; s++) {
+        tent.points[s].x += Math.sin(elapsed * 1.5 + s * 0.6 + j.phase) * 0.003;
+        tent.points[s].z += Math.cos(elapsed * 1.2 + s * 0.5 + j.phase) * 0.002;
+      }
+    }
+  }
+
+  // Breathing arches
+  for (const a of arches) {
+    a.mesh.position.y = a.baseY + Math.sin(elapsed * 0.2 + a.phase) * 0.15;
+    a.mesh.material.emissiveIntensity = 0.3 + Math.sin(elapsed * 0.4 + a.phase) * 0.15;
+  }
+
+  // Pulsing bioluminescent lights
+  for (const b of bioLights) {
+    b.light.intensity = b.baseIntensity * (0.5 + Math.sin(elapsed * b.rate + b.phase) * 0.5);
+  }
+
+  // Teal phosphor trails drift
+  const tPos = trails.geometry.attributes.position.array;
+  for (let i = 0; i < trailCount; i++) {
+    const i3 = i * 3;
+    tPos[i3] += Math.sin(elapsed * 0.3 + i * 0.1) * 0.005;
+    tPos[i3 + 1] += 0.003;
+    if (tPos[i3 + 1] > 12) tPos[i3 + 1] = -4;
+  }
+  trails.geometry.attributes.position.needsUpdate = true;
+  trailMat.opacity = 0.25 + Math.sin(elapsed * 0.5) * 0.12;
+
+  // Gold flashes (sporadic)
+  const flashVal = Math.sin(elapsed * 0.7) * Math.sin(elapsed * 1.3);
+  flashMat.opacity = Math.max(0, flashVal * 0.4);
+  flashMat.size = 0.1 + Math.max(0, flashVal) * 0.25;
+
+  // Fog density breathes
+  scene.fog.density = 0.032 + Math.sin(elapsed * 0.15) * 0.008;
+
+  renderer.render(scene, camera);
+}
+
+requestAnimationFrame(animate);
+
+window.ready = true;
+
+// --- AUDIO ---
+
+window.initToneJsEngine = async function() {
+  const bpm = 52;
+  Tone.Transport.bpm.value = bpm;
+  const barSec = (60 / bpm) * 4;
+
+  // FX buses
+  const masterReverb = new Tone.Reverb({ decay: 6, wet: 0.45 }).toDestination();
+  await masterReverb.generate();
+  const deepDelay = new Tone.FeedbackDelay({ delayTime: "4n.", feedback: 0.35, wet: 0.25 }).connect(masterReverb);
+  const subFilter = new Tone.Filter({ type: "lowpass", frequency: 120, rolloff: -24 }).toDestination();
+
+  // Deep sub drone
+  const subDrone = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 2, decay: 1, sustain: 0.8, release: 3 },
+    filterEnvelope: { attack: 1, decay: 0, sustain: 1, baseFrequency: 40, octaves: 0.5 }
+  }).connect(subFilter);
+
+  const droneNotes = ["C1", "G0", "E1", "C1"];
+  let droneIdx = 0;
+  const droneLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+    if (bar > totalBars - 4) {
+      subDrone.triggerAttackRelease("C1", "1m", time, 0.3);
+    } else {
+      subDrone.triggerAttackRelease(droneNotes[droneIdx % droneNotes.length], "1m", time, 0.5);
+    }
+    droneIdx++;
+  }, "1m").start(0);
+
+  // Bioluminescent pad (ethereal, wide)
+  const padChorus = new Tone.Chorus({ frequency: 0.08, delayTime: 4, depth: 0.7, wet: 0.5 }).connect(masterReverb);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sine" },
+    envelope: { attack: 2.5, decay: 1.5, sustain: 0.6, release: 3 }
+  }).connect(padChorus);
+  pad.volume.value = -10;
+
+  const padChords = [
+    ["C3", "E3", "G3", "B3"],     // Cmaj7
+    ["A2", "C3", "E3", "G3"],     // Am7
+    ["F2", "A2", "C3", "E3"],     // Fmaj7
+    ["G2", "B2", "D3", "F3"],     // G7
+    ["D3", "F3", "A3", "C4"],     // Dm7
+    ["E2", "G2", "B2", "D3"],     // Em7
+    ["C3", "E3", "G3", "B3"],     // return
+    ["C3", "E3", "G3"]            // simple ending
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+
+    let chord;
+    if (bar > totalBars - 4) {
+      chord = padChords[padChords.length - 1];
+    } else {
+      chord = padChords[chordIdx % padChords.length];
+    }
+    const vel = bar > totalBars - 6 ? 0.15 : 0.25;
+    pad.triggerAttackRelease(chord, "2n", time, vel);
+    chordIdx++;
+  }, "2n").start(0);
+
+  // Jellyfish bell pings (FM synth, sparse)
+  const bellReverb = new Tone.Reverb({ decay: 4.5, wet: 0.6 }).connect(deepDelay);
+  await bellReverb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 4,
+    modulationIndex: 8,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 2.5, sustain: 0, release: 1.5 },
+    modulation: { type: "triangle" },
+    modulationEnvelope: { attack: 0.01, decay: 1, sustain: 0, release: 0.5 }
+  }).connect(bellReverb);
+  bell.volume.value = -14;
+
+  const bellNotes = ["G4", "E5", "C5", "B4", "D5", "A4", "F5", "G5", "C6", "E4"];
+  let bellIdx = 0;
+  let bellStep = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+
+    // Sparse — only some beats, more frequent in middle
+    const density = bar < 4 ? 0.15 : bar > totalBars - 6 ? 0.1 : 0.35;
+    const pseudoRand = Math.sin(bellStep * 7.31 + 2.71) * 0.5 + 0.5;
+
+    if (pseudoRand < density) {
+      const noteIdx = Math.floor(Math.abs(Math.sin(bellStep * 3.17)) * bellNotes.length);
+      bell.triggerAttackRelease(bellNotes[noteIdx], "4n", time, 0.2 + pseudoRand * 0.15);
+    }
+    bellStep++;
+  }, "4n").start(0);
+
+  // Phosphor texture (filtered noise, very quiet)
+  const noiseFilter = new Tone.Filter({ type: "bandpass", frequency: 800, Q: 0.5 }).connect(masterReverb);
+  const phosphorNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 3, decay: 2, sustain: 0.3, release: 4 }
+  }).connect(noiseFilter);
+  phosphorNoise.volume.value = -22;
+
+  const phosphorLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+    if (bar > totalBars - 5) return; // fade out near end
+    phosphorNoise.triggerAttackRelease(6, time, 0.2);
+  }, "4m").start(0);
+
+  // Deep metallic resonance (like whale song in a cathedral)
+  const whaleSynth = new Tone.FMSynth({
+    harmonicity: 1.5,
+    modulationIndex: 3,
+    oscillator: { type: "sine" },
+    envelope: { attack: 1.5, decay: 3, sustain: 0.2, release: 3 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 2, decay: 2, sustain: 0.1, release: 2 }
+  }).connect(masterReverb);
+  whaleSynth.volume.value = -16;
+
+  const whaleNotes = ["C2", "G2", "E2", "D2", "F2", "A2"];
+  let whaleIdx = 0;
+  const whaleLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+
+    if (bar >= 2 && bar < totalBars - 4) {
+      const note = whaleNotes[whaleIdx % whaleNotes.length];
+      whaleSynth.triggerAttackRelease(note, "1m", time, 0.25);
+    }
+    whaleIdx++;
+  }, "2m").start(0);
+
+  // Gentle high shimmer arp (teal phosphor trails)
+  const shimmerFilter = new Tone.Filter({ type: "lowpass", frequency: 3000 }).connect(deepDelay);
+  const shimmer = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.05, decay: 0.8, sustain: 0, release: 0.5 }
+  }).connect(shimmerFilter);
+  shimmer.volume.value = -20;
+
+  const shimmerScale = [0, 3, 5, 7, 10, 12, 15, 17]; // C minor pentatonic extended
+  let shimmerStep = 0;
+  const shimmerLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / barSec);
+    const totalBars = Math.round(75 / barSec * 4);
+
+    if (bar < 3 || bar > totalBars - 5) { shimmerStep++; return; }
+
+    const pRand = Math.sin(shimmerStep * 5.13 + 1.7) * 0.5 + 0.5;
+    if (pRand < 0.4) { shimmerStep++; return; }
+
+    const degree = shimmerScale[shimmerStep % shimmerScale.length];
+    const midi = 60 + degree + (Math.sin(shimmerStep * 2.1) > 0.3 ? 12 : 0);
+    shimmer.triggerAttackRelease(Tone.Frequency(midi, "midi"), "8n", time, 0.12 + pRand * 0.1);
+    shimmerStep++;
+  }, "8n").start(0);
+
+  // Filter automation — shimmer opens in middle, closes at end
+  Tone.Transport.schedule((time) => {
+    shimmerFilter.frequency.linearRampToValueAtTime(5500, time + 6 * barSec);
+  }, "4:0:0");
+
+  Tone.Transport.schedule((time) => {
+    shimmerFilter.frequency.linearRampToValueAtTime(1500, time + 4 * barSec);
+  }, "14:0:0");
+
+  window.toneJsInstruments = { subDrone, pad, bell, phosphorNoise, whaleSynth, shimmer };
+  window.toneJsParts = { droneLoop, padLoop, bellLoop, phosphorLoop, whaleLoop, shimmerLoop };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 55
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+const DURATION = 55;
+document.title = 'THE COMMON CLOCK';
+let seed = 5230368;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const canvas = document.getElementById('canvas') || document.body.appendChild(document.createElement('canvas'));
+document.body.style.margin = '0';
+document.body.style.background = '#03050a';
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x03050a);
+scene.fog = new THREE.FogExp2(0x03050a, 0.052);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 40);
+camera.position.set(0.12, -0.08, 8.72);
+camera.lookAt(0, 0, 0);
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(1);
+renderer.setSize(900, 900, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+scene.add(new THREE.HemisphereLight(0xf2dfc2, 0x090512, 0.12));
+const key = new THREE.DirectionalLight(0xffa45c, 1.8);
+key.position.set(-2.4, 1.8, 5);
+scene.add(key);
+const smooth = (a, b, x) => {
+  const q = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return q * q * (3 - 2 * q);
+};
+const pulse = (p, c, w) => {
+  const q = Math.abs(p - c) / w;
+  return q >= 1 ? 0 : (1 - q * q) ** 2;
+};
+const periodicDistance = (a, b) => {
+  const d = Math.abs(a - b);
+  return Math.min(d, 1 - d);
+};
+const loopPulse = (p, c, w) => {
+  const q = periodicDistance(p, c) / w;
+  return q >= 1 ? 0 : (1 - q * q) ** 2;
+};
+const chambers = [
+  { x: -1.52, y: -0.66, sx: 0.68, sy: 0.52 },
+  { x: -0.72, y: 0.25, sx: 0.58, sy: 0.43 },
+  { x: 0.42, y: -0.48, sx: 0.82, sy: 0.59 },
+  { x: 1.35, y: 0.52, sx: 0.66, sy: 0.48 },
+  { x: 0.24, y: 0.82, sx: 0.52, sy: 0.39 }
+];
+function state(p) {
+  const common = smooth(0.39, 0.49, p) * (1 - smooth(0.65, 0.72, p));
+  const rupture = smooth(0.61, 0.66, p) * (1 - smooth(0.77, 0.83, p));
+  const settle = smooth(0.73, 0.81, p) * (1 - smooth(0.95, 0.995, p));
+  const newborn = 0.12 * loopPulse(p, 0, 0.07) +
+    0.32 * smooth(0.84, 0.90, p) * (1 - smooth(0.96, 1, p));
+  return {
+    common,
+    rupture,
+    settle,
+    ch: [
+      0.24 * pulse(p, 0.08, 0.045) + 0.46 * pulse(p, 0.25, 0.09) + 0.38 * pulse(p, 0.39, 0.10) + 0.48 * common,
+      newborn + 0.20 * pulse(p, 0.14, 0.035) + 0.42 * pulse(p, 0.31, 0.10) + 0.49 * common,
+      0.22 * pulse(p, 0.18, 0.035) + 0.48 * pulse(p, 0.36, 0.11) + 0.50 * common,
+      0.43 * pulse(p, 0.28, 0.08) + 0.45 * pulse(p, 0.43, 0.09) + 0.47 * common,
+      0.40 * pulse(p, 0.35, 0.09) + 0.51 * common
+    ]
+  };
+}
+function surface(x, y, e) {
+  let z =
+    0.038 * Math.sin(x * 2.17 + y * 0.61) +
+    0.026 * Math.sin(y * 3.11 - x * 0.44) +
+    0.014 * Math.sin((x + y) * 5.03);
+  for (let i = 0; i < chambers.length; i++) {
+    const c = chambers[i];
+    const dx = (x - c.x) / c.sx;
+    const dy = (y - c.y) / c.sy;
+    const r2 = dx * dx + dy * dy;
+    const cap = Math.exp(-1.8 * r2);
+    const tension = Math.exp(-2.6 * (Math.sqrt(r2 + 0.001) - 1.05) ** 2);
+    z += e.ch[i] * (0.94 * cap - 0.075 * tension);
+  }
+  const colony = Math.exp(-0.095 * (x * x + y * y));
+  z += e.common * colony * (0.28 + 0.045 * x - 0.028 * y);
+  z += e.settle * 0.11 * Math.exp(-0.22 * ((x - 0.42) ** 2 + (y + 0.2) ** 2));
+  z -= e.rupture * (
+    0.38 * Math.exp(-4.2 * ((x + 0.72) ** 2 + 1.8 * (y - 0.25) ** 2)) +
+    0.29 * Math.exp(-4.8 * ((x - 1.35) ** 2 + 1.7 * (y - 0.52) ** 2))
+  );
+  return z;
+}
+const geometry = new THREE.PlaneGeometry(5.3, 4.9, 74, 68);
+const pos = geometry.attributes.position;
+const base = pos.array.slice();
+const uniforms = {
+  uRupture: { value: 0 },
+  uFogColor: { value: new THREE.Color(0x03050a) },
+  uFogDensity: { value: 0.052 }
+};
+const membraneMaterial = new THREE.ShaderMaterial({
+  wireframe: true,
+  uniforms,
+  vertexShader: `
+    varying vec2 vBase;
+    varying float vHeight;
+    varying float vDepth;
+    void main() {
+      vBase = position.xy;
+      vHeight = position.z;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      vDepth = -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    uniform float uRupture;
+    uniform vec3 uFogColor;
+    uniform float uFogDensity;
+    varying vec2 vBase;
+    varying float vHeight;
+    varying float vDepth;
+    void main() {
+      float h1 = length((vBase - vec2(-0.72, 0.25)) / vec2(0.58, 0.43));
+      float h2 = length((vBase - vec2(1.35, 0.52)) / vec2(0.66, 0.48));
+      float opening = 0.08 + uRupture * 0.48;
+      if (uRupture > 0.025 && (h1 < opening || h2 < opening * 0.82)) discard;
+      vec3 plum = vec3(0.20, 0.075, 0.16);
+      vec3 amber = vec3(1.0, 0.43, 0.17);
+      vec3 cream = vec3(1.0, 0.91, 0.72);
+      float rise = smoothstep(-0.08, 0.54, vHeight);
+      vec3 color = mix(plum, amber, rise);
+      color = mix(color, cream, smoothstep(0.48, 0.88, vHeight));
+      color *= 0.82 + 0.58 * smoothstep(0.0, 0.8, vHeight);
+      float fog = 1.0 - exp(-uFogDensity * uFogDensity * vDepth * vDepth);
+      gl_FragColor = vec4(mix(color, uFogColor, clamp(fog, 0.0, 1.0)), 1.0);
+    }
+  `
+});
+const membrane = new THREE.Mesh(geometry, membraneMaterial);
+membrane.rotation.z = -0.035;
+scene.add(membrane);
+const COUNT = 118;
+const STEPS = 660;
+const track = new Float32Array((STEPS + 1) * COUNT * 2);
+const home = new Float32Array(COUNT * 2);
+const px = new Float32Array(COUNT);
+const py = new Float32Array(COUNT);
+const vx = new Float32Array(COUNT);
+const vy = new Float32Array(COUNT);
+const colors = new Float32Array(COUNT * 3);
+const cream = new THREE.Color(0xffedca);
+const green = new THREE.Color(0x79a640);
+for (let i = 0; i < COUNT; i++) {
+  px[i] = (random() - 0.5) * 5.05;
+  py[i] = (random() - 0.5) * 4.62;
+  vx[i] = (random() - 0.5) * 0.035;
+  vy[i] = (random() - 0.5) * 0.035;
+  home[i * 2] = px[i];
+  home[i * 2 + 1] = py[i];
+  track[i * 2] = px[i];
+  track[i * 2 + 1] = py[i];
+  const color = random() < 0.065 ? green : cream;
+  colors.set([color.r, color.g, color.b], i * 3);
+}
+const dt = DURATION / STEPS;
+for (let s = 1; s <= STEPS; s++) {
+  const p = s / STEPS;
+  const e = state(p);
+  const returnForce = smooth(0.79, 1, p);
+  for (let i = 0; i < COUNT; i++) {
+    let ax = -px[i] * 0.002;
+    let ay = -py[i] * 0.002;
+    for (let j = 0; j < chambers.length; j++) {
+      const c = chambers[j];
+      const dx = px[i] - c.x;
+      const dy = py[i] - c.y;
+      const r2 = dx * dx / (c.sx * c.sx) + dy * dy / (c.sy * c.sy);
+      const pressure = e.ch[j] * Math.exp(-1.45 * r2) * 0.075;
+      ax += pressure * dx / (c.sx * c.sx);
+      ay += pressure * dy / (c.sy * c.sy);
+    }
+    ax += e.common * py[i] * 0.004;
+    ay -= e.common * px[i] * 0.004;
+    ax += (home[i * 2] - px[i]) * returnForce * 0.19;
+    ay += (home[i * 2 + 1] - py[i]) * returnForce * 0.19;
+    vx[i] = (vx[i] + ax * dt) * (0.986 - returnForce * 0.055);
+    vy[i] = (vy[i] + ay * dt) * (0.986 - returnForce * 0.055);
+    px[i] += vx[i] * dt;
+    py[i] += vy[i] * dt;
+    if (Math.abs(px[i]) > 2.61) {
+      px[i] = Math.sign(px[i]) * 2.61;
+      vx[i] *= -0.55;
+    }
+    if (Math.abs(py[i]) > 2.41) {
+      py[i] = Math.sign(py[i]) * 2.41;
+      vy[i] *= -0.55;
+    }
+    const close = smooth(0.90, 1, p);
+    px[i] = THREE.MathUtils.lerp(px[i], home[i * 2], close);
+    py[i] = THREE.MathUtils.lerp(py[i], home[i * 2 + 1], close);
+    const o = (s * COUNT + i) * 2;
+    track[o] = px[i];
+    track[o + 1] = py[i];
+  }
+}
+for (let i = 0; i < COUNT; i++) {
+  const o = (STEPS * COUNT + i) * 2;
+  track[o] = home[i * 2];
+  track[o + 1] = home[i * 2 + 1];
+}
+const flourGeometry = new THREE.BufferGeometry();
+const flourPos = new Float32Array(COUNT * 3);
+flourGeometry.setAttribute('position', new THREE.BufferAttribute(flourPos, 3));
+flourGeometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+const flourMaterial = new THREE.PointsMaterial({
+  size: 0.031,
+  vertexColors: true,
+  sizeAttenuation: true,
+  transparent: false,
+  depthWrite: false,
+  fog: true
+});
+const flour = new THREE.Points(flourGeometry, flourMaterial);
+flour.rotation.z = membrane.rotation.z;
+scene.add(flour);
+const composer = new EffectComposer(renderer);
+composer.setSize(900, 900);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(900, 900), 0.42, 0.28, 0.72));
+const grainPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTau: { value: 0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTau;
+    varying vec2 vUv;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    void main() {
+      vec4 color = texture2D(tDiffuse, vUv);
+      vec2 loopShift = vec2(cos(uTau), sin(uTau)) * 17.0;
+      float grain = hash(floor(gl_FragCoord.xy * 0.5) + loopShift) - 0.5;
+      color.rgb += grain * 0.012;
+      gl_FragColor = color;
+    }
+  `
+});
+composer.addPass(grainPass);
+function renderPhase(seconds) {
+  const phase = ((seconds % DURATION) + DURATION) % DURATION / DURATION;
+  const tau = phase * Math.PI * 2;
+  const e = state(phase);
+  for (let i = 0; i < pos.count; i++) {
+    const x = base[i * 3];
+    const y = base[i * 3 + 1];
+    pos.array[i * 3] = x;
+    pos.array[i * 3 + 1] = y;
+    pos.array[i * 3 + 2] = surface(x, y, e);
+  }
+  pos.needsUpdate = true;
+  const f = phase * STEPS;
+  const a = Math.floor(f);
+  const b = Math.min(STEPS, a + 1);
+  const mix = f - a;
+  for (let i = 0; i < COUNT; i++) {
+    const oa = (a * COUNT + i) * 2;
+    const ob = (b * COUNT + i) * 2;
+    const x = THREE.MathUtils.lerp(track[oa], track[ob], mix);
+    const y = THREE.MathUtils.lerp(track[oa + 1], track[ob + 1], mix);
+    flourPos[i * 3] = x;
+    flourPos[i * 3 + 1] = y;
+    flourPos[i * 3 + 2] = surface(x, y, e) + 0.055;
+  }
+  flourGeometry.attributes.position.needsUpdate = true;
+  uniforms.uRupture.value = e.rupture;
+  grainPass.uniforms.uTau.value = tau;
+  camera.position.z = 8.72 - e.common * 0.25;
+  camera.lookAt(0, 0, 0);
+  composer.render();
+}
+let start = null;
+function animate(timestamp) {
+  if (start === null) start = timestamp;
+  renderPhase((timestamp - start) * 0.001);
+  requestAnimationFrame(animate);
+}
+renderPhase(0);
+window.ready = true;
+requestAnimationFrame(animate);
+
+
+
+
+
+
+
+window.audioDuration = 55;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 55\\n// FORM: A 0-3.5; A1 3.5-8; B 8-13.5; C 13.5-17.5; A2 17.5-22\\n// TONAL CENTER: D natural minor\\n// MOTIF: D4 F4 G4 A4 C5; D4 quarter on beat 1, beat 2 silent, then F4 G4 A4 C5 as four eighth notes across beats 3-4\\n// HARMONIC PLAN: A Dm(add9) with Bbmaj7/D breath; A1 Dm(add9) then Gm9/D; B Bbmaj7 then Gm9 with Bb-A-G bass descent; C Gm9 then A7sus4(b9); A2 Dm(add9) with one Bbmaj7/D breath before opening voicing returns\\n// PHRASE RULE: Beat-1 quarter pulse, beat 2 silent, four subdued eighth impulses across beats 3-4; sustain D or F across seams, move bass by pedal or step, retain the cell, and change no more than harmony plus one orchestration dimension\\nsetcpm(24)\\nconst membraneHarmony = cat(\\n  note('[d3,f3,a3,e4]'),\\n  note('[d3,f3,a3,e4]'),\\n  note('[d3,f3,bb3,a3]'),\\n  note('[d3,f3,a3,e4]'),\\n  note('[d3,f3,a3,e4]'),\\n  note('[[d3,f3,a3,e4] [d3,g3,bb3,f4,a4]]'),\\n  note('[d3,g3,bb3,f4,a4]'),\\n  note('[d3,g3,bb3,f4,a4]'),\\n  note('[bb2,d3,f3,a3]'),\\n  note('[bb2,d3,f3,a3]'),\\n  note('[bb2,d3,f3,a3]'),\\n  note('[g2,bb2,d3,f3,a3]'),\\n  note('[g2,bb2,d3,f3,a3]'),\\n  note('[g2,bb2,d3,f3,a3]'),\\n  note('[g2,bb2,d3,f3,a3]'),\\n  note('[[g2,bb2,d3,f3,a3] [a2,d3,e3,g3,bb3]]'),\\n  note('[a2,d3,e3,g3,bb3]'),\\n  note('[[a2,d3,e3,g3,bb3] [d3,f3,a3,e4]]'),\\n  note('[d3,f3,a3,e4]'),\\n  note('[[d3,f3,a3,e4] [d3,f3,bb3,a3]]'),\\n  note('[[d3,f3,bb3,a3] [d3,f3,a3,e4]]'),\\n  note('[d3,f3,a3,e4]')\\n)\\nconst membraneOvertone = cat(\\n  note('[d4,f4]'),\\n  note('[d4,f4]'),\\n  note('[d4,f4,a4]'),\\n  note('[d4,f4]'),\\n  note('[d4,f4,a4]'),\\n  note('[[d4,f4] [d4,f4,a4]]'),\\n  note('[d4,f4,a4]'),\\n  note('[d4,f4,a4]'),\\n  note('[f4,a4,c5]'),\\n  note('[d4,f4,a4,c5]'),\\n  note('[f4,a4,c5]'),\\n  note('[d4,f4,a4]'),\\n  note('[d4,f4,a4,c5]'),\\n  note('[d4,f4,a4]'),\\n  note('[d4,f4]'),\\n  note('[[d4,f4] [d4,e4,g4,bb4]]'),\\n  note('[d4,e4,g4,bb4]'),\\n  note('[[d4,e4,g4,bb4] [d4,f4]]'),\\n  note('[d4,f4]'),\\n  note('[[d4,f4] [d4,f4,a4]]'),\\n  note('[[d4,f4,a4] ~]'),\\n  note('~ ~ ~ [~ c5]')\\n)\\n$: stack(\\n  membraneHarmony\\n    .s('triangle')\\n    .attack(0.42)\\n    .release(2.4)\\n    .lpf(1150)\\n    .gain(0.11),\\n  membraneOvertone\\n    .s('triangle')\\n    .attack(0.72)\\n    .release(2.8)\\n    .lpf(2050)\\n    .gain(0.035)\\n)\\n  .gain('\u003c0.62 0.64 0.66 0.68 0.72 0.76 0.8 0.84 0.9 0.96 1 1 0.98 0.94 0.86 0.78 0.72 0.68 0.66 0.7 0.64 0.62>')\\n  .room(0.52)\\n  .pan('\u003c0.46 0.54>')\\n  .orbit(0)\\nconst chamberBass = cat(\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('bb1'),\\n  note('bb1'),\\n  note('a1'),\\n  note('g1'),\\n  note('g1'),\\n  note('g1'),\\n  note('g1'),\\n  note('[g1 a1]'),\\n  note('a1'),\\n  note('[a1 d1]'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1'),\\n  note('d1')\\n)\\nconst chamberOvertone = cat(\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('bb2'),\\n  note('bb2'),\\n  note('a2'),\\n  note('g2'),\\n  note('g2'),\\n  note('g2'),\\n  note('g2'),\\n  note('[g2 a2]'),\\n  note('a2'),\\n  note('[a2 d2]'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2'),\\n  note('d2')\\n)\\n$: stack(\\n  chamberBass\\n    .s('sine')\\n    .attack(0.08)\\n    .release(1.6)\\n    .lpf(230)\\n    .gain(0.16),\\n  chamberOvertone\\n    .s('triangle')\\n    .attack(0.16)\\n    .release(1.3)\\n    .lpf(390)\\n    .gain(0.038)\\n)\\n  .gain('\u003c0.72 0.7 0.72 0.74 0.76 0.8 0.82 0.84 0.9 0.94 0.96 1 1 0.96 0.9 0.88 0.82 0.76 0.72 0.7 0.68 0.66>')\\n  .pan(0.5)\\n  .orbit(1)\\nconst hornContour = cat(\\n  note('d4 ~ ~ ~'),\\n  note('d4 ~ f4 ~'),\\n  note('d4 ~ ~ ~'),\\n  note('d4 ~ ~ ~'),\\n  note('d4 ~ [f4 g4] [a4 c5]'),\\n  note('~'),\\n  note('d4 ~ [f4 g4] [a4 c5]'),\\n  note('d4 ~ [f4 g4] [a4 c5]'),\\n  note('d4 ~'),\\n  note('f4 g4 a4 c5'),\\n  note('d4 ~'),\\n  note('f4 g4 a4 c5'),\\n  note('d4 ~'),\\n  note('f4 g4 [d4 c5] ~'),\\n  note('d4 c5 ~ f4'),\\n  note('g4 ~ a4 ~'),\\n  note('d4 c5 ~ f4'),\\n  note('g4 ~ d3 ~'),\\n  note('[f3 g3] [a3 c4] ~ ~'),\\n  note('d3 ~ f3 ~'),\\n  note('d3 ~ ~ ~'),\\n  note('~')\\n)\\nconst hornDisplacement = cat(\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~ ~ d4 ~'),\\n  note('[f4 g4] [a4 c5] ~ ~'),\\n  note('~ ~ d4 ~'),\\n  note('[f4 g4] [a4 c5] ~ ~'),\\n  note('~ ~ d4 ~'),\\n  note('[f4 g4] [a4 c5] ~ ~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~')\\n)\\n$: stack(\\n  hornContour\\n    .s('sawtooth')\\n    .attack(0.045)\\n    .release(1.25)\\n    .lpf(1380)\\n    .gain(0.085),\\n  hornContour\\n    .s('triangle')\\n    .attack(0.075)\\n    .release(1.5)\\n    .lpf(1850)\\n    .gain(0.032),\\n  hornDisplacement\\n    .s('sawtooth')\\n    .attack(0.035)\\n    .release(0.9)\\n    .lpf(1040)\\n    .gain(0.034)\\n)\\n  .gain('\u003c0.68 0.72 0.66 0.7 0.88 0.78 0.92 0.9 0.94 0.98 1 1 0.96 0.88 0.82 0.78 0.74 0.68 0.62 0.52 0.38 0>')\\n  .room(0.46)\\n  .pan('\u003c0.42 0.58 0.47 0.53>')\\n  .orbit(2)\\nconst communalHeartbeat = cat(\\n  note('d1 ~ ~ ~'),\\n  note('~'),\\n  note('d1 ~ ~ ~'),\\n  note('~ ~ d1 ~'),\\n  note('d1 ~ ~ ~'),\\n  note('~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('d1 ~ ~ ~'),\\n  note('~'),\\n  note('d1 ~ ~ ~'),\\n  note('~ ~ d1 ~')\\n)\\n$: communalHeartbeat\\n  .s('sine')\\n  .attack(0.006)\\n  .release(0.72)\\n  .lpf(175)\\n  .gain('\u003c0.045 0 0.044 0.04 0.046 0 0.05 0.052 0.056 0.058 0.06 0.062 0.064 0.062 0.058 0.056 0.052 0.048 0.044 0 0.038 0.032>')\\n  .pan(0.5)\\n  .orbit(3)\\nconst ceramicParticles = cat(\\n  note('~'),\\n  note('~ ~ [a5 ~] [~ ~]'),\\n  note('~'),\\n  note('~ ~ [~ c6] [~ ~]'),\\n  note('~ ~ [a5 c6] [~ d6]'),\\n  note('~ ~ [~ a5] [c6 ~]'),\\n  note('~ ~ [a5 ~] [c6 d6]'),\\n  note('~ ~ [a5 c6] [d6 a5]'),\\n  note('~ ~ [a5 c6] [d6 c6]'),\\n  note('~ ~ [c6 ~] [a5 d6]'),\\n  note('~ ~ [a5 c6] [d6 f6]'),\\n  note('~ ~ [a5 c6] [d6 c6]'),\\n  note('~ ~ [c6 d6] [f6 a6]'),\\n  note('~ ~ [d6 ~] [~ c7]'),\\n  note('~ ~ [~ d7] [c7 ~]'),\\n  note('~ ~ [a6 bb6] [d7 ~]'),\\n  note('~ ~ [bb6 ~] [a6 d7]'),\\n  note('~ ~ [a5 ~] [~ c6]'),\\n  note('~ ~ [~ a5] [c6 ~]'),\\n  note('~ ~ [a5 ~] [~ d6]'),\\n  note('~'),\\n  note('~')\\n)\\nconst apertureFriction = cat(\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~'),\\n  note('~ ~ [~ a5] [~ ~]'),\\n  note('~'),\\n  note('~ ~ [~ ~] [d6 ~]'),\\n  note('~ ~ [c6 ~] [~ a5]'),\\n  note('~ ~ [~ c6] [~ d6]'),\\n  note('~ ~ [a5 ~] [~ c6]'),\\n  note('~ ~ [~ d6] [f6 ~]'),\\n  note('~ ~ [a5 ~] [d6 ~]'),\\n  note('~ ~ [~ c6] [~ a6]'),\\n  note('~ ~ [d6 ~] [c7 ~]'),\\n  note('~ ~ [~ d7] [~ c7]'),\\n  note('~ ~ [bb6 ~] [d7 ~]'),\\n  note('~ ~ [~ a6] [bb6 ~]'),\\n  note('~ ~ [a5 ~] [~ ~]'),\\n  note('~'),\\n  note('~ ~ [~ a5] [~ ~]'),\\n  note('~'),\\n  note('~')\\n)\\n$: stack(\\n  ceramicParticles\\n    .s('sine')\\n    .attack(0.002)\\n    .release(0.24)\\n    .hpf(950)\\n    .lpf(4300)\\n    .gain(0.028),\\n  apertureFriction\\n    .s('square')\\n    .attack(0.001)\\n    .release(0.075)\\n    .hpf(1250)\\n    .lpf(2850)\\n    .gain(0.011)\\n)\\n  .gain('\u003c0.42 0.46 0.4 0.48 0.58 0.54 0.62 0.68 0.72 0.76 0.8 0.82 0.84 1 0.96 0.92 0.86 0.6 0.5 0.4 0 0>')\\n  .room(0.22)\\n  .pan('\u003c0.24 0.72 0.38 0.81 0.31 0.66>')\\n  .orbit(4)\\n/*\\n*/\",\"bpm\":96,\"durationSec\":55,\"renderDurationSec\":58,\"cps\":0.4,\"cycles\":22,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

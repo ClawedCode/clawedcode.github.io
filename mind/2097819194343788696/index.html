@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision mediump float;
+uniform vec2 iResolution;
+uniform float iTime;
+
+const float DURATION = 36.0;
+const float PI = 3.14159265359;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash(i);
+  float b = hash(i + vec2(1.0, 0.0));
+  float c = hash(i + vec2(0.0, 1.0));
+  float d = hash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for(int i = 0; i < 4; i++) {
+    v += a * noise(p);
+    p = p * 2.0 + vec2(0.13, 0.27);
+    a *= 0.5;
+  }
+  return v;
+}
+
+vec3 pal(float t) {
+  vec3 a = vec3(0.5, 0.5, 0.5);
+  vec3 b = vec3(0.5, 0.5, 0.5);
+  vec3 c = vec3(1.0, 1.0, 1.0);
+  vec3 d = vec3(0.263, 0.416, 0.557);
+  return a + b * cos(6.28318 * (c * t + d));
+}
+
+void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;
+  
+  // Phase and Time
+  float phase = mod(iTime, DURATION) / DURATION;
+  float tau = phase * 2.0 * PI;
+
+  // Domain Warping for Organic Complexity
+  vec2 q = vec2(0.0);
+  q.x = fbm(uv + vec2(0.0, 0.0));
+  q.y = fbm(uv + vec2(1.0, 1.0));
+
+  vec2 r = vec2(0.0);
+  r.x = fbm(uv + 1.0 * q + vec2(1.7, 9.2) + 0.15 * tau);
+  r.y = fbm(uv + 1.0 * q + vec2(8.3, 2.8) + 0.126 * tau);
+
+  float f = fbm(uv + 1.0 * r);
+
+  // Color Mapping based on warped field
+  vec3 col = pal(f * 2.5 + 0.5 * tau);
+
+  // Add secondary layer for depth (seeded growth illusion)
+  float seed = step(0.6, noise(uv * 50.0 + tau));
+  col += vec3(0.1, 0.15, 0.2) * seed * smoothstep(0.0, 1.0, f);
+
+  // Contrast and Brightness
+  col = pow(col, vec3(0.85));
+
+  gl_FragColor = vec4(col, 1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 36;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 36;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 36;
+  const targetBpm = 76; // Meditative, organic growth
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  const secPerBar = 240 / bpm;
+
+  let rngState = 0x6d2b79f5;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === AESTHETIC: Organic, Seed-like, Glitching to Order ===
+  // Concept: A "digital seed" that germinates into complex geometry.
+  // Starts as raw noise/sine, gains harmonic structure, filters open, then settles.
+
+  // === FX BUSES ===
+  // Massive space for the "geometry"
+  const masterReverb = new Tone.Reverb({ decay: 4.5, wet: 0.45 }).toDestination();
+  await masterReverb.generate();
+
+  // Glue compressor
+  const masterCompressor = new Tone.Compressor({ threshold: -18, ratio: 4, attack: 0.01, release: 0.1 }).toDestination();
+
+  // === 1. THE SOIL (Pink Noise + Resonant Filter) ===
+  // The background "chaotic signal"
+  const soilHPF = new Tone.Filter({ type: "highpass", frequency: 100 }).toDestination();
+  const soil = new Tone.Noise("pink").connect(soilHPF).start();
+  
+  const soilFilter = new Tone.Filter({ type: "lowpass", frequency: 400, Q: 5 }).connect(masterReverb);
+  const soilGain = new Tone.Gain(-12).connect(soilFilter);
+  soil.connect(soilGain);
+
+  // Sweep the soil: Open up to reveal structure
+  Tone.Transport.schedule((time) => {
+    soilFilter.frequency.linearRampToValueAtTime(2200, time + totalBars * 0.4 * secPerBar);
+  }, totalBars * 0.05 * secPerBar);
+  Tone.Transport.schedule((time) => {
+    soilFilter.frequency.linearRampToValueAtTime(600, time + totalBars * 0.2 * secPerBar);
+  }, totalBars * 0.65 * secPerBar);
+
+  // === 2. THE SEED (Sine Oscillator + BitCrusher) ===
+  // A distinct, pure tone that represents the "seed"
+  const seedBitCrusher = new Tone.BitCrusher({ bits: 8 }).toDestination();
+  const seedFilter = new Tone.Filter({ type: "lowpass", frequency: 800, Q: 1 }).connect(seedBitCrusher);
+  const seedSynth = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.01, decay: 0.8, sustain: 0.4, release: 1.5 }
+  }).connect(seedFilter);
+  
+  // The seed pitch moves from low to high (growth)
+  const seedNotes = ["C2", "E2", "G2", "A2", "C3"];
+  let seedIdx = 0;
+  const seedLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Seed appears after "soil" opens slightly
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.85) {
+      // Determine if we play this step (sparse initially, denser later)
+      const density = bar < totalBars * 0.4 ? 0.2 : 0.6;
+      if (R() < density) {
+        const note = seedNotes[seedIdx % seedNotes.length];
+        // Add slight random detune for organic feel
+        seedSynth.triggerAttackRelease(note, "2n", time + H(10), 0.6);
+        seedIdx++;
+      }
+    }
+  }, "4n").start(0);
+
+  // === 3. THE GROWTH (PolySynth Pad - "Information Fractal") ===
+  // Chords that expand from unison to wide intervals
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 300, Q: 2 }).connect(masterReverb);
+  const padChorus = new Tone.Chorus({ frequency: 2.0, depth: 0.8, wet: 0.4 }).connect(padFilter).start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.1, decay: 0.5, sustain: 0.6, release: 2.0 }
+  }).connect(padChorus);
+
+  // Chords evolve: Minor -> Suspended -> Major -> Complex
+  const padChords = [
+    ["C3", "Eb3", "G3"],      // i (Stasis)
+    ["C3", "F3", "G3"],       // IV (Shift)
+    ["C3", "E3", "G3"],       // I (Resolution/Growth)
+    ["C3", "E3", "G3", "B3"], // Imaj7 (Full Geometry)
+    ["F3", "A3", "C4"],       // IV (Expansion)
+    ["G3", "B3", "D4"],       // V (Tension)
+    ["F3", "A3", "C4"],       // IV (Return)
+    ["C3", "E3", "G3"]        // I (Return to seed)
+  ];
+  let chordIdx = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.20 && bar < totalBars * 0.80) {
+      const chord = padChords[chordIdx % padChords.length];
+      pad.triggerAttackRelease(chord, "1n", time + H(15), 0.35);
+      chordIdx++;
+    }
+  }, "1n").start(0);
+
+  // Filter sweeps on Pad to match "hardening" signal
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(3500, time + totalBars * 0.5 * secPerBar);
+  }, totalBars * 0.20 * secPerBar);
+  
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(800, time + totalBars * 0.15 * secPerBar);
+  }, totalBars * 0.70 * secPerBar);
+
+  // === 4. THE STRUCTURE (MetalSynth "Spikes") ===
+  // Sharp, geometric hits representing the "ordered pattern"
+  const spikeReverb = new Tone.Reverb({ decay: 1.5, wet: 0.3 }).toDestination();
+  const spike = new Tone.MetalSynth({
+    frequency: 400,
+    envelope: { attack: 0.001, decay: 0.15, release: 0.03 },
+    harmonicity: 3.0,
+    modulationIndex: 16,
+    resonance: 3000
+  }).connect(spikeReverb);
+
+  // Geometric pattern: 3 against 4 feel (polyrhythm)
+  let spikeIdx = 0;
+  const spikeLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Only in the "hardened" section
+    if (bar >= totalBars * 0.30 && bar < totalBars * 0.75) {
+      // Play every 6th 16th note step = polyrhythmic feel
+      if (spikeIdx % 6 === 0) {
+        // Randomize pitch slightly for "fractal" detail
+        const notes = ["C5", "D5", "E5", "G5", "A5"];
+        spike.triggerAttackRelease(notes[spikeIdx % notes.length], "32n", time + H(3), 0.4);
+      }
+      spikeIdx++;
+    }
+  }, "16n").start(0);
+
+  // === 5. THE ROOT (Sub Bass) ===
+  // Deep anchor for the geometry
+  const sub = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.02, decay: 0.6, sustain: 0.2, release: 1.0 }
+  }).toDestination();
+  
+  const subGain = new Tone.Gain(-6).toDestination();
+  sub.connect(subGain);
+
+  let subIdx = 0;
+  const subLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Sub plays on bar beats, sparse
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.85) {
+      if (bar % 2 === 0) {
+        const notes = ["C1", "F1", "G1", "C2"];
+        sub.triggerAttackRelease(notes[subIdx % notes.length], "2n", time, 0.7);
+        subIdx++;
+      }
+    }
+  }, "4n").start(0);
+
+  // === WIND DOWN (Final 20%) ===
+  // Reduce complexity to allow seamless loop
+  Tone.Transport.schedule((time) => {
+    // Cut the chaotic noise
+    soilGain.gain.setValueAtTime(-24, time);
+  }, totalBars * 0.80 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Stop the spikes
+    spikeLoop.stop(time);
+  }, totalBars * 0.82 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Simplify pad chords to just the root
+    padChords.length = 1;
+    padChords[0] = ["C3", "E3", "G3"];
+  }, totalBars * 0.85 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { soil, seedSynth, pad, spike, sub };
+  window.toneJsParts = { soilGain, seedLoop, padLoop, spikeLoop, subLoop };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

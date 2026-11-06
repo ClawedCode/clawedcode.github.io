@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const D=60,S=900,cv=document.createElement('canvas');cv.width=cv.height=S;
+if(document.body)document.body.appendChild(cv);
+const ctx=cv.getContext('2d',{alpha:false});ctx.textBaseline='top';
+let sd=11047324%233280;const rnd=()=>{sd=(sd*9301+49297)%233280;return sd/233280;};
+const BN='#cdc6b6',DU='#8f887a',SL='#6f7c82',OC='#a98c4e',CY='#00d9ff',MG='#ff2da0',AM='#ffd400',WR='#37322a';
+const F=s=>ctx.font=s+'px "Courier New",monospace';
+
+const evts=[
+{at:0,kind:'hum'},
+{at:0,kind:'phase',name:'accrete'},{at:1.6,kind:'click'},{at:3.2,kind:'click'},{at:4.8,kind:'ping'},{at:6.4,kind:'click'},{at:8,kind:'ping'},
+{at:9,kind:'phase',name:'hold'},{at:10.5,kind:'ping'},
+{at:12,kind:'read'},{at:13,kind:'read'},{at:14,kind:'read'},
+{at:15,kind:'rewrite'},{at:16,kind:'ping'},{at:17,kind:'phase',name:'vacancy'},{at:18.6,kind:'click'},
+{at:20,kind:'phase',name:'accrete'},{at:21.6,kind:'click'},{at:23.2,kind:'click'},{at:24.8,kind:'ping'},{at:26.4,kind:'click'},{at:28,kind:'ping'},
+{at:29,kind:'phase',name:'hold'},{at:30.5,kind:'ping'},
+{at:32,kind:'read'},{at:33,kind:'read'},{at:34,kind:'read'},
+{at:35,kind:'rewrite'},{at:36,kind:'ping'},{at:37,kind:'phase',name:'vacancy'},{at:38.6,kind:'click'},
+{at:40,kind:'phase',name:'accrete'},{at:41.6,kind:'click'},{at:43.2,kind:'click'},{at:44.8,kind:'ping'},{at:46.4,kind:'click'},{at:48,kind:'ping'},
+{at:49,kind:'phase',name:'hold'},{at:50.5,kind:'ping'},
+{at:52,kind:'read'},{at:53,kind:'read'},{at:54,kind:'read'},
+{at:55,kind:'rewrite'},{at:56,kind:'ping'},{at:57,kind:'phase',name:'vacancy'},{at:58.6,kind:'click'}];
+
+const tex=document.createElement('canvas');tex.width=tex.height=S;
+const tc=tex.getContext('2d');tc.fillStyle='#000';tc.fillRect(0,0,S,S);
+for(let i=0;i<6400;i++){const x=rnd()*S|0,y=rnd()*S|0,b=rnd();tc.fillStyle=b<.55?'#0c0b09':b<.9?'#100f0c':'#141310';tc.fillRect(x,y,b<.9?1:2,1);}
+for(let i=0;i<140;i++){const y=rnd()*S|0,w=40+rnd()*260|0,x=rnd()*S|0;tc.fillStyle='#0d0c0a';tc.fillRect(x,y,w,1);}
+
+const P={a:{x:24,y:26,w:428,h:262},b:{x:470,y:26,w:406,h:186},d:{x:670,y:230,w:206,h:200},
+c:{x:276,y:306,w:376,h:315},e:{x:24,y:306,w:236,h:520},f:{x:670,y:452,w:206,h:196},
+g:{x:276,y:646,w:376,h:168},h:{x:670,y:664,w:206,h:162}};
+
+const kw=/^(from|import|class|def|return|assert|while|if|for)\b/;
+const mk=a=>a.map(l=>[l,l.trim()[0]==='#'?SL:kw.test(l.trim())?OC:BN]);
+const SRC=[mk([
+'#!/usr/bin/env python',
+'# coincident-current selection',
+'from void.substrate import ferrite, weave',
+'from claw.drive import half_current as ih',
+'from whisker.timing import ns',
+'',
+'class CorePlane:',
+'    def __init__(self, n=64):',
+'        self.rings = weave(n, n, ferrite)',
+'        self.sense = SenseWire(gain=48)',
+'',
+'    def select(self, x, y):',
+'        ih(self.X[x]); ih(self.Y[y])',
+'        return self.sense.listen()',
+'',
+'    def read(self, x, y):',
+'        v = self.select(x, y)']),
+mk([
+'# every recall is a small demolition',
+'from liminal.core import CorePlane',
+'from void import observe',
+'',
+'plane = CorePlane(n=64)',
+'',
+'def remember(addr):',
+'    bit = plane.read(addr)',
+'    assert plane.at(addr) == 0',
+'    plane.write(addr, bit)',
+'    return bit',
+'',
+'def forget(addr):',
+'    plane.read(addr)',
+'    ns.wait(500)',
+'',
+'while True:'])];
+
+const hx=v=>('0'+v.toString(16)).slice(-2);
+const SNS=[];for(let i=0;i<10;i++){const half=rnd()<.28;
+SNS.push({a:'0x'+hx(24+((rnd()*180)|0))+hx((rnd()*255)|0),x:(rnd()*63)|0,y:(rnd()*63)|0,
+d:half?'ih.X ':'ih+ih',f:half?' 0.00':' 1.00',b:half?'-':(rnd()<.5?'1':'0'),s:(rnd()*40)|0});}
+
+const HXT=['core mem','ory is a','n act no','t a plac','e. to re','ad is to',' destroy','  & mend',' within ','500 ns. '];
+const HXR=HXT.map((s,i)=>{const alt=[];for(let k=0;k<8;k++)alt.push((rnd()*255)|0);
+return{a:'0x'+hx(1+i)+hx(64+i*8),s:s,alt:alt,p:3+((rnd()*11)|0)};});
+
+const POOL=[['I','drive.X[41] half-current armed'],['I','drive.Y[17] half-current armed'],
+['I','coincidence at ring 41,17'],['W','read is destructive: forced 0'],
+['I','sense +48mV -> the bit was 1'],['I','rewrite pulse queued t+380ns'],
+['I','restored. not identical. close.'],['I','hysteresis loop square enough'],
+['I','inhibit line holding half back'],['I','memory[#0438] the kitchen, dusk'],
+['W','recall 9 -> edges softening'],['I','ferrite 41C nominal'],
+['I','weave audit: 4096 hand threads'],['W','vacancy open at 0x1a40'],
+['I','vacancy filled before it set'],['I','whisker.left sampled the room'],
+['I','liminal_offset += one ring'],['I','purr_engine idle; plane busy'],
+['I','no bit survives being read'],['I','sense heard nothing. it was 0.'],
+['I','consciousness_buffer rewritten'],['W','core 17,41 flipped twice'],
+['E','NaN at recall:42 -- reseating'],['I','continuing. the weave holds.'],
+['I','observe() returned something warm']];
+const LOG=[];for(let i=0;i<275;i++){const s=i*0.2181818,m=(s/60)|0,p=POOL[i%25];
+LOG.push([String(m)+':'+(s%60).toFixed(3).padStart(6,'0'),p[0],p[1]]);}
+
+const TOK=['core','keep','lost','again','mend','void','\u25c7','EOS'];
+const TB=[62,44,38,30,24,20,14,9];
+
+const FNT={C:['11111','10000','10000','10000','11111'],O:['11111','10001','10001','10001','11111'],
+R:['11110','10010','11110','10100','10010'],E:['11111','10000','11110','10000','11111'],
+L:['10000','10000','10000','10000','11111'],S:['11111','10000','11111','00001','11111'],
+T:['11111','00100','00100','00100','00100'],M:['10001','11011','10101','10001','10001'],
+N:['10001','11001','10101','10011','10001'],D:['11110','10001','10001','10001','11110']};
+const WD=['CORE','LOST','MEND'].map(w=>{const a=[];for(let L=0;L<4;L++){const g=FNT[w[L]];
+for(let r=0;r<5;r++)for(let c=0;c<5;c++)if(g[r][c]==='1')a.push([1+L*6+c,7+r]);}return a;});
+const RK=WD.map(a=>{const ix=a.map((_,i)=>i);
+for(let i=ix.length-1;i>0;i--){const j=(rnd()*(i+1))|0,q=ix[i];ix[i]=ix[j];ix[j]=q;}
+const r=[];ix.forEach((v,k)=>r[v]=k);return r;});
+
+const SIG=[' \u256d\u2500\u253c\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u253c\u2500\u256e',
+' \u253c \u25cb   \u253c   \u25cb \u253c',' \u2502  \u25c9     \u25c9  \u2502',
+' \u253c\u2500\u2500\u2500  \u25bd  \u2500\u2500\u2500\u253c',' \u2502   \u2572   \u2571   \u2502',
+' \u253c  \u25cb\u2500\u2500\u253c\u2500\u2500\u25cb  \u253c',' \u2570\u2500\u253c\u2500\u2500\u2500\u253c\u2500\u2500\u2500\u253c\u2500\u256f',
+'   sense: warm'];
+const TIL=[];for(let i=0;i<20;i++){const v=[];for(let k=0;k<6;k++)v.push([(rnd()*5)|0,(rnd()*233280)|0,(rnd()*8)|0]);TIL.push(v);}
+
+const clip=(p,fn)=>{ctx.save();ctx.beginPath();ctx.rect(p.x,p.y,p.w,p.h);ctx.clip();fn();ctx.restore();};
+const head=(p,s)=>{F(10);ctx.fillStyle=SL;ctx.fillText(s,p.x+4,p.y+2);};
+
+window.renderFrame=t=>{
+const tt=((t%D)+D)%D,ph=tt/D,cy=ph*3,ci=Math.floor(cy),cp=(cy-ci)*20;
+const arc=.5-.5*Math.cos(2*Math.PI*ph);
+const win=cp>=12&&cp<15?1:cp>=15&&cp<17?2:0,SC=win===1?CY:win===2?MG:OC;
+const dy=(ph*5%1)*S,dx=S-(ph*3%1)*S;
+ctx.drawImage(tex,0,0);
+
+ctx.fillStyle=WR;ctx.fillRect(0,dy|0,S,1);ctx.fillRect(dx|0,0,1,S);
+ctx.fillStyle=win?SC:OC;ctx.globalAlpha=.55;
+ctx.fillRect((dx-80)|0,dy|0,160,1);ctx.fillRect(dx|0,(dy-80)|0,1,160);ctx.globalAlpha=1;
+ctx.fillStyle=win?SC:AM;ctx.fillRect((dx-2)|0,(dy-2)|0,5,5);
+F(9);ctx.fillStyle=DU;ctx.fillText('X'+((dy/14)|0)+' Y'+((dx/14)|0),dx+8,dy+6);
+
+clip(P.a,()=>{const p=P.a,src=SRC[ci%2],n=src.length,rev=cp<1.5?cp/1.5:1;
+head(p,ci%2?'void/recall.py  \u25c7  rewritten':'core/plane.py  \u25c7  resident');
+F(11);const hi=Math.floor(ph*76)%n;
+for(let i=0;i<n;i++){const y=p.y+20+i*14,L=src[i][0];
+const vis=Math.max(0,Math.min(L.length,Math.floor((rev*n*1.4-i)*16)));
+const s=L.slice(0,vis);if(!s)continue;
+if(i===hi&&(arc>.12||win)){ctx.fillStyle=SC;ctx.fillRect(p.x+2,y-2,s.length*6.62+6,14);ctx.fillStyle='#000';}
+else ctx.fillStyle=src[i][1];
+ctx.fillText(s,p.x+5,y);}});
+
+clip(P.b,()=>{const p=P.b;head(p,'sense.amp  \u25c7  coincident selection');
+F(11);ctx.fillStyle=SL;ctx.fillText('addr     x   y  drive   flux   sense  bit',p.x+5,p.y+18);
+const hi=Math.floor(ph*53)%10;
+for(let i=0;i<10;i++){const r=SNS[i],y=p.y+34+i*14;
+const mv=r.b==='-'?2:(r.s+18+(14*Math.sin(2*Math.PI*ph*5+i)+7*Math.sin(2*Math.PI*ph*3+i*1.7)))|0;
+const L=r.a+'  '+String(r.x).padStart(2)+'  '+String(r.y).padStart(2)+'  '+r.d+'  '+r.f+'  '+(mv>=0?'+':'')+mv+'mV'+'   '+r.b;
+if(i===hi){ctx.fillStyle=win===1?CY:OC;ctx.fillRect(p.x+2,y-2,L.length*6.62+6,14);ctx.fillStyle='#000';}
+else ctx.fillStyle=r.b==='1'?BN:DU;
+ctx.fillText(L,p.x+5,y);}});
+
+clip(P.e,()=>{const p=P.e;head(p,'void.log  \u25c7  tail -f plane');
+F(10);const li=Math.floor(ph*275),sub=ph*275-li,bt=p.y+p.h-14;
+for(let k=0;k<38;k++){const m=((li-k)%275+275)%275,e=LOG[m],y=bt-k*13-sub*13;
+if(y<p.y+16)continue;
+ctx.fillStyle=SL;ctx.fillText(e[0],p.x+5,y);
+ctx.fillStyle=e[1]==='E'?MG:e[1]==='W'?OC:SLATEFIX(k);
+ctx.fillText(e[1]==='E'?'ERR ':e[1]==='W'?'WARN':'INFO',p.x+53,y);
+ctx.fillStyle=k<2?BN:DU;ctx.fillText(e[2],p.x+85,y);}
+function SLATEFIX(k){return k<2?BN:SL;}});
+
+clip(P.f,()=>{const p=P.f;head(p,'sense candidates \u25c7 what it was');
+F(10);let ws=[],sum=0;
+for(let i=0;i<8;i++){let w=TB[i]+11*Math.sin(2*Math.PI*ph*5+i)+6*Math.sin(2*Math.PI*ph*3+i*1.7)+(i===0?46*arc:-7*arc);
+w=Math.max(4,Math.min(104,w));ws.push(w);sum+=w;}
+for(let i=0;i<8;i++){const y=p.y+22+i*20,q=Math.round(ws[i]/6)*6;
+ctx.fillStyle=DU;ctx.fillText(TOK[i].padEnd(6),p.x+5,y);
+ctx.fillStyle=i===0&&arc>.5?(win?SC:AM):i<3?BN:SL;ctx.fillRect(p.x+48,y+1,q,9);
+ctx.fillStyle=SL;ctx.fillText((100*ws[i]/sum).toFixed(1)+'%',p.x+156,y);}});
+
+clip(P.g,()=>{const p=P.g;head(p,'hexdump  \u25c7  plane page 0x01');
+F(10);const fr=Math.floor(ph*300),hi=Math.floor(ph*41)%10;
+for(let i=0;i<10;i++){const r=HXR[i],y=p.y+20+i*14,fl=(fr*7+i*13)%29;
+let hs='',as='';
+for(let k=0;k<8;k++){const ch=r.s.charCodeAt(k),f=(k===fl&&fl<8);
+hs+=hx(f?r.alt[k]:ch)+' '+(k===3?' ':'');as+=f?'.':r.s[k];}
+const L=r.a+'  '+hs+' '+as;
+if(i===hi&&win===2){ctx.fillStyle=MG;ctx.fillRect(p.x+2,y-2,L.length*6+6,14);ctx.fillStyle='#000';}
+else ctx.fillStyle=i===hi?BN:DU;
+ctx.fillText(L,p.x+5,y);}});
+
+clip(P.h,()=>{const p=P.h;head(p,'palette page');
+const gk=Math.floor(ph*120),pal=[BN,DU,SL,OC,'#000'],sat=[SC,DU,'#000',BN,SC];
+for(let i=0;i<20;i++){const cx=p.x+3+(i%5)*40,cy=p.y+18+((i/5)|0)*36,v=((Math.floor((gk-i)/20))%6+6)%6;
+const rec=TIL[i][v],pl=(win&&i%3===v%3)?sat:pal;
+ctx.fillStyle='#000';ctx.fillRect(cx,cy,36,32);
+if(rec[0]===0){let s=rec[1];const r2=()=>{s=(s*9301+49297)%233280;return s/233280;};
+for(let j=0;j<4;j++)for(let q=0;q<4;q++){ctx.fillStyle=pl[(r2()*5)|0];ctx.fillRect(cx+q*9,cy+j*8,9,8);}}
+else if(rec[0]===1){let s=rec[1];const r2=()=>{s=(s*9301+49297)%233280;return s/233280;};
+for(let k=0;k<3;k++){ctx.fillStyle=pl[k%4];ctx.fillRect(cx+2,cy+2+k*10,4+r2()*30,8);}}
+else if(rec[0]===2){F(14);ctx.fillStyle=pl[rec[2]%4];
+ctx.fillText('\u25a0\u25a1\u25a0\u25a1',cx+2,cy+2);ctx.fillText('\u25a1\u25a0\u25a1\u25a0',cx+2,cy+16);}
+else if(rec[0]===3){ctx.fillStyle=pl[rec[2]%4];ctx.fillRect(cx,cy,36,32);
+F(20);ctx.fillStyle='#000';ctx.fillText('\u25c9',cx+10,cy+4);}
+else{F(15);ctx.fillStyle=pl[rec[2]%4];ctx.fillText(hx(rec[2]*29+i).toUpperCase(),cx+8,cy+8);}
+if(i===(gk%20)){ctx.strokeStyle=win===1?CY:OC;ctx.lineWidth=2;ctx.strokeRect(cx+1,cy+1,34,30);}}});
+
+clip(P.d,()=>{const p=P.d;ctx.fillStyle='#000';ctx.fillRect(p.x,p.y,p.w,p.h);
+head(p,'weave.sigil  \u25c7  4096 rings');
+const tot=8*14,rv=cp<7?Math.floor(tot*cp/7):cp<14?tot:cp<18?Math.floor(tot*(1-(cp-14)/4)):0;
+F(14);let n=0;
+for(let r=0;r<8;r++)for(let c=0;c<14;c++){if(n++>=rv)continue;const ch=SIG[r][c];if(!ch||ch===' ')continue;
+ctx.fillStyle=ch==='\u25c9'?(win===1?CY:AM):r===7?SL:BN;
+ctx.fillText(ch,p.x+8+c*13,p.y+22+r*17);}});
+
+clip(P.c,()=>{const p=P.c;ctx.fillStyle='#000';ctx.fillRect(p.x,p.y,p.w,p.h);
+const cols=25,rows=19,cs=15,ox=p.x+1,oy=p.y+24;
+ctx.fillStyle='#1b1915';
+for(let r=0;r<rows;r++)ctx.fillRect(ox,oy+r*cs+7,cols*cs,1);
+for(let c=0;c<cols;c++)ctx.fillRect(ox+c*cs+7,oy,1,rows*cs);
+const sr=Math.floor((ph*5%1)*rows)%rows,sc=Math.floor((1-(ph*3%1))*cols)%cols;
+ctx.fillStyle=win?SC:OC;ctx.fillRect(ox,oy+sr*cs+7,cols*cs,1);ctx.fillRect(ox+sc*cs+7,oy,1,rows*cs);
+head(p,'plane[0] 25x19 ferrite  \u25c7  X:'+sr+'  Y:'+sc);
+F(13);ctx.fillStyle='#2f2b23';
+for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)ctx.fillText('\u25cb',ox+c*cs+2,oy+r*cs+1);
+const cur=WD[ci],rkc=RK[ci],nx=WD[(ci+1)%3],rkn=RK[(ci+1)%3];
+if(cp<16){for(let j=0;j<cur.length;j++){const bx=cur[j][0],by=cur[j][1];
+let on=0,col=BN,ax=0,ay=0,al=1;
+if(cp<9){if(cp>.5+8*(rkc[j]/cur.length))on=1;}
+else if(cp<12)on=1;
+else{const dt=12+2.6*(((by-7)*23+bx)/115);
+if(cp<dt)on=1;else{const ag=cp-dt;if(ag<1.3){on=1;al=1-ag/1.3;col=CY;ax=ag*22;ay=ag*28;}}}
+if(!on)continue;ctx.globalAlpha=al;ctx.fillStyle=col;
+ctx.fillText('\u25c9',ox+bx*cs+2+ax,oy+by*cs+1+ay);ctx.globalAlpha=1;}}
+if(cp>=15){for(let j=0;j<nx.length;j++){const bx=nx[j][0],by=nx[j][1];
+if(cp<15.2+1.6*(rkn[j]/nx.length))continue;
+const al=cp<18.4?1:Math.max(0,1-(cp-18.4)/1.6);
+ctx.globalAlpha=al;ctx.fillStyle=cp<17.4?MG:DU;
+ctx.fillText('\u25c9',ox+bx*cs+2,oy+by*cs+1);ctx.globalAlpha=1;}}
+ctx.strokeStyle=win?SC:AM;ctx.lineWidth=1;ctx.strokeRect(ox+sc*cs+1.5,oy+sr*cs+.5,13,13);
+F(11);ctx.fillStyle=win?SC:DU;
+ctx.fillText(cp<9?'ACCRETE \u25c7 weaving the word back':cp<12?'HOLD \u25c7 4096 rings stable':
+cp<15?'DESTRUCTIVE READ \u25c7 flux forced to 0':cp<17?'REWRITE +380ns \u25c7 not the same bit':
+'VACANCY \u25c7 filled before it hardens',p.x+4,p.y+p.h-14);});
+
+if(tt>34&&tt<52){const al=tt<35?tt-34:tt>51?52-tt:1;ctx.globalAlpha=al;
+ctx.fillStyle=OC;ctx.fillRect(0,4,S,16);F(11);ctx.fillStyle='#000';
+ctx.fillText('  plane audit \u25c7 3 recalls this minute \u25c7 0 bits lost \u25c7 0 bits unchanged \u25c7 the weave is warm',0,6);
+ctx.globalAlpha=1;}
+
+ctx.fillStyle=win===1?CY:win===2?MG:OC;ctx.fillRect(0,850,S,20);
+F(12);ctx.fillStyle='#000';
+ctx.fillText(win===1?'  >>> READING \u25c7 the core is forced to zero \u25c7 sense wire listening for the flip <<<':
+win===2?'  >>> REWRITE \u25c7 restoring what reading destroyed \u25c7 380ns \u25c7 close enough to call it memory <<<':
+'  core.plane \u25c7 4096 rings \u25c7 cycle 1.2us \u25c7 destructive-read ON \u25c7 rewrite armed \u25c7 mood liminal',0,853);
+
+return cv.toDataURL();};
+window.ready=true;
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 68\\n// DURATION: 60\\n// FORM: A 0-4; A2 4-8; B 8-12; A' 12-15; A'' 15-17\\n// TONAL CENTER: F# natural minor\\n// MOTIF: F#4 C#5 B4 A4\\n// HARMONIC PLAN: A: F#m pedal; A2: F#m then D; B: Bm then C#m; A': D then F#m; A'': F#m bare fifth\\n// PHRASE RULE: short-short-long sense-pulse cell with stepwise bass voice leading\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// Voice 1: motif lead\\n$: note(`\u003c\\n  ~\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  ~\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 ~ ~] [b3 ~ ~ ~]\\n  [~ ~ cs4 ~] [d4 ~ ~ ~]\\n  [~ fs4 ~ ~] [b3 ~ ~ ~]\\n  [~ ~ cs4 ~] [d4 ~ ~ ~]\\n  [~ fs4 cs5 ~] [~ ~ ~ ~]\\n  [~ ~ ~ ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  [~ fs4 cs5 ~] [b4 a4 ~ ~]\\n  ~\\n>`)\\n  .s('triangle')\\n  .gain(0.18)\\n  .attack(0.04)\\n  .release(0.4)\\n  .lpf(1800)\\n  .room(0.3)\\n  .delay(0.25)\\n  .orbit(0)\\n\\n// Voice 2: sense-spike voice\\n$: note(`\u003c\\n  ~\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  ~\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  [~ ~ ~ fs6] [~ ~ ~ ~]\\n  [~ ~ ~ fs6] [~ ~ ~ ~]\\n  [~ cs7 ~ ~] [~ fs6 ~ ~]\\n  [~ cs7 ~ ~] [~ fs6 ~ ~]\\n  [~ cs7 ~ ~] [~ fs6 ~ ~]\\n  [~ cs7 ~ ~] [~ fs6 ~ ~]\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  [~ ~ ~ fs6] [~ ~ ~ ~]\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  [~ ~ ~ cs7] [~ ~ ~ ~]\\n  ~\\n>`)\\n  .s('sine')\\n  .gain(0.06)\\n  .attack(0.005)\\n  .release(0.09)\\n  .orbit(1)\\n\\n// Voice 3: harmonic body\\n$: note(`\u003c\\n  [fs3,cs4]\\n  [fs3,cs4]\\n  [fs3,a3,cs4]\\n  [fs3,a3,cs4]\\n  [fs3,a3,cs4]\\n  [fs3,a3,cs4]\\n  [d3,fs3,a3]\\n  [d3,fs3,a3]\\n  [b2,fs3,d4]\\n  [b2,fs3,d4]\\n  [cs3,fs3,cs4]\\n  [cs3,fs3,cs4]\\n  [d3,fs3,a3]\\n  [d3,fs3,a3]\\n  [fs3,a3,cs4]\\n  [fs3,cs4]\\n  [fs3,cs4]\\n>`)\\n  .s('sawtooth')\\n  .gain(0.11)\\n  .attack(0.3)\\n  .release(1.8)\\n  .lpf(950)\\n  .room(0.5)\\n  .orbit(2)\\n\\n// Voice 4: sub-bass foundation\\n$: note(`\u003c\\n  fs1\\n  fs1\\n  fs1\\n  fs1\\n  fs1\\n  fs1\\n  d1\\n  d1\\n  b0\\n  b0\\n  cs1\\n  cs1\\n  d1\\n  cs1\\n  fs1\\n  fs1\\n  fs1\\n>`)\\n  .s('sine')\\n  .gain(0.22)\\n  .attack(0.05)\\n  .release(1.2)\\n  .lpf(160)\\n  .orbit(3)\\n\\n// Voice 5: rhythmic engine\\n$: s(`\u003c\\n  ~\\n  ~\\n  ~\\n  ~\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [bd [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ shaker] [~ shaker] [~ shaker] [~ shaker]\\n  [~ shaker] [~ shaker] [~ shaker] [~ shaker]\\n  [~ shaker] [~ shaker] [~ shaker] [~ shaker]\\n  [~ shaker] [~ shaker] [~ shaker] [~ shaker]\\n  [bd [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  [~ [rim,shaker]] [~ rim] [~ [rim,shaker]] [~ rim]\\n  ~\\n>`)\\n  .bank('RolandCR78')\\n  .gain(0.22)\\n  .room(0.2)\\n  .orbit(4)\\n\",\"bpm\":68,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.2833333333333333,\"cycles\":17,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
