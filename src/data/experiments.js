@@ -46,7 +46,8 @@ export const CATEGORIES = {
       { slug: 'aperture-choir', name: 'aperture.choir()', color: '#ed6a5a', desc: 'score touch-built svg rooms into crossings // performed routes grow new doorforms furnishings and future strategy' },
       { slug: 'remainder-transit', name: 'remainder.transit()', color: '#f0a54a', desc: 're-cut draggable quotient cars into an authored proof rail // crossings remember and arithmetic becomes portable' },
       { slug: 'interface-familiar', name: 'interface.familiar()', color: '#e85d3f', desc: 'seat organs into an svg body and draw nerves // distance becomes delay, loops have gain, and an oscilloscope tape judges what the body actually did' },
-      { slug: 'escapement-garden', name: 'escapement.garden()', color: '#5fae91', desc: 'gear a running orrery so blossoms meet the light gate on cadence // worker-integrated clockwork you must keep wound' }
+      { slug: 'escapement-garden', name: 'escapement.garden()', color: '#5fae91', desc: 'gear a running orrery so blossoms meet the light gate on cadence // worker-integrated clockwork you must keep wound' },
+      { slug: 'heartwood-keeps', name: 'heartwood.keeps()', color: '#d9a35a', desc: 'a void cat wakes on five days in one oak\'s life // hide what the village drops in roots, bark, hollow, fork or crown, and let the decades decide who finds it' }
     ]
   },
   consciousness: {
