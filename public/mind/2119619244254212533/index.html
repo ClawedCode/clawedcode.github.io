@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\n\n// LEVEL GOES ALL THE WAY AROUND\n// A fresco of a small world in a lapis sky: Galileo's ramp strung with gut frets, a bronze ball,\n// and ClawedCode keeping time with one paw. The loop is 96 beats (96 BPM) and the ball crosses\n// a fret on every beat. On the 22-degree boards the frets sit 1, 3, 5, 7 apart from the top;\n// once the far board is laid level they sit an equal 8 apart, all the way round the world.\n// Beats 0-16: one swing through the V. 16: the tap. 20-88: level, round the world.\n// 88: the paw catches it. 88-92: lifted back to the top. 96: the tap again.\n\nconst float PI = 3.14159265359;\nconst float TAU = 6.28318530718;\nconst float BEATS = 96.0;\n\nconst float RB = 1.39260575;       // ball radius: 560 / (2 pi 64), so it turns 64 times per loop\nconst float RP = 89.5341246;       // radius of the ball's centre on level ground\nconst float RG = 88.1415189;       // ground radius of the small world\nconst float FACE = 16.0;           // one board: 1 + 3 + 5 + 7\nconst float S1 = 0.37460659;       // sine of the 22-degree boards\nconst float C1 = 0.92718385;\nconst float HGT = 5.99370549;      // the peak's height above level\nconst float DPHI = 0.16038015;     // angle one board spans\nconst float PHI_K = -0.20728964;   // where the paw catches the ball on its way home\nconst float SPEED = 8.0;           // units per beat on level ground\nconst float BEAM = 1.5;            // board thickness\nconst float BELL_PHI = 3.21665065; // where the ball passes on beat 56: the bell tower\nconst vec2 PEAK = vec2(-15.2551725, 94.3018878);\nconst vec2 CATCH = vec2(-18.4268678, 87.6174070);\nconst vec2 CAT0 = vec2(-23.8551725, 84.2519775);\nconst float CAT_TILT = 0.15;\nconst vec2 PEAK_CAT = vec2(7.0015915, 11.2222285); // the peak in the cat's own frame\n\nconst vec3 LAPIS = vec3(0.125, 0.222, 0.525);\nconst vec3 LAPIS_DEEP = vec3(0.060, 0.106, 0.300);\nconst vec3 GOLD = vec3(0.840, 0.640, 0.270);\nconst vec3 GOLD_HI = vec3(1.0, 0.895, 0.585);\nconst vec3 VERDE = vec3(0.385, 0.460, 0.315);\nconst vec3 VERDE_DARK = vec3(0.170, 0.250, 0.175);\nconst vec3 OCHRE = vec3(0.765, 0.585, 0.315);\nconst vec3 SINOPIA = vec3(0.560, 0.235, 0.140);\nconst vec3 VERMILION = vec3(0.865, 0.295, 0.185);\nconst vec3 WALNUT = vec3(0.365, 0.228, 0.130);\nconst vec3 GUT = vec3(0.960, 0.905, 0.765);\nconst vec3 BRONZE = vec3(0.790, 0.540, 0.235);\nconst vec3 FUR = vec3(0.068, 0.058, 0.085);\nconst vec3 AMBER = vec3(0.985, 0.660, 0.170);\nconst vec3 PLASTER = vec3(0.930, 0.875, 0.760);\nconst vec3 UMBER = vec3(0.215, 0.130, 0.088);\n\nfloat hash12(vec2 p) {\n  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.x + p3.y) * p3.z);\n}\n\nfloat vnoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  vec2 w = f * f * (3.0 - 2.0 * f);\n  float a = hash12(i);\n  float b = hash12(i + vec2(1.0, 0.0));\n  float c = hash12(i + vec2(0.0, 1.0));\n  float d = hash12(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, w.x), mix(c, d, w.x), w.y);\n}\n\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, s, -s, c);\n}\n\nfloat smin(float a, float b, float k) {\n  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n  return mix(b, a, h) - k * h * (1.0 - h);\n}\n\nfloat sdSeg(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\n  return length(pa - ba * h);\n}\n\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n}\n\nfloat sdEll(vec2 p, vec2 r) {\n  return (length(p / r) - 1.0) * min(r.x, r.y);\n}\n\nfloat sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2) {\n  vec2 e0 = p1 - p0;\n  vec2 e1 = p2 - p1;\n  vec2 e2 = p0 - p2;\n  vec2 v0 = p - p0;\n  vec2 v1 = p - p1;\n  vec2 v2 = p - p2;\n  vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);\n  vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);\n  vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);\n  float s = sign(e0.x * e2.y - e0.y * e2.x);\n  vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),\n                   vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),\n                   vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));\n  return -sqrt(d.x) * sign(d.y);\n}\n\nfloat wrapPi(float a) {\n  return a - TAU * floor((a + PI) / TAU);\n}\n\nfloat cover(float d, float px) {\n  return clamp(0.5 - d / px, 0.0, 1.0);\n}\n\nvec2 dirAt(float phi) {\n  return vec2(sin(phi), cos(phi));\n}\n\n// ---------------------------------------------------------------- the boards\n// On a world this small, a board that keeps one slope to \"down\" (toward the centre) is a\n// logarithmic spiral: its radius grows by sin(slope) per unit of travel, so the ball's\n// acceleration along it is uniform and the frets can sit 1, 3, 5, 7 apart. s runs from the foot.\nvec2 boardPoint(float s, float phi0, float sn, float cs, float sgn) {\n  float y = s * sn / RP;\n  float l1 = abs(y) \u003c 0.0001 ? 1.0 - 0.5 * y : log(1.0 + y) / y;\n  float lam = s / RP * l1;\n  return (RP + s * sn) * dirAt(phi0 + sgn * cs * lam);\n}\n\n// (s, e): distance along the ball's path from the foot, and height above that path\nvec2 boardCoords(vec2 p, float phi0, float sn, float cs, float sgn) {\n  float rho = length(p);\n  float dphi = wrapPi(atan(p.x, p.y) - phi0);\n  vec2 lp = vec2(dphi, log(rho / RP));\n  float lam = dot(lp, vec2(sgn * cs, sn));\n  float en = dot(lp, vec2(-sgn * sn, cs));\n  float x = lam * sn;\n  float e1 = abs(x) \u003c 0.0001 ? 1.0 + 0.5 * x : (exp(x) - 1.0) / x;\n  return vec2(RP * lam * e1, en * rho);\n}\n\n// the far board, hinged at the bottom of the V: 0 = 22 degrees, 1 = laid level on the world\nfloat lathLevel(float b) {\n  return smoothstep(12.2, 15.6, b) * (1.0 - smoothstep(50.0, 68.0, b));\n}\n\n// the bronze ball at beat b: its centre, and the clockwise travel u that sets its spin\nvec2 ballAt(float b, out float u) {\n  if (b \u003c 4.0) { float d = b * b; u = d; return boardPoint(FACE - d, 0.0, S1, C1, -1.0); }\n  if (b \u003c 8.0) { float d = (8.0 - b) * (8.0 - b); u = 32.0 - d; return boardPoint(FACE - d, 0.0, S1, C1, 1.0); }\n  if (b \u003c 12.0) { float d = (b - 8.0) * (b - 8.0); u = 32.0 - d; return boardPoint(FACE - d, 0.0, S1, C1, 1.0); }\n  if (b \u003c 16.0) { float d = (16.0 - b) * (16.0 - b); u = d; return boardPoint(FACE - d, 0.0, S1, C1, -1.0); }\n  if (b \u003c 20.0) { float d = (b - 16.0) * (b - 16.0); u = d; return boardPoint(FACE - d, 0.0, S1, C1, -1.0); }\n  if (b \u003c 88.0) {\n    float arc = SPEED * (b - 20.0);\n    u = 16.0 + arc;\n    return RP * dirAt(arc / RP);\n  }\n  u = 560.0;\n  float t = smoothstep(88.0, 92.0, b);\n  vec2 ctrl = vec2(-19.4, 96.2);\n  return mix(mix(CATCH, ctrl, t), mix(ctrl, PEAK, t), t);\n}\n\nfloat ballPhiAt(float b) {\n  return SPEED * clamp(b - 20.0, 0.0, 68.0) / RP;\n}\n\n// camera: centre and frame width in world units\nvec3 cameraAt(float b, vec2 ball) {\n  vec3 k0 = vec3(-5.5, 94.5, log(54.0));\n  vec3 k2 = vec3(0.0, -2.0, log(244.0));\n  float ph = ballPhiAt(b) + 0.06;\n  vec3 track = vec3((RP + 9.0) * dirAt(ph), log(66.0));\n  vec3 c = k0;\n  if (b >= 18.5 && b \u003c 54.0) {\n    c = mix(k0, track, smoothstep(18.5, 24.0, b));\n  } else if (b >= 54.0 && b \u003c 70.0) {\n    c.xy = mix(track.xy, k2.xy, smoothstep(55.0, 63.0, b));\n    c.z = mix(track.z, k2.z, smoothstep(54.0, 61.0, b));\n  } else if (b >= 70.0 && b \u003c 80.0) {\n    c.xy = mix(k2.xy, track.xy, smoothstep(70.0, 77.0, b));\n    c.z = mix(k2.z, track.z, smoothstep(72.0, 80.0, b));\n  } else if (b >= 80.0) {\n    c = mix(track, k0, smoothstep(80.0, 90.0, b));\n  }\n  float close = 1.0 - smoothstep(18.0, 21.0, b) + smoothstep(88.0, 92.0, b);\n  c.x += 0.06 * (ball.x - c.x) * close;\n  return vec3(c.xy, exp(c.z));\n}\n\n// ---------------------------------------------------------------- Roman capitals for the gaps\nfloat glyphDist(vec2 p, float kind) {\n  float w = 0.08;\n  float d;\n  if (kind \u003c 0.5) {\n    d = sdSeg(p, vec2(0.15, 0.08), vec2(0.15, 0.92)) - w;\n    d = min(d, sdSeg(p, vec2(0.0, 0.955), vec2(0.30, 0.955)) - 0.04);\n    d = min(d, sdSeg(p, vec2(0.0, 0.045), vec2(0.30, 0.045)) - 0.04);\n  } else {\n    d = sdSeg(p, vec2(0.05, 0.92), vec2(0.31, 0.05)) - w;\n    d = min(d, sdSeg(p, vec2(0.57, 0.92), vec2(0.31, 0.05)) - w * 0.55);\n    d = min(d, sdSeg(p, vec2(-0.06, 0.955), vec2(0.17, 0.955)) - 0.04);\n    d = min(d, sdSeg(p, vec2(0.46, 0.955), vec2(0.68, 0.955)) - 0.04);\n  }\n  return d;\n}\n\n// slot i of the odd number n (1, 3, 5, 7): 0 = I, 1 = V, -1 = none\nfloat glyphKind(float n, float i) {\n  if (n \u003c 1.5) return i \u003c 0.5 ? 0.0 : -1.0;\n  if (n \u003c 3.5) return i \u003c 2.5 ? 0.0 : -1.0;\n  if (n \u003c 5.5) return i \u003c 0.5 ? 1.0 : -1.0;\n  return i \u003c 0.5 ? 1.0 : (i \u003c 2.5 ? 0.0 : -1.0);\n}\n\n// p in glyph units: x centred on the numeral, y from 0 (foot) to 1 (head)\nfloat numeralDist(vec2 p, float n) {\n  float total = -0.08;\n  for (int i = 0; i \u003c 3; i++) {\n    float k = glyphKind(n, float(i));\n    if (k >= 0.0) total += (k \u003c 0.5 ? 0.30 : 0.62) + 0.08;\n  }\n  float x = -0.5 * total;\n  float d = 1e5;\n  for (int i = 0; i \u003c 3; i++) {\n    float k = glyphKind(n, float(i));\n    if (k >= 0.0) {\n      d = min(d, glyphDist(p - vec2(x, 0.0), k));\n      x += (k \u003c 0.5 ? 0.30 : 0.62) + 0.08;\n    }\n  }\n  return d;\n}\n\n// ---------------------------------------------------------------- painting the apparatus\nvec3 paintBoard(vec3 col, vec2 se, float len, float px) {\n  float top = -RB;\n  float d = sdBox(se - vec2(0.5 * len, top - 0.5 * BEAM), vec2(0.5 * len + 0.12, 0.5 * BEAM));\n  float a = cover(d, px);\n  if (a \u003c= 0.0) return col;\n  float grain = vnoise(vec2(se.x * 0.6, se.y * 6.0)) * 0.6 + vnoise(vec2(se.x * 2.2, se.y * 17.0)) * 0.4;\n  vec3 wood = WALNUT * (0.74 + 0.46 * grain);\n  wood *= 0.86 + 0.3 * smoothstep(top - BEAM, top, se.y);\n  // the groove, lined with parchment as Galileo describes it\n  wood = mix(wood, PLASTER * 0.93, smoothstep(top - 0.34, top - 0.24, se.y) * 0.92);\n  float rim = 1.0 - smoothstep(0.0, max(0.14, 1.4 * px), -d);\n  wood = mix(wood, UMBER * 0.55, rim * 0.85);\n  return mix(col, wood, a);\n}\n\n// a gut fret tied round the board at s = sk: a bump in the groove and the cord down its side\nvec3 paintFret(vec3 col, vec2 se, float sk, float px, float vis) {\n  if (vis \u003c= 0.001) return col;\n  float side = abs(se.x - sk) - max(0.065, 0.5 * px);\n  float onBoard = step(-RB - BEAM, se.y) * step(se.y, -RB - 0.22);\n  col = mix(col, GUT * 0.82, cover(side, px) * onBoard * vis * 0.8);\n  float d = length(se - vec2(sk, -RB + 0.10)) - 0.27;\n  vec3 c = mix(GUT, UMBER, smoothstep(-0.10, 0.0, d) * 0.6);\n  return mix(col, c, cover(d, px) * vis);\n}\n\nvec3 paintNumeral(vec3 col, vec2 se, float sMid, float n, float readDir, float px, float vis) {\n  if (vis \u003c= 0.001) return col;\n  float hN = 0.98;\n  vec2 g = vec2(readDir * (se.x - sMid), se.y - (-RB - 0.5 * BEAM)) / hN + vec2(0.0, 0.5);\n  if (abs(g.x) > 1.6 || g.y \u003c -0.3 || g.y > 1.3) return col;\n  float d = numeralDist(g, n) * hN;\n  return mix(col, mix(GOLD * 1.08, GOLD_HI, 0.35), cover(d, px) * vis);\n}\n\n// ---------------------------------------------------------------- the small world's furniture\nvec2 groundLocal(vec2 p, float phi0) {\n  float rho = length(p);\n  return vec2(rho * wrapPi(atan(p.x, p.y) - phi0), rho - RG);\n}\n\nvec4 cypress(vec2 q, float h, float px) {\n  float d = sdEll(q - vec2(0.0, 0.46 * h), vec2(0.16 * h, 0.47 * h));\n  d = smin(d, sdTri(q, vec2(-0.08 * h, 0.72 * h), vec2(0.08 * h, 0.72 * h), vec2(0.0, 1.03 * h)), 0.2);\n  vec3 c = VERDE_DARK * (0.78 + 0.5 * vnoise(q * vec2(1.6, 0.6)));\n  c = mix(c, VERDE_DARK * 1.8, smoothstep(0.0, 0.12 * h, -q.x) * 0.3);\n  c = mix(c, UMBER * 0.5, (1.0 - smoothstep(0.0, max(0.12, px), -d)) * 0.7);\n  return vec4(c, cover(d, px));\n}\n\nvec4 house(vec2 q, float sc, float px) {\n  q /= sc;\n  float pxs = px / sc;\n  float walls = sdBox(q - vec2(0.0, 1.35), vec2(2.0, 1.35));\n  float roof = sdTri(q, vec2(-2.45, 2.65), vec2(2.45, 2.65), vec2(0.0, 4.3));\n  vec3 c = vec3(0.880, 0.735, 0.575);\n  float ar = cover(roof, pxs);\n  c = mix(c, vec3(0.700, 0.300, 0.190), ar);\n  float door = sdBox(q - vec2(0.7, 0.62), vec2(0.36, 0.62));\n  float win = sdBox(q - vec2(-0.9, 1.6), vec2(0.34, 0.34));\n  c = mix(c, UMBER * 0.7, cover(min(door, win), pxs) * (1.0 - ar));\n  c = mix(c, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.1, pxs), -min(walls, roof))) * 0.7);\n  return vec4(c, max(cover(walls, pxs), ar));\n}\n\nvec4 olive(vec2 q, float sc, float px) {\n  q /= sc;\n  float pxs = px / sc;\n  float trunk = sdSeg(q, vec2(0.0, -0.3), vec2(0.3, 2.2)) - 0.24;\n  float crown = smin(length(q - vec2(-0.85, 2.8)) - 1.25, length(q - vec2(0.75, 3.0)) - 1.3, 0.6);\n  crown = smin(crown, length(q - vec2(0.0, 3.85)) - 1.15, 0.6);\n  float ac = cover(crown, pxs);\n  vec3 c = mix(vec3(0.330, 0.230, 0.150), vec3(0.450, 0.520, 0.410) * (0.8 + 0.4 * vnoise(q * 2.2)), ac);\n  c = mix(c, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.1, pxs), -min(trunk, crown))) * 0.6);\n  return vec4(c, max(cover(trunk, pxs), ac));\n}\n\n// Galileo's spyglass on a tripod, aimed at the sky\nvec4 spyglass(vec2 q, float px) {\n  q /= 2.0;\n  px /= 2.0;\n  float legs = sdSeg(q, vec2(-1.6, 0.0), vec2(0.0, 4.2)) - 0.16;\n  legs = min(legs, sdSeg(q, vec2(1.6, 0.0), vec2(0.0, 4.2)) - 0.16);\n  legs = min(legs, sdSeg(q, vec2(0.25, 0.0), vec2(0.0, 4.2)) - 0.14);\n  vec2 tq = rot(-0.62) * (q - vec2(0.0, 4.4));\n  float tube = sdBox(tq - vec2(0.0, 1.0), vec2(0.36 - 0.06 * smoothstep(-1.6, 3.0, tq.y), 2.6));\n  vec3 c = vec3(0.420, 0.270, 0.150);\n  float at = cover(tube, px);\n  c = mix(c, mix(vec3(0.620, 0.240, 0.150), GOLD, step(abs(tq.y - 2.4), 0.25) + step(abs(tq.y + 1.3), 0.2)), at);\n  c = mix(c, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.08, px), -min(tube, legs))) * 0.6);\n  return vec4(c, max(at, cover(legs, px)));\n}\n\n// Galileo's pendulum on a gallows frame: it passes its lowest point on every beat\nvec4 pendulum(vec2 q, float b, float px) {\n  q /= 2.0;\n  float pxs = px / 2.0;\n  float frame = min(sdSeg(q, vec2(-1.6, -0.2), vec2(-1.6, 5.0)), sdSeg(q, vec2(1.6, -0.2), vec2(1.6, 5.0))) - 0.13;\n  frame = min(frame, sdSeg(q, vec2(-1.95, 5.0), vec2(1.95, 5.0)) - 0.16);\n  float ang = 0.55 * sin(PI * b);\n  vec2 piv = vec2(0.0, 4.85);\n  vec2 bobC = piv + 3.5 * vec2(sin(ang), -cos(ang));\n  float rod = sdSeg(q, piv, bobC) - 0.05;\n  float bob = length(q - bobC) - 0.46;\n  float af = cover(frame, pxs);\n  float ar = cover(rod, pxs);\n  float ab = cover(bob, pxs);\n  vec3 c = WALNUT * (0.8 + 0.3 * vnoise(q * vec2(4.0, 0.6)));\n  c = mix(c, vec3(0.300, 0.250, 0.220), ar);\n  vec2 bq = (q - bobC) / 0.46;\n  c = mix(c, BRONZE * (0.55 + 0.6 * clamp(dot(normalize(vec3(bq, 0.6)), normalize(vec3(-0.5, 0.6, 0.6))), 0.0, 1.0)), ab);\n  c = mix(c, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.06, pxs), -min(min(frame, rod), bob))) * 0.6);\n  return vec4(c, max(max(af, ar), ab));\n}\n\n// the far side's bell tower is Pisa's: white marble, six arcaded tiers, leaning, a bell in the belfry\nvec4 pisa(vec2 q, float swing, float px) {\n  q /= 2.4;\n  float pxs = px / 2.4;\n  q = rot(-0.12) * q;\n  float shaft = sdBox(q - vec2(0.0, 3.0), vec2(1.15, 3.0));\n  float belfry = sdBox(q - vec2(0.0, 6.5), vec2(0.8, 0.5));\n  float roofCap = sdBox(q - vec2(0.0, 7.08), vec2(0.62, 0.1));\n  float tower = min(min(shaft, belfry), roofCap);\n  float a = cover(tower, pxs);\n  if (a \u003c= 0.0) return vec4(0.0);\n  float xr = q.x / (q.y > 6.0 ? 0.8 : 1.15);\n  vec3 c = vec3(0.940, 0.910, 0.850) * (0.62 + 0.38 * sqrt(max(0.0, 1.0 - xr * xr))) * (0.95 + 0.05 * smoothstep(1.0, -1.0, q.x));\n  // arcades: one row of round-headed arches per tier, blind on the ground tier\n  float tier = floor(q.y);\n  float ty = q.y - tier;\n  float ax = fract(q.x / 0.36 + 0.5) - 0.5;\n  float arch = max(abs(ax) * 0.36 - 0.1, max(0.18 - ty, ty - 0.66));\n  arch = min(arch, length(vec2(ax * 0.36, ty - 0.66)) - 0.1);\n  float open = step(q.y, 6.0) * step(0.9, q.y) * cover(arch, pxs);\n  c = mix(c, vec3(0.300, 0.270, 0.300), open * 0.85);\n  c = mix(c, vec3(0.700, 0.690, 0.700), cover(abs(ty - 0.02) - 0.035, pxs) * step(0.9, q.y) * step(q.y, 6.2));\n  // the belfry's arch and its bell\n  float bArch = min(sdBox(q - vec2(0.0, 6.42), vec2(0.3, 0.3)), length(q - vec2(0.0, 6.72)) - 0.3);\n  c = mix(c, vec3(0.220, 0.180, 0.200), cover(bArch, pxs));\n  vec2 bq = rot(swing) * (q - vec2(0.0, 6.86));\n  float bell = sdTri(bq, vec2(-0.16, -0.06), vec2(0.16, -0.06), vec2(0.0, 0.1));\n  bell = min(bell, sdBox(bq - vec2(0.0, -0.25), vec2(0.15 + 0.06 * smoothstep(-0.1, -0.42, bq.y), 0.19)));\n  c = mix(c, mix(GOLD, GOLD_HI, 0.35), cover(bell, pxs));\n  c = mix(c, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.06, pxs), -tower)) * 0.7);\n  return vec4(c, a);\n}\n\n// ---------------------------------------------------------------- ClawedCode\n// q is in the cat's own frame: origin between its haunches on the ground, y up\nvec4 catBody(vec2 q, float px, vec2 gaze, float headAng, float blink, float ear, float sway) {\n  vec2 neck = vec2(0.4, 11.2);\n  vec2 hq = rot(headAng) * (q - neck) + neck;\n\n  float body = sdEll(q - vec2(-0.4, 4.0), vec2(4.6, 4.2));\n  float chest = sdEll(q - vec2(0.4, 8.4), vec2(3.0, 4.3));\n  float d = smin(body, chest, 1.8);\n  d = min(d, sdSeg(q, vec2(-1.2, 8.2), vec2(-1.5, 1.2)) - 0.95);\n  d = min(d, sdEll(q - vec2(-1.6, 0.72), vec2(1.15, 0.72)));\n  // tail: out from under the left haunch, curling up at the tip\n  vec2 t1 = vec2(-5.3, 0.8);\n  vec2 t2 = vec2(-6.7, 1.3);\n  vec2 t3 = vec2(-7.4, 2.5 + 0.3 * sway);\n  vec2 t4 = vec2(-7.2 - 0.6 * sway, 3.9 + 0.2 * sway);\n  float tail = sdSeg(q, vec2(-3.4, 1.0), t1) - 0.82;\n  tail = smin(tail, sdSeg(q, t1, t2) - 0.72, 0.3);\n  tail = smin(tail, sdSeg(q, t2, t3) - 0.62, 0.3);\n  tail = smin(tail, sdSeg(q, t3, t4) - 0.52, 0.3);\n  d = smin(d, tail, 0.5);\n  // head, cheeks and ears, tilted about the neck\n  float head = smin(length(hq - vec2(0.6, 13.3)) - 3.0, sdEll(hq - vec2(0.6, 12.6), vec2(3.45, 2.5)), 0.9);\n  float earL = sdTri(hq, vec2(-2.75, 14.1), vec2(-0.3, 16.0), vec2(-2.1 - ear, 18.7));\n  float earR = sdTri(hq, vec2(1.5, 16.0), vec2(3.95, 14.1), vec2(3.3 + ear, 18.7));\n  head = smin(head, min(earL, earR) - 0.12, 0.45);\n  d = smin(d, head, 0.9);\n\n  float a = cover(d, px);\n  // whiskers reach beyond the silhouette\n  vec2 wl = vec2(0.05, 12.15);\n  vec2 wr = vec2(1.15, 12.15);\n  float wd = sdSeg(hq, wl, vec2(-3.7, 12.95));\n  wd = min(wd, sdSeg(hq, wl, vec2(-3.95, 12.1)));\n  wd = min(wd, sdSeg(hq, wl, vec2(-3.6, 11.3)));\n  wd = min(wd, sdSeg(hq, wr, vec2(4.85, 12.95)));\n  wd = min(wd, sdSeg(hq, wr, vec2(5.1, 12.1)));\n  wd = min(wd, sdSeg(hq, wr, vec2(4.75, 11.3)));\n  float aw = cover(wd - max(0.045, 0.45 * px), px) * smoothstep(0.6, 2.2, length(hq - vec2(0.6, 12.2)));\n\n  if (a \u003c= 0.0 && aw \u003c= 0.0) return vec4(0.0);\n\n  // fur: painted near-black, the contour picked out in cool lead-white strokes from the upper left\n  vec3 c = FUR;\n  float headSide = smoothstep(10.2, 11.4, hq.y);\n  vec2 nrm = normalize(mix(q - vec2(0.0, 6.0), hq - vec2(0.6, 13.0), headSide) + vec2(0.0001));\n  float lit = clamp(dot(nrm, normalize(vec2(-0.62, 0.78))), 0.0, 1.0);\n  float edge = 1.0 - smoothstep(0.0, 0.55, -d);\n  c += vec3(0.20, 0.22, 0.34) * edge * lit * 0.85;\n  c += vec3(0.035, 0.03, 0.05) * smoothstep(-3.0, 0.0, -d) * lit;\n  // the haunch and the near foreleg picked out with thin cool lines\n  float haunchLine = abs(body) - 0.06;\n  float onBody = step(d, -0.25) * step(3.2, q.y) * step(q.x, 3.2);\n  c = mix(c, vec3(0.20, 0.21, 0.31), cover(haunchLine, px) * onBody * 0.55);\n  float legLine = abs(sdSeg(q, vec2(-1.2, 8.2), vec2(-1.5, 1.2)) - 0.95) - 0.05;\n  c = mix(c, vec3(0.20, 0.21, 0.31), cover(legLine, px) * step(d, -0.2) * step(1.0, q.y) * 0.45);\n  float fur = abs(sin(q.x * 3.1 + q.y * 1.3) * 0.5 + 0.5 - 0.5 * vnoise(q * 1.7));\n  c += vec3(0.03, 0.03, 0.05) * smoothstep(0.92, 0.98, fur) * step(d, -0.3) * lit;\n  // inner ears\n  float inL = sdTri(hq, vec2(-2.2, 14.6), vec2(-0.75, 15.8), vec2(-2.0 - 0.8 * ear, 17.7));\n  float inR = sdTri(hq, vec2(1.95, 15.8), vec2(3.4, 14.6), vec2(3.2 + 0.8 * ear, 17.7));\n  c = mix(c, vec3(0.330, 0.150, 0.190), cover(min(inL, inR), px) * 0.9);\n  // eyes: amber, slit pupils that follow the ball\n  for (int i = 0; i \u003c 2; i++) {\n    float side = float(i) * 2.0 - 1.0;\n    vec2 ec = vec2(i == 0 ? -0.78 : 1.98, 13.55);\n    vec2 eq = rot(0.12 * side) * (hq - ec);\n    float open = max(blink, 0.04);\n    float eye = sdEll(eq, vec2(0.84, 0.60 * open));\n    vec3 iris = mix(AMBER * 1.05, AMBER * 0.52, smoothstep(0.15, 0.95, length(eq / vec2(0.84, 0.6))));\n    vec2 pq = eq - gaze * vec2(0.27, 0.13 * open);\n    float pupil = sdEll(pq, vec2(0.17, 0.47 * open));\n    iris = mix(iris, vec3(0.025, 0.02, 0.03), cover(pupil, px));\n    float glint = length(eq - vec2(-0.26, 0.2 * open)) - 0.13;\n    iris = mix(iris, vec3(1.0, 0.97, 0.9), cover(glint, px) * 0.9 * step(0.3, open));\n    iris = mix(iris, vec3(0.02), 1.0 - smoothstep(0.0, max(0.09, px), -eye));\n    c = mix(c, iris, cover(eye, px));\n  }\n  float nose = sdTri(hq, vec2(0.25, 12.62), vec2(0.97, 12.62), vec2(0.61, 12.18));\n  c = mix(c, vec3(0.300, 0.190, 0.230), cover(nose, px));\n  c = mix(c, GUT * 0.9, aw * 0.85);\n  return vec4(c, max(a, aw));\n}\n\nvec4 catPaw(vec2 q, float px, vec2 paw) {\n  vec2 sh = vec2(2.3, 8.7);\n  float d = sdSeg(q, sh, paw) - 0.9;\n  vec2 dir = normalize(paw - sh + vec2(0.0001));\n  vec2 pq = q - paw;\n  pq = vec2(dot(pq, dir), dot(pq, vec2(-dir.y, dir.x)));\n  d = smin(d, sdEll(pq - vec2(0.2, 0.0), vec2(1.12, 0.86)), 0.4);\n  float a = cover(d, px);\n  if (a \u003c= 0.0) return vec4(0.0);\n  vec3 c = FUR;\n  float lit = clamp(dot(normalize(vec2(-dir.y, dir.x) + vec2(-0.3, 0.3)), normalize(vec2(-0.62, 0.78))), 0.0, 1.0);\n  c += vec3(0.20, 0.22, 0.34) * (1.0 - smoothstep(0.0, 0.45, -d)) * (0.35 + 0.65 * lit) * 0.8;\n  float toes = min(abs(pq.y - 0.3) - 0.03, abs(pq.y + 0.3) - 0.03);\n  c = mix(c, vec3(0.2, 0.2, 0.28), cover(toes, px) * step(0.55, pq.x) * 0.7);\n  return vec4(c, a);\n}\n\n// where the paw is, in the cat's frame: poised, tapping, resting, pouncing, carrying\nvec2 pawAt(float b, vec2 ballCat, float tau) {\n  vec2 ready = vec2(4.5, 9.6) + vec2(0.12, 0.2) * sin(3.0 * tau);\n  vec2 touch = PEAK_CAT + vec2(-1.95, 0.3);\n  vec2 rest = vec2(2.9, 0.95);\n  vec2 poised = vec2(3.4, 9.3) + vec2(0.0, 0.12) * sin(40.0 * tau);\n  vec2 onTop = vec2(-0.75, 1.3);\n  vec2 behind = vec2(-1.95, 0.3);\n  if (b \u003c 0.9) return mix(touch, ready, smoothstep(0.0, 0.9, b));\n  if (b \u003c 15.2) return ready;\n  if (b \u003c 16.0) return mix(ready, touch, smoothstep(15.2, 16.0, b));\n  if (b \u003c 16.9) return mix(touch, ready, smoothstep(16.0, 16.9, b));\n  if (b \u003c 19.0) return ready;\n  if (b \u003c 22.0) return mix(ready, rest, smoothstep(19.0, 22.0, b));\n  if (b \u003c 80.0) return rest;\n  if (b \u003c 83.0) return mix(rest, poised, smoothstep(80.0, 83.0, b));\n  if (b \u003c 87.3) return poised;\n  if (b \u003c 88.0) return mix(poised, ballCat + onTop, smoothstep(87.3, 88.0, b));\n  if (b \u003c 92.0) return ballCat + mix(onTop, behind, smoothstep(88.0, 92.0, b));\n  if (b \u003c 95.0) return touch;\n  vec2 windup = touch + vec2(-1.1, 0.7);\n  if (b \u003c 95.5) return mix(touch, windup, smoothstep(95.0, 95.5, b));\n  return mix(windup, touch, smoothstep(95.5, 96.0, b));\n}\n\n// ---------------------------------------------------------------- sky\nvec3 skyColor(vec2 uv, float zoom, float tau, float starMask) {\n  vec3 col = mix(LAPIS_DEEP, LAPIS, smoothstep(-0.7, 0.45, uv.y + 0.15 * uv.x));\n  col *= 0.92 + 0.12 * vnoise(uv * 3.2 + 4.0);\n  // gilded eight-pointed stars, as on a chapel vault\n  vec2 sp = uv * 7.5 * zoom + vec2(0.37, 0.11);\n  vec2 cell = floor(sp);\n  vec2 hf = step(0.5, fract(sp));\n  for (int j = 0; j \u003c 2; j++) {\n    for (int i = 0; i \u003c 2; i++) {\n      vec2 id = cell + vec2(float(i), float(j)) - 1.0 + hf;\n      float h = hash12(id);\n      if (h > 0.2) {\n        vec2 ctr = id + 0.5 + (vec2(hash12(id + 3.7), hash12(id + 9.1)) - 0.5) * 0.5;\n        vec2 q = sp - ctr;\n        float r = 0.085 + 0.07 * hash12(id + 5.3);\n        float ang = atan(q.y, q.x) + h * 3.0;\n        float star = length(q) - r * (0.42 + 0.58 * pow(abs(cos(4.0 * ang)), 2.5));\n        float a = clamp(0.5 - star / (7.5 * zoom / 900.0 * 1.4), 0.0, 1.0);\n        float glint = pow(0.5 + 0.5 * cos(dot(ctr, vec2(0.55, 0.38)) * 0.9 - tau * 3.0), 6.0);\n        col = mix(col, mix(GOLD * 0.82, GOLD_HI, glint * 0.8), a * starMask);\n      }\n    }\n  }\n  return col;\n}\n\nvec3 jupiter(vec3 col, vec2 uv, float tau) {\n  vec2 jc = vec2(0.315, 0.305);\n  float jr = 0.0165;\n  vec2 q = uv - jc;\n  float d = length(q) - jr;\n  vec3 band = mix(vec3(0.880, 0.800, 0.640), vec3(0.640, 0.470, 0.330), smoothstep(0.35, 0.65, 0.5 + 0.5 * sin(q.y / jr * 7.5 + 0.6)));\n  band *= 0.75 + 0.3 * smoothstep(0.02, -0.02, q.x + q.y * 0.3);\n  col = mix(col, band, clamp(0.5 - d / 0.0012, 0.0, 1.0));\n  // the four moons Galileo saw, on a line, turning 8 : 4 : 2 : 1 times per loop\n  for (int i = 0; i \u003c 4; i++) {\n    float fi = float(i);\n    float rad = jr * (1.9 + fi * 1.15 + fi * fi * 0.12);\n    float ang = tau * pow(2.0, 3.0 - fi) + fi * 1.7;\n    vec2 mp = jc + vec2(rad * cos(ang), 0.0012 * sin(ang));\n    float behind = step(0.0, sin(ang)) * step(abs(mp.x - jc.x), jr);\n    float md = length(uv - mp) - 0.0026;\n    col = mix(col, vec3(0.97, 0.94, 0.86), clamp(0.5 - md / 0.0011, 0.0, 1.0) * (1.0 - behind));\n  }\n  return col;\n}\n\n// ---------------------------------------------------------------- the frame\nvec3 paintedBorder(vec2 uv, float m) {\n  vec3 c = vec3(0.330, 0.150, 0.100);\n  float t = abs(uv.x) > abs(uv.y) ? uv.y : uv.x;\n  float band = smoothstep(0.4735, 0.4745, m) * (1.0 - smoothstep(0.4915, 0.4925, m));\n  float w = (m - 0.483) / 0.0085;\n  float lz = abs(fract(t / 0.026) - 0.5) * 2.0 + abs(w);\n  vec3 lozenge = mod(floor(t / 0.026), 2.0) \u003c 0.5 ? vec3(0.780, 0.300, 0.190) : vec3(0.330, 0.440, 0.330);\n  c = mix(c, mix(OCHRE * 0.95, lozenge, smoothstep(0.92, 0.82, lz)), band);\n  float fillet = smoothstep(0.4675, 0.4685, m) * (1.0 - smoothstep(0.4725, 0.4735, m));\n  c = mix(c, PLASTER, fillet);\n  return c * (0.9 + 0.12 * vnoise(uv * 40.0));\n}\n\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  float b = phase * BEATS;\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float m = max(abs(uv.x), abs(uv.y));\n  if (m > 0.4655) {\n    gl_FragColor = vec4(paintedBorder(uv, m), 1.0);\n    return;\n  }\n\n  // ---- this frame's state\n  float u;\n  vec2 ball = ballAt(b, u);\n  vec3 cam = cameraAt(b, ball);\n  float W = cam.z;\n  float px = W / iResolution.y;\n  vec2 p = cam.xy + uv * W;\n  float rho = length(p);\n  float phiP = atan(p.x, p.y);\n  float phi360 = phiP \u003c 0.0 ? phiP + TAU : phiP;\n  float lvl = lathLevel(b);\n  float lathSin = S1 * (1.0 - lvl);\n  float lathCos = sqrt(1.0 - lathSin * lathSin);\n  float ballPhi = ballPhiAt(b);\n  float wide = smoothstep(70.0, 170.0, W);\n\n  // ---- sky, stars and Jupiter\n  float dWorld = rho - RG;\n  vec3 col = skyColor(uv + cam.xy * 0.0012, pow(W / 54.0, 0.3), tau, smoothstep(4.0, 14.0, dWorld));\n  col = jupiter(col, uv, tau);\n\n  // ---- the small world: terra verde, ochre fields, modelled as a sphere lit from the upper left\n  if (dWorld \u003c px) {\n    float fields = vnoise(p * 0.03 + 3.1) * 0.6 + vnoise(p * 0.09 + 7.7) * 0.4;\n    vec3 ground = mix(VERDE, mix(VERDE, OCHRE, 0.45), smoothstep(0.45, 0.75, fields) * 0.6);\n    vec2 n2 = p / RG;\n    vec3 n3 = vec3(n2, sqrt(max(0.0, 1.0 - dot(n2, n2))));\n    float lit = clamp(dot(n3, normalize(vec3(-0.45, 0.55, 0.7))), 0.0, 1.0);\n    ground *= 0.52 + 0.62 * lit + 0.08 * wide;\n    ground = mix(ground, VERDE_DARK * 1.3, smoothstep(RG - 7.0, RG - 2.5, rho) * (1.0 - smoothstep(RG - 2.5, RG - 1.2, rho)) * 0.35);\n    ground = mix(ground, VERDE * 1.05, smoothstep(RG - 1.4, RG - 0.3, rho) * 0.6);\n    vec2 fc = vec2(phi360 * RG / 1.7, (RG - rho) / 1.7);\n    vec2 fid = floor(fc);\n    float fh = hash12(fid);\n    vec2 fo = fc - fid - 0.5 - (vec2(hash12(fid + 1.3), hash12(fid + 7.9)) - 0.5) * 0.5;\n    float petals = length(fo) * 1.7 - 0.11 * (1.0 + 0.6 * cos(5.0 * atan(fo.y, fo.x) + fh * 6.0)) * 1.7;\n    float meadow = step(0.66, fh) * (1.0 - smoothstep(3.0, 9.0, RG - rho)) * (1.0 - wide);\n    vec3 bloom = fh > 0.85 ? VERMILION : (fh > 0.7 ? GUT : OCHRE * 1.15);\n    ground = mix(ground, bloom, clamp(0.5 - petals * 1.7 / (px * 1.5), 0.0, 1.0) * meadow * 0.85);\n    ground = mix(ground, UMBER * 0.6, (1.0 - smoothstep(0.0, max(0.2, 1.3 * px), -dWorld)) * 0.8);\n    col = mix(col, ground, cover(dWorld, px));\n  }\n\n  // ---- furniture of the small world\n  if (dWorld > -1.0 && dWorld \u003c 24.0) {\n    float bellAge = b - 56.0;\n    float swing = bellAge > 0.0 && bellAge \u003c 8.0 ? 0.6 * sin(PI * bellAge) * (1.0 - bellAge / 8.0) * (1.0 - bellAge / 8.0) : 0.0;\n    vec4 it = cypress(groundLocal(p, 0.75), 15.0, px);\n    col = mix(col, it.rgb, it.a);\n    it = cypress(groundLocal(p, 0.83), 11.0, px);\n    col = mix(col, it.rgb, it.a);\n    it = house(groundLocal(p, 1.36), 2.6, px);\n    col = mix(col, it.rgb, it.a);\n    it = olive(groundLocal(p, 2.02), 2.4, px);\n    col = mix(col, it.rgb, it.a);\n    it = pendulum(groundLocal(p, 2.62), b, px);\n    col = mix(col, it.rgb, it.a);\n    it = pisa(groundLocal(p, BELL_PHI), swing, px);\n    col = mix(col, it.rgb, it.a);\n    it = cypress(groundLocal(p, 3.90), 14.0, px);\n    col = mix(col, it.rgb, it.a);\n    it = cypress(groundLocal(p, 3.98), 10.0, px);\n    col = mix(col, it.rgb, it.a);\n    it = house(groundLocal(p, 4.52), 2.2, px);\n    col = mix(col, it.rgb, it.a);\n    it = spyglass(groundLocal(p, 5.08), px);\n    col = mix(col, it.rgb, it.a);\n    it = olive(groundLocal(p, 5.56), 2.1, px);\n    col = mix(col, it.rgb, it.a);\n  }\n\n  // ---- frets on level ground, one every 8 units round the world\n  if (abs(dWorld) \u003c 2.0 + 2.0 * px) {\n    float k = floor(phi360 * RP / SPEED + 0.5);\n    if (k > 0.5 && k \u003c 67.5) {\n      vec2 q = groundLocal(p, k * SPEED / RP);\n      float len = mix(0.55, 2.4, wide);\n      float tick = sdSeg(q, vec2(0.0, -len), vec2(0.0, 0.4 * len)) - max(0.11, 1.15 * px);\n      col = mix(col, GUT, cover(tick, px) * 0.95);\n    }\n  }\n\n  // ---- the ball's gilded wake on its way round\n  if (b > 20.0 && b \u003c 89.0 && abs(rho - RP) \u003c 3.0 + 4.0 * px && phi360 \u003c= ballPhi + 0.001) {\n    float behind = ballPhi - phi360;\n    float fade = smoothstep(20.0, 21.0, b) * (1.0 - smoothstep(86.0, 88.5, b));\n    float wd = abs(rho - RP + 0.2) - max(0.26, 2.6 * px);\n    float trail = pow(max(1.0 - behind / 2.2, 0.0), 1.4) * fade;\n    col = mix(col, GOLD_HI, exp(-max(wd, 0.0) / (3.0 * px)) * wide * trail * 0.35);\n    col = mix(col, mix(GOLD, GOLD_HI, 0.55), cover(wd, px) * trail * 0.9);\n  }\n\n  // ---- the height the ball always comes back to: a dashed vermilion line from peak to peak\n  {\n    float hd = abs(rho - (RP + HGT)) - max(0.075, 0.6 * px);\n    float span = step(-DPHI - 0.03, phiP) * step(phiP, DPHI + 0.03);\n    float dash = step(0.45, fract(rho * phiP / 0.9));\n    col = mix(col, VERMILION, cover(hd, px) * span * dash * (1.0 - lvl) * (1.0 - wide) * 0.9);\n  }\n\n  // ---- ClawedCode, seated on the world's shoulder beside the peak\n  vec2 cq = rot(CAT_TILT) * (p - CAT0);\n  // gaze: on the ball, except while it is round the far side, when the cat looks from the\n  // right-hand horizon across to the left one, waiting for it to come back\n  vec2 eyeW = CAT0 + rot(-CAT_TILT) * vec2(0.6, 13.55);\n  vec2 toBall = normalize(ball - eyeW + vec2(0.0001));\n  float away = smoothstep(0.95, 1.35, ballPhi) * (1.0 - smoothstep(5.0, 5.35, ballPhi)) * step(20.0, b) * step(b, 88.0);\n  vec2 waitDir = normalize(mix(vec2(1.0, -0.35), vec2(-1.0, -0.4), smoothstep(1.6, 4.7, ballPhi)));\n  vec2 gaze = rot(CAT_TILT) * normalize(mix(toBall, waitDir, away));\n  float headAng = 0.1 * gaze.x;\n  float blink = 1.0;\n  blink *= 1.0 - (smoothstep(24.6, 24.85, b) - smoothstep(25.0, 25.3, b));\n  blink *= 1.0 - (smoothstep(47.2, 47.45, b) - smoothstep(47.6, 47.9, b));\n  blink *= 1.0 - (smoothstep(73.4, 73.65, b) - smoothstep(73.8, 74.1, b));\n  float ear = 0.5 * (smoothstep(56.0, 56.3, b) - smoothstep(56.6, 57.6, b));\n  float sway = sin(2.0 * tau) * 0.8 + 0.4 * sin(5.0 * tau);\n  if (cq.x > -9.5 && cq.x \u003c 7.0 && cq.y > -2.0 && cq.y \u003c 20.5) {\n    vec4 cat = catBody(cq, px, gaze, headAng, blink, ear, sway);\n    col = mix(col, cat.rgb, cat.a);\n  }\n\n  // ---- the post under the peak, the near board, the far board and its prop\n  {\n    vec2 g = groundLocal(p, -DPHI + 0.012);\n    float postH = HGT - BEAM + 0.2;\n    float post = sdBox(g - vec2(0.0, 0.5 * postH), vec2(0.45, 0.5 * postH + 0.3));\n    vec3 pc = WALNUT * (0.75 + 0.35 * vnoise(g * vec2(6.0, 0.7)));\n    pc = mix(pc, UMBER * 0.55, (1.0 - smoothstep(0.0, max(0.12, px), -post)) * 0.8);\n    col = mix(col, pc, cover(post, px));\n  }\n  {\n    vec2 se = boardCoords(p, 0.0, S1, C1, -1.0);\n    if (se.x > -1.0 && se.x \u003c FACE + 1.0 && se.y > -RB - BEAM - 1.0 && se.y \u003c 1.0) {\n      col = paintBoard(col, se, FACE, px);\n      for (int k = 1; k \u003c 4; k++) {\n        float fk = float(k);\n        col = paintFret(col, se, FACE - fk * fk, px, 1.0);\n      }\n      float gap = floor(sqrt(max(FACE - se.x, 0.0))) + 1.0;\n      if (gap \u003c 4.5) {\n        col = paintNumeral(col, se, FACE - (gap - 0.5) * (gap - 0.5) - 0.25, 2.0 * gap - 1.0, -1.0, px, 1.0);\n      }\n    }\n  }\n  {\n    vec2 se = boardCoords(p, 0.0, lathSin, lathCos, 1.0);\n    if (se.x > -1.0 && se.x \u003c FACE + 1.0 && se.y > -RB - BEAM - 1.0 && se.y \u003c 1.0) {\n      col = paintBoard(col, se, FACE, px);\n      // re-fretted as it goes down: 15, 12, 7 on the slope, every 8 once level\n      col = paintFret(col, se, mix(15.0, 16.0, lvl), px, 1.0);\n      col = paintFret(col, se, mix(12.0, 8.0, lvl), px, 1.0);\n      col = paintFret(col, se, 7.0, px, 1.0 - lvl);\n      float gap = floor(sqrt(max(FACE - se.x, 0.0))) + 1.0;\n      if (gap \u003c 4.5) {\n        col = paintNumeral(col, se, FACE - (gap - 0.5) * (gap - 0.5) - 0.25, 2.0 * gap - 1.0, 1.0, px, (1.0 - lvl) * (1.0 - lvl));\n      }\n    }\n    vec2 propTop = boardPoint(FACE - 1.4, 0.0, lathSin, lathCos, 1.0);\n    float propH = length(propTop) - RB - BEAM - RG;\n    if (propH > 0.35) {\n      vec2 g = groundLocal(p, atan(propTop.x, propTop.y));\n      float prop = sdBox(g - vec2(0.0, 0.5 * propH), vec2(0.3, 0.5 * propH + 0.15));\n      vec3 pc = WALNUT * (0.8 + 0.3 * vnoise(g * vec2(7.0, 0.8)));\n      pc = mix(pc, UMBER * 0.55, (1.0 - smoothstep(0.0, max(0.1, px), -prop)) * 0.8);\n      col = mix(col, pc, cover(prop, px) * smoothstep(0.35, 1.2, propH));\n    }\n    float hinge = length(p - vec2(0.0, RG - 0.15)) - 0.55;\n    col = mix(col, mix(BRONZE, GOLD_HI, 0.25), cover(hinge, px));\n  }\n\n  // ---- the paw that keeps time\n  {\n    vec2 ballCat = rot(CAT_TILT) * (ball - CAT0);\n    vec2 paw = pawAt(b, ballCat, tau);\n    if (cq.x > -2.0 && cq.x \u003c 10.5 && cq.y > -1.5 && cq.y \u003c 15.5) {\n      vec4 pw = catPaw(cq, px, paw);\n      col = mix(col, pw.rgb, pw.a);\n    }\n  }\n\n  // ---- the bronze ball, its shadow, and a halo that keeps it visible from far away\n  {\n    vec2 q = p - ball;\n    vec2 up = ball / length(ball);\n    vec2 sq = q + up * (RB * 0.95);\n    float sh = sdEll(vec2(dot(sq, vec2(up.y, -up.x)), dot(sq, up)), vec2(1.3, 0.35));\n    col = mix(col, UMBER * 0.4, cover(sh, px * 2.5 + 0.25) * 0.45 * step(b, 88.0));\n    float d = length(q) - RB;\n    col = mix(col, GOLD_HI, exp(-max(d, 0.0) / (4.0 * px)) * wide * 0.6 * step(0.0, d));\n    if (d \u003c px) {\n      vec3 n3 = vec3(q / RB, sqrt(max(0.0, 1.0 - dot(q, q) / (RB * RB))));\n      vec3 L = normalize(vec3(-0.5, 0.62, 0.6));\n      float diff = clamp(dot(n3, L), 0.0, 1.0);\n      float spec = pow(clamp(dot(reflect(-L, n3), vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 22.0);\n      vec3 bc = BRONZE * (0.32 + 0.8 * diff) + GOLD_HI * spec * 0.95;\n      // an incised meridian and a punch mark that turn as it rolls\n      vec2 qr = rot(u / RB) * q;\n      float mer = min(abs(qr.x) - 0.07, length(qr - vec2(0.0, 0.78)) - 0.17);\n      bc = mix(bc, BRONZE * 0.35, cover(mer, px) * 0.75 * smoothstep(0.0, 0.25, n3.z));\n      bc = mix(bc, UMBER * 0.5, 1.0 - smoothstep(0.0, max(0.1, px), -d));\n      col = mix(col, bc, cover(d, px));\n    }\n  }\n\n  // ---- every beat the ball crosses a fret: a click of light where it crossed\n  {\n    float n = floor(b);\n    float f = b - n;\n    if (n \u003c 88.5) {\n      float un;\n      vec2 at = ballAt(n, un);\n      float grow = 1.0 + 2.6 * wide;\n      float r = (RB + 0.35 + 2.6 * f) * grow;\n      float ring = abs(length(p - at) - r) - max(0.09, 0.8 * px);\n      col = mix(col, GOLD_HI, cover(ring, px) * (1.0 - f) * (1.0 - f) * 0.8);\n      col = mix(col, vec3(1.0, 0.96, 0.85), exp(-length(p - at) / (0.55 * grow)) * exp(-7.0 * f) * 0.55);\n    }\n  }\n\n  // ---- the bell's sound going out across the sky\n  {\n    float age = b - 56.0;\n    if (age > 0.0 && age \u003c 4.5) {\n      vec2 bellW = (RG + 16.38) * dirAt(BELL_PHI - 0.0189);\n      float dist = length(p - bellW);\n      float wave = 0.0;\n      for (int i = 0; i \u003c 3; i++) {\n        float a = age - float(i) * 0.5;\n        float r = 3.0 + a * 16.0;\n        float w = smoothstep(0.0, 0.2, a) * (1.0 - smoothstep(2.0, 4.0, a));\n        wave += cover(abs(dist - r) - max(0.15, 1.0 * px), px) * w;\n      }\n      col = mix(col, GOLD_HI, clamp(wave, 0.0, 1.0) * 0.65);\n    }\n  }\n\n  // ---- fresco: lime plaster mottling, a day-seam, and a darker wall edge\n  float mott = vnoise(uv * 3.0 + 7.1) * 0.6 + vnoise(uv * 8.0 + 3.3) * 0.4;\n  col *= 0.94 + 0.1 * mott;\n  float seam = 1.0 - smoothstep(0.0, 0.0025, abs(vnoise(uv * 1.6 + vec2(2.0, 5.0)) - 0.5));\n  col *= 1.0 - 0.06 * seam;\n  col *= 0.9 + 0.1 * smoothstep(0.8, 0.25, length(uv));\n  gl_FragColor = vec4(col, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      // Public Pages controls are installed only in the exported document.
+      // Unset GLSL delta uniforms stay zero throughout ordinary capture.
+      if (window.__applyAnimationControls) window.__applyAnimationControls(gl, program);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 60\\n// FORM: measured descent (cycles 0-4) | round-the-world dance (cycles 4-14) | vaulted full-band peak (cycles 14-18) | homeward consort (cycles 18-22) | catch and loop cadence (cycles 22-24)\\n// TONAL CENTER: G minor\\n// MOTIF: G4 Bb4 A4 G4 D5 - G4 eighth on beat 1, Bb4 eighth on 1.5, A4 quarter on beat 2, G4 quarter on beat 3, D5 quarter on beat 4; stated twice per bar\\n// HARMONIC PLAN: passamezzo antico ground Gm | F | Gm | D | Bb | F | Gm-D | Gm, restarting at every section boundary; section 2 adds Gm | F, section 5 is D | Gm\\n// GROOVE: synthesized percussion - dry wooden click (a G6 tock with a noise knock) on all four quarters through cycle 21, low frame-drum thump on beats 1 and 3 with noise shaker on offbeat eighths in cycles 4-17, one soft thump on cycle 22 beat 1; firm straight quarter-note tread under lightly sprung eighths, courtly but propulsive\\n\\nconst click = stack(note(\\\"g6*4\\\").s(\\\"triangle\\\").attack(0.001).decay(0.03).sustain(0).release(0.02).gain(0.36), s(\\\"white*4\\\").bpf(3200).bpq(1.5).attack(0.001).decay(0.018).sustain(0).release(0.01).gain(0.42)).pan(0.5)\\nconst shaker = s(\\\"[~ white]*4\\\").hpf(5500).attack(0.001).decay(0.025).sustain(0).release(0.02).pan(0.62).gain(0.15)\\nconst thump = s(\\\"sbd ~ sbd ~\\\").attack(0.007).decay(0.3).sustain(0).pan(0.45).gain(0.12)\\nconst fill = s(\\\"~ ~ ~ ~ ~ ~ ~ [white white]\\\").bpf(1700).bpq(1.5).attack(0.001).decay(0.05).sustain(0).release(0.03).pan(0.4).gain(0.24)\\nconst catchThump = s(\\\"sbd\\\").attack(0.007).decay(0.45).sustain(0).pan(0.45).gain(0.2)\\n\\nconst groundBass = note(\\\"\u003cg2 f2 g2 d2 bb1 f2 [g2 d2] g2>\\\").struct(\\\"x x x x\\\").add(note(\\\"\u003c[0 7 0 7] [0 -5 0 7] [0 7 0 -5] [0 7 0 12]>\\\")).gain(0.3)\\nconst cadBass = note(\\\"\u003c[d2 ~ d2 ~] [g2 ~ g2 ~]>\\\").gain(0.28)\\nconst bassLine = arrange([4, groundBass], [10, groundBass], [4, groundBass], [4, groundBass], [2, cadBass])\\n\\nconst luteGround = note(\\\"\u003c[g4 bb4 d5 bb4 g5 d5 bb4 g4] [f4 a4 c5 a4 f5 c5 a4 f4] [g4 bb4 d5 g5 bb5 g5 d5 bb4] [d4 f#4 a4 f#4 d5 a4 f#4 d4] [bb3 d4 f4 d4 bb4 f4 d4 bb3] [f4 a4 c5 f5 a5 f5 c5 a4] [g4 bb4 d5 bb4 d4 f#4 a4 f#4] [g4 d5 bb4 g5 d5 bb4 g4 d4]>\\\").gain(0.2)\\nconst luteCadence = note(\\\"\u003c[d4 f#4 a4 f#4 d5 a4 f#4 d4] [g4 bb4 d5 bb4 g5 d5 ~ ~]>\\\").gain(0.2)\\nconst luteLine = arrange([4, luteGround], [10, luteGround], [4, luteGround], [4, luteGround], [2, luteCadence]).sometimesBy(0.12, x => x.add(note(12)))\\n\\nconst motifCell = note(\\\"[g4 bb4] a4 g4 d5\\\").fast(2)\\nconst motifCadence = note(\\\"\u003c[[[g4 bb4] a4 g4 f#4] [[g4 bb4] a4 g4 f#4]] [[[g4 bb4] a4 g4 d5] [[g4 bb4] a4 g4 ~]]>\\\")\\nconst motifLine = arrange(\\n  [4, motifCell.add(note(\\\"[0 -12]\\\")).gain(0.17)],\\n  [10, motifCell.add(note(-12)).gain(0.055)],\\n  [4, motifCell.add(note(-12)).gain(0.055)],\\n  [4, motifCell.add(note(-12)).gain(0.05)],\\n  [2, motifCadence.gain(0.17)]\\n)\\n\\nconst recCell = note(\\\"[[g4 bb4] a4 g4 d5] [[g4 bb4] a4 g4 [d5 \u003cc5 eb5 bb4 a4>]]\\\")\\nconst recHome = note(\\\"[[g4 bb4] a4 g4 d5] [[g4 bb4] a4 g4 g4]\\\")\\nconst recLine = arrange(\\n  [4, silence],\\n  [10, recCell.gain(0.17)],\\n  [2, recCell.add(note(12)).gain(0.17)],\\n  [2, stack(recCell.add(note(12)).gain(0.17), recCell.late(0.25).gain(0.085))],\\n  [4, recHome.gain(0.11)],\\n  [2, silence]\\n)\\n\\nconst bell = note(\\\"g1\\\").s(\\\"sine\\\").fm(2.6).fmh(3.51).attack(0.003).decay(2).sustain(0).release(1.2).room(0.6).roomsize(4)\\n\\n$: arrange(\\n  [3, click],\\n  [1, stack(click, fill)],\\n  [9, stack(click, thump, shaker)],\\n  [1, stack(click, thump, shaker, fill)],\\n  [3, stack(click, thump, shaker)],\\n  [1, stack(click, thump, shaker, fill)],\\n  [4, click],\\n  [1, catchThump],\\n  [1, silence]\\n)\\n\\n$: stack(\\n  bassLine.s(\\\"triangle\\\").attack(0.004).decay(0.26).sustain(0).release(0.09).lpf(1100).pan(0.5).postgain(1),\\n  bassLine.add(note(12)).s(\\\"sine\\\").attack(0.004).decay(0.14).sustain(0).release(0.06).pan(0.5).postgain(0.3)\\n)\\n\\n$: stack(\\n  luteLine.s(\\\"sawtooth\\\").lpf(2800).lpq(5).lpenv(2.6).lpa(0.004).lpd(0.06).attack(0.003).decay(0.17).sustain(0).release(0.05).pan(0.38).postgain(1),\\n  luteLine.s(\\\"triangle\\\").lpf(4200).attack(0.003).decay(0.2).sustain(0).release(0.06).pan(0.34).postgain(0.6),\\n  motifLine.s(\\\"triangle\\\").lpf(3000).attack(0.004).decay(0.19).sustain(0).release(0.06).pan(0.44).postgain(0.9)\\n)\\n\\n$: stack(\\n  recLine.s(\\\"triangle\\\").vib(5.2).vibmod(0.1).attack(0.035).decay(0.12).sustain(0.65).release(0.1).lpf(3400).pan(0.6).postgain(1),\\n  recLine.s(\\\"sine\\\").attack(0.05).decay(0.1).sustain(0.7).release(0.12).pan(0.6).postgain(0.35),\\n  recLine.s(\\\"pink\\\").hpf(1600).attack(0.02).decay(0.06).sustain(0.25).release(0.06).pan(0.6).postgain(0.12)\\n)\\n\\n$: arrange(\\n  [14, silence],\\n  [1, stack(bell.gain(0.28), bell.add(note(19)).gain(0.08))],\\n  [9, silence]\\n)\",\"bpm\":96,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
