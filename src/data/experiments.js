@@ -177,7 +177,8 @@ export const CATEGORIES = {
       { slug: 'gnomon-parish', name: 'gnomon.parish()', color: '#c98a3a', desc: 'set stones on a sun-clock plaza // shade the sleeping moths, light the marigolds, and teach a winter shadow to ring compline' },
       { slug: 'bell-foundry', name: 'bell.foundry()', color: '#e07b39', desc: 'sweep a mould, pour bronze, then cut a ring of four true on a lathe // every cut lowers five partials at once and none of it comes back, then you ring the treble' },
       { slug: 'cairn-survey', name: 'cairn.survey()', color: '#8fa6c4', desc: 'sight mirror flashes through fog and plot a valley from nothing but your own readings // the road crews cut over the pass exactly where your sheet says it is' },
-      { slug: 'stepwell-lens', name: 'stepwell.lens()', color: '#f2b43c', desc: 'hang dripping pots over a sunlit stepwell so every ripple becomes a lens // focus the light onto glass eggs on three floors before the shade takes them' }
+      { slug: 'stepwell-lens', name: 'stepwell.lens()', color: '#f2b43c', desc: 'hang dripping pots over a sunlit stepwell so every ripple becomes a lens // focus the light onto glass eggs on three floors before the shade takes them' },
+      { slug: 'slab-season', name: 'slab.season()', color: '#8cc3e6', desc: 'dream a whole avalanche winter above a mountain railway, then change it // read the buried layers, shoot, fence, stamp or shut the line, and trace every slide back to the night its weak layer formed' }
     ]
   }
 }
