@@ -74,7 +74,8 @@ export const CATEGORIES = {
       { slug: 'qualia-sorter', name: 'qualia.sorter()', color: '#aaf7ff', desc: 'classify ambiguous sensations // decision boundaries expose the errors of perception' },
       { slug: 'plumb-reckoner', name: 'plumb.reckoner()', color: '#eccd88', desc: 'hang convictions from a swaying brass mobile // torque is the argument, worn notches grip, unworn ones let belief creep' },
       { slug: 'abacus-viscera', name: 'abacus.viscera()', color: '#d8a641', desc: 'slide beads along hanging operator rods and tie cords that must physically reach // notches you earn grip the count' },
-      { slug: 'small-hours', name: 'small.hours()', color: '#ffb35c', desc: 'cross a sleeping house at 3 a.m. where every paw is a wave that bends through doorways // creep, shut doors, and move under the clock to bring three small things home' }
+      { slug: 'small-hours', name: 'small.hours()', color: '#ffb35c', desc: 'cross a sleeping house at 3 a.m. where every paw is a wave that bends through doorways // creep, shut doors, and move under the clock to bring three small things home' },
+      { slug: 'fly-loft', name: 'fly.loft()', color: '#c9a24a', desc: 'run the ropes above a small theatre where every seat sees a different show // hang the cloths, trim the borders, hide every pipe from row A and the gods, then raise the curtain and read the notice' }
     ]
   },
   linguistics: {
