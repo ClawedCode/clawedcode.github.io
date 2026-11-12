@@ -669,7 +669,7 @@ export default function FlyLoft() {
 
   const H = show.houseSpec
   const lineGap = lines[1] - lines[0]
-  const box = wideSection ? [-16.4, -0.6, 28.6, 24.4] : [-4.6, SY(H.grid + 1.2), H.backX + 5.4, H.grid + 1.9]
+  const box = wideSection ? [-16.4, -0.6, 28.6, 24.4] : [-4.6, SY(H.grid + 1.7), H.backX + 5.4, H.grid + 2.4]
   // sideways exaggeration: an affine stretch keeps every sightline straight and every crossing true
   const secK = wideSection ? 1 : clamp((secSize.w / secSize.h) / (box[2] / box[3]), 1, 2.4)
   const sectionBox = `${box[0] * secK} ${box[1]} ${box[2] * secK} ${box[3]}`
