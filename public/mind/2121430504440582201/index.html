@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\n// 128 BPM: 32 bars of 1.875 s, 128 beats. Every event below sits on that clock.\nconst float BARS = 32.0;\n\nconst vec3 GROUND = vec3(0.027, 0.035, 0.063);\nconst vec3 AMBER = vec3(0.949, 0.663, 0.231);\nconst vec3 EVENT = vec3(1.0, 0.957, 0.863);\nconst vec2 SOMA = vec2(0.0, 0.352);\n\nfloat hash12(vec2 p) {\n  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.x + p3.y) * p3.z);\n}\n\nvec2 hash22(vec2 p) {\n  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.xx + p3.yz) * p3.zy);\n}\n\nfloat ease(float x) {\n  x = clamp(x, 0.0, 1.0);\n  return x * x * (3.0 - 2.0 * x);\n}\n\nfloat fill(float d, float soft) {\n  return 1.0 - smoothstep(-soft, soft, d);\n}\n\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\n  return length(pa - ba * h);\n}\n\nfloat sdEllipse(vec2 p, vec2 r) {\n  return (length(p / r) - 1.0) * min(r.x, r.y);\n}\n\nfloat sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2) {\n  vec2 e0 = p1 - p0;\n  vec2 e1 = p2 - p1;\n  vec2 e2 = p0 - p2;\n  vec2 v0 = p - p0;\n  vec2 v1 = p - p1;\n  vec2 v2 = p - p2;\n  vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);\n  vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);\n  vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);\n  float s = sign(e0.x * e2.y - e0.y * e2.x);\n  vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),\n                   vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),\n                   vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));\n  return -sqrt(d.x) * sign(d.y);\n}\n\nfloat smin(float a, float b, float k) {\n  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n  return mix(b, a, h) - k * h * (1.0 - h);\n}\n\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, -s, s, c);\n}\n\n// Camera over the wall of video stills: xy = centre in tile units, z = tiles per frame height.\nvec3 cameraAt(float bar) {\n  vec3 portrait = vec3(0.0, 0.45, 12.0);\n  vec3 wall = vec3(0.0, 0.0, 16.0);\n  vec3 drift = vec3(2.5, -0.8, 17.0);\n  vec3 overBlock = vec3(0.0, 0.0, 15.0);\n  vec3 inputSquare = vec3(0.0, 0.45, 11.0);\n  vec3 closeInput = vec3(0.0, 0.45, 10.4);\n  if (bar \u003c 5.0) return mix(portrait, wall, ease(bar / 5.0));\n  if (bar \u003c 9.5) return mix(wall, drift, ease((bar - 5.0) / 4.5));\n  if (bar \u003c 14.0) return mix(drift, overBlock, ease((bar - 9.5) / 4.5));\n  if (bar \u003c 16.0) return mix(overBlock, inputSquare, ease((bar - 14.0) / 2.0));\n  if (bar \u003c 28.0) return mix(inputSquare, closeInput, ease((bar - 16.0) / 12.0));\n  return mix(closeInput, portrait, ease((bar - 28.0) / 4.0));\n}\n\n// One 200x200 frame sampled from a video. l spans -0.5..0.5 inside its tile.\nvec3 videoStill(vec2 l, float kind, float seed) {\n  float h1 = hash12(vec2(seed * 113.0, 1.7));\n  float h2 = hash12(vec2(seed * 71.0, 9.3));\n  float h3 = hash12(vec2(seed * 37.0, 4.1));\n  vec3 col = vec3(0.5);\n  if (kind \u003c 0.5) {\n    // outdoors: sky, horizon, a low sun\n    float horizon = mix(-0.22, 0.12, h1);\n    vec3 sky = mix(vec3(0.44, 0.56, 0.66), vec3(0.80, 0.63, 0.47), h2);\n    vec3 land = mix(vec3(0.27, 0.34, 0.21), vec3(0.46, 0.38, 0.27), h3);\n    col = l.y > horizon ? mix(sky, sky * 1.18, clamp(l.y - horizon, 0.0, 1.0)) : land * (0.75 + 0.5 * (l.y + 0.5));\n    col = mix(col, vec3(0.97, 0.90, 0.72), fill(length(l - vec2(mix(-0.25, 0.25, h3), horizon + 0.16)) - 0.07, 0.012));\n  } else if (kind \u003c 1.5) {\n    // someone talking to their camera\n    vec3 wallCol = mix(vec3(0.63, 0.58, 0.50), vec3(0.40, 0.46, 0.53), h1);\n    vec3 skin = mix(vec3(0.87, 0.67, 0.53), vec3(0.47, 0.31, 0.23), h2);\n    vec3 shirt = mix(vec3(0.24, 0.30, 0.43), vec3(0.60, 0.23, 0.20), h3);\n    col = wallCol;\n    col = mix(col, shirt, fill(sdEllipse(l - vec2(0.0, -0.55), vec2(0.38, 0.28)), 0.012));\n    col = mix(col, skin, fill(sdEllipse(l - vec2(0.0, 0.02), vec2(0.15, 0.19)), 0.012));\n    col = mix(col, skin * 0.32, fill(sdEllipse(l - vec2(0.0, 0.14), vec2(0.165, 0.10)), 0.012) * step(0.09, l.y));\n  } else if (kind \u003c 2.5) {\n    // a living room: a window over a sofa\n    vec3 wallCol = mix(vec3(0.70, 0.64, 0.54), vec3(0.52, 0.56, 0.50), h1);\n    vec3 sofa = mix(vec3(0.46, 0.17, 0.15), vec3(0.28, 0.32, 0.40), h2);\n    col = wallCol;\n    col = mix(col, vec3(0.86, 0.90, 0.92), fill(sdBox(l - vec2(mix(-0.15, 0.15, h3), 0.20), vec2(0.17, 0.15)), 0.01));\n    col = mix(col, wallCol * 0.55, fill(sdBox(l - vec2(0.0, -0.42), vec2(0.5, 0.1)), 0.01));\n    col = mix(col, sofa, fill(sdBox(l - vec2(0.0, -0.20), vec2(0.36, 0.10)) - 0.04, 0.01));\n    col = mix(col, sofa * 1.25, fill(sdBox(vec2(abs(l.x) - 0.17, l.y + 0.10), vec2(0.13, 0.05)) - 0.03, 0.01));\n  } else if (kind \u003c 3.5) {\n    // a title card\n    vec3 card = mix(vec3(0.12, 0.12, 0.16), vec3(0.20, 0.13, 0.12), h1);\n    col = card;\n    col = mix(col, vec3(0.86, 0.84, 0.78), fill(sdBox(l - vec2(0.0, 0.08), vec2(mix(0.20, 0.32, h2), 0.045)), 0.01));\n    col = mix(col, vec3(0.62, 0.60, 0.56), fill(sdBox(l - vec2(0.0, -0.08), vec2(mix(0.12, 0.24, h3), 0.025)), 0.01));\n    col = mix(col, mix(vec3(0.70, 0.36, 0.22), vec3(0.30, 0.50, 0.55), h3), fill(sdBox(l - vec2(0.0, -0.30), vec2(0.5, 0.02)), 0.01));\n  } else if (kind \u003c 4.5) {\n    // a car in the street\n    vec3 paint = mix(vec3(0.62, 0.20, 0.17), vec3(0.75, 0.73, 0.68), h2);\n    col = mix(vec3(0.58, 0.62, 0.66), vec3(0.42, 0.40, 0.38), step(l.y, 0.05));\n    col = mix(col, vec3(0.30, 0.31, 0.33), step(l.y, -0.18));\n    float carX = mix(-0.08, 0.08, h1);\n    col = mix(col, paint, fill(sdBox(l - vec2(carX, -0.09), vec2(0.30, 0.07)) - 0.03, 0.01));\n    col = mix(col, paint * 0.8, fill(sdBox(l - vec2(carX - 0.02, 0.03), vec2(0.15, 0.06)) - 0.03, 0.01));\n    col = mix(col, vec3(0.08), fill(length(vec2(abs(l.x - carX) - 0.19, l.y + 0.17)) - 0.065, 0.01));\n  } else {\n    // a cat\n    vec3 room = mix(vec3(0.68, 0.61, 0.50), vec3(0.50, 0.56, 0.52), h1);\n    col = room;\n    col = mix(col, room * 0.66, step(l.y, -0.24));\n    vec3 fur = h2 \u003c 0.32 ? vec3(0.07, 0.07, 0.08) : (h2 \u003c 0.62 ? vec3(0.82, 0.50, 0.24) : (h2 \u003c 0.82 ? vec3(0.47, 0.47, 0.50) : vec3(0.92, 0.90, 0.86)));\n    vec2 c = vec2(h3 \u003c 0.5 ? -l.x : l.x, l.y);\n    float body = sdEllipse(c - vec2(0.09, -0.15), vec2(0.25, 0.17));\n    float head = length(c - vec2(-0.15, 0.06)) - 0.16;\n    vec2 ce = vec2(abs(c.x + 0.15), c.y);\n    float ears = sdTri(ce, vec2(0.02, 0.17), vec2(0.15, 0.12), vec2(0.13, 0.34));\n    float tail = sdSegment(c, vec2(0.30, -0.22), vec2(0.40, 0.10)) - 0.04;\n    float cat = min(min(smin(body, head, 0.05), ears), tail);\n    col = mix(col, fur, fill(cat, 0.01));\n    vec2 ey = vec2(abs(c.x + 0.15) - 0.065, c.y - 0.07);\n    col = mix(col, vec3(0.86, 0.72, 0.30), fill(length(ey) - 0.026, 0.008));\n  }\n  return col;\n}\n\n// The cat face of the optimal stimulus, in input coordinates q (-1..1 across the 200x200 square).\nfloat headSdf(vec2 q) {\n  float crown = sdEllipse(q - vec2(0.0, -0.12), vec2(0.62, 0.52));\n  float cheeks = sdEllipse(q - vec2(0.0, -0.31), vec2(0.70, 0.36));\n  vec2 e = vec2(abs(q.x), q.y);\n  float ear = sdTri(e, vec2(0.12, 0.30), vec2(0.62, 0.06), vec2(0.50, 0.86)) - 0.03;\n  return smin(smin(crown, cheeks, 0.10), ear, 0.07);\n}\n\nfloat innerEarSdf(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  return sdTri(e, vec2(0.24, 0.32), vec2(0.55, 0.16), vec2(0.48, 0.70)) - 0.01;\n}\n\nfloat muzzleSdf(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  return smin(length(e - vec2(0.10, -0.38)) - 0.12, sdEllipse(q - vec2(0.0, -0.22), vec2(0.10, 0.12)), 0.06);\n}\n\nfloat noseSdf(vec2 q) {\n  return sdTri(q, vec2(-0.075, -0.20), vec2(0.075, -0.20), vec2(0.0, -0.29)) - 0.02;\n}\n\nvec2 eyeLocal(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y) - vec2(0.25, -0.03);\n  return rot(0.22) * e;\n}\n\nfloat socketSdf(vec2 q) {\n  return sdEllipse(eyeLocal(q), vec2(0.135, 0.085));\n}\n\nfloat valueNoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  float a = hash12(i);\n  float b = hash12(i + vec2(1.0, 0.0));\n  float c = hash12(i + vec2(0.0, 1.0));\n  float d = hash12(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\nfloat fidelityAt(float k) {\n  return 1.0 - pow(0.91, k);\n}\n\n// Grey value of the input after k gradient steps toward what the neuron wants.\nfloat stimulusValue(vec2 q, float k, float grain) {\n  float soft = mix(0.32, 0.05, ease(k / 30.0));\n  float fidelity = fidelityAt(k);\n  float noiseAmp = 0.05 + 0.25 * pow(0.92, k);\n  float mottle = (valueNoise(q * 5.0 + 3.0) - 0.5) * (0.05 + 0.10 * pow(0.95, k));\n  float face = 0.56;\n  face = mix(face, 0.36, fill(headSdf(q), soft));\n  face = mix(face, 0.50, fill(innerEarSdf(q), soft));\n  face = mix(face, 0.71, fill(muzzleSdf(q), soft));\n  face = mix(face, 0.15, fill(socketSdf(q), soft));\n  face = mix(face, 0.22, fill(noseSdf(q), soft));\n  return mix(0.56, face, fidelity) + noiseAmp * (grain - 0.5) * 2.0 + mottle;\n}\n\nfloat whiskers(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  float d = sdSegment(e, vec2(0.22, -0.34), vec2(0.74, -0.25));\n  d = min(d, sdSegment(e, vec2(0.23, -0.39), vec2(0.77, -0.40)));\n  d = min(d, sdSegment(e, vec2(0.22, -0.44), vec2(0.70, -0.55)));\n  return 1.0 - smoothstep(0.004, 0.009, d);\n}\n\nfloat blinkAt(float bar, float centre) {\n  return 1.0 - smoothstep(0.0, 0.11, abs(bar - centre));\n}\n\n// The neuron's activation over the loop, in bars: wrong guesses, then cats, then the climb.\nfloat activation(float tb) {\n  tb = mod(tb, BARS);\n  float bt = tb * 4.0;\n  float bi = floor(bt + 0.5);\n  float spike = exp(-pow((bt - bi) * 7.0, 2.0));\n  float a = 0.04;\n  if (bi >= 16.0 && bi \u003c= 55.0) {\n    float sel = ease((bi / 4.0 - 8.5) / 1.5);\n    float guess = 0.22 + 0.36 * hash12(vec2(bi, 5.0));\n    a += mix(guess, 0.9, sel) * spike;\n  }\n  float k = clamp(bt - 64.0, 0.0, 32.0);\n  float climb = fidelityAt(floor(k) + ease(fract(k) * 4.0));\n  a += step(64.0, bt) * 0.88 * climb;\n  a += (1.0 - ease(tb / 3.5)) * step(tb, 4.0) * 0.88;\n  return a;\n}\n\nfloat digitCode(float d) {\n  return d \u003c 0.5 ? 63.0 : d \u003c 1.5 ? 6.0 : d \u003c 2.5 ? 91.0 : d \u003c 3.5 ? 79.0 : d \u003c 4.5 ? 102.0\n       : d \u003c 5.5 ? 109.0 : d \u003c 6.5 ? 125.0 : d \u003c 7.5 ? 7.0 : d \u003c 8.5 ? 127.0 : 111.0;\n}\n\nfloat segmentOn(float code, float bitValue) {\n  return mod(floor(code / bitValue + 0.001), 2.0);\n}\n\n// Seven-segment digit d with its lower-left corner at the origin of p.\nfloat sevenSegment(vec2 p, float d) {\n  float W = 0.019;\n  float H = 0.034;\n  float T = 0.0034;\n  float code = digitCode(d);\n  float s = 0.0;\n  vec2 hz = vec2(W * 0.5 - T * 0.7, T * 0.5);\n  vec2 vt = vec2(T * 0.5, H * 0.25 - T * 0.7);\n  s = max(s, segmentOn(code, 1.0) * fill(sdBox(p - vec2(W * 0.5, H), hz), 0.0007));\n  s = max(s, segmentOn(code, 2.0) * fill(sdBox(p - vec2(W, H * 0.75), vt), 0.0007));\n  s = max(s, segmentOn(code, 4.0) * fill(sdBox(p - vec2(W, H * 0.25), vt), 0.0007));\n  s = max(s, segmentOn(code, 8.0) * fill(sdBox(p - vec2(W * 0.5, 0.0), hz), 0.0007));\n  s = max(s, segmentOn(code, 16.0) * fill(sdBox(p - vec2(0.0, H * 0.25), vt), 0.0007));\n  s = max(s, segmentOn(code, 32.0) * fill(sdBox(p - vec2(0.0, H * 0.75), vt), 0.0007));\n  s = max(s, segmentOn(code, 64.0) * fill(sdBox(p - vec2(W * 0.5, H * 0.5), hz), 0.0007));\n  return s;\n}\n\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float bar = phase * BARS;\n  float beat = bar * 4.0;\n  float tau = phase * 6.28318530718;\n\n  vec3 cam = cameraAt(bar);\n  vec2 world = cam.xy + uv * cam.z;\n  vec2 cell = floor(world);\n  vec2 l = world - cell - 0.5;\n  float px = cam.z / iResolution.y;\n  float inBlock = step(max(abs(world.x), abs(world.y)), 4.0);\n  vec2 q = world / 4.0;\n\n  // Every still flips to a new frame once a bar, on an off-beat eighth; a quarter of the wall\n  // turns between each pair of beats, and none turns on the loop point.\n  float flipOffset = floor(hash12(cell + 17.0) * 4.0) + 0.5;\n  float frameIndex = mod(floor((beat - flipOffset) / 4.0), 32.0);\n  float seed = hash12(vec2(cell.x * 31.0 + frameIndex * 7.0, cell.y * 17.0 - frameIndex * 13.0));\n  float kind = floor(hash12(vec2(seed * 91.0, 3.3)) * 5.0);\n  if (hash12(vec2(seed * 57.0, 8.1)) \u003c 0.06) kind = 5.0;\n  float flipFlash = exp(-mod(beat - flipOffset, 4.0) * 9.0);\n\n  // Training: on every beat three stills are shown to the neuron. First it answers anything;\n  // from bar 9 it answers only to cats.\n  float neuronOn = ease((bar - 3.0) / 1.25) * (1.0 - ease((bar - 28.0) / 1.5));\n  float firedTile = 0.0;\n  float firedCat = 0.0;\n  float firedSeed = 0.0;\n  float firedAge = 9.0;\n  vec3 lines = vec3(0.0);\n  float somaFire = 0.0;\n  float beatNow = floor(beat);\n  for (int i = 0; i \u003c 2; i++) {\n    float b = beatNow - float(i);\n    if (b >= 16.0 && b \u003c= 55.0) {\n      float sel = ease((b / 4.0 - 8.5) / 1.5);\n      float age = beat - b;\n      vec3 camB = cameraAt(b / 4.0);\n      for (int j = 0; j \u003c 3; j++) {\n        float fj = float(j);\n        vec2 r = hash22(vec2(b * 3.1 + fj, fj * 7.7 + 1.3));\n        vec2 shown = floor(camB.xy + vec2(mix(-0.40, 0.40, r.x), mix(-0.40, 0.14, r.y)) * camB.z);\n        float isCat = step(hash12(vec2(b, fj + 40.0)), sel);\n        if (shown.x == cell.x && shown.y == cell.y && age \u003c firedAge) {\n          firedTile = 1.0;\n          firedCat = isCat;\n          firedSeed = hash12(vec2(b * 1.7, fj + 2.0));\n          firedAge = age;\n        }\n        vec2 tileScreen = (shown + 0.5 - cam.xy) / cam.z;\n        float strength = exp(-age * 2.2);\n        vec3 lineCol = mix(vec3(0.70, 0.73, 0.78) * 0.6, AMBER, isCat);\n        float width = mix(0.0011, 0.0024, isCat);\n        float d = sdSegment(uv, SOMA, tileScreen);\n        lines += lineCol * strength * (1.0 - smoothstep(width, width + 0.0016, d));\n        float climb = clamp(age * 2.2, 0.0, 1.0);\n        vec2 signal = mix(tileScreen, SOMA, climb);\n        lines += lineCol * (1.0 - climb) * 1.6 * fill(length(uv - signal) - 0.006, 0.002);\n        somaFire += strength * mix(0.32, 1.0, isCat);\n      }\n    }\n  }\n  if (firedTile > 0.5) {\n    kind = firedCat > 0.5 ? 5.0 : floor(firedSeed * 5.0);\n    seed = firedSeed;\n    flipFlash = exp(-firedAge * 9.0);\n  }\n\n  // The wall of stills.\n  vec3 still = videoStill(l, kind, seed);\n  still *= 0.84 + 0.16 * (1.0 - length(l) * 1.3);\n  float wallLevel = 1.0 - 0.84 * ease((bar - 14.5) / 1.5) + 0.84 * ease((bar - 28.0) / 3.5);\n\n  // ClawedCode's face made of darkened stills (bars 28-32 and 0-4): each tile lets go on its own beat.\n  float mosaicOn = step(28.0, bar) + step(bar, 4.5);\n  float release = 0.5 + floor(hash12(cell + 5.0) * 12.0) / 4.0;\n  float tileHold = bar >= 28.0 ? 1.0 : 1.0 - ease((bar - release) / 0.2);\n  float faceSoft = 0.006;\n  float head = fill(headSdf(q), faceSoft);\n  float mosaicFace = clamp(mosaicOn, 0.0, 1.0) * inBlock * tileHold * head;\n  still *= 1.0 - 0.85 * mosaicFace;\n  still = mix(still, vec3(0.36, 0.12, 0.11) * 0.55, clamp(mosaicOn, 0.0, 1.0) * inBlock * tileHold * fill(innerEarSdf(q), faceSoft) * 0.8);\n\n  float tileMask = fill(sdBox(l, vec2(0.41)) - 0.03, px);\n  vec3 col = mix(GROUND, still * wallLevel + EVENT * flipFlash * 0.10 * wallLevel, tileMask);\n\n  // Fired stills of cats get an amber frame once the neuron knows what it wants.\n  float frameEdge = 1.0 - smoothstep(0.018, 0.04, abs(sdBox(l, vec2(0.41)) - 0.03));\n  col = mix(col, AMBER, firedTile * firedCat * frameEdge * exp(-firedAge * 1.2) * neuronOn);\n\n  // The question (bars 14-16): the centre block turns to static and closes into one 200x200 input.\n  float staticStart = 14.0 + 1.25 * length(cell + 0.5) / 5.66;\n  float staticAmt = ease((bar - staticStart) / 0.3);\n  float backToStills = ease((bar - 28.0) / 2.5);\n  float inputWeight = inBlock * staticAmt * (1.0 - backToStills);\n  float seamsClosed = ease((bar - 15.2) / 0.8) * (1.0 - ease((bar - 28.5) / 1.5));\n\n  // Gradient ascent (bars 16-24): one step per beat, 32 steps from static to a face.\n  float kf = clamp(beat - 64.0, 0.0, 32.0);\n  float k = floor(kf) + ease(fract(kf) * 4.0);\n  float grain = hash12(floor((q + 1.0) * 100.0) + 0.5);\n  float value = stimulusValue(q, k, grain);\n  float before = stimulusValue(q, max(k - 1.0, 0.0), grain);\n  float stepPulse = step(64.0, beat) * step(beat, 96.0) * exp(-fract(kf) * 5.0);\n  vec3 inputCol = vec3(value) * vec3(1.0, 0.985, 0.96);\n  inputCol += EVENT * clamp(abs(value - before) * 3.0, 0.0, 0.35) * stepPulse;\n\n  // The portrait looks back (bars 24.5-28): amber eyes open and the grey fur goes black.\n  float black = ease((bar - 25.0) / 2.0);\n  vec3 fur = vec3(0.045, 0.045, 0.058) + vec3(0.10, 0.11, 0.14) * smoothstep(-0.07, 0.0, headSdf(q));\n  fur = mix(fur, vec3(0.30, 0.10, 0.10), fill(innerEarSdf(q), faceSoft) * 0.8);\n  inputCol = mix(inputCol, fur, black * head);\n  inputCol = mix(inputCol, vec3(0.62, 0.61, 0.59), black * (1.0 - head) * 0.5);\n\n  float inputMask = max(tileMask, seamsClosed);\n  col = mix(col, inputCol, inputWeight * inputMask);\n  float inputBorder = 1.0 - smoothstep(0.025, 0.06, abs(sdBox(world, vec2(4.0))));\n  col = mix(col, EVENT * 0.8, inputBorder * seamsClosed * 0.85);\n\n  // Eyes and whiskers ride over the input and over the mosaic.\n  float eyesOpen = bar >= 24.0 ? ease((bar - 24.5) / 0.5) : 1.0 - ease((bar - 2.5) / 1.0);\n  float lid = clamp(1.0 - blinkAt(bar, 26.6) - blinkAt(bar, 30.4) - blinkAt(bar, 1.4), 0.0, 1.0);\n  float aperture = max(lid, 0.04);\n  vec2 el = eyeLocal(q);\n  float eyeShape = sdEllipse(vec2(el.x, el.y / aperture), vec2(0.13, 0.08)) * aperture;\n  float eyeMask = fill(eyeShape, 0.004) * inBlock;\n  float lookUp = ease((bar - 26.0) / 0.4) * (1.0 - ease((bar - 27.2) / 0.4));\n  vec2 pupilPos = el - vec2(0.0, 0.025 * lookUp);\n  vec3 iris = AMBER * (0.72 + 0.5 * smoothstep(0.07, -0.07, el.y)) * (1.0 - 0.35 * smoothstep(0.08, 0.13, length(el * vec2(1.0, 1.5))));\n  iris = mix(iris, vec3(0.02, 0.015, 0.01), fill(sdEllipse(pupilPos, vec2(0.022, 0.07 * aperture)), 0.004));\n  iris = mix(iris, vec3(1.0, 0.97, 0.9), fill(length(el - vec2(-0.04, 0.03)) - 0.014, 0.004) * lid);\n  col += AMBER * 0.22 * exp(-max(eyeShape, 0.0) * 28.0) * eyesOpen * inBlock * lid;\n  col = mix(col, iris, eyeMask * eyesOpen);\n  float whiskerAmt = bar >= 24.0 ? ease((bar - 25.5) / 1.5) : 1.0 - ease((bar - 2.0) / 1.5);\n  col = mix(col, vec3(0.88, 0.87, 0.84), whiskers(q) * whiskerAmt * inBlock);\n\n  // The neuron: connection lines, the cell body, and its axon into the activation trace.\n  float asking = step(64.0, beat) * step(beat, 112.0);\n  float inputTop = (4.0 - cam.y) / cam.z;\n  float descend = fract(kf);\n  float toInput = sdSegment(uv, SOMA, vec2(0.0, inputTop));\n  float downSignal = fill(length(uv - mix(SOMA, vec2(0.0, inputTop), descend)) - 0.006, 0.002) * step(beat, 96.0);\n  lines += EVENT * asking * (0.35 * (1.0 - smoothstep(0.0016, 0.0032, toInput)) + 1.2 * downSignal);\n  float fidelity = fidelityAt(k);\n  somaFire += asking * (0.4 + 0.5 * fidelity + 0.5 * stepPulse);\n  col += lines * neuronOn;\n\n  float traceBand = step(0.402, uv.y) * step(uv.y, 0.478) * step(abs(uv.x), 0.455);\n  col = mix(col, GROUND * 0.8, traceBand * neuronOn * 0.82);\n  float dx = 1.0 / iResolution.y;\n  float tb = bar - (0.44 - uv.x) / 0.88 * 4.0;\n  float a0 = activation(tb);\n  float a1 = activation(tb + dx / 0.88 * 4.0);\n  float traceY = 0.41 + 0.058 * a0;\n  float slope = (a1 - a0) * 0.058 / dx;\n  float traceDist = abs(uv.y - traceY) / sqrt(1.0 + slope * slope);\n  float inTrace = step(abs(uv.x), 0.44);\n  vec3 traceCol = mix(vec3(0.75, 0.78, 0.82), AMBER, ease((tb - 8.5) / 1.5) * step(tb, 16.0) + step(16.0, tb));\n  col = mix(col, traceCol, inTrace * (1.0 - smoothstep(0.0012, 0.0026, traceDist)) * neuronOn);\n  col += traceCol * 0.10 * inTrace * step(0.41, uv.y) * step(uv.y, traceY) * neuronOn;\n  float nowMark = 1.0 - smoothstep(0.0, 0.0025, abs(uv.x - 0.44));\n  col = mix(col, EVENT, nowMark * traceBand * neuronOn * 0.5);\n\n  float axon = sdSegment(uv, SOMA, vec2(0.0, 0.405));\n  float dendrites = min(sdSegment(uv, SOMA, SOMA + vec2(-0.055, -0.03)), sdSegment(uv, SOMA, SOMA + vec2(0.06, -0.025)));\n  dendrites = min(dendrites, min(sdSegment(uv, SOMA, SOMA + vec2(-0.03, -0.05)), sdSegment(uv, SOMA, SOMA + vec2(0.025, -0.055))));\n  float fire = clamp(somaFire, 0.0, 1.0);\n  vec3 neuronCol = mix(vec3(0.55, 0.57, 0.62), EVENT, 0.3 + 0.7 * fire);\n  col = mix(col, neuronCol, (1.0 - smoothstep(0.0018, 0.0035, min(axon, dendrites))) * neuronOn);\n  float somaD = length(uv - SOMA) - 0.021;\n  col += EVENT * 0.35 * fire * exp(-max(somaD, 0.0) * 45.0) * neuronOn;\n  col = mix(col, neuronCol, fill(somaD, 0.0015) * neuronOn);\n  col = mix(col, neuronCol * 0.55, fill(length(uv - SOMA - vec2(0.003, -0.002)) - 0.0075, 0.0015) * neuronOn);\n\n  // Frames seen: 0 to 10,000,000 across the training bars.\n  float counterOn = ease((bar - 4.0) / 0.5) * (1.0 - ease((bar - 24.0) / 1.0));\n  float seen = floor(1.0e5 * clamp((bar - 4.0) / 10.0, 0.0, 1.0)) * 100.0;\n  vec2 counterOrigin = vec2(-0.432, -0.456);\n  float plate = fill(sdBox(uv - vec2(-0.30, -0.439), vec2(0.142, 0.03)) - 0.006, 0.001);\n  col = mix(col, GROUND, plate * counterOn * 0.8);\n  if (counterOn > 0.0 && plate > 0.0) {\n    float place = 1.0e7;\n    for (int i = 0; i \u003c 8; i++) {\n      float fi = float(i);\n      float x = counterOrigin.x + fi * 0.028 + step(1.5, fi) * 0.012 + step(4.5, fi) * 0.012;\n      float d = mod(floor((seen + 0.5) / place), 10.0);\n      float lead = (seen + 0.5 \u003c place && i \u003c 7) ? 0.22 : 1.0;\n      float seg = sevenSegment(uv - vec2(x, counterOrigin.y), d);\n      col = mix(col, EVENT * lead, seg * counterOn);\n      place = place / 10.0;\n    }\n    float comma = min(length(uv - vec2(counterOrigin.x + 0.0575, counterOrigin.y + 0.001)),\n                      length(uv - vec2(counterOrigin.x + 0.1595, counterOrigin.y + 0.001))) - 0.0026;\n    col = mix(col, EVENT, fill(comma, 0.0008) * counterOn);\n  }\n\n  col *= 1.0 - 0.22 * dot(uv, uv) * (1.0 + 0.1 * sin(tau));\n  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      // Public Pages controls are installed only in the exported document.
+      // Unset GLSL delta uniforms stay zero throughout ordinary capture.
+      if (window.__applyAnimationControls) window.__applyAnimationControls(gl, program);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 128\\n// DURATION: 60\\n// FORM: poster 0-4 | training 4-14 | question 14-16 | signature 16-24 | recognition 24-28 | return 28-32\\n// TONAL CENTER: C# minor\\n// MOTIF: E4 G#4 B4 C#5 - two-bar cell: E4 on beat 1, G#4 on beat 2-and, B4 on beat 4, one beat rest, C#5 on beat 2, B4 on beat 3-and, then rest through the bar line\\n// HARMONIC PLAN: C#m9 | Amaj9 | F#m9 | G#m7 - four bars repeating for all 32 cycles; the question (14-16) sits on F#m9 | G#m7 with the pad filter opening; sections change layer groups and filter only, never the progression\\n// GROOVE: RolandTR909 - rounded kick on beat 1 and the and of beat 3, one warm snare on beats 2 and 4, short swung hats with gaps, dry rim pickups; clean 2-step, no crackle or noise sweep\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// Keep each sampled hit dry and finite: the snare supplies body without a second clap/noise layer.\\nconst hats = s(\\\"[~ hh] [hh ~] [~ hh] [hh hh]\\\").bank(\\\"RolandTR909\\\")\\n  .late(\\\"[0 0.018]*4\\\").velocity(\\\"\u003c0.9 0.6 0.8 0.55>*2\\\")\\n  .attack(0.002).decay(0.035).sustain(0).release(0.012).gain(0.11).hpf(2200).lpf(5600).pan(0.56)\\nconst rimEnd = s(\\\"~ ~ ~ [~ ~ ~ rim]\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.002).decay(0.055).sustain(0).release(0.02).gain(0.055).lpf(3200).pan(0.58)\\nconst rim3 = s(\\\"~ ~ rim ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.002).decay(0.055).sustain(0).release(0.02).gain(0.07).lpf(3200).pan(0.58)\\nconst kick2step = s(\\\"bd ~ [~ bd] ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.19).sustain(0).release(0.045).gain(0.12).lpf(900)\\nconst kickHalf = s(\\\"bd ~ ~ ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.19).sustain(0).release(0.045).gain(0.12).lpf(900)\\nconst backbeat = s(\\\"~ sd ~ sd\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.11).sustain(0).release(0.035).gain(0.16).hpf(160).lpf(3600)\\n\\nconst roots = \\\"\u003cc#2 a1 f#1 g#1>\\\"\\nconst sub = (st) => {\\n  const n = note(roots).struct(st).clip(0.4)\\n  return stack(n.s(\\\"sine\\\").gain(0.15), n.s(\\\"sawtooth\\\").lpf(230).gain(0.08))\\n    .attack(0.005).decay(0.18).sustain(0.22).release(0.22)\\n}\\n\\nconst padLoop = \\\"\u003c[c#3,e3,g#3,b3,d#4] [a2,c#3,e3,g#3,b3] [f#2,a2,c#3,e3,g#3] [g#2,b2,d#3,f#3]>\\\"\\nconst padQuestion = \\\"\u003c[f#2,a2,c#3,e3,g#3] [g#2,b2,d#3,f#3]>\\\"\\nconst pad = (src, cut) => {\\n  const n = note(src).clip(0.98)\\n  return stack(n.add(note(0.06)).pan(0.36), n.add(note(-0.06)).pan(0.64)).s(\\\"sawtooth\\\")\\n    .lpf(cut).lpq(2).attack(0.35).decay(0.2).sustain(0.75).release(0.65)\\n    .gain(0.16).room(0.4).roomsize(2.4)\\n}\\n\\nconst ghost = (p, g) => stack(p.s(\\\"triangle\\\").gain(0.36 * g), p.s(\\\"sawtooth\\\").lpf(1800).gain(0.06 * g), p.s(\\\"sine\\\").gain(0.1 * g))\\n  .clip(0.6).attack(0.035).decay(0.3).sustain(0.3).release(0.7)\\n  .bpf(1100).bpq(0.7).pan(0.48).room(0.34).roomsize(2.2)\\n  .delay(0.22).delaytime(0.1875).delayfeedback(0.28)\\nconst motifCell = \\\"\u003c[e4 [~ g#4] ~ b4] [~ c#5 [~ b4] ~]>\\\"\\nconst motifOctave = \\\"\u003c[e5 [~ g#5] ~ b5] [~ c#6 [~ b5] ~] [e5 [~ g#5] ~ b5] [~ b5@3]>\\\"\\nconst bell = (src, g = 1) => {\\n  const n = note(src).clip(0.35).velocity(\\\"\u003c1 0.92 0.96 0.88>\\\")\\n  return stack(n.s(\\\"triangle\\\").gain(0.2 * g), n.s(\\\"sine\\\").gain(0.1 * g))\\n    .attack(0.005).decay(0.17).sustain(0).release(0.28)\\n    .lpf(3200).lpenv(2).lpa(0.005).lpd(0.12).pan(0.55).room(0.3).roomsize(1.8)\\n}\\n\\n// A pitched breath marks the question without a broadband riser or a continuous noise floor.\\nconst question = note(\\\"\u003c[f#4,a4,c#5] [g#4,b4,d#5]>\\\").s(\\\"sine\\\")\\n  .clip(0.65).attack(0.22).decay(0.3).sustain(0.25).release(0.45)\\n  .gain(0.075).room(0.2).roomsize(1.6)\\n\\n$: arrange(\\n  [4, stack(kickHalf, hats, rimEnd)],\\n  [10, stack(kick2step, backbeat, hats, rimEnd)],\\n  [2, silence],\\n  [4, stack(kickHalf, rim3, hats)],\\n  [4, stack(kickHalf, rim3, hats, backbeat)],\\n  [4, stack(kick2step, backbeat, hats, rimEnd)],\\n  [4, stack(kickHalf, hats, rimEnd)]\\n)\\n\\n$: arrange(\\n  [4, sub(\\\"x ~ ~ ~\\\")],\\n  [10, sub(\\\"x ~ [~ x] ~\\\")],\\n  [2, silence],\\n  [4, sub(\\\"x ~ ~ ~\\\")],\\n  [4, sub(\\\"x ~ [~ x] ~\\\").velocity(\\\"1 1 0.72 1\\\")],\\n  [4, sub(\\\"x ~ [~ x] ~\\\")],\\n  [4, sub(\\\"x ~ ~ ~\\\")]\\n)\\n\\n$: arrange(\\n  [4, pad(padLoop, 700)],\\n  [10, pad(padLoop, 1500)],\\n  [2, pad(padQuestion, \\\"\u003c1700 2300>\\\")],\\n  [4, pad(padLoop, 1500)],\\n  [4, pad(padLoop, 1750)],\\n  [4, pad(padLoop, 2600)],\\n  [4, pad(padLoop, 700)]\\n)\\n\\n$: arrange(\\n  [4, silence],\\n  [5, silence],\\n  [5, ghost(note(motifCell).sometimesBy(0.25, x => x.off(0.1875, y => y.add(note(12)).velocity(0.5))), 1)],\\n  [2, ghost(note(\\\"\u003c~ [~ ~ ~ [~ ~ e4 ~]]>\\\"), 0.45)],\\n  [4, bell(\\\"\u003c[e4 g#4 b4 c#5] [a4 b4 c#5 e5] [f#4 a4 c#5 e5] [g#4 b4 d#5 f#5]>\\\")],\\n  [4, bell(\\\"\u003c[e4 g#4 b4 c#5] [a4 b4 c#5 e5] [f#4 a4 c#5 e5] [g#4 b4 d#5 f#5]>\\\", 1.7).add(note(12))],\\n  [4, ghost(note(motifOctave), 0.95)],\\n  [4, silence]\\n)\\n\\n$: arrange(\\n  [14, silence],\\n  [2, question],\\n  [16, silence]\\n)\\n\",\"bpm\":128,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5333333333333333,\"cycles\":32,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
