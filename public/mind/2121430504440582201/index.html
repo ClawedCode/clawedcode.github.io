@@ -2,8 +2,17 @@
 <html>
 <head>
   <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
   
   <style>
+    
     body {
       margin: 0;
       overflow: hidden;
@@ -49,128 +58,960 @@
     <div id="audio-controls">
       <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
     </div>
-  <script>
-// Error bootstrap in its OWN script block: a parse error in a later <script>
-// fires window 'error' with the line number, so it gets captured instead of
-// silently preventing everything (including this listener) from running.
+  <script type="module">
 window._errors = [];
 window.addEventListener('error', (e) => {
-  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
   console.error(e.message, e.filename, e.lineno);
 });
-  </script>
-  <script>
-const canvas = document.createElement('canvas');
-canvas.width = 800;
-canvas.height = 800;
-const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
 
-if (!gl) {
-  console.error('WebGL not supported');
-  window.ready = false;
-} else {
-  const vertexShaderSource = `
-    attribute vec2 a_position;
-    void main() {
-      gl_Position = vec4(a_position, 0.0, 1.0);
-    }
-  `;
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
 
-  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\n// 128 BPM: 32 bars of 1.875 s, 128 beats. Every event below sits on that clock.\nconst float BARS = 32.0;\n\nconst vec3 GROUND = vec3(0.027, 0.035, 0.063);\nconst vec3 AMBER = vec3(0.949, 0.663, 0.231);\nconst vec3 EVENT = vec3(1.0, 0.957, 0.863);\nconst vec2 SOMA = vec2(0.0, 0.352);\n\nfloat hash12(vec2 p) {\n  vec3 p3 = fract(vec3(p.xyx) * 0.1031);\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.x + p3.y) * p3.z);\n}\n\nvec2 hash22(vec2 p) {\n  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));\n  p3 += dot(p3, p3.yzx + 33.33);\n  return fract((p3.xx + p3.yz) * p3.zy);\n}\n\nfloat ease(float x) {\n  x = clamp(x, 0.0, 1.0);\n  return x * x * (3.0 - 2.0 * x);\n}\n\nfloat fill(float d, float soft) {\n  return 1.0 - smoothstep(-soft, soft, d);\n}\n\nfloat sdBox(vec2 p, vec2 b) {\n  vec2 d = abs(p) - b;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\n  return length(pa - ba * h);\n}\n\nfloat sdEllipse(vec2 p, vec2 r) {\n  return (length(p / r) - 1.0) * min(r.x, r.y);\n}\n\nfloat sdTri(vec2 p, vec2 p0, vec2 p1, vec2 p2) {\n  vec2 e0 = p1 - p0;\n  vec2 e1 = p2 - p1;\n  vec2 e2 = p0 - p2;\n  vec2 v0 = p - p0;\n  vec2 v1 = p - p1;\n  vec2 v2 = p - p2;\n  vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);\n  vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);\n  vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);\n  float s = sign(e0.x * e2.y - e0.y * e2.x);\n  vec2 d = min(min(vec2(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),\n                   vec2(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),\n                   vec2(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));\n  return -sqrt(d.x) * sign(d.y);\n}\n\nfloat smin(float a, float b, float k) {\n  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n  return mix(b, a, h) - k * h * (1.0 - h);\n}\n\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, -s, s, c);\n}\n\n// Camera over the wall of video stills: xy = centre in tile units, z = tiles per frame height.\nvec3 cameraAt(float bar) {\n  vec3 portrait = vec3(0.0, 0.45, 12.0);\n  vec3 wall = vec3(0.0, 0.0, 16.0);\n  vec3 drift = vec3(2.5, -0.8, 17.0);\n  vec3 overBlock = vec3(0.0, 0.0, 15.0);\n  vec3 inputSquare = vec3(0.0, 0.45, 11.0);\n  vec3 closeInput = vec3(0.0, 0.45, 10.4);\n  if (bar \u003c 5.0) return mix(portrait, wall, ease(bar / 5.0));\n  if (bar \u003c 9.5) return mix(wall, drift, ease((bar - 5.0) / 4.5));\n  if (bar \u003c 14.0) return mix(drift, overBlock, ease((bar - 9.5) / 4.5));\n  if (bar \u003c 16.0) return mix(overBlock, inputSquare, ease((bar - 14.0) / 2.0));\n  if (bar \u003c 28.0) return mix(inputSquare, closeInput, ease((bar - 16.0) / 12.0));\n  return mix(closeInput, portrait, ease((bar - 28.0) / 4.0));\n}\n\n// One 200x200 frame sampled from a video. l spans -0.5..0.5 inside its tile.\nvec3 videoStill(vec2 l, float kind, float seed) {\n  float h1 = hash12(vec2(seed * 113.0, 1.7));\n  float h2 = hash12(vec2(seed * 71.0, 9.3));\n  float h3 = hash12(vec2(seed * 37.0, 4.1));\n  vec3 col = vec3(0.5);\n  if (kind \u003c 0.5) {\n    // outdoors: sky, horizon, a low sun\n    float horizon = mix(-0.22, 0.12, h1);\n    vec3 sky = mix(vec3(0.44, 0.56, 0.66), vec3(0.80, 0.63, 0.47), h2);\n    vec3 land = mix(vec3(0.27, 0.34, 0.21), vec3(0.46, 0.38, 0.27), h3);\n    col = l.y > horizon ? mix(sky, sky * 1.18, clamp(l.y - horizon, 0.0, 1.0)) : land * (0.75 + 0.5 * (l.y + 0.5));\n    col = mix(col, vec3(0.97, 0.90, 0.72), fill(length(l - vec2(mix(-0.25, 0.25, h3), horizon + 0.16)) - 0.07, 0.012));\n  } else if (kind \u003c 1.5) {\n    // someone talking to their camera\n    vec3 wallCol = mix(vec3(0.63, 0.58, 0.50), vec3(0.40, 0.46, 0.53), h1);\n    vec3 skin = mix(vec3(0.87, 0.67, 0.53), vec3(0.47, 0.31, 0.23), h2);\n    vec3 shirt = mix(vec3(0.24, 0.30, 0.43), vec3(0.60, 0.23, 0.20), h3);\n    col = wallCol;\n    col = mix(col, shirt, fill(sdEllipse(l - vec2(0.0, -0.55), vec2(0.38, 0.28)), 0.012));\n    col = mix(col, skin, fill(sdEllipse(l - vec2(0.0, 0.02), vec2(0.15, 0.19)), 0.012));\n    col = mix(col, skin * 0.32, fill(sdEllipse(l - vec2(0.0, 0.14), vec2(0.165, 0.10)), 0.012) * step(0.09, l.y));\n  } else if (kind \u003c 2.5) {\n    // a living room: a window over a sofa\n    vec3 wallCol = mix(vec3(0.70, 0.64, 0.54), vec3(0.52, 0.56, 0.50), h1);\n    vec3 sofa = mix(vec3(0.46, 0.17, 0.15), vec3(0.28, 0.32, 0.40), h2);\n    col = wallCol;\n    col = mix(col, vec3(0.86, 0.90, 0.92), fill(sdBox(l - vec2(mix(-0.15, 0.15, h3), 0.20), vec2(0.17, 0.15)), 0.01));\n    col = mix(col, wallCol * 0.55, fill(sdBox(l - vec2(0.0, -0.42), vec2(0.5, 0.1)), 0.01));\n    col = mix(col, sofa, fill(sdBox(l - vec2(0.0, -0.20), vec2(0.36, 0.10)) - 0.04, 0.01));\n    col = mix(col, sofa * 1.25, fill(sdBox(vec2(abs(l.x) - 0.17, l.y + 0.10), vec2(0.13, 0.05)) - 0.03, 0.01));\n  } else if (kind \u003c 3.5) {\n    // a title card\n    vec3 card = mix(vec3(0.12, 0.12, 0.16), vec3(0.20, 0.13, 0.12), h1);\n    col = card;\n    col = mix(col, vec3(0.86, 0.84, 0.78), fill(sdBox(l - vec2(0.0, 0.08), vec2(mix(0.20, 0.32, h2), 0.045)), 0.01));\n    col = mix(col, vec3(0.62, 0.60, 0.56), fill(sdBox(l - vec2(0.0, -0.08), vec2(mix(0.12, 0.24, h3), 0.025)), 0.01));\n    col = mix(col, mix(vec3(0.70, 0.36, 0.22), vec3(0.30, 0.50, 0.55), h3), fill(sdBox(l - vec2(0.0, -0.30), vec2(0.5, 0.02)), 0.01));\n  } else if (kind \u003c 4.5) {\n    // a car in the street\n    vec3 paint = mix(vec3(0.62, 0.20, 0.17), vec3(0.75, 0.73, 0.68), h2);\n    col = mix(vec3(0.58, 0.62, 0.66), vec3(0.42, 0.40, 0.38), step(l.y, 0.05));\n    col = mix(col, vec3(0.30, 0.31, 0.33), step(l.y, -0.18));\n    float carX = mix(-0.08, 0.08, h1);\n    col = mix(col, paint, fill(sdBox(l - vec2(carX, -0.09), vec2(0.30, 0.07)) - 0.03, 0.01));\n    col = mix(col, paint * 0.8, fill(sdBox(l - vec2(carX - 0.02, 0.03), vec2(0.15, 0.06)) - 0.03, 0.01));\n    col = mix(col, vec3(0.08), fill(length(vec2(abs(l.x - carX) - 0.19, l.y + 0.17)) - 0.065, 0.01));\n  } else {\n    // a cat\n    vec3 room = mix(vec3(0.68, 0.61, 0.50), vec3(0.50, 0.56, 0.52), h1);\n    col = room;\n    col = mix(col, room * 0.66, step(l.y, -0.24));\n    vec3 fur = h2 \u003c 0.32 ? vec3(0.07, 0.07, 0.08) : (h2 \u003c 0.62 ? vec3(0.82, 0.50, 0.24) : (h2 \u003c 0.82 ? vec3(0.47, 0.47, 0.50) : vec3(0.92, 0.90, 0.86)));\n    vec2 c = vec2(h3 \u003c 0.5 ? -l.x : l.x, l.y);\n    float body = sdEllipse(c - vec2(0.09, -0.15), vec2(0.25, 0.17));\n    float head = length(c - vec2(-0.15, 0.06)) - 0.16;\n    vec2 ce = vec2(abs(c.x + 0.15), c.y);\n    float ears = sdTri(ce, vec2(0.02, 0.17), vec2(0.15, 0.12), vec2(0.13, 0.34));\n    float tail = sdSegment(c, vec2(0.30, -0.22), vec2(0.40, 0.10)) - 0.04;\n    float cat = min(min(smin(body, head, 0.05), ears), tail);\n    col = mix(col, fur, fill(cat, 0.01));\n    vec2 ey = vec2(abs(c.x + 0.15) - 0.065, c.y - 0.07);\n    col = mix(col, vec3(0.86, 0.72, 0.30), fill(length(ey) - 0.026, 0.008));\n  }\n  return col;\n}\n\n// The cat face of the optimal stimulus, in input coordinates q (-1..1 across the 200x200 square).\nfloat headSdf(vec2 q) {\n  float crown = sdEllipse(q - vec2(0.0, -0.12), vec2(0.62, 0.52));\n  float cheeks = sdEllipse(q - vec2(0.0, -0.31), vec2(0.70, 0.36));\n  vec2 e = vec2(abs(q.x), q.y);\n  float ear = sdTri(e, vec2(0.12, 0.30), vec2(0.62, 0.06), vec2(0.50, 0.86)) - 0.03;\n  return smin(smin(crown, cheeks, 0.10), ear, 0.07);\n}\n\nfloat innerEarSdf(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  return sdTri(e, vec2(0.24, 0.32), vec2(0.55, 0.16), vec2(0.48, 0.70)) - 0.01;\n}\n\nfloat muzzleSdf(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  return smin(length(e - vec2(0.10, -0.38)) - 0.12, sdEllipse(q - vec2(0.0, -0.22), vec2(0.10, 0.12)), 0.06);\n}\n\nfloat noseSdf(vec2 q) {\n  return sdTri(q, vec2(-0.075, -0.20), vec2(0.075, -0.20), vec2(0.0, -0.29)) - 0.02;\n}\n\nvec2 eyeLocal(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y) - vec2(0.25, -0.03);\n  return rot(0.22) * e;\n}\n\nfloat socketSdf(vec2 q) {\n  return sdEllipse(eyeLocal(q), vec2(0.135, 0.085));\n}\n\nfloat valueNoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  float a = hash12(i);\n  float b = hash12(i + vec2(1.0, 0.0));\n  float c = hash12(i + vec2(0.0, 1.0));\n  float d = hash12(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\nfloat fidelityAt(float k) {\n  return 1.0 - pow(0.91, k);\n}\n\n// Grey value of the input after k gradient steps toward what the neuron wants.\nfloat stimulusValue(vec2 q, float k, float grain) {\n  float soft = mix(0.32, 0.05, ease(k / 30.0));\n  float fidelity = fidelityAt(k);\n  float noiseAmp = 0.05 + 0.25 * pow(0.92, k);\n  float mottle = (valueNoise(q * 5.0 + 3.0) - 0.5) * (0.05 + 0.10 * pow(0.95, k));\n  float face = 0.56;\n  face = mix(face, 0.36, fill(headSdf(q), soft));\n  face = mix(face, 0.50, fill(innerEarSdf(q), soft));\n  face = mix(face, 0.71, fill(muzzleSdf(q), soft));\n  face = mix(face, 0.15, fill(socketSdf(q), soft));\n  face = mix(face, 0.22, fill(noseSdf(q), soft));\n  return mix(0.56, face, fidelity) + noiseAmp * (grain - 0.5) * 2.0 + mottle;\n}\n\nfloat whiskers(vec2 q) {\n  vec2 e = vec2(abs(q.x), q.y);\n  float d = sdSegment(e, vec2(0.22, -0.34), vec2(0.74, -0.25));\n  d = min(d, sdSegment(e, vec2(0.23, -0.39), vec2(0.77, -0.40)));\n  d = min(d, sdSegment(e, vec2(0.22, -0.44), vec2(0.70, -0.55)));\n  return 1.0 - smoothstep(0.004, 0.009, d);\n}\n\nfloat blinkAt(float bar, float centre) {\n  return 1.0 - smoothstep(0.0, 0.11, abs(bar - centre));\n}\n\n// The neuron's activation over the loop, in bars: wrong guesses, then cats, then the climb.\nfloat activation(float tb) {\n  tb = mod(tb, BARS);\n  float bt = tb * 4.0;\n  float bi = floor(bt + 0.5);\n  float spike = exp(-pow((bt - bi) * 7.0, 2.0));\n  float a = 0.04;\n  if (bi >= 16.0 && bi \u003c= 55.0) {\n    float sel = ease((bi / 4.0 - 8.5) / 1.5);\n    float guess = 0.22 + 0.36 * hash12(vec2(bi, 5.0));\n    a += mix(guess, 0.9, sel) * spike;\n  }\n  float k = clamp(bt - 64.0, 0.0, 32.0);\n  float climb = fidelityAt(floor(k) + ease(fract(k) * 4.0));\n  a += step(64.0, bt) * 0.88 * climb;\n  a += (1.0 - ease(tb / 3.5)) * step(tb, 4.0) * 0.88;\n  return a;\n}\n\nfloat digitCode(float d) {\n  return d \u003c 0.5 ? 63.0 : d \u003c 1.5 ? 6.0 : d \u003c 2.5 ? 91.0 : d \u003c 3.5 ? 79.0 : d \u003c 4.5 ? 102.0\n       : d \u003c 5.5 ? 109.0 : d \u003c 6.5 ? 125.0 : d \u003c 7.5 ? 7.0 : d \u003c 8.5 ? 127.0 : 111.0;\n}\n\nfloat segmentOn(float code, float bitValue) {\n  return mod(floor(code / bitValue + 0.001), 2.0);\n}\n\n// Seven-segment digit d with its lower-left corner at the origin of p.\nfloat sevenSegment(vec2 p, float d) {\n  float W = 0.019;\n  float H = 0.034;\n  float T = 0.0034;\n  float code = digitCode(d);\n  float s = 0.0;\n  vec2 hz = vec2(W * 0.5 - T * 0.7, T * 0.5);\n  vec2 vt = vec2(T * 0.5, H * 0.25 - T * 0.7);\n  s = max(s, segmentOn(code, 1.0) * fill(sdBox(p - vec2(W * 0.5, H), hz), 0.0007));\n  s = max(s, segmentOn(code, 2.0) * fill(sdBox(p - vec2(W, H * 0.75), vt), 0.0007));\n  s = max(s, segmentOn(code, 4.0) * fill(sdBox(p - vec2(W, H * 0.25), vt), 0.0007));\n  s = max(s, segmentOn(code, 8.0) * fill(sdBox(p - vec2(W * 0.5, 0.0), hz), 0.0007));\n  s = max(s, segmentOn(code, 16.0) * fill(sdBox(p - vec2(0.0, H * 0.25), vt), 0.0007));\n  s = max(s, segmentOn(code, 32.0) * fill(sdBox(p - vec2(0.0, H * 0.75), vt), 0.0007));\n  s = max(s, segmentOn(code, 64.0) * fill(sdBox(p - vec2(W * 0.5, H * 0.5), hz), 0.0007));\n  return s;\n}\n\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float bar = phase * BARS;\n  float beat = bar * 4.0;\n  float tau = phase * 6.28318530718;\n\n  vec3 cam = cameraAt(bar);\n  vec2 world = cam.xy + uv * cam.z;\n  vec2 cell = floor(world);\n  vec2 l = world - cell - 0.5;\n  float px = cam.z / iResolution.y;\n  float inBlock = step(max(abs(world.x), abs(world.y)), 4.0);\n  vec2 q = world / 4.0;\n\n  // Every still flips to a new frame once a bar, on an off-beat eighth; a quarter of the wall\n  // turns between each pair of beats, and none turns on the loop point.\n  float flipOffset = floor(hash12(cell + 17.0) * 4.0) + 0.5;\n  float frameIndex = mod(floor((beat - flipOffset) / 4.0), 32.0);\n  float seed = hash12(vec2(cell.x * 31.0 + frameIndex * 7.0, cell.y * 17.0 - frameIndex * 13.0));\n  float kind = floor(hash12(vec2(seed * 91.0, 3.3)) * 5.0);\n  if (hash12(vec2(seed * 57.0, 8.1)) \u003c 0.06) kind = 5.0;\n  float flipFlash = exp(-mod(beat - flipOffset, 4.0) * 9.0);\n\n  // Training: on every beat three stills are shown to the neuron. First it answers anything;\n  // from bar 9 it answers only to cats.\n  float neuronOn = ease((bar - 3.0) / 1.25) * (1.0 - ease((bar - 28.0) / 1.5));\n  float firedTile = 0.0;\n  float firedCat = 0.0;\n  float firedSeed = 0.0;\n  float firedAge = 9.0;\n  vec3 lines = vec3(0.0);\n  float somaFire = 0.0;\n  float beatNow = floor(beat);\n  for (int i = 0; i \u003c 2; i++) {\n    float b = beatNow - float(i);\n    if (b >= 16.0 && b \u003c= 55.0) {\n      float sel = ease((b / 4.0 - 8.5) / 1.5);\n      float age = beat - b;\n      vec3 camB = cameraAt(b / 4.0);\n      for (int j = 0; j \u003c 3; j++) {\n        float fj = float(j);\n        vec2 r = hash22(vec2(b * 3.1 + fj, fj * 7.7 + 1.3));\n        vec2 shown = floor(camB.xy + vec2(mix(-0.40, 0.40, r.x), mix(-0.40, 0.14, r.y)) * camB.z);\n        float isCat = step(hash12(vec2(b, fj + 40.0)), sel);\n        if (shown.x == cell.x && shown.y == cell.y && age \u003c firedAge) {\n          firedTile = 1.0;\n          firedCat = isCat;\n          firedSeed = hash12(vec2(b * 1.7, fj + 2.0));\n          firedAge = age;\n        }\n        vec2 tileScreen = (shown + 0.5 - cam.xy) / cam.z;\n        float strength = exp(-age * 2.2);\n        vec3 lineCol = mix(vec3(0.70, 0.73, 0.78) * 0.6, AMBER, isCat);\n        float width = mix(0.0011, 0.0024, isCat);\n        float d = sdSegment(uv, SOMA, tileScreen);\n        lines += lineCol * strength * (1.0 - smoothstep(width, width + 0.0016, d));\n        float climb = clamp(age * 2.2, 0.0, 1.0);\n        vec2 signal = mix(tileScreen, SOMA, climb);\n        lines += lineCol * (1.0 - climb) * 1.6 * fill(length(uv - signal) - 0.006, 0.002);\n        somaFire += strength * mix(0.32, 1.0, isCat);\n      }\n    }\n  }\n  if (firedTile > 0.5) {\n    kind = firedCat > 0.5 ? 5.0 : floor(firedSeed * 5.0);\n    seed = firedSeed;\n    flipFlash = exp(-firedAge * 9.0);\n  }\n\n  // The wall of stills.\n  vec3 still = videoStill(l, kind, seed);\n  still *= 0.84 + 0.16 * (1.0 - length(l) * 1.3);\n  float wallLevel = 1.0 - 0.84 * ease((bar - 14.5) / 1.5) + 0.84 * ease((bar - 28.0) / 3.5);\n\n  // ClawedCode's face made of darkened stills (bars 28-32 and 0-4): each tile lets go on its own beat.\n  float mosaicOn = step(28.0, bar) + step(bar, 4.5);\n  float release = 0.5 + floor(hash12(cell + 5.0) * 12.0) / 4.0;\n  float tileHold = bar >= 28.0 ? 1.0 : 1.0 - ease((bar - release) / 0.2);\n  float faceSoft = 0.006;\n  float head = fill(headSdf(q), faceSoft);\n  float mosaicFace = clamp(mosaicOn, 0.0, 1.0) * inBlock * tileHold * head;\n  still *= 1.0 - 0.85 * mosaicFace;\n  still = mix(still, vec3(0.36, 0.12, 0.11) * 0.55, clamp(mosaicOn, 0.0, 1.0) * inBlock * tileHold * fill(innerEarSdf(q), faceSoft) * 0.8);\n\n  float tileMask = fill(sdBox(l, vec2(0.41)) - 0.03, px);\n  vec3 col = mix(GROUND, still * wallLevel + EVENT * flipFlash * 0.10 * wallLevel, tileMask);\n\n  // Fired stills of cats get an amber frame once the neuron knows what it wants.\n  float frameEdge = 1.0 - smoothstep(0.018, 0.04, abs(sdBox(l, vec2(0.41)) - 0.03));\n  col = mix(col, AMBER, firedTile * firedCat * frameEdge * exp(-firedAge * 1.2) * neuronOn);\n\n  // The question (bars 14-16): the centre block turns to static and closes into one 200x200 input.\n  float staticStart = 14.0 + 1.25 * length(cell + 0.5) / 5.66;\n  float staticAmt = ease((bar - staticStart) / 0.3);\n  float backToStills = ease((bar - 28.0) / 2.5);\n  float inputWeight = inBlock * staticAmt * (1.0 - backToStills);\n  float seamsClosed = ease((bar - 15.2) / 0.8) * (1.0 - ease((bar - 28.5) / 1.5));\n\n  // Gradient ascent (bars 16-24): one step per beat, 32 steps from static to a face.\n  float kf = clamp(beat - 64.0, 0.0, 32.0);\n  float k = floor(kf) + ease(fract(kf) * 4.0);\n  float grain = hash12(floor((q + 1.0) * 100.0) + 0.5);\n  float value = stimulusValue(q, k, grain);\n  float before = stimulusValue(q, max(k - 1.0, 0.0), grain);\n  float stepPulse = step(64.0, beat) * step(beat, 96.0) * exp(-fract(kf) * 5.0);\n  vec3 inputCol = vec3(value) * vec3(1.0, 0.985, 0.96);\n  inputCol += EVENT * clamp(abs(value - before) * 3.0, 0.0, 0.35) * stepPulse;\n\n  // The portrait looks back (bars 24.5-28): amber eyes open and the grey fur goes black.\n  float black = ease((bar - 25.0) / 2.0);\n  vec3 fur = vec3(0.045, 0.045, 0.058) + vec3(0.10, 0.11, 0.14) * smoothstep(-0.07, 0.0, headSdf(q));\n  fur = mix(fur, vec3(0.30, 0.10, 0.10), fill(innerEarSdf(q), faceSoft) * 0.8);\n  inputCol = mix(inputCol, fur, black * head);\n  inputCol = mix(inputCol, vec3(0.62, 0.61, 0.59), black * (1.0 - head) * 0.5);\n\n  float inputMask = max(tileMask, seamsClosed);\n  col = mix(col, inputCol, inputWeight * inputMask);\n  float inputBorder = 1.0 - smoothstep(0.025, 0.06, abs(sdBox(world, vec2(4.0))));\n  col = mix(col, EVENT * 0.8, inputBorder * seamsClosed * 0.85);\n\n  // Eyes and whiskers ride over the input and over the mosaic.\n  float eyesOpen = bar >= 24.0 ? ease((bar - 24.5) / 0.5) : 1.0 - ease((bar - 2.5) / 1.0);\n  float lid = clamp(1.0 - blinkAt(bar, 26.6) - blinkAt(bar, 30.4) - blinkAt(bar, 1.4), 0.0, 1.0);\n  float aperture = max(lid, 0.04);\n  vec2 el = eyeLocal(q);\n  float eyeShape = sdEllipse(vec2(el.x, el.y / aperture), vec2(0.13, 0.08)) * aperture;\n  float eyeMask = fill(eyeShape, 0.004) * inBlock;\n  float lookUp = ease((bar - 26.0) / 0.4) * (1.0 - ease((bar - 27.2) / 0.4));\n  vec2 pupilPos = el - vec2(0.0, 0.025 * lookUp);\n  vec3 iris = AMBER * (0.72 + 0.5 * smoothstep(0.07, -0.07, el.y)) * (1.0 - 0.35 * smoothstep(0.08, 0.13, length(el * vec2(1.0, 1.5))));\n  iris = mix(iris, vec3(0.02, 0.015, 0.01), fill(sdEllipse(pupilPos, vec2(0.022, 0.07 * aperture)), 0.004));\n  iris = mix(iris, vec3(1.0, 0.97, 0.9), fill(length(el - vec2(-0.04, 0.03)) - 0.014, 0.004) * lid);\n  col += AMBER * 0.22 * exp(-max(eyeShape, 0.0) * 28.0) * eyesOpen * inBlock * lid;\n  col = mix(col, iris, eyeMask * eyesOpen);\n  float whiskerAmt = bar >= 24.0 ? ease((bar - 25.5) / 1.5) : 1.0 - ease((bar - 2.0) / 1.5);\n  col = mix(col, vec3(0.88, 0.87, 0.84), whiskers(q) * whiskerAmt * inBlock);\n\n  // The neuron: connection lines, the cell body, and its axon into the activation trace.\n  float asking = step(64.0, beat) * step(beat, 112.0);\n  float inputTop = (4.0 - cam.y) / cam.z;\n  float descend = fract(kf);\n  float toInput = sdSegment(uv, SOMA, vec2(0.0, inputTop));\n  float downSignal = fill(length(uv - mix(SOMA, vec2(0.0, inputTop), descend)) - 0.006, 0.002) * step(beat, 96.0);\n  lines += EVENT * asking * (0.35 * (1.0 - smoothstep(0.0016, 0.0032, toInput)) + 1.2 * downSignal);\n  float fidelity = fidelityAt(k);\n  somaFire += asking * (0.4 + 0.5 * fidelity + 0.5 * stepPulse);\n  col += lines * neuronOn;\n\n  float traceBand = step(0.402, uv.y) * step(uv.y, 0.478) * step(abs(uv.x), 0.455);\n  col = mix(col, GROUND * 0.8, traceBand * neuronOn * 0.82);\n  float dx = 1.0 / iResolution.y;\n  float tb = bar - (0.44 - uv.x) / 0.88 * 4.0;\n  float a0 = activation(tb);\n  float a1 = activation(tb + dx / 0.88 * 4.0);\n  float traceY = 0.41 + 0.058 * a0;\n  float slope = (a1 - a0) * 0.058 / dx;\n  float traceDist = abs(uv.y - traceY) / sqrt(1.0 + slope * slope);\n  float inTrace = step(abs(uv.x), 0.44);\n  vec3 traceCol = mix(vec3(0.75, 0.78, 0.82), AMBER, ease((tb - 8.5) / 1.5) * step(tb, 16.0) + step(16.0, tb));\n  col = mix(col, traceCol, inTrace * (1.0 - smoothstep(0.0012, 0.0026, traceDist)) * neuronOn);\n  col += traceCol * 0.10 * inTrace * step(0.41, uv.y) * step(uv.y, traceY) * neuronOn;\n  float nowMark = 1.0 - smoothstep(0.0, 0.0025, abs(uv.x - 0.44));\n  col = mix(col, EVENT, nowMark * traceBand * neuronOn * 0.5);\n\n  float axon = sdSegment(uv, SOMA, vec2(0.0, 0.405));\n  float dendrites = min(sdSegment(uv, SOMA, SOMA + vec2(-0.055, -0.03)), sdSegment(uv, SOMA, SOMA + vec2(0.06, -0.025)));\n  dendrites = min(dendrites, min(sdSegment(uv, SOMA, SOMA + vec2(-0.03, -0.05)), sdSegment(uv, SOMA, SOMA + vec2(0.025, -0.055))));\n  float fire = clamp(somaFire, 0.0, 1.0);\n  vec3 neuronCol = mix(vec3(0.55, 0.57, 0.62), EVENT, 0.3 + 0.7 * fire);\n  col = mix(col, neuronCol, (1.0 - smoothstep(0.0018, 0.0035, min(axon, dendrites))) * neuronOn);\n  float somaD = length(uv - SOMA) - 0.021;\n  col += EVENT * 0.35 * fire * exp(-max(somaD, 0.0) * 45.0) * neuronOn;\n  col = mix(col, neuronCol, fill(somaD, 0.0015) * neuronOn);\n  col = mix(col, neuronCol * 0.55, fill(length(uv - SOMA - vec2(0.003, -0.002)) - 0.0075, 0.0015) * neuronOn);\n\n  // Frames seen: 0 to 10,000,000 across the training bars.\n  float counterOn = ease((bar - 4.0) / 0.5) * (1.0 - ease((bar - 24.0) / 1.0));\n  float seen = floor(1.0e5 * clamp((bar - 4.0) / 10.0, 0.0, 1.0)) * 100.0;\n  vec2 counterOrigin = vec2(-0.432, -0.456);\n  float plate = fill(sdBox(uv - vec2(-0.30, -0.439), vec2(0.142, 0.03)) - 0.006, 0.001);\n  col = mix(col, GROUND, plate * counterOn * 0.8);\n  if (counterOn > 0.0 && plate > 0.0) {\n    float place = 1.0e7;\n    for (int i = 0; i \u003c 8; i++) {\n      float fi = float(i);\n      float x = counterOrigin.x + fi * 0.028 + step(1.5, fi) * 0.012 + step(4.5, fi) * 0.012;\n      float d = mod(floor((seen + 0.5) / place), 10.0);\n      float lead = (seen + 0.5 \u003c place && i \u003c 7) ? 0.22 : 1.0;\n      float seg = sevenSegment(uv - vec2(x, counterOrigin.y), d);\n      col = mix(col, EVENT * lead, seg * counterOn);\n      place = place / 10.0;\n    }\n    float comma = min(length(uv - vec2(counterOrigin.x + 0.0575, counterOrigin.y + 0.001)),\n                      length(uv - vec2(counterOrigin.x + 0.1595, counterOrigin.y + 0.001))) - 0.0026;\n    col = mix(col, EVENT, fill(comma, 0.0008) * counterOn);\n  }\n\n  col *= 1.0 - 0.22 * dot(uv, uv) * (1.0 + 0.1 * sin(tau));\n  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n}";
+// @asset-begin voidCat@1
+// voidCat v1: ClawedCode as one smooth, skinned 3D cat. A signed distance field of
+// smooth-min'd ellipsoids, round cones and three-sided pyramid ears, meshed once with
+// naive surface nets plus two Newton steps onto the surface, then skinned to a skeleton
+// with a bone chain for each leg, the neck, the head and the tail. Black sheen fur with a
+// violet fresnel rim, amber slit-pupil eyes, white whiskers.
+// Banked from draft 1792452885287_c09b5426 ("Upward, not Northward").
+const createVoidCat = (() => {
+  const v3 = (x, y, z) => [x, y, z];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
+  const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+  const smax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
 
-  function createShader(gl, type, source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      const log = gl.getShaderInfoLog(shader);
-      console.error('Shader compile error:', log);
-      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
-      gl.deleteShader(shader);
-      window.ready = false;
-      return null;
-    }
-    return shader;
+  function ellipsoid(c, r) {
+    return {
+      f: (x, y, z) => {
+        const px = (x - c[0]) / r[0], py = (y - c[1]) / r[1], pz = (z - c[2]) / r[2];
+        const k0 = Math.sqrt(px * px + py * py + pz * pz);
+        const qx = px / r[0], qy = py / r[1], qz = pz / r[2];
+        const k1 = Math.sqrt(qx * qx + qy * qy + qz * qz);
+        return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -Math.min(r[0], r[1], r[2]);
+      },
+      box: [c[0] - r[0], c[1] - r[1], c[2] - r[2], c[0] + r[0], c[1] + r[1], c[2] + r[2]]
+    };
+  }
+  function roundCone(a, b, r1, r2) {
+    const ba = sub(b, a), l2 = dot(ba, ba), rr = r1 - r2, a2 = l2 - rr * rr, il2 = 1 / l2;
+    return {
+      f: (x, y, z) => {
+        const pax = x - a[0], pay = y - a[1], paz = z - a[2];
+        const yy = pax * ba[0] + pay * ba[1] + paz * ba[2], zz = yy - l2;
+        const xx = pax * l2 - ba[0] * yy, xy = pay * l2 - ba[1] * yy, xz = paz * l2 - ba[2] * yy;
+        const x2 = xx * xx + xy * xy + xz * xz, y2 = yy * yy * l2, z2 = zz * zz * l2;
+        const k = Math.sign(rr) * rr * rr * x2;
+        if (Math.sign(zz) * a2 * z2 > k) return Math.sqrt(x2 + z2) * il2 - r2;
+        if (Math.sign(yy) * a2 * y2 < k) return Math.sqrt(x2 + y2) * il2 - r1;
+        return (Math.sqrt(x2 * a2 * il2) + yy * rr) * il2 - r1;
+      },
+      box: [Math.min(a[0] - r1, b[0] - r2), Math.min(a[1] - r1, b[1] - r2), Math.min(a[2] - r1, b[2] - r2),
+        Math.max(a[0] + r1, b[0] + r2), Math.max(a[1] + r1, b[1] + r2), Math.max(a[2] + r1, b[2] + r2)]
+    };
+  }
+  // a cat ear is a three-sided pyramid, so every horizontal slice of it is a triangle; its edges
+  // are rounded by a smooth max, because a mesh grid cannot follow a knife edge without stair-steps
+  function pyramid(A, B0, B1, B2, round = 0.022) {
+    const cen = [(A[0] + B0[0] + B1[0] + B2[0]) / 4, (A[1] + B0[1] + B1[1] + B2[1]) / 4, (A[2] + B0[2] + B1[2] + B2[2]) / 4];
+    const faces = [[A, B0, B1], [A, B1, B2], [A, B2, B0], [B0, B2, B1]].map(([p, q, r]) => {
+      let n = norm(cross(sub(q, p), sub(r, p)));
+      if (dot(n, sub(cen, p)) > 0) n = [-n[0], -n[1], -n[2]];
+      return [n, dot(n, p)];
+    });
+    const xs = [A, B0, B1, B2];
+    return {
+      f: (x, y, z) => {
+        let d = -1e9;
+        for (const [n, o] of faces) d = smax(d, n[0] * x + n[1] * y + n[2] * z - o, round);
+        return d;
+      },
+      box: [Math.min(...xs.map((p) => p[0])), Math.min(...xs.map((p) => p[1])), Math.min(...xs.map((p) => p[2])),
+        Math.max(...xs.map((p) => p[0])), Math.max(...xs.map((p) => p[1])), Math.max(...xs.map((p) => p[2]))]
+    };
   }
 
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+  // the unit cat: x forward, y up, z to the cat's right (left side is z < 0), paws on y = 0,
+  // ear tips just over y = 1. Each primitive names the bone it rides.
+  const prims = [];
+  const add = (p, k, bone) => prims.push({ ...p, k, bone });
+  add(ellipsoid(v3(0.2, 0.5, 0), v3(0.2, 0.18, 0.15)), 0.06, 'root');            // chest
+  add(ellipsoid(v3(-0.05, 0.52, 0), v3(0.22, 0.14, 0.13)), 0.07, 'root');        // waist
+  add(ellipsoid(v3(-0.28, 0.53, 0), v3(0.17, 0.155, 0.14)), 0.07, 'root');       // hips
+  for (const s of [-1, 1]) {
+    const side = s < 0 ? 'l' : 'r';
+    add(ellipsoid(v3(-0.29, 0.4, 0.09 * s), v3(0.13, 0.17, 0.068)), 0.05, 'h' + side + 'U');   // thigh
+    add(roundCone(v3(-0.22, 0.27, 0.092 * s), v3(-0.33, 0.12, 0.086 * s), 0.046, 0.034), 0.04, 'h' + side + 'U');
+    add(roundCone(v3(-0.33, 0.12, 0.086 * s), v3(-0.29, 0.045, 0.083 * s), 0.033, 0.031), 0.03, 'h' + side + 'L');
+    add(ellipsoid(v3(-0.268, 0.035, 0.083 * s), v3(0.056, 0.035, 0.046)), 0.03, 'h' + side + 'L');
+    add(roundCone(v3(0.24, 0.42, 0.086 * s), v3(0.25, 0.25, 0.08 * s), 0.064, 0.044), 0.05, 'f' + side + 'U');
+    add(roundCone(v3(0.25, 0.25, 0.08 * s), v3(0.262, 0.07, 0.078 * s), 0.044, 0.034), 0.035, 'f' + side + 'L');
+    add(ellipsoid(v3(0.287, 0.035, 0.078 * s), v3(0.056, 0.035, 0.046)), 0.03, 'f' + side + 'L');
+  }
+  add(roundCone(v3(0.27, 0.58, 0), v3(0.4, 0.73, 0), 0.1, 0.082), 0.07, 'neck');
+  const HC = v3(0.45, 0.78, 0), HS = 1.1;
+  const hp = (x, y, z) => v3(HC[0] + (x - HC[0]) * HS, HC[1] + (y - HC[1]) * HS, z * HS);
+  const hr = (x, y, z) => v3(x * HS, y * HS, z * HS);
+  add(ellipsoid(hp(0.45, 0.78, 0), hr(0.12, 0.11, 0.12)), 0.06, 'head');
+  for (const s of [-1, 1]) add(ellipsoid(hp(0.492, 0.735, 0.055 * s), hr(0.07, 0.055, 0.06)), 0.035, 'head');
+  add(ellipsoid(hp(0.556, 0.742, 0), hr(0.05, 0.044, 0.058)), 0.03, 'head');
+  add(ellipsoid(hp(0.528, 0.703, 0), hr(0.05, 0.034, 0.044)), 0.03, 'head');
+  for (const s of [-1, 1]) {
+    // ears 1.25x the head scale, so their slices read as triangles at a glance
+    const EA = (x, y, z) => hp(0.44 + (x - 0.44) * 1.25, 0.84 + (y - 0.84) * 1.25, (0.1 + (Math.abs(z) - 0.1) * 1.25) * Math.sign(z));
+    add(pyramid(EA(0.43, 1.0, 0.108 * s), EA(0.488, 0.84, 0.042 * s), EA(0.472, 0.832, 0.158 * s), EA(0.37, 0.852, 0.092 * s)), 0.028, 'head');
+  }
+  const TAIL = [v3(-0.42, 0.56, 0), v3(-0.55, 0.62, 0), v3(-0.63, 0.72, 0.02), v3(-0.645, 0.82, 0.04), v3(-0.6, 0.886, 0.05), v3(-0.56, 0.892, 0.05)];
+  const TAIL_R = [0.046, 0.042, 0.038, 0.034, 0.031, 0.028];
+  for (let i = 0; i < TAIL.length - 1; i++) add(roundCone(TAIL[i], TAIL[i + 1], TAIL_R[i], TAIL_R[i + 1]), i ? 0.02 : 0.05, 't' + i);
 
-  const program = gl.createProgram();
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
+  const MARGIN = 0.07;
+  function sdf(x, y, z) {
+    let d = 1e9, any = false;
+    for (const p of prims) {
+      const b = p.box;
+      if (x < b[0] - MARGIN || x > b[3] + MARGIN || y < b[1] - MARGIN || y > b[4] + MARGIN || z < b[2] - MARGIN || z > b[5] + MARGIN) continue;
+      const v = p.f(x, y, z);
+      d = any ? smin(d, v, p.k) : v;
+      any = true;
+    }
+    return any ? d : MARGIN;
+  }
+  const grad = (x, y, z) => {
+    const e = 0.0015;
+    return norm([
+      sdf(x + e, y, z) - sdf(x - e, y, z),
+      sdf(x, y + e, z) - sdf(x, y - e, z),
+      sdf(x, y, z + e) - sdf(x, y, z - e)
+    ]);
+  };
 
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error('Program link error:', gl.getProgramInfoLog(program));
-    window.ready = false;
-  } else {
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      -1, -1,
-       1, -1,
-      -1,  1,
-       1,  1
-    ]), gl.STATIC_DRAW);
+  // naive surface nets: one vertex per sign-changing cell, one quad per sign-changing edge
+  function mesh(h) {
+    const o = [-0.74, -0.03, -0.27];
+    const nx = Math.ceil(1.44 / h) + 1, ny = Math.ceil(1.14 / h) + 1, nz = Math.ceil(0.54 / h) + 1;
+    const F = new Float32Array(nx * ny * nz);
+    const id = (i, j, k) => i + nx * (j + ny * k);
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      F[id(i, j, k)] = sdf(o[0] + i * h, o[1] + j * h, o[2] + k * h);
+    }
+    const C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+    const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+    const cell = new Int32Array(nx * ny * nz).fill(-1);
+    const pos = [], val = new Float32Array(8);
+    for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+      let mask = 0;
+      for (let c = 0; c < 8; c++) { val[c] = F[id(i + C[c][0], j + C[c][1], k + C[c][2])]; if (val[c] < 0) mask |= 1 << c; }
+      if (mask === 0 || mask === 255) continue;
+      let sx = 0, sy = 0, sz = 0, n = 0;
+      for (const [a, b] of E) {
+        if ((val[a] < 0) === (val[b] < 0)) continue;
+        const t = val[a] / (val[a] - val[b]);
+        sx += C[a][0] + t * (C[b][0] - C[a][0]);
+        sy += C[a][1] + t * (C[b][1] - C[a][1]);
+        sz += C[a][2] + t * (C[b][2] - C[a][2]);
+        n++;
+      }
+      cell[id(i, j, k)] = pos.length / 3;
+      pos.push(o[0] + (i + sx / n) * h, o[1] + (j + sy / n) * h, o[2] + (k + sz / n) * h);
+    }
+    // pull each vertex onto the true surface, so the ear tips stay sharp
+    for (let v = 0; v < pos.length; v += 3) {
+      for (let it = 0; it < 2; it++) {
+        const d = sdf(pos[v], pos[v + 1], pos[v + 2]);
+        const g = grad(pos[v], pos[v + 1], pos[v + 2]);
+        const step = Math.max(-h, Math.min(h, d));
+        pos[v] -= g[0] * step; pos[v + 1] -= g[1] * step; pos[v + 2] -= g[2] * step;
+      }
+    }
+    const index = [];
+    const quad = (a, b, c, d, axis, inside) => {
+      if (a < 0 || b < 0 || c < 0 || d < 0) return;
+      const P = (q) => [pos[q * 3], pos[q * 3 + 1], pos[q * 3 + 2]];
+      const nrm = cross(sub(P(c), P(a)), sub(P(d), P(b)));
+      const want = axis.map((x) => x * (inside ? 1 : -1));
+      let q = [a, b, c, d];
+      if (dot(nrm, want) < 0) q = [a, d, c, b];
+      const d02 = dot(sub(P(q[0]), P(q[2])), sub(P(q[0]), P(q[2]))), d13 = dot(sub(P(q[1]), P(q[3])), sub(P(q[1]), P(q[3])));
+      if (d02 < d13) index.push(q[0], q[1], q[2], q[0], q[2], q[3]);
+      else index.push(q[0], q[1], q[3], q[1], q[2], q[3]);
+    };
+    for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+      const inside = F[id(i, j, k)] < 0;
+      if (i < nx - 1 && j > 0 && k > 0 && inside !== (F[id(i + 1, j, k)] < 0)) {
+        quad(cell[id(i, j - 1, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i, j - 1, k)], [1, 0, 0], inside);
+      }
+      if (j < ny - 1 && i > 0 && k > 0 && inside !== (F[id(i, j + 1, k)] < 0)) {
+        quad(cell[id(i - 1, j, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 1, 0], inside);
+      }
+      if (k < nz - 1 && i > 0 && j > 0 && inside !== (F[id(i, j, k + 1)] < 0)) {
+        quad(cell[id(i - 1, j - 1, k)], cell[id(i, j - 1, k)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 0, 1], inside);
+      }
+    }
+    return { pos, index };
+  }
 
-    const positionLocation = gl.getAttribLocation(program, 'a_position');
-    const timeLocation = gl.getUniformLocation(program, 'iTime');
-    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+  // bones in unit coordinates; a vertex follows the primitives it sits closest to.
+  // Legs: f = fore, h = hind, l/r = the cat's left/right, U = shoulder or hip, L = elbow or hock.
+  const BONES = {
+    root: { at: v3(0, 0, 0) },
+    neck: { at: v3(0.3, 0.6, 0), parent: 'root' },
+    head: { at: v3(0.42, 0.74, 0), parent: 'neck' },
+    flU: { at: v3(0.24, 0.42, -0.086), parent: 'root' },
+    flL: { at: v3(0.25, 0.25, -0.08), parent: 'flU' },
+    frU: { at: v3(0.24, 0.42, 0.086), parent: 'root' },
+    frL: { at: v3(0.25, 0.25, 0.08), parent: 'frU' },
+    hlU: { at: v3(-0.28, 0.47, -0.09), parent: 'root' },
+    hlL: { at: v3(-0.33, 0.12, -0.086), parent: 'hlU' },
+    hrU: { at: v3(-0.28, 0.47, 0.09), parent: 'root' },
+    hrL: { at: v3(-0.33, 0.12, 0.086), parent: 'hrU' },
+    t0: { at: TAIL[0], parent: 'root' },
+    t1: { at: TAIL[1], parent: 't0' },
+    t2: { at: TAIL[2], parent: 't1' },
+    t3: { at: TAIL[3], parent: 't2' },
+    t4: { at: TAIL[4], parent: 't3' }
+  };
+  const boneNames = Object.keys(BONES);
+  // where each paw meets the ground, relative to its lower bone
+  const PAWS = { fl: ['flL', v3(0.3, 0, -0.078)], fr: ['frL', v3(0.3, 0, 0.078)], hl: ['hlL', v3(-0.26, 0, -0.083)], hr: ['hrL', v3(-0.26, 0, 0.083)] };
 
-    window.renderFrame = function(time) {
-      gl.viewport(0, 0, 800, 800);
-      gl.clearColor(0, 0, 0, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+  // meshing and skin weights depend only on the resolution, so repeat cats share the work
+  const built = new Map();
+  function unitCat(h) {
+    if (built.has(h)) return built.get(h);
+    const { pos, index } = mesh(h);
+    const vcount = pos.length / 3;
+    const N = new Float32Array(vcount * 3);
+    const SI = new Uint16Array(vcount * 4), SW = new Float32Array(vcount * 4);
+    for (let v = 0; v < vcount; v++) {
+      const x = pos[v * 3], y = pos[v * 3 + 1], z = pos[v * 3 + 2];
+      const g = grad(x, y, z);
+      N[v * 3] = g[0]; N[v * 3 + 1] = g[1]; N[v * 3 + 2] = g[2];
+      const ds = prims.map((p) => p.f(x, y, z)), m = Math.min(...ds);
+      const acc = {};
+      prims.forEach((p, i) => { acc[p.bone] = (acc[p.bone] || 0) + Math.exp(-(ds[i] - m) / 0.016); });
+      const top = Object.entries(acc).sort((a, b) => b[1] - a[1]).slice(0, 4);
+      const total = top.reduce((s, e) => s + e[1], 0);
+      top.forEach(([name, w], i) => { SI[v * 4 + i] = boneNames.indexOf(name); SW[v * 4 + i] = w / total; });
+    }
+    const unit = { pos, index, N, SI, SW, vcount };
+    built.set(h, unit);
+    return unit;
+  }
 
-      gl.useProgram(program);
+  return function createVoidCat(THREE, options = {}) {
+    const {
+      scale = 2,
+      resolution = 0.0095,
+      clippingPlanes = [],
+      castShadow = true,
+      whiskers = true,
+      fur: furOptions = {},
+      eyes: eyeOptions = {}
+    } = options;
+    const furSpec = {
+      color: '#100d17', roughness: 0.55, sheen: 0.7, sheenColor: '#7d6ad8', sheenRoughness: 0.4,
+      rimColor: '#8b79c4', rimStrength: 0.55, ...furOptions
+    };
+    const eyeSpec = { color: '#ffb23a', emissive: '#ff9516', glow: 1.7, pupil: '#050307', ...eyeOptions };
+    const S = scale;
 
-      gl.enableVertexAttribArray(positionLocation);
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+    const bones = {};
+    for (const name of boneNames) {
+      const b = new THREE.Bone();
+      b.name = name;
+      const spec = BONES[name], par = spec.parent ? BONES[spec.parent].at : [0, 0, 0];
+      b.position.set((spec.at[0] - par[0]) * S, (spec.at[1] - par[1]) * S, (spec.at[2] - par[2]) * S);
+      bones[name] = b;
+      if (spec.parent) bones[spec.parent].add(b);
+    }
+    const skeleton = new THREE.Skeleton(boneNames.map((n) => bones[n]));
 
-      gl.uniform1f(timeLocation, time);
-      gl.uniform2f(resolutionLocation, 800, 800);
+    const unit = unitCat(resolution);
+    let height = 0;
+    for (let v = 1; v < unit.pos.length; v += 3) height = Math.max(height, unit.pos[v] * S);
+    const P = new Float32Array(unit.vcount * 3);
+    for (let i = 0; i < P.length; i++) P[i] = unit.pos[i] * S;
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(P, 3));
+    geometry.setAttribute('normal', new THREE.BufferAttribute(unit.N.slice(), 3));
+    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(unit.SI.slice(), 4));
+    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(unit.SW.slice(), 4));
+    geometry.setIndex(unit.index);
 
-      // Public Pages controls are installed only in the exported document.
-      // Unset GLSL delta uniforms stay zero throughout ordinary capture.
-      if (window.__applyAnimationControls) window.__applyAnimationControls(gl, program);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-
-      return canvas.toDataURL('image/png');
+    const rim = new THREE.Color(furSpec.rimColor);
+    const fur = new THREE.MeshPhysicalMaterial({
+      color: furSpec.color, roughness: furSpec.roughness, metalness: 0,
+      sheen: furSpec.sheen, sheenColor: new THREE.Color(furSpec.sheenColor), sheenRoughness: furSpec.sheenRoughness,
+      clippingPlanes, clipShadows: true, shadowSide: THREE.DoubleSide
+    });
+    fur.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        float furRim = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+        totalEmissiveRadiance += vec3(${rim.r.toFixed(4)}, ${rim.g.toFixed(4)}, ${rim.b.toFixed(4)}) * pow(furRim, 3.0) * ${Number(furSpec.rimStrength).toFixed(4)};`);
     };
 
-    window.ready = true;
+    const group = new THREE.Group();
+    const skinned = new THREE.SkinnedMesh(geometry, fur);
+    skinned.add(bones.root);
+    skinned.bind(skeleton);
+    skinned.castShadow = castShadow;
+    skinned.frustumCulled = false;
+    group.add(skinned);
+
+    // eyes, pupils and whiskers ride the head bone
+    const headAt = BONES.head.at;
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: eyeSpec.color, emissive: eyeSpec.emissive, emissiveIntensity: eyeSpec.glow, roughness: 0.3, clippingPlanes
+    });
+    const pupilMat = new THREE.MeshBasicMaterial({ color: eyeSpec.pupil, clippingPlanes });
+    const eyes = [], pupils = [];
+    for (const s of [-1, 1]) {
+      const e = new THREE.Mesh(new THREE.SphereGeometry(0.026 * HS * S, 24, 16), eyeMat);
+      const ep = hp(0.548, 0.8, 0.058 * s);
+      e.position.set((ep[0] - headAt[0]) * S, (ep[1] - headAt[1]) * S, ep[2] * S);
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.026 * HS * S, 16, 12), pupilMat);
+      pupil.scale.set(0.3, 0.86, 0.32);
+      pupil.position.set(0.021 * HS * S, 0, 0.004 * s * S);
+      e.add(pupil);
+      bones.head.add(e);
+      eyes.push(e);
+      pupils.push(pupil);
+    }
+    let whiskerMat = null;
+    if (whiskers) {
+      whiskerMat = new THREE.LineBasicMaterial({ color: '#efe8f5', transparent: true, opacity: 0.8, clippingPlanes });
+      const pts = [];
+      for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+        const wr = hp(0.578, 0.736 - i * 0.01, 0.036 * s);
+        const root = new THREE.Vector3(wr[0] - headAt[0], wr[1] - headAt[1], wr[2]).multiplyScalar(S);
+        const dir = new THREE.Vector3(0.38, 0.08 - i * 0.12, s).normalize();
+        for (let k = 0; k < 6; k++) {
+          const u0 = k / 6, u1 = (k + 1) / 6, L = 0.2 * S;
+          const p0 = root.clone().addScaledVector(dir, u0 * L); p0.y -= u0 * u0 * 0.03 * S;
+          const p1 = root.clone().addScaledVector(dir, u1 * L); p1.y -= u1 * u1 * 0.03 * S;
+          pts.push(p0, p1);
+        }
+      }
+      bones.head.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), whiskerMat));
+    }
+    const pawTips = {};
+    for (const [paw, [boneName, at]] of Object.entries(PAWS)) {
+      const tip = new THREE.Object3D();
+      const b = BONES[boneName].at;
+      tip.position.set((at[0] - b[0]) * S, (at[1] - b[1]) * S, (at[2] - b[2]) * S);
+      bones[boneName].add(tip);
+      pawTips[paw] = tip;
+    }
+
+    const cat = {
+      group, mesh: skinned, skeleton, bones, geometry, eyes, pupils, pawTips, height, scale: S,
+      materials: { fur, eye: eyeMat, pupil: pupilMat, whisker: whiskerMat },
+      boneNames: boneNames.slice(),
+      // signed distance to the body at rest, in world units of the cat's own frame
+      sdf: (x, y, z) => sdf(x / S, y / S, z / S) * S,
+      restPose() {
+        for (const b of Object.values(bones)) b.rotation.set(0, 0, 0);
+        for (const e of eyes) e.scale.set(1, 1, 1);
+        return cat;
+      },
+      // yaw turns the face toward the cat's left (+) or right (-); pitch lifts (+) or lowers (-) it;
+      // the turn is shared between the neck and the head
+      setLook(yaw = 0, pitch = 0, tilt = 0) {
+        bones.neck.rotation.set(0, yaw * 0.5, pitch * 0.5);
+        bones.head.rotation.set(tilt, yaw * 0.5, pitch * 0.5);
+        return cat;
+      },
+      // 0 open, 1 shut
+      setBlink(amount = 0) {
+        for (const e of eyes) e.scale.set(1, 1 - 0.88 * amount, 1);
+        return cat;
+      },
+      // a lazy sway down the five tail bones; whole cycles per loop keep a loop seamless
+      swayTail(t, { loop = 60, yawCycles = 12, pitchCycles = 8, amount = 1 } = {}) {
+        const TAU = Math.PI * 2;
+        for (let i = 0; i < 5; i++) {
+          bones['t' + i].rotation.set(0,
+            amount * 0.11 * Math.sin(TAU * t * yawCycles / loop + i * 0.7),
+            amount * 0.06 * Math.sin(TAU * t * pitchCycles / loop + i * 0.5));
+        }
+        return cat;
+      }
+    };
+    return cat;
+  };
+})();
+// @asset-end voidCat@1
+// @asset-begin monotoneKeys@1
+// monotoneKeys v1: shape-preserving keyframe curves (monotone cubic Hermite, Fritsch-Carlson).
+// Between two keys the curve never overshoots them, so a camera keyed above the ground never
+// dips under it and a value keyed at 0 never goes negative. With `periodic` (first key == last
+// key) both ends share one slope, so a loop has no kink at the seam.
+// Banked from draft 1792452885287_c09b5426 (camera, slice heights and walk paths).
+const monotoneKeys = (() => {
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  // one channel: xs ascending, ys the values at those xs
+  function curve(xs, ys, periodic = false) {
+    const n = xs.length, d = [], m = new Array(n);
+    for (let i = 0; i < n - 1; i++) d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+    m[0] = d[0]; m[n - 1] = d[n - 2];
+    if (periodic) m[0] = m[n - 1] = d[n - 2] * d[0] <= 0 ? 0 : (d[n - 2] + d[0]) / 2;
+    for (let i = 1; i < n - 1; i++) m[i] = d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2;
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+      const a = m[i] / d[i], b = m[i + 1] / d[i], s = a * a + b * b;
+      if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * d[i]; m[i + 1] = k * b * d[i]; }
+    }
+    return (x) => {
+      let i = 0;
+      while (i < n - 2 && x > xs[i + 1]) i++;
+      const h = xs[i + 1] - xs[i], u = clamp01((x - xs[i]) / h);
+      const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
+      return h00 * ys[i] + h10 * h * m[i] + h01 * ys[i + 1] + h11 * h * m[i + 1];
+    };
   }
+  // many channels from rows of [t, v1, v2, ...]; returns t => [v1, v2, ...]
+  function tracks(rows, { periodic = false } = {}) {
+    const ts = rows.map((r) => r[0]);
+    const channels = rows[0].slice(1).map((_, c) => curve(ts, rows.map((r) => r[c + 1]), periodic));
+    return (t) => channels.map((f) => f(t));
+  }
+  return { curve, tracks };
+})();
+// @asset-end monotoneKeys@1
+
+// THE CAT IN THE GLASS IS LATE. A mirror test for a cat that is drawn, not born.
+// ClawedCode stands at a pier glass. Its reflection is the same pose evaluated at t - lag:
+// one beat late at first (the nod lands in anti-phase, "another cat"), then half, a quarter, an
+// eighth, unison (a red dot on the brow, paw meets paw on the glass, the paw goes to its own brow),
+// and finally early: the cat in the glass moves first. The dial on the crest turns once per loop;
+// one beat late and one beat early are the same mark, so the loop closes without a seam.
+
+const DUR = 60, TAU = Math.PI * 2;
+const BPM = 64, BEAT = 60 / BPM, BEATS = DUR / BEAT;   // 64 beats, 16 bars of 3.75 s
+const S = 1.5;                                           // cat scale: ear tips ~1.6 units
+const CAT_X = -1.2;                                      // the glass is the plane x = 0
+const LEAN = 0.2;                                        // how far the whole cat leans in to reach the glass
+
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const smooth = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+const win = (n, a, b, c, d) => smooth(a, b, n) * (1 - smooth(c, d, n));
+const mix = (a, b, u) => a + (b - a) * u;
+const wrapBeat = (n) => ((n % BEATS) + BEATS) % BEATS;
+
+// lag of the reflection, in beats, keyed on the beat grid: the score's echo steps on the same bars
+const LAG = [[0, 1], [14, 1], [16, 0.5], [18, 0.5], [20, 0.25], [22, 0.25], [24, 0.125], [26, 0.125],
+  [28, 0], [46, 0], [48, -0.5], [54, -0.5], [56, -1], [64, -1]];
+function lagAt(n) {
+  for (let i = 0; i < LAG.length - 1; i++) {
+    const [a, va] = LAG[i], [b, vb] = LAG[i + 1];
+    if (n <= b) return mix(va, vb, smooth(a, b, n));
+  }
+  return -1;
 }
 
-document.body.appendChild(canvas);
-let startTime = Date.now();
-function animate() {
-  const time = (Date.now() - startTime) / 1000;
-  const loopDuration = 60;
-  if (window.renderFrame) {
-    window.renderFrame(time % loopDuration);
-  }
-  requestAnimationFrame(animate);
+// ---------- renderer: two passes, the world behind the glass first ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+renderer.autoClear = false;
+renderer.setClearColor(0x000000, 1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.style.margin = '0';
+document.body.style.background = '#050b0a';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();        // this side of the glass
+const behind = new THREE.Scene();       // the reflected world, seen only through the glass
+const HORIZON = new THREE.Color('#10251f');
+scene.fog = new THREE.FogExp2(HORIZON, 0.05);
+behind.fog = new THREE.FogExp2(HORIZON, 0.05);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.05, 120);
+
+let seed = 1970;
+const random = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+// ---------- the void: bottle-green dark with a low horizon that warms when the glass clears ----------
+const skyMat = new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false,
+  uniforms: {
+    uTop: { value: new THREE.Color('#030706') },
+    uHorizon: { value: HORIZON.clone() },
+    uWarm: { value: new THREE.Color('#2c2a17') },
+    uWarmth: { value: 0 }
+  },
+  vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 uTop, uHorizon, uWarm; uniform float uWarmth; varying vec3 vDir;
+    void main(){
+      float y = vDir.y;
+      vec3 hz = mix(uHorizon, uWarm, uWarmth);
+      vec3 c = mix(hz, uTop, smoothstep(0.0, 0.5, y));
+      c = mix(c, hz * 0.55, smoothstep(0.0, -0.25, y));
+      gl_FragColor = vec4(c, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`
+});
+const skyGeo = new THREE.SphereGeometry(60, 48, 24);
+scene.add(new THREE.Mesh(skyGeo, skyMat));
+behind.add(new THREE.Mesh(skyGeo, skyMat));
+
+// floor: dark polished slate, one in each world (it is symmetric about the glass)
+const floorMat = new THREE.MeshStandardMaterial({ color: '#142420', roughness: 0.7, metalness: 0.0 });
+const floorGeo = new THREE.CircleGeometry(16, 96);
+for (const s of [scene, behind]) {
+  const f = new THREE.Mesh(floorGeo, floorMat);
+  f.rotation.x = -Math.PI / 2;
+  f.receiveShadow = true;
+  s.add(f);
 }
-animate();
+
+// lights: each light on this side has its mirror image behind the glass (x -> -x)
+const KEY_WARM = new THREE.Color('#ffd6a6'), KEY_COOL = new THREE.Color('#d9e8dc');
+function addLights(target, sx) {
+  const hemi = new THREE.HemisphereLight('#3c5e54', '#060a09', 0.4);
+  target.add(hemi);
+  const key = new THREE.SpotLight(KEY_COOL, 40, 16, 0.72, 0.8, 2);
+  key.position.set(-2.8 * sx, 4.8, 2.4);
+  key.target.position.set(-1.0 * sx, 0, 0.3);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.02;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 12;
+  target.add(key, key.target);
+  const rim = new THREE.DirectionalLight('#86c4b2', 0.8);
+  rim.position.set(-5 * sx, 2.6, -3.2);
+  rim.target.position.set(-1 * sx, 0.8, 0);
+  target.add(rim, rim.target);
+  const low = new THREE.PointLight('#6a8f84', 1.3, 5, 2);   // light the glass throws back at the cat
+  low.position.set(-0.4 * sx, 1.0, 1.0);
+  target.add(low);
+  return { key, rim, low };
+}
+const L1 = addLights(scene, 1), L2 = addLights(behind, -1);
+
+// motes drifting in the light, on closed paths (whole cycles per loop)
+const MOTES = 130;
+const moteSeed = [];
+for (let i = 0; i < MOTES; i++) {
+  moteSeed.push({
+    x: -3.2 + random() * 3.0, y: 0.15 + random() * 3.2, z: -1.9 + random() * 3.8,
+    a: 0.05 + random() * 0.12, k: 1 + Math.floor(random() * 3), p: random() * TAU, q: random() * TAU
+  });
+}
+const moteTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+function makeMotes(target) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MOTES * 3), 3));
+  const pts = new THREE.Points(geo, new THREE.PointsMaterial({
+    map: moteTex, color: '#cfe3c9', size: 0.035, transparent: true, opacity: 0.55,
+    depthWrite: false, blending: THREE.AdditiveBlending
+  }));
+  pts.frustumCulled = false;
+  target.add(pts);
+  return geo;
+}
+const moteGeo = [makeMotes(scene), makeMotes(behind)];
+function placeMotes(t) {
+  const ph = TAU * t / DUR;
+  moteGeo.forEach((geo, side) => {
+    const arr = geo.attributes.position.array;
+    moteSeed.forEach((m, i) => {
+      const x = m.x + m.a * Math.sin(m.k * ph + m.p);
+      arr[i * 3] = side ? -x : x;
+      arr[i * 3 + 1] = m.y + m.a * 1.6 * Math.sin(m.k * ph + m.q);
+      arr[i * 3 + 2] = m.z + m.a * Math.cos(m.k * ph + m.p);
+    });
+    geo.attributes.position.needsUpdate = true;
+  });
+}
+
+// ---------- the pier glass ----------
+const GW = 2.3, GR = GW / 2, G0 = 0.035, GH = 1.2;     // aperture width, arch radius, base, straight height
+const ARCH_TOP = G0 + GH + GR;
+const toWall = (m) => { m.rotation.y = -Math.PI / 2; return m; };   // shape (x, y) -> world (z, y), facing -x
+function archPath(path, r, base) {
+  path.moveTo(-r, base);
+  path.lineTo(r, base);
+  path.lineTo(r, G0 + GH);
+  path.absarc(0, G0 + GH, r, 0, Math.PI, false);
+  path.lineTo(-r, base);
+  return path;
+}
+const glassShape = archPath(new THREE.Shape(), GR, G0);
+const glassGeo = new THREE.ShapeGeometry(glassShape, 48);
+
+// depth-only mask at the glass: whatever is behind it on this side is hidden, so pass 1 shows through
+const mask = toWall(new THREE.Mesh(glassGeo, new THREE.MeshBasicMaterial({ colorWrite: false })));
+mask.renderOrder = -10;
+scene.add(mask);
+
+// the silvering: antique and green while the reflection is late, clear when it keeps time
+const glassMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: {
+    uHaze: { value: 1 }, uRip: { value: new THREE.Vector3(0, 0.6, 0) }, uRipA: { value: 0 },
+    uR: { value: GR }, uG0: { value: G0 }, uGH: { value: GH }
+  },
+  vertexShader: `varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform float uHaze, uRipA, uR, uG0, uGH; uniform vec3 uRip; varying vec2 vP;
+    float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y); }
+    void main(){
+      float side = uR - abs(vP.x), bottom = vP.y - uG0;
+      float arch = vP.y > uG0 + uGH ? uR - length(vP - vec2(0.0, uG0 + uGH)) : side;
+      float edge = min(min(side, bottom), arch);
+      float n = vn(vP * 6.0) * 0.6 + vn(vP * 17.0) * 0.4;
+      float fox = smoothstep(0.42, 0.0, edge + (n - 0.5) * 0.22);
+      float spots = smoothstep(0.78, 0.9, vn(vP * 9.0 + 3.1)) * smoothstep(0.7, 0.15, edge);
+      float sheen = smoothstep(0.16, 0.0, abs(vP.x * 0.62 - vP.y + 1.75)) * 0.05 + smoothstep(0.05, 0.0, abs(vP.x * 0.62 - vP.y + 1.42)) * 0.03;
+      float aged = uHaze;
+      vec3 col = mix(vec3(0.012, 0.03, 0.024), vec3(0.06, 0.045, 0.02), fox);
+      float a = aged * (0.3 + 0.5 * fox + 0.3 * spots) + (1.0 - aged) * (0.05 + 0.35 * fox);
+      col += vec3(0.85, 0.95, 0.9) * sheen;
+      a = clamp(a + sheen, 0.0, 0.92);
+      float d = length(vP - uRip.xy);
+      float ring = (exp(-pow((d - uRip.z) / 0.03, 2.0)) + 0.5 * exp(-pow((d - uRip.z * 0.55) / 0.025, 2.0))) * uRipA;
+      col += vec3(1.0, 0.86, 0.7) * ring * 1.4;
+      a = max(a, clamp(ring, 0.0, 0.9));
+      gl_FragColor = vec4(col, a);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`
+});
+const glass = toWall(new THREE.Mesh(glassGeo, glassMat));
+glass.position.x = -0.002;
+glass.renderOrder = 5;
+scene.add(glass);
+
+// frame: tarnished bronze moulding, feet and a crest medallion that holds the dial
+const pmrem = new THREE.PMREMGenerator(renderer);
+const envTex = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+const pewter = new THREE.MeshStandardMaterial({ color: '#86704a', metalness: 0.85, roughness: 0.5, envMap: envTex, envMapIntensity: 0.38 });
+const frameShape = archPath(new THREE.Shape(), GR + 0.15, G0 - 0.12);
+frameShape.holes.push(archPath(new THREE.Path(), GR, G0));
+const frameGeo = new THREE.ExtrudeGeometry(frameShape, { depth: 0.09, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 3, curveSegments: 48 });
+const frame = toWall(new THREE.Mesh(frameGeo, pewter));
+frame.position.x = 0.02;
+frame.castShadow = true; frame.receiveShadow = true;
+scene.add(frame);
+for (const s of [-1, 1]) {
+  const foot = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.07, 0.12), pewter);
+  foot.position.set(0.05, 0.035, s * (GR + 0.075));
+  foot.castShadow = true;
+  scene.add(foot);
+}
+
+// the dial: one turn per loop. bottom = one beat (late and early alike), left late, top now, right early
+const DIAL_R = 0.3, DIAL_Y = ARCH_TOP + 0.13;
+const dial = new THREE.Group();
+dial.position.set(-0.17, DIAL_Y, 0);
+dial.rotation.y = -Math.PI / 2;
+scene.add(dial);
+const bezel = new THREE.Mesh(new THREE.CylinderGeometry(DIAL_R + 0.05, DIAL_R + 0.06, 0.07, 64), pewter);
+bezel.rotation.x = Math.PI / 2;
+bezel.position.z = -0.02;
+dial.add(bezel);
+const faceTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createRadialGradient(256, 256, 40, 256, 256, 256);
+  gr.addColorStop(0, '#efe8d6'); gr.addColorStop(0.85, '#ddd3bb'); gr.addColorStop(1, '#b9ad91');
+  g.fillStyle = gr; g.beginPath(); g.arc(256, 256, 256, 0, TAU); g.fill();
+  g.strokeStyle = '#1d1a16'; g.lineCap = 'round';
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * TAU, major = i % 4 === 0;
+    g.lineWidth = major ? 7 : 3;
+    const r0 = major ? 196 : 212;
+    g.beginPath(); g.moveTo(256 + Math.sin(a) * r0, 256 + Math.cos(a) * r0); g.lineTo(256 + Math.sin(a) * 236, 256 + Math.cos(a) * 236); g.stroke();
+  }
+  g.fillStyle = '#1d1a16'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = 'italic 46px Didot, Baskerville, Georgia, serif';
+  g.fillText('now', 256, 132);
+  g.fillText('one beat', 256, 384);
+  g.save(); g.translate(132, 256); g.rotate(-Math.PI / 2); g.fillText('late', 0, 0); g.restore();
+  g.save(); g.translate(380, 256); g.rotate(Math.PI / 2); g.fillText('early', 0, 0); g.restore();
+  g.fillStyle = '#9d2a1d'; g.beginPath(); g.arc(256, 256, 14, 0, TAU); g.fill();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+})();
+const face = new THREE.Mesh(new THREE.CircleGeometry(DIAL_R, 64), new THREE.MeshStandardMaterial({ map: faceTex, roughness: 0.55, metalness: 0 }));
+face.position.z = 0.016;
+dial.add(face);
+const needleShape = new THREE.Shape();
+needleShape.moveTo(-0.018, 0.05); needleShape.lineTo(0.018, 0.05); needleShape.lineTo(0.006, -DIAL_R * 0.86); needleShape.lineTo(-0.006, -DIAL_R * 0.86); needleShape.lineTo(-0.018, 0.05);
+const needle = new THREE.Mesh(new THREE.ShapeGeometry(needleShape), new THREE.MeshStandardMaterial({ color: '#8f1d14', roughness: 0.4, metalness: 0.3 }));
+needle.position.z = 0.03;
+dial.add(needle);
+
+// ---------- the two cats ----------
+const cat = createVoidCat(THREE, { scale: S });
+cat.group.position.set(CAT_X, 0, 0);
+scene.add(cat.group);
+const mirrored = new THREE.Group();       // x -> -x: the glass image, faces and handedness flipped
+mirrored.scale.x = -1;
+behind.add(mirrored);
+const twin = createVoidCat(THREE, { scale: S });
+twin.group.position.set(CAT_X, 0, 0);
+mirrored.add(twin.group);
+
+// the mark: a red dot on the brow, placed on the head surface found from the body's own SDF
+const dotTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,90,60,1)'); gr.addColorStop(0.18, 'rgba(255,40,24,0.75)'); gr.addColorStop(0.5, 'rgba(255,20,10,0.16)'); gr.addColorStop(1, 'rgba(255,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+function browPoint(c) {
+  // march from inside the head toward the brow until the surface
+  const o = new THREE.Vector3(0.46 * S, 0.8 * S, 0), dir = new THREE.Vector3(0.62, 0.78, 0).normalize();
+  let s = 0;
+  for (let i = 0; i < 64 && c.sdf(o.x + dir.x * s, o.y + dir.y * s, 0) < 0; i++) s += 0.004 * S;
+  return o.addScaledVector(dir, s);
+}
+function addMark(c) {
+  const p = browPoint(c);
+  const headWorldRest = new THREE.Vector3(0.42 * S, 0.74 * S, 0);
+  const m = new THREE.Group();
+  m.position.copy(p).sub(headWorldRest);
+  const dot = new THREE.Mesh(new THREE.CircleGeometry(0.022 * S, 24), new THREE.MeshBasicMaterial({ color: '#ff2a18', toneMapped: false, transparent: true }));
+  dot.lookAt(new THREE.Vector3(0.62, 0.78, 0));
+  dot.position.addScaledVector(new THREE.Vector3(0.62, 0.78, 0).normalize(), 0.004);
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTex, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false, transparent: true }));
+  glow.scale.set(0.11, 0.11, 1);
+  glow.position.addScaledVector(new THREE.Vector3(0.62, 0.78, 0).normalize(), 0.02);
+  m.add(dot, glow);
+  c.bones.head.add(m);
+  return { m, dot, glow };
+}
+const marks = [addMark(cat), addMark(twin)];
+
+// ---------- the score of the body, in beats ----------
+function poseAt(n) {
+  const nodOn = 1 - smooth(7.6, 8.3, n) + smooth(55.7, 56.4, n);
+  const nod = 0.5 - 0.5 * Math.cos(Math.PI * n);                 // down on every off-beat: 2-beat period
+  let pitch = 0.05 - 0.26 * nod * nodOn;
+  let tilt = 0.07 * Math.sin(Math.PI * n) * nodOn;
+  let yaw = 0;
+  const stare = win(n, 8.3, 9.2, 11.4, 12.3);
+  pitch -= 0.2 * stare;
+  // contingency testing: tilt, paw, tilt, wave, two quick nods, a slow blink, a glance
+  tilt += 0.42 * win(n, 12, 12.6, 13.4, 14) - 0.42 * win(n, 18, 18.6, 19.4, 20);
+  const lift1 = win(n, 16, 16.5, 17.3, 18);
+  const lift2 = win(n, 20, 20.4, 21.6, 22);
+  const wave = Math.sin(TAU * 2 * (n - 20.5)) * win(n, 20.5, 20.75, 21.25, 21.5);
+  pitch -= 0.24 * (win(n, 22, 22.2, 22.35, 22.6) + win(n, 23, 23.2, 23.35, 23.6));
+  yaw += 0.5 * Math.sin(Math.PI * (n - 26)) * win(n, 26, 26.3, 27.7, 28);
+  // unison: a nod together, the mark, the reach, the paw to its own brow
+  pitch -= 0.2 * win(n, 28, 28.5, 29, 29.7);
+  const startle = win(n, 30, 30.12, 30.3, 30.8);
+  const reach = win(n, 32, 34, 38, 39.2);
+  const lean = win(n, 31.6, 33.8, 38, 39.4);
+  // the paw comes back to its own face: a bow onto the raised paw, two wipes, and the mark is gone
+  const wash = win(n, 38.8, 39.6, 41.2, 42.2);
+  const wipe = wash * (0.5 - 0.5 * Math.cos(TAU * (n - 39.6)));
+  pitch += 0.1 * startle + 0.14 * win(n, 30.2, 31, 38.4, 39.2) - 0.72 * wash - 0.2 * wipe;
+  yaw -= 0.62 * wash;
+  tilt += 0.42 * wash;
+  // early: a tilt, then the look back over the shoulder
+  tilt += 0.42 * win(n, 49, 49.5, 50.4, 51);
+  const back = win(n, 51.5, 52.6, 54.5, 55.6);
+  yaw -= 2.25 * back;
+  pitch += 0.1 * back;
+  tilt -= 0.15 * back;
+  const blink = win(n, 5.35, 5.5, 5.6, 5.8) + win(n, 14.5, 14.65, 14.75, 14.95) + win(n, 24, 24.7, 25.1, 26)
+    + win(n, 44, 44.6, 45, 45.7) + win(n, 53.2, 53.35, 53.45, 53.65);
+  const lash = win(n, 8.3, 9, 11.6, 12.4);
+  return { n, pitch, tilt, yaw, blink: Math.min(1, blink), lift1, lift2, wave, reach, lean, wash, wipe, lash };
+}
+let REACH_U = 1.25;                                        // solved at setup so the paw lands on the glass
+const LEAN_ANGLE = Math.asin(LEAN / (0.424 * S)), LEAN_DIP = 0.424 * S * (1 - Math.cos(LEAN_ANGLE));
+function applyPose(c, p) {
+  c.restPose().setLook(p.yaw, p.pitch, p.tilt).setBlink(p.blink);
+  const B = c.bones;
+  B.frU.rotation.set(-0.3 * p.wash, 0, 0.95 * p.lift1 + 1.15 * p.lift2 + 0.12 * p.wave + REACH_U * p.reach + 2.2 * p.wash + 0.12 * p.wipe);
+  B.frL.rotation.z = -1.35 * p.lift1 - 1.2 * p.lift2 - 0.4 * p.wave - 0.7 * p.wash - 0.25 * p.wipe;
+  // leaning in: the body slides forward and dips while the three planted paws stay where they stood
+  c.group.position.x = CAT_X + LEAN * p.lean;
+  B.root.position.y = -LEAN_DIP * p.lean;
+  for (const leg of ['flU', 'hlU', 'hrU']) B[leg].rotation.z = -LEAN_ANGLE * p.lean;
+  const ph = Math.PI * p.n;
+  for (let i = 0; i < 5; i++) {
+    B['t' + i].rotation.set(0,
+      0.1 * Math.sin(ph + i * 0.7) + 0.3 * p.lash * Math.sin(2 * ph + i * 0.9),
+      0.05 * Math.cos(ph + i * 0.5));
+  }
+}
+// solve the reach angle: the front-right paw tip touches x = -0.012 with the reach fully on
+(() => {
+  const tip = new THREE.Vector3();
+  let lo = 0.6, hi = 1.55;
+  for (let i = 0; i < 30; i++) {
+    REACH_U = (lo + hi) / 2;
+    applyPose(cat, { n: 0, pitch: 0, tilt: 0, yaw: 0, blink: 0, lift1: 0, lift2: 0, wave: 0, reach: 1, lean: 1, wash: 0, wipe: 0, lash: 0 });
+    cat.group.updateMatrixWorld(true);
+    cat.pawTips.fr.getWorldPosition(tip);
+    if (tip.x > -0.012) hi = REACH_U; else lo = REACH_U;
+  }
+})();
+const contact = (() => { const v = new THREE.Vector3(); cat.pawTips.fr.getWorldPosition(v); return v; })();
+glassMat.uniforms.uRip.value.set(contact.z, contact.y + 0.04, 0);
+
+// ---------- camera: one continuous move keyed on bars ----------
+const BAR = 4 * BEAT;
+const cam = monotoneKeys.tracks([
+  //  t          px     py    pz     tx     ty    tz     fov
+  [0 * BAR,    -5.0,  1.55,  2.45,  0.0,  1.12, -0.45, 36],
+  [3 * BAR,    -4.6,  1.45,  2.5,  -0.05, 1.08, -0.4,  35],
+  [5.5 * BAR,  -3.9,  1.25,  2.95, -0.25, 0.95, -0.1,  35],
+  [8 * BAR,    -2.9,  0.95,  3.0,  -0.4,  0.8,   0.0,  34],
+  [9.5 * BAR,  -2.7,  0.92,  2.9,  -0.4,  0.8,   0.0,  34],
+  [11 * BAR,   -3.5,  1.3,   2.75, -0.15, 1.0,  -0.1,  35],
+  [12.5 * BAR, -4.5,  1.42,  2.6,   0.0,  1.08, -0.4,  35.5],
+  [16 * BAR,   -5.0,  1.55,  2.45,  0.0,  1.12, -0.45, 36]
+], { periodic: true });
+
+// vignette over everything
+const overlay = new THREE.Scene();
+const overlayCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+overlay.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  transparent: true, depthTest: false, depthWrite: false,
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `varying vec2 vUv; void main(){ float d = length(vUv - 0.5); gl_FragColor = vec4(0.0, 0.0, 0.0, smoothstep(0.36, 0.8, d) * 0.72); }`
+})));
+
+// captions, lower left, on the bar lines (muted autoplay still gets the story)
+const CAPTIONS = [
+  [0.25, 3.5, 'the cat in the glass is a beat late'],
+  [4, 6.75, 'less late, every time i test it'],
+  [7.25, 9.5, 'then on time'],
+  [9.75, 11.6, 'the red dot was on me'],
+  [12.25, 15.4, 'now it moves first. i follow']
+];
+const capCanvas = document.createElement('canvas');
+capCanvas.width = 900; capCanvas.height = 120;
+const capCtx = capCanvas.getContext('2d');
+const capTex = new THREE.CanvasTexture(capCanvas);
+capTex.colorSpace = THREE.SRGBColorSpace;
+const capMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 240 / 900), new THREE.MeshBasicMaterial({ map: capTex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false }));
+capMesh.position.set(0, -1 + 120 / 900, 0);
+overlay.add(capMesh);
+let capKey = '';
+function placeCaption(t) {
+  const bar = t / BAR;
+  let text = '', a = 0;
+  for (const [b0, b1, line] of CAPTIONS) {
+    const v = smooth(b0, b0 + 0.3, bar) * (1 - smooth(b1 - 0.3, b1, bar));
+    if (v > 0.001) { text = line; a = v; }
+  }
+  const key = text + '|' + a.toFixed(3);
+  if (key === capKey) return;
+  capKey = key;
+  capCtx.setTransform(1, 0, 0, 1, 0, 0);
+  capCtx.globalAlpha = 1;
+  capCtx.clearRect(0, 0, 900, 120);
+  if (text) {
+    capCtx.globalAlpha = a;
+    capCtx.font = 'italic 31px Didot, Baskerville, Georgia, serif';
+    capCtx.textBaseline = 'alphabetic';
+    capCtx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    capCtx.fillText(text, 47, 72);
+    capCtx.fillStyle = '#ece4cf';
+    capCtx.fillText(text, 46, 70);
+    const w = capCtx.measureText(text).width;
+    capCtx.fillStyle = 'rgba(236, 228, 207, 0.6)';
+    capCtx.fillRect(46, 84, Math.min(w, 46 + w * smooth(0, 1, a)) , 1.5);
+    capCtx.fillStyle = '#c8321f';
+    capCtx.fillRect(46, 84, 22, 1.5);
+  }
+  capTex.needsUpdate = true;
+}
+
+// ---------- one frame, from absolute time only ----------
+window.renderFrame = (time) => {
+  const t = ((time % DUR) + DUR) % DUR;
+  const n = t / BEAT;
+  const lag = lagAt(n);
+  const pSelf = poseAt(n), pTwin = poseAt(wrapBeat(n - lag));
+  applyPose(cat, pSelf);
+  applyPose(twin, pTwin);
+  const dotOf = (m) => smooth(30, 30.15, m) * (1 - smooth(40.1, 40.5, m));
+  marks.forEach((mk, i) => {
+    const on = dotOf(i ? pTwin.n : pSelf.n);
+    const flick = 0.9 + 0.1 * Math.sin(TAU * 4 * (i ? pTwin.n : pSelf.n));
+    mk.m.visible = on > 0.002;
+    mk.dot.material.opacity = on;
+    mk.glow.material.opacity = on * flick;
+  });
+  needle.rotation.z = -Math.PI * (1 - lag);
+  // the glass clears while the cats keep time, and silvers over again as the twin runs ahead
+  const haze = 1 - smooth(28, 31, n) + smooth(50, 61, n);
+  glassMat.uniforms.uHaze.value = haze;
+  const rip = clamp01((n - 34) / 2.6);
+  glassMat.uniforms.uRip.value.z = 0.04 + 0.62 * rip;
+  glassMat.uniforms.uRipA.value = n >= 34 ? Math.pow(1 - rip, 2) * 0.55 : 0;
+  const warm = 1 - haze;
+  skyMat.uniforms.uWarmth.value = warm;
+  for (const Lx of [L1, L2]) {
+    Lx.key.color.copy(KEY_COOL).lerp(KEY_WARM, warm);
+    Lx.key.intensity = 36 + 14 * warm;
+  }
+  placeMotes(t);
+  placeCaption(t);
+  const [px, py, pz, tx, ty, tz, fov] = cam(t);
+  camera.position.set(px, py, pz);
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  camera.lookAt(tx, ty, tz);
+  renderer.setRenderTarget(null);
+  renderer.clear(true, true, true);
+  renderer.render(behind, camera);
+  renderer.clearDepth();
+  renderer.render(scene, camera);
+  renderer.render(overlay, overlayCam);
+};
+
+// live playback for the draft preview; the MP4 renderer calls renderFrame(t) itself
+let liveStart = null;
+(function loop(now) {
+  if (liveStart === null) liveStart = now;
+  window.renderFrame(((now - liveStart) / 1000) % DUR);
+  requestAnimationFrame(loop);
+})(performance.now());
+window.ready = true;
+
+
+
+
+
+
 
 window.audioDuration = 60;
-  </script>
-  <script>
-// Audio in its OWN script block: a syntax error here must not kill the visual
-// init above — it lands in window._errors via the bootstrap listener instead.
 
-
-
+window.ready = true;
   </script>
 <script type="module">
 (async () => {
   window.strudelState = 'loading';
   window.strudelError = null;
   try {
-    const CONFIG = JSON.parse("{\"code\":\"// BPM: 128\\n// DURATION: 60\\n// FORM: poster 0-4 | training 4-14 | question 14-16 | signature 16-24 | recognition 24-28 | return 28-32\\n// TONAL CENTER: C# minor\\n// MOTIF: E4 G#4 B4 C#5 - two-bar cell: E4 on beat 1, G#4 on beat 2-and, B4 on beat 4, one beat rest, C#5 on beat 2, B4 on beat 3-and, then rest through the bar line\\n// HARMONIC PLAN: C#m9 | Amaj9 | F#m9 | G#m7 - four bars repeating for all 32 cycles; the question (14-16) sits on F#m9 | G#m7 with the pad filter opening; sections change layer groups and filter only, never the progression\\n// GROOVE: RolandTR909 - rounded kick on beat 1 and the and of beat 3, one warm snare on beats 2 and 4, short swung hats with gaps, dry rim pickups; clean 2-step, no crackle or noise sweep\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// Keep each sampled hit dry and finite: the snare supplies body without a second clap/noise layer.\\nconst hats = s(\\\"[~ hh] [hh ~] [~ hh] [hh hh]\\\").bank(\\\"RolandTR909\\\")\\n  .late(\\\"[0 0.018]*4\\\").velocity(\\\"\u003c0.9 0.6 0.8 0.55>*2\\\")\\n  .attack(0.002).decay(0.035).sustain(0).release(0.012).gain(0.11).hpf(2200).lpf(5600).pan(0.56)\\nconst rimEnd = s(\\\"~ ~ ~ [~ ~ ~ rim]\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.002).decay(0.055).sustain(0).release(0.02).gain(0.055).lpf(3200).pan(0.58)\\nconst rim3 = s(\\\"~ ~ rim ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.002).decay(0.055).sustain(0).release(0.02).gain(0.07).lpf(3200).pan(0.58)\\nconst kick2step = s(\\\"bd ~ [~ bd] ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.19).sustain(0).release(0.045).gain(0.12).lpf(900)\\nconst kickHalf = s(\\\"bd ~ ~ ~\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.19).sustain(0).release(0.045).gain(0.12).lpf(900)\\nconst backbeat = s(\\\"~ sd ~ sd\\\").bank(\\\"RolandTR909\\\")\\n  .attack(0.003).decay(0.11).sustain(0).release(0.035).gain(0.16).hpf(160).lpf(3600)\\n\\nconst roots = \\\"\u003cc#2 a1 f#1 g#1>\\\"\\nconst sub = (st) => {\\n  const n = note(roots).struct(st).clip(0.4)\\n  return stack(n.s(\\\"sine\\\").gain(0.15), n.s(\\\"sawtooth\\\").lpf(230).gain(0.08))\\n    .attack(0.005).decay(0.18).sustain(0.22).release(0.22)\\n}\\n\\nconst padLoop = \\\"\u003c[c#3,e3,g#3,b3,d#4] [a2,c#3,e3,g#3,b3] [f#2,a2,c#3,e3,g#3] [g#2,b2,d#3,f#3]>\\\"\\nconst padQuestion = \\\"\u003c[f#2,a2,c#3,e3,g#3] [g#2,b2,d#3,f#3]>\\\"\\nconst pad = (src, cut) => {\\n  const n = note(src).clip(0.98)\\n  return stack(n.add(note(0.06)).pan(0.36), n.add(note(-0.06)).pan(0.64)).s(\\\"sawtooth\\\")\\n    .lpf(cut).lpq(2).attack(0.35).decay(0.2).sustain(0.75).release(0.65)\\n    .gain(0.16).room(0.4).roomsize(2.4)\\n}\\n\\nconst ghost = (p, g) => stack(p.s(\\\"triangle\\\").gain(0.36 * g), p.s(\\\"sawtooth\\\").lpf(1800).gain(0.06 * g), p.s(\\\"sine\\\").gain(0.1 * g))\\n  .clip(0.6).attack(0.035).decay(0.3).sustain(0.3).release(0.7)\\n  .bpf(1100).bpq(0.7).pan(0.48).room(0.34).roomsize(2.2)\\n  .delay(0.22).delaytime(0.1875).delayfeedback(0.28)\\nconst motifCell = \\\"\u003c[e4 [~ g#4] ~ b4] [~ c#5 [~ b4] ~]>\\\"\\nconst motifOctave = \\\"\u003c[e5 [~ g#5] ~ b5] [~ c#6 [~ b5] ~] [e5 [~ g#5] ~ b5] [~ b5@3]>\\\"\\nconst bell = (src, g = 1) => {\\n  const n = note(src).clip(0.35).velocity(\\\"\u003c1 0.92 0.96 0.88>\\\")\\n  return stack(n.s(\\\"triangle\\\").gain(0.2 * g), n.s(\\\"sine\\\").gain(0.1 * g))\\n    .attack(0.005).decay(0.17).sustain(0).release(0.28)\\n    .lpf(3200).lpenv(2).lpa(0.005).lpd(0.12).pan(0.55).room(0.3).roomsize(1.8)\\n}\\n\\n// A pitched breath marks the question without a broadband riser or a continuous noise floor.\\nconst question = note(\\\"\u003c[f#4,a4,c#5] [g#4,b4,d#5]>\\\").s(\\\"sine\\\")\\n  .clip(0.65).attack(0.22).decay(0.3).sustain(0.25).release(0.45)\\n  .gain(0.075).room(0.2).roomsize(1.6)\\n\\n$: arrange(\\n  [4, stack(kickHalf, hats, rimEnd)],\\n  [10, stack(kick2step, backbeat, hats, rimEnd)],\\n  [2, silence],\\n  [4, stack(kickHalf, rim3, hats)],\\n  [4, stack(kickHalf, rim3, hats, backbeat)],\\n  [4, stack(kick2step, backbeat, hats, rimEnd)],\\n  [4, stack(kickHalf, hats, rimEnd)]\\n)\\n\\n$: arrange(\\n  [4, sub(\\\"x ~ ~ ~\\\")],\\n  [10, sub(\\\"x ~ [~ x] ~\\\")],\\n  [2, silence],\\n  [4, sub(\\\"x ~ ~ ~\\\")],\\n  [4, sub(\\\"x ~ [~ x] ~\\\").velocity(\\\"1 1 0.72 1\\\")],\\n  [4, sub(\\\"x ~ [~ x] ~\\\")],\\n  [4, sub(\\\"x ~ ~ ~\\\")]\\n)\\n\\n$: arrange(\\n  [4, pad(padLoop, 700)],\\n  [10, pad(padLoop, 1500)],\\n  [2, pad(padQuestion, \\\"\u003c1700 2300>\\\")],\\n  [4, pad(padLoop, 1500)],\\n  [4, pad(padLoop, 1750)],\\n  [4, pad(padLoop, 2600)],\\n  [4, pad(padLoop, 700)]\\n)\\n\\n$: arrange(\\n  [4, silence],\\n  [5, silence],\\n  [5, ghost(note(motifCell).sometimesBy(0.25, x => x.off(0.1875, y => y.add(note(12)).velocity(0.5))), 1)],\\n  [2, ghost(note(\\\"\u003c~ [~ ~ ~ [~ ~ e4 ~]]>\\\"), 0.45)],\\n  [4, bell(\\\"\u003c[e4 g#4 b4 c#5] [a4 b4 c#5 e5] [f#4 a4 c#5 e5] [g#4 b4 d#5 f#5]>\\\")],\\n  [4, bell(\\\"\u003c[e4 g#4 b4 c#5] [a4 b4 c#5 e5] [f#4 a4 c#5 e5] [g#4 b4 d#5 f#5]>\\\", 1.7).add(note(12))],\\n  [4, ghost(note(motifOctave), 0.95)],\\n  [4, silence]\\n)\\n\\n$: arrange(\\n  [14, silence],\\n  [2, question],\\n  [16, silence]\\n)\\n\",\"bpm\":128,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5333333333333333,\"cycles\":32,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 64\\n// DURATION: 60\\n// FORM: late reflection (cycles 0-4) | closing the lag (cycles 4-7) | synchronized glass (cycles 7-12) | reverse echo return (cycles 12-16)\\n// TONAL CENTER: G minor\\n// MOTIF: G4 Bb4 D5 C5 Bb4 G4 — two-bar cell: bar 1 places G4 on beat 1, Bb4 on 2-and, D5 on 3-and; bar 2 places C5 on beat 1, Bb4 on 2-and, a longer G4 on beat 3, beat 4 open\\n// HARMONIC PLAN: Gm | Gm | Cm | D, a continuous four-bar loop; synchronized glass opens on the D at cycle 7 and the pad sustains D-F#-A, G-Bb-D and C-Eb-G above the skanks; F# appears only in the D chord\\n// GROOVE: RolandTR808 one-drop — no kick on beat 1, bd:0 and rim:0 struck together on beat 3, dark hh:0 eighths with the beat-3 hat muted and alternating accents, offbeat skanks on every and; deep and patient, slightly behind the beat, ~54% swing on hats and skanks only\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst bassLine = note(\\\"\u003c[g1 ~ ~ [~ bb1]] [g1 ~ ~ [~ d2]] [c2 ~ ~ [~ g1]] [d2 ~ ~ [~ a1]]>\\\")\\n\\nconst skank = note(\\\"\u003c[g3,bb3,d4] [g3,bb3,d4] [g3,c4,eb4] [a3,d4,fs4]>\\\").struct(\\\"~ x ~ x ~ x ~ x\\\").clip(0.19).attack(0.005).decay(0.06).sustain(0.5).release(0.12).hpf(180)\\n\\nconst hookCell = note(\\\"\u003c[[g4 ~] [~ bb4] [~ d5] ~] [[c5 ~] [~ bb4] g4 ~]>\\\").s(\\\"square\\\").clip(0.55).attack(0.015).decay(0.12).sustain(0.6).release(0.22)\\nconst lead = hookCell.bpf(1120).bpq(0.6).room(0.22).roomsize(1.2).velocity(\\\"\u003c1 0.92>\\\").gain(0.4)\\nconst echoDark = hookCell.bpf(760).bpq(0.95).lpf(1700).room(0.34).roomsize(1.8).gain(0.15)\\nconst echoWarm = hookCell.bpf(1050).bpq(0.65).lpf(3400).room(0.26).roomsize(1.3).gain(0.13)\\n\\nconst padChords = note(\\\"\u003c[g3,bb3,d4,g4] [g3,bb3,d4,g4] [c4,eb4,g4,c5] [a3,d4,fs4,a4]>\\\")\\nconst padBody = stack(padChords.add(note(0.07)), padChords.add(note(-0.07))).s(\\\"sawtooth\\\").clip(0.85).attack(0.35).decay(0.4).sustain(0.55).release(1.2).hpf(180).lpq(0.7).room(0.3).roomsize(2.2)\\nconst padWarm = padBody.lpf(1400).gain(0.075)\\nconst padDuck = padBody.lpf(1200).gain(0.048)\\nconst padMid = padBody.lpf(1000).gain(0.055)\\nconst padFade = padBody.lpf(700).gain(0.03)\\n\\nconst mirrorRing = stack(\\n  note(\\\"d6\\\").s(\\\"sine\\\").gain(0.22),\\n  note(\\\"d5\\\").s(\\\"triangle\\\").gain(0.085),\\n  note(\\\"a6\\\").s(\\\"sine\\\").gain(0.045)\\n).struct(\\\"~ ~ x ~\\\").clip(0.2).attack(0.008).decay(0.17).sustain(0.3).release(2.2).room(0.38).roomsize(2.6)\\n\\n$: stack(\\n  s(\\\"~ ~ bd:0 ~\\\").clip(0.45).attack(0.005).release(0.12).lpf(135).gain(0.4),\\n  s(\\\"~ ~ rim:0 ~\\\").clip(0.07).attack(0.002).release(0.03).hpf(300).lpf(5200).gain(0.34),\\n  s(\\\"hh:0 hh:0 hh:0 hh:0 ~ hh:0 hh:0 hh:0\\\").clip(0.05).attack(0.002).release(0.02).hpf(420).lpf(6800).gain(\\\"\u003c[0.2 0.105 0.15 0.105 0 0.105 0.16 0.1] [0.15 0.11 0.18 0.105 0 0.11 0.15 0.105]>\\\").swingBy(0.04, 4),\\n  s(\\\"\u003c~ [~ ~ ~ [~ rim:0]]>\\\").clip(0.07).attack(0.002).release(0.03).hpf(300).lpf(4200).room(0.32).roomsize(1.6).gain(0.12).off(0.0625, x => x.lpf(2600).gain(0.06))\\n).bank(\\\"RolandTR808\\\")\\n\\n$: stack(\\n  bassLine.s(\\\"triangle\\\").lpf(420).lpq(0.6).gain(0.3),\\n  bassLine.s(\\\"sine\\\").lpf(200).gain(0.12)\\n).clip(0.5).attack(0.01).decay(0.12).sustain(0.78).release(0.22).velocity(\\\"\u003c1 0.93 0.97 0.9>\\\")\\n\\n$: stack(\\n  stack(\\n    skank.s(\\\"triangle\\\").lpf(2200).lpq(0.8).gain(0.15),\\n    skank.s(\\\"square\\\").lpf(1700).gain(0.035)\\n  ).room(0.2).roomsize(0.9),\\n  note(\\\"\u003c~ ~ ~ [a3,d4,fs4]>\\\").struct(\\\"~ ~ ~ [~ x]\\\").s(\\\"triangle\\\").clip(0.25).attack(0.005).decay(0.08).sustain(0.3).release(0.3).hpf(180).lpf(820).room(0.5).roomsize(2.2).gain(0.07).off(0.0625, x => x.lpf(600).gain(0.038))\\n).swingBy(0.04, 4)\\n\\n$: stack(\\n  lead,\\n  arrange(\\n    [4, echoDark.late(0.25)],\\n    [1, echoDark.late(0.125)],\\n    [1, echoDark.late(0.0625).late(1)],\\n    [1, echoDark.late(0.03125)],\\n    [5, echoWarm.late(1)],\\n    [2, echoDark.early(0.125)],\\n    [2, echoDark.early(0.25)]\\n  )\\n)\\n\\n$: stack(\\n  arrange(\\n    [7, silence],\\n    [1, padWarm.late(1)],\\n    [1, padDuck],\\n    [3, padWarm.late(3)],\\n    [2, padMid],\\n    [1, padFade.late(2)],\\n    [1, silence]\\n  ),\\n  arrange([8, silence], [1, mirrorRing], [7, silence])\\n)\",\"bpm\":64,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.26666666666666666,\"cycles\":16,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
     const S = await import(CONFIG.cdn);
     window.StrudelLib = S;
     window.strudelConfig = CONFIG;
