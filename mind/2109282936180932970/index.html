@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\n\nconst float DURATION = 60.0;\nconst float TAU = 6.28318530718;\nconst float PI = 3.14159265359;\nconst float SEED_SALT = 13417478.0;\n\n// Square frame: uv.x and uv.y both span -0.5..0.5 (normalized by height).\n// The hero galaxy sits upper right, fully inside the 8% safe area.\nconst vec2 HERO = vec2(0.205, 0.165);\nconst float HERO_RADIUS = 0.115;\n// Where the unseen mass is at frame zero (lower left), already bending two galaxies.\nconst vec2 START = vec2(-0.272, -0.252);\n// Einstein radius squared of the whole lens: theta_E ~ 0.167 (about 37% of frame height across).\nconst float LENS_S = 0.0280;\n\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, -s, s, c);\n}\n\nfloat hash11(float n) {\n  return fract(sin(n * 127.1 + SEED_SALT * 0.0000173) * 43758.5453123);\n}\n\nfloat hash21(vec2 p) {\n  return fract(sin(dot(p, vec2(127.1, 311.7)) + SEED_SALT * 0.0000011) * 43758.5453123);\n}\n\n// ---------------------------------------------------------------\n// THE INVISIBLE MASS: never drawn. One closed elliptical circuit per\n// loop that leaves START, sits exactly on the hero's core at tau = PI\n// (30 s), and comes home along a sideways-bulged return leg.\n// ---------------------------------------------------------------\n\nvec2 massCenter(float tau) {\n  vec2 mid = 0.5 * (START + HERO);\n  vec2 e1 = 0.5 * (START - HERO);\n  vec2 e2 = normalize(vec2(-e1.y, e1.x)) * 0.062;\n  return mid + e1 * cos(tau) + e2 * sin(tau);\n}\n\nvec2 lobeOffset(float tau) {\n  return rot(tau * 2.0) * vec2(0.020, 0.0);\n}\n\nvec2 massLobeA(float tau) {\n  return massCenter(tau) + lobeOffset(tau) * 0.45;\n}\n\nvec2 massLobeB(float tau) {\n  return massCenter(tau) - lobeOffset(tau) * 0.55;\n}\n\n// thin-lens deflection: light at p came from p + deflection\nvec2 deflectLobe(vec2 p, vec2 lobe, float strength, float core) {\n  vec2 r = p - lobe;\n  return -r * (strength / (dot(r, r) + core * core));\n}\n\nvec2 lensDeflection(vec2 p, float tau) {\n  vec2 d = deflectLobe(p, massLobeA(tau), LENS_S * 0.58, 0.018);\n  d += deflectLobe(p, massLobeB(tau), LENS_S * 0.42, 0.022);\n  return d;\n}\n\n// effective radius of the lens potential: its iso-lines are the mass map\nfloat lensEffectiveRadius(vec2 p, float tau) {\n  vec2 a = p - massLobeA(tau);\n  vec2 b = p - massLobeB(tau);\n  float pa = 0.58 / sqrt(dot(a, a) + 0.018 * 0.018);\n  float pb = 0.42 / sqrt(dot(b, b) + 0.022 * 0.022);\n  return 1.0 / (pa + pb);\n}\n\n// ---------------------------------------------------------------\n// FIELD GEOMETRY: explicit ellipses, nuclei, logarithmic arms.\n// ---------------------------------------------------------------\n\n// two logarithmic arms wound the same way (sin has two zeros per turn)\nfloat spiralArmMask(vec2 q, float radius, float pitch, float armWidth, float phaseOff) {\n  float rr = length(q);\n  float ang = atan(q.y, q.x);\n  float wind = log(max(rr, 0.01) / (radius * 0.18)) / pitch;\n  float d = sin(ang - wind + phaseOff);\n  float arm = smoothstep(armWidth, armWidth * 0.2, abs(d));\n  float inner = smoothstep(radius * 0.08, radius * 0.26, rr);\n  float outer = 1.0 - smoothstep(radius * 0.72, radius * 1.06, rr);\n  return arm * inner * outer;\n}\n\n// one background galaxy: ellipse disc + compact nucleus + optional arms\nfloat galaxyLum(vec2 p, vec2 center, float radius, float axisRatio, float angle, float armed) {\n  vec2 q = rot(angle) * (p - center);\n  vec2 qd = q / vec2(1.0, axisRatio);\n  float rr = length(qd);\n  if (rr > radius * 1.3) return 0.0;\n  float disc = 1.0 - smoothstep(radius * 0.30, radius * 1.02, rr);\n  float nucleus = smoothstep(radius * 0.22, 0.0, rr);\n  float lum = disc * 0.55 + nucleus * 0.95;\n  lum += armed * spiralArmMask(qd, radius, 0.62, 0.42, 0.0) * 0.52;\n  return lum;\n}\n\n// ---------------------------------------------------------------\n// THE HERO SPIRAL: core + two gold arms + one dark dust lane.\n// .x = warm luminance, .y = dust-lane occlusion\n// ---------------------------------------------------------------\n\nvec2 heroGalaxy(vec2 p, float tau) {\n  float radius = HERO_RADIUS;\n  // one full turn per loop, counter to the mass circuit\n  vec2 q = rot(0.35 - tau) * (p - HERO);\n  vec2 qd = q / vec2(1.0, 0.80);\n  float rr = length(qd);\n  if (rr > radius * 1.2) return vec2(0.0);\n\n  float disc = 1.0 - smoothstep(radius * 0.22, radius * 1.02, rr);\n  float core = smoothstep(radius * 0.22, 0.0, rr) * 1.15;\n  float bulge = (1.0 - smoothstep(radius * 0.10, radius * 0.42, rr)) * 0.35;\n  float halo = (1.0 - smoothstep(radius * 0.90, radius * 1.18, rr)) * 0.10;\n  float arms = spiralArmMask(qd, radius, 0.58, 0.40, 0.0);\n  float lum = disc * 0.40 + bulge + halo + arms * 0.70 + core;\n\n  // one continuous dark dust lane: a narrow band wound between the two arms\n  float laneMask = spiralArmMask(qd, radius, 0.58, 0.16, 1.45)\n                 * (1.0 - smoothstep(radius * 0.70, radius * 1.00, rr))\n                 * smoothstep(radius * 0.16, radius * 0.30, rr) * 0.9;\n  return vec2(lum, laneMask);\n}\n\n// ---------------------------------------------------------------\n// THE WHOLE SKY, sampled at the bent coordinate s.\n// ---------------------------------------------------------------\n\nvec3 background(vec2 s, float tau) {\n  // far outside the authored field there is nothing to see\n  if (max(abs(s.x), abs(s.y)) > 1.6) return vec3(0.0);\n\n  vec3 col = vec3(0.0);\n  vec3 cream = vec3(1.00, 0.93, 0.76);\n  vec3 violet = vec3(0.66, 0.58, 0.96);\n\n  // sparse hashed starfield: single points for depth, never texture\n  vec2 cell = floor(s * 34.0);\n  float starH = hash21(cell);\n  if (starH > 0.974) {\n    vec2 jitter = vec2(hash21(cell + 7.1), hash21(cell + 19.3));\n    vec2 sp = fract(s * 34.0) - jitter;\n    float pt = smoothstep(0.16, 0.0, length(sp));\n    col += vec3(0.56, 0.60, 0.76) * pt * (0.35 + 0.55 * hash21(cell + 3.3));\n  }\n\n  // closed parallax drift of the whole field, deeper members slower\n  vec2 drift = vec2(0.028, -0.017) * vec2(sin(tau), cos(tau) - 1.0);\n\n  // 48 seeded galaxies, culled to the ones near this sample\n  for (int i = 0; i \u003c 64; i++) {\n    float id = float(i) + 1.0;\n    float hx = hash11(id * 3.17 + 1.7);\n    float hy = hash11(id * 7.91 + 4.3);\n    float hs = hash11(id * 11.37 + 9.1);\n    float ht = hash11(id * 5.53 + 13.9);\n    float ha = hash11(id * 17.21 + 21.3);\n    float hv = hash11(id * 23.11 + 31.7);\n\n    vec2 center = vec2(hx * 1.56 - 0.78, hy * 1.36 - 0.68);\n    float depth = 0.35 + 0.65 * hs;\n    center += drift * depth;\n    if (length(center - HERO) \u003c 0.21) continue;\n    if (abs(s.x - center.x) > 0.10 || abs(s.y - center.y) > 0.10) continue;\n\n    float radius = mix(0.020, 0.056, hs * hs);\n    float axisRatio = mix(0.32, 0.95, ht);\n    float halfTurns = floor(1.0 + 3.0 * hv);\n    float angle = ha * TAU - halfTurns * PI * (tau / TAU);\n    float armed = step(0.75, hv);\n\n    float lum = galaxyLum(s, center, radius, axisRatio, angle, armed);\n    float violetness = step(0.86, hx) * 0.75;\n    col += mix(cream, violet, violetness) * lum * (0.70 + 0.50 * depth);\n  }\n\n  // two placed galaxies beside START so frame zero is already mid-bend\n  vec2 drift2 = drift * 0.8;\n  col += cream * galaxyLum(s, START + vec2(0.170, 0.035) + drift2, 0.050, 0.62, 0.9 - PI * (tau / TAU), 1.0) * 1.15;\n  col += mix(cream, violet, 0.35) * galaxyLum(s, START + vec2(-0.045, 0.190) + drift2, 0.044, 0.80, 2.3 + PI * (tau / TAU), 0.0) * 1.05;\n\n  // the hero\n  vec2 h = heroGalaxy(s, tau);\n  if (h.x > 0.0) {\n    vec3 goldArm = vec3(1.00, 0.86, 0.56);\n    vec3 creamCore = vec3(1.00, 0.97, 0.88);\n    vec3 heroCol = mix(goldArm, creamCore, smoothstep(0.55, 1.2, h.x));\n    vec3 lit = heroCol * h.x * 1.05;\n    // dust lane: a matte mass read against the light behind it\n    lit = mix(lit, lit * 0.18 + vec3(0.075, 0.055, 0.110) * 0.5, h.y);\n    col += lit;\n  }\n\n  return col;\n}\n\nvoid main() {\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n\n  // ---- the only thing the mass does: bend what lies behind it ----\n  vec2 defl = lensDeflection(uv, tau);\n  vec2 bent = uv + defl;\n  vec3 col = background(bent, tau);\n\n  // strongly demagnified inner images are sub-pixel: let them go dark\n  // instead of aliasing into noise inside the hole\n  vec2 c = massCenter(tau);\n  float stretch = length(defl) / max(length(uv - c), 0.004);\n  col *= 1.0 - smoothstep(3.0, 7.0, stretch);\n\n  // ---- ground: near-black indigo, deepest clean dark at centre ----\n  float edge = length(uv * vec2(0.80, 1.0));\n  vec3 ground = mix(vec3(0.040, 0.043, 0.074), vec3(0.058, 0.044, 0.098), smoothstep(0.15, 0.85, edge));\n  col += ground;\n\n  // ---- event: cold cyan iso-lines of the mass, inside the dark hole, 47-73% ----\n  float reveal = smoothstep(0.47, 0.53, phase) * (1.0 - smoothstep(0.63, 0.69, phase));\n  if (reveal > 0.002) {\n    float interior = 1.0 - smoothstep(0.092, 0.112, length(uv - c));\n    float f = lensEffectiveRadius(uv, tau);\n    // thin iso-lines with a soft halo, so they read as a faint measurement\n    // rather than a flat decal; each line rises a beat after the one inside it\n    float lines = 0.0;\n    float halo = 0.0;\n    for (int k = 0; k \u003c 4; k++) {\n      float level = 0.024 + float(k) * 0.021;\n      float rise = clamp((phase - 0.47) / 0.045 - float(k) * 0.35, 0.0, 1.0);\n      float dist = abs(f - level);\n      lines += (1.0 - smoothstep(0.0008, 0.0030, dist)) * rise * (0.85 - 0.12 * float(k));\n      halo += (1.0 - smoothstep(0.0, 0.011, dist)) * rise;\n    }\n    vec3 cyan = vec3(0.30, 0.80, 0.92);\n    col += cyan * (clamp(lines, 0.0, 1.0) * 0.55 + clamp(halo, 0.0, 1.0) * 0.10) * interior * reveal;\n  }\n\n  // ---- restrained response curve, no bloom ----\n  col = max(col, 0.0);\n  col = col / (1.0 + col * 0.55);\n  col = pow(col, vec3(0.92));\n\n  // faint ordered grain so smooth falloffs don't band\n  float grain = hash21(gl_FragCoord.xy * 0.73) - 0.5;\n  col += grain * 0.006;\n\n  gl_FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 68\\n// DURATION: 60\\n// FORM: A 0-2.5 | B 2.5-7.5 | C 7.5-11 | D 11-13 | E 13-17 (17 cycles @ 68bpm = 60s)\\n// TONAL CENTER: D Aeolian (D minor), harmony always rootless above an A1 pedal\\n// MOTIF: A4 F4 D4 C5 G4 — fall, fall, wide leap up, hang on the fourth; struck on beat 1, 2.5 and 4.5 of a cycle, beat 3 always empty, tail note rings over the bar line\\n// HARMONIC PLAN: A=A1+E3 bare fifth, mode undeclared | B=A1+E3,F3 (D minor implied, never rooted) | C=A1+F3,A3,C4,E4 (Dm11 rootless, brightest) | D=A1+F3,A3 thinning to F3 alone | E=A1+E3, exactly the section-A voicing, no cadence\\n// PHRASE RULE: one soft deep D2 tick at the head of every cycle is the only pulse; pluck places three or fewer attacks per cycle and never lands on beat 3. No sustained voice begins a section with an attack — pad voicings hold common tones and crossfade the single added or removed tone; the A1 pedal and the tick carry unaltered across every seam.\\n\\n// --- invariant sub pedal: A1, 55 Hz, never changes ---\\n$: note(\\\"a1\\\")\\n  .sound(\\\"sine\\\")\\n  .attack(4).decay(0.1).sustain(1).release(0.1)\\n  .lpf(140)\\n  .gain(0.62)\\n  .pan(0.5)\\n  .room(0.18).roomsize(6)\\n\\n// --- sparse point voice: dry low-passed triangle pluck, D4-C5 ---\\n$: note(`\u003c\\n  [a4 ~ f4 ~ ~ ~ ~ d4]\\n  [c5 ~ ~ ~ ~ ~ g4 ~]\\n  [a4 ~ ~ ~ ~ ~ g4 ~]\\n  [a4 ~ e4 ~ ~ ~ ~ b3]\\n  [c5 ~ ~ ~ ~ ~ g4 ~]\\n  [~ a4 ~ e4 ~ ~ ~ b3]\\n  [~ ~ c5 ~ ~ ~ ~ g4]\\n  [a4 ~ ~ e4 ~ ~ ~ ~]\\n  [a4 ~ ~ ~ ~ ~ ~ ~]\\n  [f4 ~ ~ ~ ~ ~ ~ ~]\\n  [d4 ~ ~ ~ ~ ~ ~ ~]\\n  [c5 ~ ~ ~ ~ ~ ~ g4]\\n  [a4 ~ f4 ~ ~ ~ ~ ~]\\n  [c5 ~ ~ ~ ~ ~ g4 ~]\\n  [a4 ~ f4 ~ ~ ~ ~ d4]\\n  [c5 ~ ~ ~ ~ ~ g4 ~]\\n  [~ ~ ~ ~ ~ ~ ~ ~]\\n>`)\\n  .sound(\\\"triangle\\\")\\n  .attack(0.004)\\n  .decay(`\u003c0.5 0.5 0.45 0.5 0.5 0.5 0.55 0.6 2.6 2.6 2.6 2.6 1.1 0.9 0.5 0.5 0.5>`)\\n  .sustain(0)\\n  .release(`\u003c0.3 0.3 0.3 0.3 0.3 0.3 0.35 0.4 1.8 1.8 1.8 1.8 0.8 0.6 0.3 0.3 0.3>`)\\n  .lpf(1250).lpq(2)\\n  .gain(`\u003c0.3 0.3 0.26 0.3 0.3 0.3 0.32 0.34 0.36 0.36 0.36 0.34 0.3 0.28 0.3 0.3 0.3>`)\\n  .pan(`\u003c0.42 0.56 0.47 0.38 0.6 0.44 0.55 0.5 0.5 0.46 0.54 0.5 0.45 0.55 0.42 0.56 0.5>`)\\n  .room(0.42).roomsize(9)\\n\\n// --- inferred pad: detuned saws, rootless above the pedal, vibrato only in the signature window ---\\n$: note(`\u003c\\n  [e3,e4] [e3,e4] [e3,f3,e4]\\n  [e3,f3,e4] [e3,f3,e4] [e3,f3,e4] [e3,f3,e4] [e3,f3,a3,e4]\\n  [f3,a3,c4,e4] [f3,a3,c4,e4] [f3,a3,c4,e4] [f3,a3,c4,e4]\\n  [f3,a3,e4] [f3,a3]\\n  [f3,e3] [e3,e4] [e3,e4] [e3,e4]\\n>`)\\n  .sound(\\\"sawtooth\\\")\\n  .attack(2.2).decay(0.2).sustain(1).release(2.4)\\n  .lpf(sine.range(420, 980).slow(8.5))\\n  .lpq(1.2)\\n  .vib(`\u003c0 0 0 0 0 0 0 0 0.22 0.22 0.22 0.18 0.1 0 0 0 0>`)\\n  .vibmod(`\u003c0 0 0 0 0 0 0 0 0.14 0.14 0.14 0.1 0.05 0 0 0 0>`)\\n  .gain(`\u003c0.1 0.1 0.11 0.12 0.12 0.13 0.13 0.15 0.19 0.2 0.2 0.18 0.14 0.12 0.11 0.1 0.1 0.1>`)\\n  .pan(0.5)\\n  .room(0.55).roomsize(14)\\n\\n// --- bar marker: one soft deep D2 tick per cycle, all 17 ---\\n$: note(\\\"d2 ~ ~ ~\\\")\\n  .sound(\\\"sine\\\")\\n  .attack(0.001).decay(0.12).sustain(0).release(0.08)\\n  .lpf(190)\\n  .gain(0.26)\\n  .pan(0.5)\\n  .room(0.2).roomsize(5)\",\"bpm\":68,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.2833333333333333,\"cycles\":17,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

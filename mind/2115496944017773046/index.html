@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\n\n// SOME MESSES ARE ONLY DIRECTIONS\n// A Taylor-Couette cell seen from above: golden syrup fills the gap between a\n// turning inner cylinder and a resting glass wall. At this viscosity the flow is\n// reversible: seven crank turns smear four ink drops into faint rings, seven\n// turns back return every drop to the exact spot it left.\n// Clock: 21 cycles of 20/7 s (84 BPM).\n// A 0-1 rest | B 1-9 seven turns forward, slow start, fast finish | C 9-12 pivot,\n// the paw taps the glass on beat 2 of cycle 9 and on the cycle-10 downbeat |\n// B' 12-20 the exact mirror: fast unwinding, slow homecoming | A' 20-21 rest, identical to A.\n\nconst float TAU = 6.28318530718;\nconst float CYCLES = 21.0;\n\nconst vec2 CELL = vec2(-0.015, 0.03);\nconst float R_IN = 0.19;\nconst float R_OUT = 0.385;\nconst float R_GLASS = 0.407;\nconst float CRANK_R = 0.15;\nconst float KNOB_R = 0.034;\nconst vec2 SHOULDER = vec2(0.64, -0.68);\nconst vec2 LIGHT_DIR = vec2(-0.6, 0.8);\nconst float HEAD_SCALE = 1.22;\n\nfloat hash21(vec2 p) {\n  p = fract(p * vec2(123.34, 456.21));\n  p += dot(p, p + 45.32);\n  return fract(p.x * p.y);\n}\n\nfloat valueNoise(vec2 p) {\n  vec2 i = floor(p);\n  vec2 f = fract(p);\n  f = f * f * (3.0 - 2.0 * f);\n  float a = hash21(i);\n  float b = hash21(i + vec2(1.0, 0.0));\n  float c = hash21(i + vec2(0.0, 1.0));\n  float d = hash21(i + vec2(1.0, 1.0));\n  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);\n}\n\n// Stokes flow between the turning inner cylinder and the resting glass:\n// the share of the crank angle a ring of syrup at radius r is carried through.\nfloat couetteShare(float r) {\n  float a = 1.0 / (R_IN * R_IN);\n  float b = 1.0 / (R_OUT * R_OUT);\n  return clamp((1.0 / (r * r) - b) / (a - b), 0.0, 1.0);\n}\n\nfloat couetteSlope(float r) {\n  float a = 1.0 / (R_IN * R_IN);\n  float b = 1.0 / (R_OUT * R_OUT);\n  return 2.0 / (r * r * r * (a - b));\n}\n\n// crank winding curve: gentle start, quicker finish, zero speed at both ends\nfloat windCurve(float u) {\n  float v = clamp(u, 0.0, 1.0);\n  float x = v * sqrt(sqrt(v));\n  return x * x * (3.0 - 2.0 * x);\n}\n\nfloat windSlope(float u) {\n  float v = clamp(u, 0.0, 1.0);\n  float x = v * sqrt(sqrt(v));\n  return 6.0 * x * (1.0 - x) * 1.25 * sqrt(sqrt(v));\n}\n\n// crank turns on the cycle clock; the reverse is the forward run played as its mirror\nfloat crankTurns(float c) {\n  if (c \u003c 1.0) return 0.0;\n  if (c \u003c 9.0) return 7.0 * windCurve((c - 1.0) / 8.0);\n  if (c \u003c 12.0) return 7.0;\n  if (c \u003c 20.0) return 7.0 * windCurve((20.0 - c) / 8.0);\n  return 0.0;\n}\n\n// signed turns per cycle\nfloat crankRate(float c) {\n  if (c > 1.0 && c \u003c 9.0) return 0.875 * windSlope((c - 1.0) / 8.0);\n  if (c > 12.0 && c \u003c 20.0) return -0.875 * windSlope((20.0 - c) / 8.0);\n  return 0.0;\n}\n\n// one injected bead of ink: a soft sphere seen from above, darker where it is deeper,\n// with a faint pigment rim and slow mottling carried in the rest frame\nfloat inkBead(vec2 q, vec2 center, float radius, float seed, float soft) {\n  vec2 d = q - center;\n  float dist = length(d);\n  float ang = atan(d.y, d.x);\n  float rr = radius * (1.0 + 0.022 * sin(3.0 * ang + seed) + 0.012 * sin(5.0 * ang + 1.7 * seed));\n  float body = 1.0 - smoothstep(rr - soft, rr + soft, dist);\n  float x = clamp(dist / rr, 0.0, 1.0);\n  float depth = sqrt(max(1.0 - x * x, 0.0));\n  float mottle = 0.9 + 0.2 * valueNoise(d * 60.0 + seed * 7.0);\n  float rim = 0.22 * smoothstep(0.62, 0.94, x);\n  float halo = 0.085 * exp(-dist * dist / (4.0 * rr * rr));\n  return (body * (0.42 + 0.62 * depth + rim) * mottle + halo) * (rr / (rr + 0.3 * soft));\n}\n\n// the four drops (each with the small satellite the pipette left) where they sit at rest,\n// one per radial zone so the smear separates into four bands: sumi innermost, viridian outermost\nvec3 inkAbsorbance(vec2 q, float soft) {\n  float sumi = inkBead(q, vec2(-0.0271, 0.2203), 0.028, 0.4, soft)\n    + 0.85 * inkBead(q, vec2(-0.0729, 0.2244), 0.009, 2.9, soft);\n  float cobalt = inkBead(q, vec2(-0.0641, -0.2571), 0.030, 1.3, soft)\n    + 0.85 * inkBead(q, vec2(-0.1102, -0.2596), 0.0095, 4.1, soft);\n  float carmine = inkBead(q, vec2(-0.2828, -0.1143), 0.031, 2.2, soft)\n    + 0.85 * inkBead(q, vec2(-0.2826, -0.0652), 0.0095, 0.7, soft);\n  float viridian = inkBead(q, vec2(0.3199, 0.1292), 0.029, 5.1, soft)\n    + 0.85 * inkBead(q, vec2(0.2773, 0.1733), 0.009, 3.3, soft);\n  return cobalt * vec3(3.7, 2.1, 0.22)\n    + carmine * vec3(0.25, 2.9, 2.1)\n    + viridian * vec3(2.7, 0.45, 1.3)\n    + sumi * vec3(2.9, 3.0, 3.2);\n}\n\n// suspended air bubbles: rigid tracers that ride their own ring of syrup\nvec2 syrupBubbles(vec2 q, float spin) {\n  vec2 acc = vec2(0.0);\n  float r = length(q);\n  float row = floor((r - 0.2) / 0.0105 + 0.5);\n  if (row \u003c 0.0 || row > 16.0) return acc;\n  float rowR = 0.2 + row * 0.0105;\n  float slots = floor(TAU * rowR / 0.021);\n  float slotAngle = TAU / slots;\n  float shift = spin * couetteShare(rowR);\n  float th = atan(q.y, q.x);\n  float base = floor((th + shift) / slotAngle);\n  for (int k = 0; k \u003c 3; k++) {\n    float s = base + float(k) - 1.0;\n    float sw = mod(s, slots);\n    if (hash21(vec2(sw, row + 17.0)) \u003c 0.075) {\n      float jitter = hash21(vec2(row + 3.1, sw)) - 0.5;\n      float grow = hash21(vec2(sw * 1.7, row + 9.0));\n      float size = 0.0013 + 0.0034 * grow * grow;\n      float ang = (s + 0.5 + 0.6 * jitter) * slotAngle - shift;\n      vec2 bc = rowR * vec2(cos(ang), sin(ang));\n      float d = length(q - bc);\n      float disk = 1.0 - smoothstep(size - 0.0008, size + 0.0008, d);\n      float core = 1.0 - smoothstep(0.15 * size, 0.55 * size, length(q - bc - vec2(-0.25, 0.25) * size));\n      acc.x = max(acc.x, disk);\n      acc.y = max(acc.y, core * disk);\n    }\n  }\n  return acc;\n}\n\nfloat sdTaper(vec2 p, vec2 a, vec2 b, float ra, float rb) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);\n  return length(pa - ba * h) - mix(ra, rb, h);\n}\n\nfloat smin(float a, float b, float k) {\n  float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);\n  return mix(b, a, h) - k * h * (1.0 - h);\n}\n\n// ClawedCode's foreleg reaching in from the lower right: furred shoulder, slim leg, round paw, four toes\nfloat catPawBody(vec2 p, vec2 paw, vec2 fwd, float scale, float flex) {\n  vec2 side = vec2(-fwd.y, fwd.x);\n  vec2 wrist = paw - fwd * 0.05 * scale;\n  vec2 reach = wrist - SHOULDER;\n  vec2 elbow = SHOULDER + reach * 0.45 + normalize(vec2(-reach.y, reach.x)) * 0.03;\n  float leg = smin(sdTaper(p, SHOULDER, elbow, 0.062, 0.044), sdTaper(p, elbow, wrist, 0.044, 0.03 * scale), 0.02);\n  float palm = length(p - paw) - 0.044 * scale * (1.0 - 0.1 * flex);\n  float d = smin(leg, palm, 0.028);\n  for (int k = 0; k \u003c 4; k++) {\n    float a = (float(k) - 1.5) * 0.5;\n    vec2 dir = fwd * cos(a) + side * sin(a);\n    float toe = length(p - (paw + dir * 0.051 * scale * (1.0 + 0.08 * flex))) - 0.0185 * scale;\n    d = smin(d, toe, 0.005);\n  }\n  float shoulder = length(p - SHOULDER) - 0.2;\n  return smin(d, shoulder, 0.07);\n}\n\n// the silhouette gets short tufts that lie along the leg\nfloat catPaw(vec2 p, vec2 paw, vec2 fwd, float scale, float flex) {\n  vec2 legAxis = normalize(paw - SHOULDER);\n  vec2 fq = vec2(dot(p, legAxis), dot(p, vec2(-legAxis.y, legAxis.x)));\n  float fur = 0.65 * valueNoise(fq * vec2(520.0, 60.0)) + 0.35 * valueNoise(fq * vec2(160.0, 22.0));\n  return catPawBody(p, paw, fwd, scale, flex) - 0.005 * fur;\n}\n\n// claws: four pale hooks that slide out of the toes while the paw grips the knob\nfloat catClaws(vec2 p, vec2 paw, vec2 fwd, float scale, float grip) {\n  vec2 side = vec2(-fwd.y, fwd.x);\n  float d = 1.0;\n  for (int k = 0; k \u003c 4; k++) {\n    float a = (float(k) - 1.5) * 0.5;\n    vec2 dir = fwd * cos(a) + side * sin(a);\n    vec2 base = paw + dir * (0.051 + 0.0165) * scale;\n    vec2 tip = base + (dir * 0.9 + side * 0.25) * 0.011 * scale * grip;\n    d = min(d, sdTaper(p, base, tip, 0.0026, 0.0007));\n  }\n  return d;\n}\n\n// one lit segment of the counter's digit\nfloat segmentMask(vec2 g, vec2 a, vec2 b, float on) {\n  return on * (1.0 - smoothstep(0.07, 0.11, sdTaper(g, a, b, 0.0, 0.0)));\n}\n\nfloat isDigit(float d, float k) {\n  return 1.0 - step(0.5, abs(d - k));\n}\n\n// printed digit on the counter wheel; g spans -0.5..0.5 vertically\nfloat counterDigit(vec2 g, float d) {\n  float a = 1.0 - isDigit(d, 1.0) - isDigit(d, 4.0);\n  float b = 1.0 - isDigit(d, 5.0) - isDigit(d, 6.0);\n  float c = 1.0 - isDigit(d, 2.0);\n  float dd = 1.0 - isDigit(d, 1.0) - isDigit(d, 4.0) - isDigit(d, 7.0);\n  float e = isDigit(d, 0.0) + isDigit(d, 2.0) + isDigit(d, 6.0) + isDigit(d, 8.0);\n  float f = 1.0 - isDigit(d, 1.0) - isDigit(d, 2.0) - isDigit(d, 3.0) - isDigit(d, 7.0);\n  float m = 1.0 - isDigit(d, 0.0) - isDigit(d, 1.0) - isDigit(d, 7.0);\n  float v = 0.0;\n  v = max(v, segmentMask(g, vec2(-0.2, 0.4), vec2(0.2, 0.4), a));\n  v = max(v, segmentMask(g, vec2(0.24, 0.36), vec2(0.24, 0.04), b));\n  v = max(v, segmentMask(g, vec2(0.24, -0.04), vec2(0.24, -0.36), c));\n  v = max(v, segmentMask(g, vec2(-0.2, -0.4), vec2(0.2, -0.4), dd));\n  v = max(v, segmentMask(g, vec2(-0.24, -0.04), vec2(-0.24, -0.36), e));\n  v = max(v, segmentMask(g, vec2(-0.24, 0.36), vec2(-0.24, 0.04), f));\n  v = max(v, segmentMask(g, vec2(-0.2, 0.0), vec2(0.2, 0.0), m));\n  return v;\n}\n\nfloat roundBox(vec2 p, vec2 halfSize, float radius) {\n  vec2 d = abs(p) - halfSize + radius;\n  return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - radius;\n}\n\nfloat sdTriangle(vec2 p, vec2 p0, vec2 p1, vec2 p2) {\n  vec2 e0 = p1 - p0;\n  vec2 e1 = p2 - p1;\n  vec2 e2 = p0 - p2;\n  vec2 v0 = p - p0;\n  vec2 v1 = p - p1;\n  vec2 v2 = p - p2;\n  vec2 pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);\n  vec2 pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);\n  vec2 pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);\n  float sgn = sign(e0.x * e2.y - e0.y * e2.x);\n  vec2 d = min(min(vec2(dot(pq0, pq0), sgn * (v0.x * e0.y - v0.y * e0.x)),\n                   vec2(dot(pq1, pq1), sgn * (v1.x * e1.y - v1.y * e1.x))),\n                   vec2(dot(pq2, pq2), sgn * (v2.x * e2.y - v2.y * e2.x)));\n  return -sqrt(d.x) * sign(d.y);\n}\n\n// ClawedCode's head from above, in head space (x toward what it watches):\n// round skull, cheeks, a muzzle and two ears at the back corners\nfloat catHead(vec2 l) {\n  float skull = (length(l / vec2(0.07, 0.062)) - 1.0) * 0.062;\n  float cheeks = min(length(l - vec2(0.016, 0.04)), length(l - vec2(0.016, -0.04))) - 0.04;\n  float muzzle = length(l - vec2(0.056, 0.0)) - 0.029;\n  float d = smin(skull, cheeks, 0.02);\n  d = smin(d, muzzle, 0.02);\n  float earL = sdTriangle(l, vec2(-0.004, 0.056), vec2(-0.047, 0.04), vec2(-0.052, 0.102));\n  float earR = sdTriangle(l, vec2(-0.004, -0.056), vec2(-0.047, -0.04), vec2(-0.052, -0.102));\n  return smin(d, min(earL, earR), 0.006);\n}\n\nfloat bump(float x, float a, float b) {\n  return smoothstep(a, a + 0.3, x) * (1.0 - smoothstep(b - 0.3, b, x));\n}\n\nvec2 rotate2(vec2 v, float a) {\n  float cs = cos(a);\n  float sn = sin(a);\n  return vec2(cs * v.x - sn * v.y, sn * v.x + cs * v.y);\n}\n\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  float c = phase * CYCLES;\n  float px = 1.0 / iResolution.y;\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n\n  // camera leans in toward the pivot and back out, mirrored like the crank\n  float leanIn = smoothstep(1.0, 9.5, c) * (1.0 - smoothstep(11.5, 20.0, c));\n  float zoom = 0.91 + 0.02 * leanIn;\n  vec2 p = CELL + (uv - vec2(-0.02, 0.02) - CELL) / zoom;\n  float pxs = px / zoom;\n\n  float turns = crankTurns(c);\n  float spin = TAU * turns;\n  float rate = crankRate(c);\n\n  vec2 q = p - CELL;\n  float r = length(q);\n  vec2 nrm = q / max(r, 0.0001);\n  float facing = dot(nrm, LIGHT_DIR);\n\n  // ---- crank and paw kinematics ----\n  float alpha = -0.235 * TAU - spin;\n  vec2 knob = CELL + CRANK_R * vec2(cos(alpha), sin(alpha));\n  vec2 pawRest = knob + normalize(SHOULDER - knob) * 0.108;\n  vec2 tapDir = normalize(vec2(0.96, -0.27));\n  vec2 tapHover = CELL + tapDir * (R_GLASS + 0.055);\n  vec2 tapHit = CELL + tapDir * (R_GLASS - 0.004);\n  vec2 paw = pawRest;\n  float lift = 0.0;\n  if (c > 9.0 && c \u003c 11.9) {\n    float go = smoothstep(9.0, 9.2, c);\n    float back = smoothstep(11.0, 11.85, c);\n    float press1 = smoothstep(9.18, 9.25, c) * (1.0 - smoothstep(9.55, 9.75, c));\n    float press2 = smoothstep(9.93, 10.0, c) * (1.0 - smoothstep(10.12, 10.3, c));\n    float press = max(press1, press2);\n    paw = mix(mix(pawRest, tapHover, go), tapHit, press);\n    paw = mix(paw, pawRest, back);\n    lift = go * (1.0 - back) * (1.0 - 0.75 * press);\n  }\n  float settle = smoothstep(20.05, 20.35, c) * (1.0 - smoothstep(20.45, 20.9, c));\n  lift = max(lift, 0.5 * settle);\n  float knead = sin(TAU * 2.0 * c) * (1.0 - smoothstep(0.55, 0.95, c));\n  float tapPose = smoothstep(9.0, 9.2, c) * (1.0 - smoothstep(11.0, 11.85, c));\n  vec2 fwd = rotate2(normalize(mix(normalize(paw - SHOULDER), normalize(CELL - paw), 0.55 * tapPose)), -0.28 * rate);\n  float pawScale = 1.24 + 0.08 * lift;\n  float onKnob = 1.0 - smoothstep(9.0, 9.12, c) * (1.0 - smoothstep(11.75, 11.9, c));\n  vec2 headPos = vec2(0.322, -0.312);\n  float lookTap = smoothstep(9.0, 9.2, c) * (1.0 - smoothstep(10.6, 11.4, c));\n  vec2 headF = normalize(mix(mix(CELL, knob, 0.55), tapHit, lookTap) - headPos);\n  vec2 headS = vec2(-headF.y, headF.x);\n  float grip = onKnob * (0.6 + 0.4 * smoothstep(0.08, 0.35, abs(rate)));\n\n  // ---- bench: slate, warm spill from the lit syrup, the beaker's shadow ----\n  float slate = 0.78 + 0.26 * valueNoise(p * 3.5) + 0.14 * valueNoise(p * 11.0) + 0.06 * valueNoise(p * 60.0);\n  vec3 bench = vec3(0.036, 0.038, 0.046) * slate;\n  float spill = exp(-max(r - R_GLASS, 0.0) / 0.085);\n  bench += vec3(0.4, 0.23, 0.08) * 0.24 * spill * (0.85 + 0.3 * valueNoise(p * 9.0));\n  bench *= 1.0 - 0.45 * (1.0 - smoothstep(R_GLASS - 0.01, R_GLASS + 0.06, length(q - vec2(0.035, -0.045))));\n\n  // the pipette that laid the drops, resting on the bench at lower left\n  vec2 pipA = vec2(-0.455, -0.255);\n  vec2 pipB = vec2(-0.27, -0.452);\n  float pipShadow = sdTaper(p - vec2(0.012, -0.014), pipA, pipB, 0.016, 0.006);\n  bench *= 1.0 - 0.5 * (1.0 - smoothstep(-0.008, 0.01, pipShadow));\n  vec3 col = bench;\n  float tube = sdTaper(p, pipA, pipB, 0.0085, 0.004);\n  vec2 pipAxis = normalize(pipB - pipA);\n  float across = dot(p - pipA, vec2(-pipAxis.y, pipAxis.x));\n  float along = clamp(dot(p - pipA, pipAxis) / length(pipB - pipA), 0.0, 1.0);\n  vec3 tubeCol = bench * 1.4 + vec3(0.1, 0.12, 0.13) + vec3(0.6) * exp(-pow((across - 0.003) / 0.0018, 2.0));\n  tubeCol = mix(tubeCol, vec3(0.03, 0.07, 0.3), smoothstep(0.82, 0.86, along) * 0.85);\n  col = mix(col, tubeCol, 1.0 - smoothstep(-pxs, pxs, tube));\n  float bulb = length(rotate2(p - pipA, 0.76) / vec2(1.0, 0.62)) - 0.034;\n  vec3 bulbCol = vec3(0.11, 0.025, 0.03) * (0.7 + 0.6 * max(dot(normalize(p - pipA + vec2(0.0001)), LIGHT_DIR), 0.0));\n  col = mix(col, bulbCol, 1.0 - smoothstep(-pxs, pxs, bulb));\n  float tipDrop = length(p - pipB - pipAxis * 0.004) - 0.0055;\n  col = mix(col, vec3(0.04, 0.08, 0.36), 1.0 - smoothstep(-pxs, pxs, tipDrop));\n\n  // brass revolution counter at upper right: rolls 0 to 7 and back\n  vec2 cq = p - vec2(0.405, 0.4);\n  col *= 1.0 - 0.5 * (1.0 - smoothstep(-0.006, 0.014, roundBox(cq - vec2(0.01, -0.013), vec2(0.04, 0.05), 0.01)));\n  float housing = roundBox(cq, vec2(0.04, 0.05), 0.01);\n  vec3 brass = vec3(0.42, 0.3, 0.13) * (0.75 + 0.4 * smoothstep(0.05, -0.05, cq.y - cq.x));\n  brass += vec3(0.35, 0.28, 0.15) * (1.0 - smoothstep(0.0, 0.006, abs(housing + 0.004))) * max(dot(normalize(cq + vec2(0.0001)), LIGHT_DIR), 0.0);\n  float windowD = roundBox(cq - vec2(0.0, 0.004), vec2(0.022, 0.029), 0.004);\n  float wheelPos = c \u003c 10.5\n    ? floor(turns) + smoothstep(0.9, 1.0, fract(turns))\n    : floor(turns) + 1.0 - smoothstep(0.9, 1.0, 1.0 - fract(turns));\n  float wheelBase = floor(wheelPos);\n  float roll = wheelPos - wheelBase;\n  vec2 gq = (cq - vec2(0.0, 0.004)) / 0.05;\n  float ink = counterDigit(gq + vec2(0.0, 1.3 * roll), wheelBase) + counterDigit(gq + vec2(0.0, 1.3 * roll - 1.3), wheelBase + 1.0);\n  vec3 wheel = vec3(0.025) * (0.6 + 0.4 * (1.0 - abs(gq.y) * 1.6));\n  wheel = mix(wheel, vec3(0.9, 0.88, 0.8) * (0.55 + 0.45 * (1.0 - abs(gq.y) * 1.4)), clamp(ink, 0.0, 1.0));\n  vec3 counterCol = mix(brass, wheel, 1.0 - smoothstep(-pxs, pxs, windowD));\n  col = mix(col, counterCol, 1.0 - smoothstep(-pxs, pxs, housing));\n\n  // ---- glass wall ----\n  if (r \u003c R_GLASS + 2.0 * pxs) {\n    float gx = clamp((r - R_OUT) / (R_GLASS - R_OUT), 0.0, 1.0);\n    vec3 glass = vec3(0.13, 0.15, 0.14) + vec3(0.6, 0.38, 0.15) * 0.3 * (1.0 - gx);\n    glass += vec3(1.0, 0.97, 0.92) * 0.6 * pow(max(facing, 0.0), 6.0) * exp(-pow((gx - 0.45) / 0.22, 2.0));\n    glass += vec3(0.9, 0.95, 1.0) * 0.16 * pow(max(-facing, 0.0), 3.0) * exp(-pow((gx - 0.7) / 0.2, 2.0));\n    glass += 0.3 * exp(-pow((r - (R_GLASS - 0.0035)) / 0.0014, 2.0)) * (0.55 + 0.45 * max(facing, 0.0));\n    col = mix(col, glass, 1.0 - smoothstep(R_GLASS - pxs, R_GLASS + pxs, r));\n  }\n\n  // ---- syrup, ink and bubbles ----\n  float syrupMask = (1.0 - smoothstep(R_OUT - pxs, R_OUT + pxs, r)) * smoothstep(R_IN - pxs, R_IN + pxs, r);\n  if (r > R_IN - 2.0 * pxs && r \u003c R_OUT + 2.0 * pxs) {\n    float gap = clamp((r - R_IN) / (R_OUT - R_IN), 0.0, 1.0);\n    float glowShape = sin(0.5 * TAU * gap);\n    float bright = 0.7 + 0.3 * glowShape;\n    bright *= 1.0 + 0.08 * dot(nrm, vec2(-0.55, 0.45));\n    bright *= 0.95 + 0.08 * valueNoise(q * 9.0 + 4.0);\n    float meniscus = smoothstep(0.0, 0.017, r - R_IN) * smoothstep(0.0, 0.017, R_OUT - r);\n    bright *= 0.55 + 0.45 * meniscus;\n    float causticN = valueNoise(q * 15.0 + 2.0 * valueNoise(q * 5.0 + 7.0));\n    float caustic = pow(1.0 - abs(2.0 * causticN - 1.0), 7.0);\n    bright *= 0.97 + 0.07 * caustic;\n    vec3 syrup = mix(vec3(0.76, 0.4, 0.12), vec3(1.0, 0.72, 0.34), smoothstep(0.0, 0.55, glowShape));\n    syrup = mix(syrup, vec3(1.0, 0.9, 0.62), smoothstep(0.75, 1.0, glowShape) * 0.6) * bright;\n    syrup += vec3(1.0, 0.92, 0.78) * 0.22 * exp(-pow((r - R_IN - 0.004) / 0.0013, 2.0)) * (0.5 + 0.5 * max(facing, 0.0));\n    syrup += vec3(1.0, 0.92, 0.78) * 0.28 * exp(-pow((R_OUT - r - 0.004) / 0.0013, 2.0)) * (0.5 + 0.5 * max(-facing, 0.0));\n\n    // pixel footprint pulled back to the rest frame: a radial window spans\n    // couetteSlope * spin radians of the original ring, so integrate along it.\n    // Once the streaks are finer than the eye resolves they read as a faint haze.\n    float haze = 0.0026 * smoothstep(1.5, 6.0, turns);\n    float window = pxs + 2.0 * haze;\n    float sweep = couetteSlope(r) * spin * window * r;\n    float samples = clamp(floor(2.0 + sweep / 0.0045), 2.0, 16.0);\n    float soft = 0.0018 + 1.15 * sweep / samples;\n    vec2 tangent = vec2(-nrm.y, nrm.x);\n    vec3 trans = vec3(0.0);\n    for (int k = 0; k \u003c 16; k++) {\n      if (float(k) >= samples) break;\n      float fk = (float(k) + 0.5) / samples - 0.5;\n      float tj = (mod(float(k), 2.0) - 0.5) * 0.5;\n      vec2 qs = q + nrm * fk * window + tangent * tj * pxs;\n      float rs = length(qs);\n      float ths = atan(qs.y, qs.x) + spin * couetteShare(rs);\n      trans += exp(-inkAbsorbance(rs * vec2(cos(ths), sin(ths)), soft));\n    }\n    syrup *= trans / samples;\n\n    vec2 bubble = syrupBubbles(q, spin);\n    syrup = mix(syrup, syrup * 0.45, bubble.x * 0.75);\n    syrup += vec3(1.0, 0.95, 0.85) * 0.32 * bubble.y;\n\n    // the paw's tap sends a surface ripple across the gap; it never touches the ink below\n    float ripple = 0.0;\n    vec2 src = CELL + tapDir * R_OUT;\n    float srcDist = length(p - src);\n    float secPerCycle = DURATION / CYCLES;\n    if (c > 9.25 && c \u003c 11.0) {\n      float age = (c - 9.25) * secPerCycle;\n      float dr = srcDist - (0.03 + 0.17 * age);\n      ripple += sin(dr * 120.0) * exp(-dr * dr / 0.0016) * exp(-age * 0.8);\n    }\n    if (c > 10.0 && c \u003c 11.75) {\n      float age = (c - 10.0) * secPerCycle;\n      float dr = srcDist - (0.03 + 0.17 * age);\n      ripple += sin(dr * 120.0) * exp(-dr * dr / 0.0016) * exp(-age * 0.8);\n    }\n    // window reflected on the syrup surface\n    vec2 wq = q - vec2(-0.215, 0.165) + nrm * 0.012 * ripple;\n    wq = vec2(0.94 * wq.x + 0.34 * wq.y, -0.34 * wq.x + 0.94 * wq.y);\n    float pane = (1.0 - smoothstep(0.045, 0.085, abs(wq.x))) * (1.0 - smoothstep(0.024, 0.056, abs(wq.y)));\n    float mullion = smoothstep(0.002, 0.008, abs(wq.x)) * smoothstep(0.002, 0.008, abs(wq.y));\n    syrup += vec3(0.85, 0.92, 1.0) * 0.065 * pane * mullion;\n    syrup *= 1.0 + 0.3 * ripple * meniscus;\n    syrup += vec3(1.0, 0.97, 0.9) * 0.34 * max(ripple, 0.0) * meniscus;\n\n    col = mix(col, syrup, syrupMask);\n  }\n\n  // ---- inner cylinder top: lathe-turned aluminium that turns with the crank ----\n  float discMask = 1.0 - smoothstep(R_IN - pxs, R_IN + pxs, r);\n  if (r \u003c R_IN + 2.0 * pxs) {\n    float a = atan(q.y, q.x);\n    float bow = pow(abs(cos(a - atan(LIGHT_DIR.y, LIGHT_DIR.x))), 12.0);\n    vec3 disc = vec3(0.44, 0.45, 0.47) * (0.8 + 0.1 * r / R_IN);\n    disc += vec3(0.26, 0.29, 0.33) * bow * smoothstep(0.03, 0.17, r);\n    disc += vec3(0.22, 0.12, 0.04) * smoothstep(R_IN - 0.06, R_IN, r);\n    disc += vec3(0.012) * sin(r * 900.0);\n    float groove = exp(-pow((r - (R_IN - 0.03)) / 0.0016, 2.0));\n    disc *= 1.0 - 0.45 * groove;\n    // index stripe and four cap screws ride with the cylinder\n    vec2 mq = rotate2(q, spin);\n    vec2 sq = rotate2(q, spin);\n    float wedgeHalf = 0.0012 + 0.006 * clamp((mq.x - (R_IN - 0.05)) / 0.035, 0.0, 1.0);\n    float stripe = (1.0 - smoothstep(wedgeHalf, wedgeHalf + pxs, abs(mq.y)))\n      * smoothstep(R_IN - 0.052, R_IN - 0.05, mq.x) * (1.0 - smoothstep(R_IN - 0.015, R_IN - 0.013, mq.x));\n    disc = mix(disc, vec3(0.78, 0.09, 0.06), stripe);\n    for (int k = 0; k \u003c 4; k++) {\n      float ba = (float(k) + 0.5) * 0.25 * TAU;\n      vec2 bq = sq - 0.135 * vec2(cos(ba), sin(ba));\n      float bd = length(bq) - 0.0105;\n      vec2 bn = bq / 0.0105;\n      float bl = max(dot(rotate2(bn, -spin), LIGHT_DIR), 0.0);\n      vec3 screw = vec3(0.3, 0.31, 0.33) * (0.6 + 0.8 * bl);\n      float socket = 1.0 - smoothstep(0.0035, 0.0035 + pxs, max(abs(bq.x), abs(bq.y)));\n      screw = mix(screw, vec3(0.05), socket);\n      disc *= 1.0 - 0.35 * (1.0 - smoothstep(0.0, 0.006, length(bq - rotate2(vec2(0.004, -0.004), spin)) - 0.0105));\n      disc = mix(disc, screw, 1.0 - smoothstep(-pxs, pxs, bd));\n    }\n    float bevel = smoothstep(R_IN - 0.009, R_IN - 0.002, r);\n    disc = mix(disc, vec3(0.2) + 0.4 * max(facing, 0.0), bevel);\n    col = mix(col, disc, discMask);\n  }\n\n  // ---- shadows cast by the crank, knob and paw ----\n  vec2 crankShadowOff = vec2(0.007, -0.009);\n  float barShadow = sdTaper(p - crankShadowOff, CELL, knob, 0.0175, 0.015);\n  float knobShadow = length(p - knob - vec2(0.013, -0.016)) - KNOB_R;\n  float crankShade = 1.0 - smoothstep(-0.006, 0.009, min(barShadow, knobShadow));\n  col *= 1.0 - 0.5 * crankShade * (1.0 - 0.7 * syrupMask);\n\n  vec2 pawShadowOff = vec2(0.013, -0.016) * (1.0 + 2.2 * lift);\n  float pawShadowD = catPaw(p - pawShadowOff, paw, fwd, pawScale, knead);\n  float pawShade = 1.0 - smoothstep(-0.012 - 0.02 * lift, 0.012 + 0.02 * lift, pawShadowD);\n  col *= 1.0 - (0.55 - 0.3 * syrupMask) * pawShade;\n  vec2 hs = p - vec2(0.02, -0.026) - headPos;\n  float headShadowD = catHead(vec2(dot(hs, headF), dot(hs, headS)) / HEAD_SCALE) * HEAD_SCALE;\n  col *= 1.0 - 0.5 * (1.0 - smoothstep(-0.015, 0.02, headShadowD));\n\n  // ---- crank arm, hub boss and walnut knob ----\n  float barD = sdTaper(p, CELL, knob, 0.0175, 0.015);\n  vec2 barAxis = normalize(knob - CELL);\n  float barSide = dot(p - CELL, vec2(-barAxis.y, barAxis.x));\n  float barLit = max(dot(vec2(-barAxis.y, barAxis.x) * sign(barSide), LIGHT_DIR), 0.0);\n  vec3 barCol = vec3(0.07, 0.075, 0.09) + vec3(0.45, 0.47, 0.52) * barLit * smoothstep(0.007, 0.015, abs(barSide));\n  barCol += vec3(0.05) * (1.0 - smoothstep(0.0, 0.004, abs(barSide)));\n  col = mix(col, barCol, 1.0 - smoothstep(-pxs, pxs, barD));\n\n  float hubD = r - 0.028;\n  vec3 hubCol = vec3(0.36, 0.37, 0.39) * (0.65 + 0.5 * max(facing, 0.0) * smoothstep(0.0, 0.028, r));\n  hubCol += vec3(0.25) * exp(-pow((r - 0.022) / 0.002, 2.0)) * max(facing, 0.0);\n  vec2 slotDir = vec2(cos(alpha), sin(alpha));\n  float slot = (1.0 - smoothstep(0.0024, 0.0024 + pxs, abs(dot(q, vec2(-slotDir.y, slotDir.x))))) * (1.0 - smoothstep(0.014, 0.016, r));\n  hubCol = mix(hubCol, vec3(0.05), slot);\n  col = mix(col, hubCol, 1.0 - smoothstep(-pxs, pxs, hubD));\n\n  vec2 kq = (p - knob) / KNOB_R;\n  float kr = length(kq);\n  if (kr \u003c 1.2) {\n    vec3 kn = vec3(kq, sqrt(max(1.0 - kr * kr, 0.0)));\n    vec3 kl = normalize(vec3(LIGHT_DIR, 1.1));\n    float kdiff = max(dot(kn, kl), 0.0);\n    float kspec = pow(max(dot(reflect(-kl, kn), vec3(0.0, 0.0, 1.0)), 0.0), 28.0);\n    vec3 knobCol = vec3(0.36, 0.19, 0.09) * (0.28 + 0.9 * kdiff) + vec3(1.0, 0.9, 0.75) * 0.55 * kspec;\n    knobCol *= 0.9 + 0.2 * sin(kq.x * 11.0 + kq.y * 4.0 + 2.0 * valueNoise(kq * 3.0));\n    col = mix(col, knobCol, 1.0 - smoothstep(1.0 - 1.2 * pxs / KNOB_R, 1.0, kr));\n  }\n\n  // ---- the paw ----\n  float pawD = catPaw(p, paw, fwd, pawScale, knead);\n  if (pawD \u003c 0.02) {\n    float e = 0.0025;\n    vec2 grad = vec2(\n      catPawBody(p + vec2(e, 0.0), paw, fwd, pawScale, knead) - catPawBody(p - vec2(e, 0.0), paw, fwd, pawScale, knead),\n      catPawBody(p + vec2(0.0, e), paw, fwd, pawScale, knead) - catPawBody(p - vec2(0.0, e), paw, fwd, pawScale, knead)\n    );\n    vec2 outward = normalize(grad + vec2(0.00001));\n    float depthIn = clamp(-pawD / 0.04, 0.0, 1.0);\n    vec3 fn = normalize(vec3(outward * (1.0 - depthIn), 0.35 + depthIn));\n    float fdiff = max(dot(fn, normalize(vec3(LIGHT_DIR, 0.9))), 0.0);\n    vec3 fur = vec3(0.024, 0.022, 0.028) * (0.6 + 0.8 * fdiff);\n    fur += vec3(0.2, 0.2, 0.25) * pow(fdiff, 3.0) * (0.35 + 0.65 * (1.0 - depthIn));\n    float rimAmt = smoothstep(-0.028, 0.0, pawD);\n    vec3 rimCol = mix(vec3(0.3, 0.34, 0.42), vec3(1.0, 0.64, 0.28), max(syrupMask, 0.7 * spill));\n    fur += rimCol * 1.15 * rimAmt * rimAmt * rimAmt;\n    vec2 strandAxis = normalize(paw - SHOULDER);\n    fur *= 0.88 + 0.24 * valueNoise(vec2(dot(p, strandAxis) * 45.0, dot(p, vec2(-strandAxis.y, strandAxis.x)) * 420.0));\n    col = mix(col, fur, 1.0 - smoothstep(-0.0025, pxs, pawD));\n  }\n  if (grip > 0.01) {\n    float clawD = catClaws(p, paw, fwd, pawScale, grip);\n    col = mix(col, vec3(0.95, 0.92, 0.84), (1.0 - smoothstep(-pxs, pxs, clawD)) * grip);\n  }\n\n  // ---- ClawedCode's head: watches the crank, slow-blinks, whiskers lean in at the homecoming ----\n  vec2 hl = vec2(dot(p - headPos, headF), dot(p - headPos, headS)) / HEAD_SCALE;\n  float headD = catHead(hl) * HEAD_SCALE;\n  if (headD \u003c 0.02) {\n    float he = 0.002;\n    vec2 hg = vec2(\n      catHead(hl + vec2(headF.x, headS.x) * he) - catHead(hl - vec2(headF.x, headS.x) * he),\n      catHead(hl + vec2(headF.y, headS.y) * he) - catHead(hl - vec2(headF.y, headS.y) * he)\n    );\n    vec2 hout = normalize(hg + vec2(0.00001));\n    float hin = clamp(-headD / 0.06, 0.0, 1.0);\n    vec3 hn = normalize(vec3(hout * (1.0 - hin), 0.35 + hin));\n    float hdiff = max(dot(hn, normalize(vec3(LIGHT_DIR, 0.9))), 0.0);\n    vec3 headCol = vec3(0.024, 0.022, 0.028) * (0.6 + 0.8 * hdiff);\n    headCol += vec3(0.2, 0.2, 0.25) * pow(hdiff, 3.0) * (0.35 + 0.65 * (1.0 - hin));\n    float hrim = smoothstep(-0.022, 0.0, headD);\n    headCol += vec3(0.3, 0.26, 0.24) * 0.8 * hrim * hrim * (0.55 + 0.45 * spill);\n    headCol *= 0.9 + 0.2 * valueNoise(vec2(dot(p, headF) * 60.0, dot(p, headS) * 300.0));\n    // eyes, half seen over the brow, catching the syrup light\n    float blink = 1.0 - 0.94 * max(bump(c, 10.45, 10.85), bump(c, 20.25, 20.75));\n    for (int k = 0; k \u003c 2; k++) {\n      float sd = float(k) * 2.0 - 1.0;\n      vec2 el = rotate2(hl - vec2(0.04, 0.028 * sd), 0.35 * sd);\n      float eyeD = length(el / vec2(0.0085 * blink + 0.0004, 0.0165)) - 1.0;\n      float eyeMask = 1.0 - smoothstep(-0.08, 0.08, eyeD);\n      vec3 iris = vec3(0.74, 0.84, 0.28) * (0.65 + 0.35 * smoothstep(0.0165, 0.0, abs(el.y)));\n      iris = mix(iris, vec3(0.02), 1.0 - smoothstep(0.0016, 0.0028, abs(el.y)));\n      iris += vec3(0.9) * (1.0 - smoothstep(0.0015, 0.0028, length(el - vec2(0.002, -0.005 * sd))));\n      headCol = mix(headCol, iris, eyeMask);\n    }\n    float nose = sdTriangle(hl, vec2(0.084, 0.0), vec2(0.072, 0.009), vec2(0.072, -0.009));\n    headCol = mix(headCol, vec3(0.13, 0.05, 0.06), 1.0 - smoothstep(-pxs, pxs, nose * HEAD_SCALE));\n    col = mix(col, headCol, 1.0 - smoothstep(-pxs, pxs, headD));\n  }\n  float interest = max(bump(c, 18.8, 20.9), 0.6 * bump(c, 9.1, 10.7));\n  float whisker = 1.0;\n  for (int k = 0; k \u003c 6; k++) {\n    float sd = step(2.5, float(k)) * 2.0 - 1.0;\n    float j = mod(float(k), 3.0);\n    float a = (0.95 + 0.27 * j - 0.3 * interest) * sd;\n    vec2 wb = vec2(0.06, 0.019 * sd);\n    vec2 we = wb + vec2(cos(a), sin(a)) * (0.115 - 0.01 * j) - vec2(0.012, 0.0);\n    whisker = min(whisker, sdTaper(hl, wb, we, 0.0011, 0.0004));\n  }\n  col = mix(col, vec3(0.9, 0.88, 0.82), 0.85 * (1.0 - smoothstep(-pxs, pxs, whisker * HEAD_SCALE)));\n\n  col *= 1.0 - 0.3 * smoothstep(0.38, 0.8, length(uv));\n  col = pow(max(col, vec3(0.0)), vec3(0.95));\n  gl_FragColor = vec4(col, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      // Public Pages controls are installed only in the exported document.
+      // Unset GLSL delta uniforms stay zero throughout ordinary capture.
+      if (window.__applyAnimationControls) window.__applyAnimationControls(gl, program);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 84\\n// DURATION: 60\\n// FORM: A cycles 0-1 | B cycles 1-9 | C cycles 9-12 | B' cycles 12-20 | A' cycles 20-21\\n// TONAL CENTER: D Dorian, an unbroken D pedal under every section\\n// MOTIF: D4 A4 G4 B4 E4 - silent beat 1, D4 on the and of 1, A4 on beat 2 tied across to G4 on beat 3, B4 on the and of 3, E4 on beat 4 ringing over the barline\\n// HARMONIC PLAN: A Dm(add9) | B Dm, Dm(add9), Gm6, Am7, Cmaj9 over D, one change every two cycles | C the five motif pitches D4 E4 G4 A4 B4 held as one cluster | B' the same chords reversed, Cmaj9, Am7, Gm6, Dm(add9), Dm | A' Dm(add9) in A's voicing\\n// PHRASE RULE: a two-stroke knead cell, two notes a quaver apart landing just off the beat, subdivides cycle by cycle through B and thins again through B'; B' is the literal retrograde of B in cycle order and note order; the D pedal and one common tone hold across every boundary while the pad steps to each new chord under a ringing mallet, so dynamics move only by density\\n// PEDAL: struck once per cycle (attack 0.6 s, release 1.6 s); held as one 21-cycle note the offline renderer dropped it as the oldest voice from cycle 4 on\\nconst cell = (items) => '[' + items.map((i) => (Array.isArray(i) ? '[' + i.join(' ') + ']' : i)).join(' ') + ']'\\nconst rev = (items) => items.slice().reverse().map((i) => (Array.isArray(i) ? i.slice().reverse() : i))\\nconst cycles = (cs) => '\u003c' + cs.map(cell).join(' ') + '>'\\nconst nums = (xs) => '\u003c' + xs.join(' ') + '>'\\nconst b1 = ['~', 'd4', 'a4', '~', 'g4', 'b4', 'e4', '~']\\nconst b2 = ['~', 'd4', 'a4', '~', 'g4', 'b4', 'e4', ['~', 'd4']]\\nconst b3 = ['~', ['d4', 'a4'], 'a4', '~', ['g4', 'b4'], 'b4', 'e4', ['~', 'd4']]\\nconst b4 = ['~', ['d4', 'a4'], 'a4', ['~', 'g4'], ['g4', 'b4'], 'b4', 'e4', ['b4', 'd4']]\\nconst b5 = ['d4', ['d4', 'a4'], 'a4', 'g4', ['g4', 'b4'], 'b4', 'e4', ['b4', 'd4']]\\nconst b6 = ['d4', ['d4', 'a4'], ['a4', 'd5'], 'g4', ['g4', 'b4'], ['b4', 'd5'], 'e4', ['b4', 'd4']]\\nconst b7 = [['d4', 'a4'], ['a4', 'g4'], ['g4', 'b4'], ['b4', 'e4'], ['e4', 'd5'], ['d5', 'a5'], ['a4', 'g4'], ['b4', 'd4']]\\nconst b8 = [['d4', 'a4', 'g4'], 'a4', ['g4', 'b4', 'e4'], 'b4', ['e4', 'd5', 'a5'], 'd5', ['a4', 'g4', 'b4'], ['b4', 'e4', 'd4']]\\nconst bPhrase = [b1, b2, b3, b4, b5, b6, b7, b8]\\nconst bRetro = bPhrase.slice().reverse().map(rev)\\nconst silent = ['~']\\nconst kneadTwice = ['~', '~', '~', ['d4', 'a4'], '~', '~', '~', ['d4', 'a4']]\\nconst kneadOnce = [['a4', 'd4'], '~', '~', '~', '~', '~', '~', '~']\\nconst malletCycles = [kneadTwice].concat(bPhrase, [silent, silent, silent], bRetro, [kneadOnce])\\nconst padChords = [\\n  'a3,d4,e4',\\n  'a3,d4,f4', 'a3,d4,f4',\\n  'a3,d4,e4', 'a3,d4,e4',\\n  'g3,bb3,d4,e4', 'g3,bb3,d4,e4',\\n  'a3,c4,e4,g4',\\n  'c4,e4,g4,b4',\\n  'd4,e4,g4,a4,b4', 'd4,e4,g4,a4,b4', 'd4,e4,g4,a4,b4',\\n  'c4,e4,g4,b4',\\n  'a3,c4,e4,g4',\\n  'g3,bb3,d4,e4', 'g3,bb3,d4,e4',\\n  'a3,d4,e4', 'a3,d4,e4',\\n  'a3,d4,f4', 'a3,d4,f4',\\n  'a3,d4,e4'\\n].map((c) => [c])\\nconst padLevel = [0.08, 0.10, 0.11, 0.12, 0.12, 0.13, 0.13, 0.13, 0.13, 0.14, 0.15, 0.14, 0.13, 0.13, 0.13, 0.12, 0.12, 0.11, 0.10, 0.09, 0.08]\\nconst padShadow = padLevel.map((g) => Math.round(g * 55) / 100)\\nconst rimTap = ['~', '~', '~', '~']\\nconst bellCycles = Array.from({ length: 21 }, (_, i) => {\\n  if (i === 9) return ['~', 'd6', '~', '~']\\n  if (i === 10) return ['a6', '~', '~', '~']\\n  if (i === 15) return ['~', '~', '~', 'a6']\\n  if (i === 17) return ['d6', '~', '~', '~']\\n  return rimTap\\n})\\nconst bellLevel = Array.from({ length: 21 }, (_, i) => (i === 9 || i === 10 ? 0.44 : i === 15 || i === 17 ? 0.15 : 0.0))\\nconst bellPartial = bellLevel.map((g) => Math.round(g * 22) / 100)\\n\\n$: note(cycles(malletCycles))\\n  .sound('triangle')\\n  .gain(0.38)\\n  .attack(0.003)\\n  .decay(0.9)\\n  .sustain(0)\\n  .release(0.12)\\n  .lpf(3500)\\n  .pan(0.44)\\n  .room(0.34)\\n  .roomsize(3)\\n\\n$: stack(\\n  note(cycles(padChords)).gain(nums(padLevel)).pan(0.36),\\n  note(cycles(padChords)).add(note(0.08)).gain(nums(padShadow)).pan(0.64)\\n)\\n  .sound('sawtooth')\\n  .attack(1.2)\\n  .decay(0.4)\\n  .sustain(0.9)\\n  .release(2)\\n  .lpf(sine.range(620, 1900).slow(21))\\n  .lpq(4)\\n  .room(0.3)\\n  .roomsize(5)\\n\\n$: stack(\\n  note('d2').gain(0.34),\\n  note('d3').gain(0.045)\\n)\\n  .sound('sine')\\n  .attack(0.6)\\n  .decay(0.2)\\n  .sustain(1)\\n  .release(1.6)\\n  .lpf(340)\\n  .pan(0.5)\\n\\n$: stack(\\n  note(cycles(bellCycles)).gain(nums(bellLevel)),\\n  note(cycles(bellCycles)).add(note(17.57)).gain(nums(bellPartial))\\n)\\n  .sound('sine')\\n  .attack(0.001)\\n  .decay(1.6)\\n  .sustain(0)\\n  .release(0.3)\\n  .pan(0.6)\\n  .room(0.5)\\n  .roomsize(6)\",\"bpm\":84,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.35,\"cycles\":21,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

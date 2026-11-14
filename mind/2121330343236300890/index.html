@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+(() => {
+  // ---------------------------------------------------------------------------
+  // THE SLIME MOLD RAILWAY
+  // Tero, Takagi, Saigusa, Ito, Bebber, Fricker, Yumiki, Kobayashi & Nakagaki,
+  // "Rules for biologically inspired adaptive network design", Science (2010).
+  // A plasmodium of Physarum polycephalum (one yellow cell, no brain) is set on
+  // Tokyo in a dish shaped like the Kanto plain, with an oat flake on each city.
+  // It spreads with a contiguous margin, colonises every flake, and behind the
+  // margin its mesh resolves into tubes: a network comparable to the real rail
+  // system in cost, transport efficiency and fault tolerance. 26 hours.
+  //
+  // The tubes are not drawn by hand. Setup grows them with the paper's own
+  // flow-conductance model (the "Physarum solver"): Kirchhoff flow through the
+  // mesh, dD/dt = f(|Q|) - D with f(Q) = Q^1.8 / (1 + Q^1.8), one randomly
+  // chosen reached flake as the source at each step and every other reached
+  // flake (plus the growing margin) as a sink. Lit ground (the sea, the lakes,
+  // the mountains) is where Physarum will not go: it avoids light.
+  //
+  // Grid: 112 BPM, one 4/4 bar = 2.142857 s; 28 bars = 60 s.
+  //   bars 0.1-16.75   time-lapse, x2600: the clock runs 00:00 -> 26:00
+  //   bars 16.8-18   real time: ClawedCode's paw carries a printed rail map over the dish,
+  //                  holds it up (its lines cast shadows), and lays it down on bar 18
+  //   bars 18-19.8   a light runs out from Tokyo along the rail lines; the tubes under them glow
+  //   bars 19.8-22   the match holds
+  //   bars 22-23.2   the paw drags the acetate away
+  //   bars 24-26.5   the camera pans along the bench to the next fresh dish
+  //   bars 26.5-28   the fresh dish waits: frame zero again
+  // ---------------------------------------------------------------------------
+  const DURATION = 60;
+  const BPM = 112;
+  const BAR = 240 / BPM;
+  const TAU = Math.PI * 2;
+  const HOURS = 26;
+  const LAPSE_A = 0.1;
+  const LAPSE_B = 16.75;
+  const SHEET_IN_A = 16.8;         // the paw brings the acetate in from the bench ...
+  const SHEET_ABOVE = 17.45;       // ... holds it above the dish ...
+  const SHEET_DOWN = 18;           // ... and lays it down: its line shadows close onto the tubes
+  const PAW_OFF = 18.5;
+  const WAVE_A = 18;               // a light runs out from Tokyo along every matched tube
+  const WAVE_RINGS = 6;
+  const WAVE_STEP = 0.22;
+  const PAW_BACK = 21.6;
+  const SHEET_OUT_A = 22;
+  const SHEET_OUT_B = 23.2;
+  const PAN_A = 24;
+  const PAN_B = 26.5;
+  const DISH_GAP = 880;            // bench spacing between dishes (px); the bench texture repeats with it
+  const SPEED = Math.round(HOURS * 3600 / ((LAPSE_B - LAPSE_A) * BAR) / 100) * 100;
+
+  // named cues (seconds) for the separately composed score
+  const CUES = {
+    lapseStarts: LAPSE_A * BAR,
+    catCameos: [2, 4, 6, 8, 10, 12, 14].map(b => b * BAR),
+    lastFlakeReached: 9.5 * BAR,
+    lapseStops: LAPSE_B * BAR,      // 35.89 s: the clock stops at 26:00, real time resumes
+    sheetDown: SHEET_DOWN * BAR,    // 38.57 s: the lines meet their shadows
+    matchWave: [WAVE_A * BAR, (WAVE_A + WAVE_RINGS * WAVE_STEP + 0.5) * BAR],
+    sheetAway: [SHEET_OUT_A * BAR, SHEET_OUT_B * BAR],
+    panStarts: PAN_A * BAR,         // 51.43 s
+    freshDish: PAN_B * BAR          // 56.79 s
+  };
+  void CUES;
+
+  // ---- helpers ---------------------------------------------------------------
+  const clamp01 = u => (u < 0 ? 0 : u > 1 ? 1 : u);
+  const smooth = u => { const v = clamp01(u); return v * v * (3 - 2 * v); };
+  const smoother = u => { const v = clamp01(u); return v * v * v * (v * (v * 6 - 15) + 10); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const ramp = (x, a, b) => smooth((x - a) / (b - a));
+  const mulberry = seed => {
+    let s = seed >>> 0;
+    return () => {
+      s = (s + 0x6d2b79f5) | 0;
+      let r = Math.imul(s ^ (s >>> 15), 1 | s);
+      r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+      return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  const makeLayer = (w = 900, h = 900) => {
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    return c;
+  };
+  const resetCtx = g => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.filter = 'none';
+    g.setLineDash([]);
+    g.lineDashOffset = 0;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.lineWidth = 1;
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+    g.shadowOffsetX = 0;
+    g.shadowOffsetY = 0;
+    g.fillStyle = '#000';
+    g.strokeStyle = '#000';
+    g.font = '10px sans-serif';
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+  };
+  const MONO = '"Menlo", "DejaVu Sans Mono", "Courier New", monospace';
+  const SANS = '"Helvetica Neue", "Helvetica", "Arial", sans-serif';
+  const HAND = '"Marker Felt", "Comic Sans MS", "Chalkboard", cursive';
+
+  const C = {
+    bench0: '#0b0e13',
+    bench1: '#06080b',
+    agar0: '#1d2329',
+    agar1: '#11151a',
+    seaLight: 'rgba(160, 212, 255, 0.50)',
+    seaCore: 'rgba(196, 228, 255, 0.16)',
+    coast: 'rgba(214, 238, 255, 0.55)',
+    hill: 'rgba(140, 188, 245, 0.075)',
+    hillLine: 'rgba(170, 212, 255, 0.17)',
+    moldHalo: 'rgba(240, 176, 20, 0.10)',
+    moldDeep: '#b97d06',
+    mold: '#e9b012',
+    moldCore: '#ffe166',
+    moldPulse: 'rgba(255, 249, 214, 0.62)',
+    oat: '#eadcb8',
+    oatShade: '#b9a275',
+    rail: '#f2f9ff',
+    railUnder: 'rgba(4, 12, 26, 0.62)',
+    fur: '#050506',
+    furLift: '#16181d',
+    rim: 'rgba(255, 214, 128, 0.55)',
+    rimCool: 'rgba(170, 210, 255, 0.40)',
+    eye: '#f0a20c',
+    pupil: '#140b02',
+    hud: 'rgba(232, 240, 250, 0.84)',
+    hudDim: 'rgba(232, 240, 250, 0.46)'
+  };
+
+  // ---- the Kanto plain, in km (x east, y north) -------------------------------
+  const KM = 4.9;                  // px per km
+  const DX = 450;
+  const DY = 450;                  // dish centre at rest
+  const R_GLASS = 388;
+  const R_AGAR = 374;
+  const MAP0X = -2;
+  const MAP0Y = 7;                 // the map point under the dish centre
+  const px = xk => DX + (xk - MAP0X) * KM;
+  const py = yk => DY - (yk - MAP0Y) * KM;
+  const toPx = poly => poly.map(([x, y]) => [px(x), py(y)]);
+
+  // Sagami Bay, the Uraga Channel and Tokyo Bay (one water body inside the dish)
+  const SEA_A = [
+    [-95, -48], [-58, -49], [-56.5, -46.5], [-56, -43.3], [-54.3, -41.6], [-50.7, -38.9], [-46.2, -36.6],
+    [-40.7, -35.5], [-37.1, -34.6], [-31.7, -34.5], [-25.3, -35.6], [-19.9, -34.6], [-17.2, -36.6],
+    [-16.3, -39.0], [-14.2, -44], [-13.8, -50], [-13.6, -54.4], [-10.5, -55.2], [-7.2, -53.3], [-5.6, -48],
+    [-5.4, -44.4], [-3.6, -42.2], [-1.4, -40.4], [-3.4, -39.6], [-6.5, -38.6], [-8.4, -37.0], [-10.6, -34.6],
+    [-10.9, -32.2], [-11.8, -28.5], [-12.5, -25.5], [-9.6, -23.6], [-8.1, -22.2], [-9.0, -19.4], [-6.8, -16.6],
+    [-4.6, -15.0], [-1.5, -13.6], [1.0, -11.5], [3.4, -8.6], [2.6, -5.8], [0.4, -3.2], [0.2, -0.6], [2.4, 1.2],
+    [4.6, 2.0], [6.3, 2.6], [9.0, 1.9], [12.7, 2.4], [16.3, 5.4], [19.9, 6.6], [22.6, 5.2], [25.3, 2.4],
+    [28.2, -0.6], [30.8, -3.3], [32.4, -5.8], [30.3, -8.6], [28.1, -11.1], [24.4, -15.5], [20.6, -18.6],
+    [17.2, -21.1], [13.6, -24.2], [12.7, -26.6], [10.6, -29.6], [6.2, -31.6], [2.7, -34.4], [5.4, -35.6],
+    [7.2, -41.1], [6.0, -46], [5.4, -50], [6.3, -53.3], [6.3, -57.7], [8.0, -63], [9.0, -68.8], [10.5, -90],
+    [-95, -90]
+  ];
+  // the Pacific off Boso and the Kujukuri beach
+  const SEA_B = [
+    [15.5, -90], [17.2, -73.3], [20.5, -68.0], [23.5, -64.4], [27.5, -60.0], [30.8, -56.6], [34.5, -55.8],
+    [38.0, -55.5], [44.0, -53.6], [50.7, -52.2], [53.4, -48.8], [57.0, -41.1], [58.8, -35.5], [57.2, -31.5],
+    [56.1, -27.8], [59.0, -23.5], [62.4, -18.9], [66.0, -13.4], [69.7, -7.8], [73.0, -3.6], [76.0, 0.0],
+    [82, 7], [110, 20], [110, -90]
+  ];
+  const LAKES = [
+    // Kasumigaura
+    [[41.8, 50.6], [44.5, 53.6], [48.6, 55.4], [53.0, 54.2], [57.5, 51.6], [62.0, 48.4], [66.0, 44.6],
+      [63.8, 41.6], [59.2, 43.4], [54.6, 45.8], [50.0, 47.6], [45.6, 48.6]],
+    // Inba-numa
+    [[36.2, 16.2], [38.0, 19.4], [40.8, 21.0], [42.6, 19.8], [41.0, 17.6], [38.6, 15.2]],
+    // Tega-numa
+    [[21.8, 25.6], [24.0, 26.8], [27.2, 27.6], [27.6, 26.8], [24.6, 25.6], [22.2, 24.8]]
+  ];
+  // illumination steps for high ground: the Kanto mountains in the west, the Boso hills in the south
+  const HILLS = [
+    { level: 1, poly: [[-44, 95], [-44, 52], [-46, 38], [-46.5, 28], [-47.5, 19], [-46, 10], [-42.5, 2], [-43, -6],
+      [-41.5, -14], [-43.5, -23], [-47, -29], [-52, -33], [-58, -37], [-62, -40], [-120, -40], [-120, 95]] },
+    { level: 2, poly: [[-51, 95], [-51, 52], [-53, 38], [-54, 26], [-55, 16], [-52, 6], [-49, -3], [-48.5, -12],
+      [-50, -22], [-56, -28], [-64, -34], [-120, -36], [-120, 95]] },
+    { level: 3, poly: [[-58, 95], [-58, 50], [-61, 34], [-63, 20], [-60, 6], [-57, -6], [-57, -18], [-62, -25],
+      [-120, -30], [-120, 95]] },
+    { level: 1, poly: [[8, -44], [16, -40], [26, -41], [36, -43], [46, -45], [54, -48], [56, -90], [6, -90]] },
+    { level: 2, poly: [[14, -51], [24, -48], [34, -50], [44, -52], [48, -56], [40, -90], [12, -90]] }
+  ];
+  const HILL_LIGHT = [0, 0.3, 0.55, 0.8];
+
+  // 36 oat flakes, one per city (km); Tokyo carries the inoculum
+  const CITIES = [
+    ['Tokyo', 0.6, 6.8], ['Kawasaki', -5.7, -9.9], ['Yokohama', -12.5, -17.1], ['Chiba', 31.9, -0.8],
+    ['Funabashi', 20.4, 9.6], ['Omiya', -12.3, 31.7], ['Kawagoe', -24.8, 33.9], ['Tokorozawa', -26.3, 19.9],
+    ['Tachikawa', -31.3, 8.7], ['Hachioji', -38.1, 4.0], ['Ome', -43.8, 18.6], ['Hanno', -40.0, 25.6],
+    ['Machida', -28.4, -8.7], ['Hashimoto', -37.6, -2.8], ['Atsugi', -35.8, -20.1], ['Hiratsuka', -37.1, -31.0],
+    ['Fujisawa', -24.4, -30.0], ['Kamakura', -19.0, -32.0], ['Yokosuka', -11.5, -37.5], ['Odawara', -54.0, -38.6],
+    ['Kasukabe', -0.7, 39.4], ['Koshigaya', 2.8, 30.1], ['Matsudo', 12.8, 18.2], ['Kashiwa', 19.1, 26.8],
+    ['Toride', 26.2, 32.3], ['Tsukuba', 28.7, 51.4], ['Tsuchiura', 39.5, 50.2], ['Narita', 50.5, 17.3],
+    ['Sakura', 42.0, 11.5], ['Togane', 54.8, -6.7], ['Mobara', 47.8, -21.3], ['Goi', 32.1, -13.5],
+    ['Kisarazu', 16.5, -26.0], ['Kumagaya', -33.6, 58.4], ['Kuki', -8.4, 49.1], ['Fuchu', -25.9, 5.8]
+  ];
+  const TOKYO = 0;
+  // the rail map on the acetate: city pairs joined by a line (JR and the main private lines, simplified)
+  const RAIL = [
+    [0, 1], [1, 2], [2, 16], [16, 15], [15, 19], [2, 17], [17, 18], [0, 35], [35, 9], [35, 8], [8, 9], [8, 10],
+    [9, 11], [11, 6], [0, 7], [7, 11], [7, 6], [0, 6], [0, 5], [5, 33], [5, 34], [5, 6], [4, 22], [22, 21],
+    [21, 5], [5, 7], [7, 35], [1, 35], [2, 12], [12, 13], [13, 9], [0, 12], [12, 14], [14, 19], [12, 16],
+    [13, 14], [14, 15], [0, 21], [21, 20], [20, 34], [5, 20], [20, 23], [23, 4], [0, 22], [22, 23], [23, 24],
+    [24, 26], [23, 25], [24, 27], [0, 4], [4, 3], [3, 28], [28, 27], [3, 29], [29, 30], [3, 30], [3, 31],
+    [31, 32]
+  ];
+  const LABELS = [
+    [0, 'TOKYO', 10, -12], [2, 'YOKOHAMA', -86, 2], [3, 'CHIBA', 12, 4], [5, 'OMIYA', 9, -11],
+    [9, 'HACHIOJI', -66, 16], [19, 'ODAWARA', -24, 24], [27, 'NARITA', 10, -8], [25, 'TSUKUBA', -30, -14],
+    [18, 'YOKOSUKA', -28, 24], [33, 'KUMAGAYA', 10, 4]
+  ];
+
+  const pip = (poly, x, y) => {
+    let inside = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const xi = poly[i][0], yi = poly[i][1], xj = poly[j][0], yj = poly[j][1];
+      if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside = !inside;
+    }
+    return inside;
+  };
+  const isWater = (xk, yk) => pip(SEA_A, xk, yk) || pip(SEA_B, xk, yk) || LAKES.some(l => pip(l, xk, yk));
+  const hillLight = (xk, yk) => {
+    let L = 0;
+    for (const hl of HILLS) if (pip(hl.poly, xk, yk)) L = Math.max(L, HILL_LIGHT[hl.level]);
+    return L;
+  };
+  const kmOf = (x, y) => [(x - DX) / KM + MAP0X, -(y - DY) / KM + MAP0Y];
+
+  // ---- the mesh: Poisson-disk points over the unlit ground, joined by a Delaunay triangulation ----
+  const rng = mulberry(20100122);   // Science, 22 January 2010
+  const S = 13;
+  const nodes = [];
+  {
+    const R = R_AGAR - 9;
+    const cell = S / Math.SQRT2;
+    const gw = Math.ceil(2 * R / cell) + 2;
+    const grid = new Int32Array(gw * gw).fill(-1);
+    const gx = x => Math.floor((x - DX + R) / cell);
+    const gy = y => Math.floor((y - DY + R) / cell);
+    const usable = (x, y) => {
+      if (Math.hypot(x - DX, y - DY) > R) return false;
+      const [xk, yk] = kmOf(x, y);
+      return !isWater(xk, yk);
+    };
+    const free = (x, y) => {
+      const cx = gx(x), cy = gy(y);
+      for (let j = cy - 2; j <= cy + 2; j++) {
+        for (let i = cx - 2; i <= cx + 2; i++) {
+          if (i < 0 || j < 0 || i >= gw || j >= gw) continue;
+          const k = grid[j * gw + i];
+          if (k >= 0 && Math.hypot(nodes[k].x - x, nodes[k].y - y) < S) return false;
+        }
+      }
+      return true;
+    };
+    const add = (x, y) => {
+      grid[gy(y) * gw + gx(x)] = nodes.length;
+      nodes.push({ x, y, L: 0, food: -1 });
+      return nodes.length - 1;
+    };
+    const active = [add(DX, DY)];
+    while (active.length) {
+      const ai = Math.floor(rng() * active.length);
+      const base = nodes[active[ai]];
+      let placed = false;
+      for (let k = 0; k < 24; k++) {
+        const a = rng() * TAU, rr = S * (1 + rng());
+        const x = base.x + Math.cos(a) * rr, y = base.y + Math.sin(a) * rr;
+        if (usable(x, y) && free(x, y)) { active.push(add(x, y)); placed = true; break; }
+      }
+      if (!placed) active.splice(ai, 1);
+    }
+  }
+  // thin the lit hills, then put one node exactly on each city
+  {
+    const kept = [];
+    for (const n of nodes) {
+      const [xk, yk] = kmOf(n.x, n.y);
+      n.L = hillLight(xk, yk);
+      const keep = rng();
+      if (n.L > 0 && keep < n.L * 0.75) continue;
+      if (CITIES.some(([, cxk, cyk]) => Math.hypot(px(cxk) - n.x, py(cyk) - n.y) < S * 0.8)) continue;
+      kept.push(n);
+    }
+    nodes.length = 0;
+    nodes.push(...kept);
+  }
+  const foodNode = CITIES.map(([, xk, yk], ci) => {
+    nodes.push({ x: px(xk), y: py(yk), L: 0, food: ci });
+    return nodes.length - 1;
+  });
+  // Bowyer-Watson
+  const edgesRaw = [];
+  {
+    const P = nodes.map(n => [n.x, n.y]);
+    P.push([-4000, -4000], [6000, -4000], [450, 6000]);
+    const n0 = nodes.length;
+    const circ = (a, b, c) => {
+      const [ax, ay] = P[a], [bx, by] = P[b], [cx, cy] = P[c];
+      const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+      const ux = ((ax * ax + ay * ay) * (by - cy) + (bx * bx + by * by) * (cy - ay) + (cx * cx + cy * cy) * (ay - by)) / d;
+      const uy = ((ax * ax + ay * ay) * (cx - bx) + (bx * bx + by * by) * (ax - cx) + (cx * cx + cy * cy) * (bx - ax)) / d;
+      return [a, b, c, ux, uy, (ax - ux) * (ax - ux) + (ay - uy) * (ay - uy)];
+    };
+    let tris = [circ(n0, n0 + 1, n0 + 2)];
+    for (let v = 0; v < n0; v++) {
+      const [x, y] = P[v];
+      const keep = [], edgeCount = new Map();
+      for (const tr of tris) {
+        if ((x - tr[3]) * (x - tr[3]) + (y - tr[4]) * (y - tr[4]) < tr[5]) {
+          for (const [a, b] of [[tr[0], tr[1]], [tr[1], tr[2]], [tr[2], tr[0]]]) {
+            const key = a < b ? a + ',' + b : b + ',' + a;
+            edgeCount.set(key, (edgeCount.get(key) || 0) + 1);
+          }
+        } else keep.push(tr);
+      }
+      for (const [key, count] of edgeCount) {
+        if (count !== 1) continue;
+        const [a, b] = key.split(',').map(Number);
+        keep.push(circ(a, b, v));
+      }
+      tris = keep;
+    }
+    const seen = new Set();
+    for (const tr of tris) {
+      for (const [a, b] of [[tr[0], tr[1]], [tr[1], tr[2]], [tr[2], tr[0]]]) {
+        if (a >= n0 || b >= n0) continue;
+        const key = a < b ? a + ',' + b : b + ',' + a;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const A = nodes[a], B = nodes[b];
+        if (Math.hypot(B.x - A.x, B.y - A.y) > S * 2.15) continue;
+        let wet = false;
+        for (const u of [0.25, 0.5, 0.75]) {
+          const [qk, rk] = kmOf(lerp(A.x, B.x, u), lerp(A.y, B.y, u));
+          if (isWater(qk, rk)) wet = true;
+        }
+        if (wet) continue;
+        edgesRaw.push([Math.min(a, b), Math.max(a, b)]);
+      }
+    }
+    edgesRaw.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+    for (let k = edgesRaw.length - 1; k >= 0; k--) {
+      const [a, b] = edgesRaw[k];
+      if (nodes[a].food < 0 && nodes[b].food < 0 && rng() < 0.2) edgesRaw.splice(k, 1);
+    }
+  }
+  const N = nodes.length;
+  const E = edgesRaw.length;
+  const eA = new Int32Array(E), eB = new Int32Array(E);
+  const eLen = new Float64Array(E), eLight = new Float64Array(E);
+  const eCx = new Float32Array(E), eCy = new Float32Array(E), ePhase = new Float32Array(E);
+  let meanLen = 0;
+  edgesRaw.forEach(([a, b], e) => {
+    eA[e] = a;
+    eB[e] = b;
+    const A = nodes[a], B = nodes[b];
+    const len = Math.hypot(B.x - A.x, B.y - A.y);
+    eLen[e] = len;
+    meanLen += len / E;
+    eLight[e] = (A.L + B.L) / 2;
+    const bow = (rng() - 0.5) * 0.34 * len;
+    eCx[e] = (A.x + B.x) / 2 - (B.y - A.y) / len * bow;
+    eCy[e] = (A.y + B.y) / 2 + (B.x - A.x) / len * bow;
+    ePhase[e] = ((A.x + B.x) * 0.006 + (A.y + B.y) * 0.004) % TAU;
+  });
+  for (let e = 0; e < E; e++) eLen[e] /= meanLen;
+  const adj = Array.from({ length: N }, () => []);
+  for (let e = 0; e < E; e++) {
+    adj[eA[e]].push(e);
+    adj[eB[e]].push(e);
+  }
+
+  // ---- the margin: arrival time of the plasmodium at each node (Dijkstra from Tokyo) ----
+  const H_FRONT = 16;
+  const lobes = (x, y) => 1 + 0.42 * Math.sin(x * 0.013 + 1.3) * Math.cos(y * 0.011 - 0.4) + 0.22 * Math.sin((x + y) * 0.021 + 0.7);
+  const cost = new Float64Array(N).fill(Infinity);
+  {
+    const jitter = Float64Array.from({ length: E }, () => 0.78 + 0.44 * rng());
+    const heap = [];
+    const push = (d, v) => {
+      heap.push([d, v]);
+      let i = heap.length - 1;
+      while (i > 0) {
+        const p = (i - 1) >> 1;
+        if (heap[p][0] <= heap[i][0]) break;
+        [heap[p], heap[i]] = [heap[i], heap[p]];
+        i = p;
+      }
+    };
+    const pop = () => {
+      const top = heap[0], last = heap.pop();
+      if (heap.length) {
+        heap[0] = last;
+        let i = 0;
+        for (;;) {
+          const l = 2 * i + 1, r = l + 1;
+          let m = i;
+          if (l < heap.length && heap[l][0] < heap[m][0]) m = l;
+          if (r < heap.length && heap[r][0] < heap[m][0]) m = r;
+          if (m === i) break;
+          [heap[m], heap[i]] = [heap[i], heap[m]];
+          i = m;
+        }
+      }
+      return top;
+    };
+    cost[foodNode[TOKYO]] = 0;
+    push(0, foodNode[TOKYO]);
+    while (heap.length) {
+      const [d, v] = pop();
+      if (d > cost[v]) continue;
+      for (const e of adj[v]) {
+        const w = eA[e] === v ? eB[e] : eA[e];
+        const nd = d + eLen[e] * (1 + 3.5 * eLight[e]) * jitter[e] / lobes(nodes[w].x, nodes[w].y);
+        if (nd < cost[w]) { cost[w] = nd; push(nd, w); }
+      }
+    }
+  }
+  let maxCost = 0;
+  for (let v = 0; v < N; v++) if (nodes[v].L === 0 && cost[v] < Infinity && cost[v] > maxCost) maxCost = cost[v];
+  const arrival = Float64Array.from(cost, c => (c === Infinity ? Infinity : Math.pow(c / maxCost, 0.85) * H_FRONT));
+  const eArr = Float64Array.from({ length: E }, (_, e) => Math.max(arrival[eA[e]], arrival[eB[e]]));
+  const foods = foodNode.filter(v => arrival[v] < Infinity);
+
+  // ---- the Physarum solver -------------------------------------------------------
+  const DH = 0.1;                  // hours per step
+  const STEPS = Math.round(HOURS / DH);
+  const SNAP_EVERY = 2;
+  const SNAP_H = DH * SNAP_EVERY;
+  const GAMMA = 1.8;
+  const I0 = 16;
+  const DT = 0.22;                 // model time per step
+  const D_INIT = 0.16;
+  const SUPPORT = 0.14;
+  const SUPPORT_TAU = 2.6;         // hours: how long the margin keeps an explored tube alive on its own
+  const FRONT_AGE = 1.6;
+  const FRONT_W = 0.22;
+  const snaps = [];
+  const solveStats = { steps: 0, iters: 0, maxIters: 0 };
+  {
+    const D = new Float64Array(E);
+    const act = new Uint8Array(E);
+    let actList = [];
+    const p = new Float64Array(N), b = new Float64Array(N), r = new Float64Array(N);
+    const z = new Float64Array(N), d = new Float64Array(N), Ad = new Float64Array(N), diag = new Float64Array(N);
+    const srng = mulberry(4391);
+    const matvec = (x, y) => {
+      y.fill(0);
+      for (let q = 0; q < actList.length; q++) {
+        const e = actList[q];
+        const g = D[e] / eLen[e];
+        const a = eA[e], c = eB[e];
+        const f = g * (x[a] - x[c]);
+        y[a] += f;
+        y[c] -= f;
+      }
+    };
+    for (let s = 0; s <= STEPS; s++) {
+      const h = s * DH;
+      let changed = false;
+      for (let e = 0; e < E; e++) {
+        if (!act[e] && eArr[e] <= h) { act[e] = 1; D[e] = D_INIT; changed = true; }
+      }
+      if (changed) actList = [];
+      if (!actList.length) for (let e = 0; e < E; e++) if (act[e]) actList.push(e);
+      const reached = foods.filter(v => arrival[v] <= h);
+      const front = [];
+      for (let v = 0; v < N; v++) {
+        const age = h - arrival[v];
+        if (nodes[v].food < 0 && age >= 0 && age < FRONT_AGE) front.push(v);
+      }
+      if (reached.length + front.length >= 2 && actList.length) {
+        const src = reached[Math.floor(srng() * reached.length)];
+        b.fill(0);
+        let wsum = 0;
+        for (const v of reached) if (v !== src) wsum += 1;
+        for (const v of front) wsum += FRONT_W * (1 - (h - arrival[v]) / FRONT_AGE);
+        for (const v of reached) if (v !== src) b[v] -= I0 / wsum;
+        for (const v of front) b[v] -= I0 * FRONT_W * (1 - (h - arrival[v]) / FRONT_AGE) / wsum;
+        b[src] += I0;
+        diag.fill(0);
+        for (const e of actList) {
+          const g = D[e] / eLen[e];
+          diag[eA[e]] += g;
+          diag[eB[e]] += g;
+        }
+        // preconditioned conjugate gradients, warm-started from the last pressures
+        matvec(p, Ad);
+        let bn = 0, rz = 0;
+        for (let v = 0; v < N; v++) {
+          r[v] = b[v] - Ad[v];
+          z[v] = diag[v] > 0 ? r[v] / diag[v] : 0;
+          d[v] = z[v];
+          rz += r[v] * z[v];
+          bn += b[v] * b[v];
+        }
+        const tol = 1e-14 * bn;
+        let it = 0;
+        for (; it < 400; it++) {
+          let rr2 = 0;
+          for (let v = 0; v < N; v++) rr2 += r[v] * r[v];
+          if (rr2 < tol) break;
+          matvec(d, Ad);
+          let dAd = 0;
+          for (let v = 0; v < N; v++) dAd += d[v] * Ad[v];
+          if (dAd <= 0) break;
+          const alpha = rz / dAd;
+          let rzn = 0;
+          for (let v = 0; v < N; v++) {
+            p[v] += alpha * d[v];
+            r[v] -= alpha * Ad[v];
+            z[v] = diag[v] > 0 ? r[v] / diag[v] : 0;
+            rzn += r[v] * z[v];
+          }
+          const beta = rzn / rz;
+          rz = rzn;
+          for (let v = 0; v < N; v++) d[v] = z[v] + beta * d[v];
+        }
+        solveStats.steps += 1;
+        solveStats.iters += it;
+        solveStats.maxIters = Math.max(solveStats.maxIters, it);
+        for (const e of actList) {
+          const Q = Math.abs(D[e] / eLen[e] * (p[eA[e]] - p[eB[e]]));
+          const qg = Math.pow(Q, GAMMA);
+          const f = qg / (1 + qg) * (1 - 0.85 * eLight[e]);
+          const sup = SUPPORT * Math.exp(-(h - eArr[e]) / SUPPORT_TAU);
+          D[e] = Math.max(1e-5, D[e] + DT * (f + sup - D[e]));
+        }
+      }
+      if (s % SNAP_EVERY === 0) snaps.push(Float32Array.from(D));
+    }
+  }
+  const NSNAP = snaps.length;
+  const finalD = snaps[NSNAP - 1];
+  const dAt = (e, h) => {
+    const k = Math.min(NSNAP - 1.000001, Math.max(0, h / SNAP_H));
+    const k0 = Math.floor(k);
+    const fr = k - k0;
+    return snaps[k0][e] * (1 - fr) + snaps[k0 + 1][e] * fr;
+  };
+  const widthOf = D => 0.45 + 9.2 * Math.pow(Math.max(0, D - 0.11), 0.85);
+
+  // ---- the rail map, and which tubes lie under it ---------------------------------
+  const cityPx = CITIES.map(([, xk, yk]) => [px(xk), py(yk)]);
+  const segDist = (x, y, ax, ay, bx, by) => {
+    const vx = bx - ax, vy = by - ay;
+    const u = clamp01(((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy));
+    return Math.hypot(x - ax - u * vx, y - ay - u * vy);
+  };
+  const MATCH_PX = 3.2 * KM;
+  const matched = [];
+  for (let e = 0; e < E; e++) {
+    if (finalD[e] < 0.22) continue;
+    const mx = (nodes[eA[e]].x + nodes[eB[e]].x) / 2, my = (nodes[eA[e]].y + nodes[eB[e]].y) / 2;
+    for (const [a, c] of RAIL) {
+      if (segDist(mx, my, cityPx[a][0], cityPx[a][1], cityPx[c][0], cityPx[c][1]) < MATCH_PX) { matched.push(e); break; }
+    }
+  }
+  const matchedRings = Array.from({ length: WAVE_RINGS }, () => []);
+  {
+    const [tx, ty] = [px(CITIES[TOKYO][1]), py(CITIES[TOKYO][2])];
+    let far = 0;
+    const dist = matched.map(e => {
+      const d = Math.hypot((nodes[eA[e]].x + nodes[eB[e]].x) / 2 - tx, (nodes[eA[e]].y + nodes[eB[e]].y) / 2 - ty);
+      far = Math.max(far, d);
+      return d;
+    });
+    matched.forEach((e, k) => matchedRings[Math.min(WAVE_RINGS - 1, Math.floor(dist[k] / (far + 1e-6) * WAVE_RINGS))].push(e));
+  }
+  const ringGlow = (bar, k) => ramp(bar, WAVE_A + k * WAVE_STEP, WAVE_A + k * WAVE_STEP + 0.5) *
+    (1 - ramp(bar, SHEET_OUT_A - 0.1, SHEET_OUT_A + 0.45));
+  const thick = [];
+  for (let e = 0; e < E; e++) if (finalD[e] >= 0.22) thick.push(e);
+  const railCover = RAIL.map(([a, c]) => {
+    let hit = 0;
+    for (let k = 1; k < 20; k++) {
+      const x = lerp(cityPx[a][0], cityPx[c][0], k / 20), y = lerp(cityPx[a][1], cityPx[c][1], k / 20);
+      let best = 1e9;
+      for (const e of thick) {
+        const d = segDist(x, y, nodes[eA[e]].x, nodes[eA[e]].y, nodes[eB[e]].x, nodes[eB[e]].y);
+        if (d < best) best = d;
+      }
+      if (best < MATCH_PX) hit += 1;
+    }
+    return hit / 19;
+  });
+  // the order the lines draw out from Tokyo (breadth-first over the rail graph)
+  const railDepth = new Array(CITIES.length).fill(Infinity);
+  railDepth[TOKYO] = 0;
+  for (let pass = 0; pass < 12; pass++) {
+    for (const [a, c] of RAIL) {
+      if (railDepth[a] + 1 < railDepth[c]) railDepth[c] = railDepth[a] + 1;
+      if (railDepth[c] + 1 < railDepth[a]) railDepth[a] = railDepth[c] + 1;
+    }
+  }
+  const railOrder = RAIL.map(([a, c]) => (railDepth[a] <= railDepth[c] ? [a, c, railDepth[a]] : [c, a, railDepth[c]]));
+
+  window.__physarumStats = {
+    nodes: N, edges: E, foods: foods.length, solve: solveStats, snapshots: NSNAP,
+    thickTubes: thick.length, matchedTubes: matched.length,
+    railLinks: RAIL.length, railCovered: railCover.filter(c => c >= 0.7).length,
+    railCoverMean: railCover.reduce((s, c) => s + c, 0) / RAIL.length,
+    lastFlakeHour: Math.max(...foods.map(v => arrival[v])), speed: SPEED
+  };
+
+  // ---- static layers ----------------------------------------------------------------
+  const benchLayer = makeLayer(900 + DISH_GAP, 900);
+  {
+    const g = benchLayer.getContext('2d');
+    const grad = g.createLinearGradient(0, 0, 0, 900);
+    grad.addColorStop(0, C.bench0);
+    grad.addColorStop(1, C.bench1);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, benchLayer.width, 900);
+    const br = mulberry(77);
+    // brushed streaks and scratches, repeated every DISH_GAP so the pan closes
+    const marks = [];
+    for (let k = 0; k < 140; k++) marks.push([br() * DISH_GAP, br() * 900, 30 + br() * 160, br() * 0.035, (br() - 0.5) * 0.06]);
+    for (const [x, y, len, a, tilt] of marks) {
+      for (const shift of [-DISH_GAP, 0, DISH_GAP]) {
+        g.strokeStyle = `rgba(170, 190, 215, ${a})`;
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(x + shift, y);
+        g.lineTo(x + shift + len, y + len * tilt);
+        g.stroke();
+      }
+    }
+  }
+
+  const dishLayer = makeLayer();
+  const flakeShapes = [];
+  {
+    const g = dishLayer.getContext('2d');
+    // spill of the projected light onto the bench, and the dish's shadow
+    let grad = g.createRadialGradient(DX, DY + 8, R_GLASS - 30, DX, DY + 8, R_GLASS + 40);
+    grad.addColorStop(0, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(DX, DY + 8, R_GLASS + 40, 0, TAU);
+    g.fill();
+    grad = g.createRadialGradient(DX, DY, R_GLASS, DX, DY, R_GLASS + 46);
+    grad.addColorStop(0, 'rgba(120, 170, 230, 0.07)');
+    grad.addColorStop(1, 'rgba(120, 170, 230, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS + 46, 0, TAU);
+    g.fill();
+    // glass base
+    g.fillStyle = 'rgba(160, 185, 205, 0.10)';
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS, 0, TAU);
+    g.fill();
+    // agar
+    g.save();
+    g.beginPath();
+    g.arc(DX, DY, R_AGAR, 0, TAU);
+    g.clip();
+    grad = g.createRadialGradient(DX - 60, DY - 80, 40, DX, DY, R_AGAR);
+    grad.addColorStop(0, C.agar0);
+    grad.addColorStop(1, C.agar1);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 900, 900);
+    const ar = mulberry(911);
+    for (let k = 0; k < 260; k++) {
+      const a = ar() * TAU, rr = Math.sqrt(ar()) * R_AGAR, rad = 12 + ar() * 46;
+      g.fillStyle = ar() < 0.5 ? 'rgba(255,255,255,0.012)' : 'rgba(0,0,0,0.03)';
+      g.beginPath();
+      g.arc(DX + Math.cos(a) * rr, DY + Math.sin(a) * rr, rad, 0, TAU);
+      g.fill();
+    }
+    // the light mask: hills in three steps, then the water at full light
+    for (const hl of HILLS) {
+      const poly = toPx(hl.poly);
+      const path = new Path2D();
+      poly.forEach(([x, y], k) => (k ? path.lineTo(x, y) : path.moveTo(x, y)));
+      path.closePath();
+      g.filter = 'blur(3px)';
+      g.fillStyle = C.hill;
+      g.fill(path);
+      g.filter = 'none';
+      g.strokeStyle = C.hillLine;
+      g.lineWidth = 1;
+      g.stroke(path);
+    }
+    const water = new Path2D();
+    for (const poly of [SEA_A, SEA_B, ...LAKES]) {
+      toPx(poly).forEach(([x, y], k) => (k ? water.lineTo(x, y) : water.moveTo(x, y)));
+      water.closePath();
+    }
+    g.filter = 'blur(16px)';
+    g.fillStyle = 'rgba(140, 196, 255, 0.16)';
+    g.fill(water);
+    g.filter = 'blur(5px)';
+    g.fillStyle = C.seaLight;
+    g.fill(water);
+    g.filter = 'none';
+    g.fillStyle = C.seaCore;
+    g.fill(water);
+    g.strokeStyle = C.coast;
+    g.lineWidth = 1.3;
+    g.stroke(water);
+    g.restore();
+    // oat flakes
+    const fr = mulberry(36);
+    cityPx.forEach(([x, y]) => {
+      const pts = [];
+      const rot = fr() * TAU;
+      for (let k = 0; k < 9; k++) {
+        const a = rot + k / 9 * TAU;
+        const rr = (6.2 + fr() * 2.4) * (k % 2 ? 1 : 0.86);
+        pts.push([x + Math.cos(a) * rr * 1.22, y + Math.sin(a) * rr * 0.9]);
+      }
+      flakeShapes.push(pts);
+      const path = new Path2D();
+      pts.forEach(([qx, qy], k) => (k ? path.lineTo(qx, qy) : path.moveTo(qx, qy)));
+      path.closePath();
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.save();
+      g.translate(1.2, 1.6);
+      g.fill(path);
+      g.restore();
+      const og = g.createRadialGradient(x - 2, y - 2, 1, x, y, 9);
+      og.addColorStop(0, '#f8efd4');
+      og.addColorStop(1, C.oat);
+      g.fillStyle = og;
+      g.fill(path);
+      g.strokeStyle = C.oatShade;
+      g.lineWidth = 0.8;
+      g.stroke(path);
+      for (let k = 0; k < 3; k++) {
+        g.fillStyle = 'rgba(150, 120, 70, 0.45)';
+        g.beginPath();
+        g.arc(x + (fr() - 0.5) * 8, y + (fr() - 0.5) * 6, 0.7 + fr() * 0.6, 0, TAU);
+        g.fill();
+      }
+    });
+  }
+
+  const rimLayer = makeLayer();
+  {
+    const g = rimLayer.getContext('2d');
+    g.lineCap = 'round';
+    const grad = g.createLinearGradient(DX - R_GLASS, DY - R_GLASS, DX + R_GLASS, DY + R_GLASS);
+    grad.addColorStop(0, 'rgba(225, 238, 250, 0.30)');
+    grad.addColorStop(0.5, 'rgba(225, 238, 250, 0.10)');
+    grad.addColorStop(1, 'rgba(225, 238, 250, 0.22)');
+    g.strokeStyle = grad;
+    g.lineWidth = R_GLASS - R_AGAR;
+    g.beginPath();
+    g.arc(DX, DY, (R_GLASS + R_AGAR) / 2, 0, TAU);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.20)';
+    g.lineWidth = 1.2;
+    g.beginPath();
+    g.arc(DX, DY, R_AGAR + 1, 0, TAU);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.30)';
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS - 0.5, 0, TAU);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS - 5, -2.55, -1.75);
+    g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.22)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS - 6, 0.45, 0.85);
+    g.stroke();
+    // the lid's broad reflection
+    g.save();
+    g.beginPath();
+    g.arc(DX, DY, R_GLASS, 0, TAU);
+    g.clip();
+    const lid = g.createLinearGradient(DX - 300, DY - 340, DX + 40, DY - 40);
+    lid.addColorStop(0, 'rgba(255,255,255,0.055)');
+    lid.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = lid;
+    g.beginPath();
+    g.ellipse(DX - 150, DY - 170, 300, 150, -0.75, 0, TAU);
+    g.fill();
+    g.restore();
+    // tape label on the rim
+    g.save();
+    g.translate(DX + Math.cos(-0.72) * (R_GLASS - 8), DY + Math.sin(-0.72) * (R_GLASS - 8));
+    g.rotate(-0.72 + Math.PI / 2);
+    g.fillStyle = 'rgba(222, 211, 178, 0.92)';
+    g.beginPath();
+    g.moveTo(-46, -11);
+    g.lineTo(46, -12);
+    g.lineTo(48, 10);
+    g.lineTo(-45, 11);
+    g.closePath();
+    g.fill();
+    g.fillStyle = 'rgba(40, 44, 70, 0.9)';
+    g.font = `15px ${HAND}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('kanto · 36', 0, 0.5);
+    g.restore();
+  }
+
+  const margin = makeLayer(64, 64);
+  {
+    const g = margin.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+    grad.addColorStop(0, 'rgba(255, 214, 58, 0.85)');
+    grad.addColorStop(0.55, 'rgba(240, 180, 22, 0.42)');
+    grad.addColorStop(1, 'rgba(230, 160, 10, 0)');
+    g.fillStyle = grad;
+    g.fillRect(0, 0, 64, 64);
+  }
+
+  const hudLayer = makeLayer();
+  {
+    const g = hudLayer.getContext('2d');
+    g.fillStyle = C.hudDim;
+    g.font = `600 11px ${SANS}`;
+    g.letterSpacing = '2.5px';
+    g.fillText('PHYSARUM POLYCEPHALUM', 28, 856);
+    g.font = `10px ${SANS}`;
+    g.fillText('36 OAT FLAKES · ONE CELL · NO BRAIN', 28, 874);
+  }
+
+  // ---- drawing -----------------------------------------------------------------------
+  const NB = 22;
+  const buckets = Array.from({ length: NB }, () => []);
+  const curve = (path, e) => {
+    const A = nodes[eA[e]], B = nodes[eB[e]];
+    path.moveTo(A.x, A.y);
+    path.quadraticCurveTo(eCx[e], eCy[e], B.x, B.y);
+  };
+  const partialCurve = (path, e, fromA, u) => {
+    // de Casteljau: the first u of the curve, starting at the earlier node
+    const A = nodes[fromA ? eA[e] : eB[e]], B = nodes[fromA ? eB[e] : eA[e]];
+    const cx = eCx[e], cy = eCy[e];
+    const q0x = lerp(A.x, cx, u), q0y = lerp(A.y, cy, u);
+    const q1x = lerp(cx, B.x, u), q1y = lerp(cy, B.y, u);
+    path.moveTo(A.x, A.y);
+    path.quadraticCurveTo(q0x, q0y, lerp(q0x, q1x, u), lerp(q0y, q1y, u));
+  };
+
+  function drawMold(g, h, t, glowBar) {
+    for (const bk of buckets) bk.length = 0;
+    const front = new Path2D();
+    let frontCount = 0;
+    const hubs = new Float32Array(CITIES.length);
+    const beat = t / BAR * TAU;
+    for (let e = 0; e < E; e++) {
+      if (eArr[e] > h) {
+        const aA = arrival[eA[e]], aB = arrival[eB[e]];
+        const lo = Math.min(aA, aB), hi = Math.max(aA, aB);
+        if (lo <= h && hi < Infinity) {
+          partialCurve(front, e, aA <= aB, clamp01((h - lo) / (hi - lo)));
+          frontCount += 1;
+        }
+        continue;
+      }
+      const D = dAt(e, h);
+      if (D < 0.1) continue;
+      const w = widthOf(D) * (1 + 0.07 * Math.sin(beat - ePhase[e] * 3));
+      const bi = Math.min(NB - 1, Math.max(1, Math.round(w * 2)));
+      buckets[bi].push(e);
+      const fa = nodes[eA[e]].food, fb = nodes[eB[e]].food;
+      if (fa >= 0) hubs[fa] = Math.max(hubs[fa], w);
+      if (fb >= 0) hubs[fb] = Math.max(hubs[fb], w);
+    }
+    // the advancing margin: a soft sheet over the newest ground
+    for (let v = 0; v < N; v++) {
+      const age = h - arrival[v];
+      if (age < -0.35 || age > 1.3) continue;
+      const a = age < 0 ? (1 + age / 0.35) * 0.55 : 0.55 * Math.pow(1 - age / 1.3, 1.4);
+      if (a <= 0.01) continue;
+      g.globalAlpha = a;
+      g.drawImage(margin, nodes[v].x - 20, nodes[v].y - 20, 40, 40);
+    }
+    g.globalAlpha = 1;
+    const paths = buckets.map(bk => {
+      if (!bk.length) return null;
+      const path = new Path2D();
+      for (const e of bk) curve(path, e);
+      return path;
+    });
+    // halos
+    for (let bi = 6; bi < NB; bi++) {
+      if (!paths[bi]) continue;
+      g.strokeStyle = C.moldHalo;
+      g.lineWidth = bi / 2 * 2.8 + 4;
+      g.stroke(paths[bi]);
+    }
+    // bodies, then their bright cores
+    for (let bi = 1; bi < NB; bi++) {
+      if (!paths[bi]) continue;
+      const w = bi / 2;
+      g.globalAlpha = Math.min(1, w / 1.2);
+      g.strokeStyle = w < 1.6 ? C.mold : C.moldDeep;
+      g.lineWidth = Math.max(0.9, w);
+      g.stroke(paths[bi]);
+    }
+    g.globalAlpha = 1;
+    for (let bi = 4; bi < NB; bi++) {
+      if (!paths[bi]) continue;
+      g.strokeStyle = bi < 7 ? C.moldCore : C.mold;
+      g.lineWidth = bi / 2 * 0.62;
+      g.stroke(paths[bi]);
+    }
+    for (let bi = 9; bi < NB; bi++) {
+      if (!paths[bi]) continue;
+      g.strokeStyle = C.moldCore;
+      g.lineWidth = bi / 2 * 0.3;
+      g.stroke(paths[bi]);
+    }
+    // shuttle streaming: the protoplasm sloshes back and forth once a bar
+    g.strokeStyle = C.moldPulse;
+    g.lineDashOffset = 7 * Math.sin(beat);
+    for (let bi = 8; bi < NB; bi++) {
+      if (!paths[bi]) continue;
+      g.setLineDash([2 + bi * 0.25, 7 + bi * 0.5]);
+      g.lineWidth = Math.max(1, bi / 2 * 0.22);
+      g.stroke(paths[bi]);
+    }
+    g.setLineDash([]);
+    g.lineDashOffset = 0;
+    // the growing tips
+    if (frontCount) {
+      g.strokeStyle = 'rgba(255, 214, 70, 0.9)';
+      g.lineWidth = 1.15;
+      g.stroke(front);
+    }
+    // flakes the plasmodium has reached become yellow hubs
+    for (let ci = 0; ci < CITIES.length; ci++) {
+      const v = foodNode[ci];
+      const age = h - arrival[v];
+      if (age < 0) continue;
+      const [x, y] = cityPx[ci];
+      const grow = smooth(age / 0.8);
+      const rad = (7 + Math.min(7, hubs[ci] * 0.75)) * (0.45 + 0.55 * grow);
+      g.globalAlpha = 0.86 * grow + (ci === TOKYO ? 0.14 : 0);
+      g.drawImage(margin, x - rad * 1.9, y - rad * 1.9, rad * 3.8, rad * 3.8);
+      g.globalAlpha = 0.72 * grow;
+      g.fillStyle = C.mold;
+      g.beginPath();
+      g.arc(x, y, rad * 0.72, 0, TAU);
+      g.fill();
+      g.fillStyle = C.moldCore;
+      g.globalAlpha = 0.5 * grow;
+      g.beginPath();
+      g.arc(x - rad * 0.15, y - rad * 0.2, rad * 0.36, 0, TAU);
+      g.fill();
+    }
+    g.globalAlpha = 1;
+    // the match: tubes lying under a rail line run hot, ring by ring outward from Tokyo
+    if (glowBar !== null) {
+      g.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < WAVE_RINGS; k++) {
+        const gk = ringGlow(glowBar, k);
+        if (gk <= 0.001 || !matchedRings[k].length) continue;
+        const hot = new Path2D();
+        for (const e of matchedRings[k]) curve(hot, e);
+        g.strokeStyle = `rgba(255, 228, 150, ${0.2 * gk})`;
+        g.lineWidth = 10;
+        g.stroke(hot);
+        g.strokeStyle = `rgba(255, 248, 214, ${0.4 * gk})`;
+        g.lineWidth = 2.6;
+        g.stroke(hot);
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
+  }
+
+  function drawDish(g, ox, h, t, glowBar) {
+    if (ox + DX + R_GLASS + 48 < 0 || ox + DX - R_GLASS - 48 > 900) return;
+    resetCtx(g);
+    g.drawImage(dishLayer, ox, 0);
+    g.translate(ox, 0);
+    g.save();
+    g.beginPath();
+    g.arc(DX, DY, R_AGAR, 0, TAU);
+    g.clip();
+    drawMold(g, h, t, glowBar);
+    g.restore();
+    resetCtx(g);
+    g.drawImage(rimLayer, ox, 0);
+  }
+
+  // the acetate: a printed rail map, carried in, held above the dish, laid down, dragged away
+  const SHEET_ANCHOR = [646, 804];   // where the paw holds it, just outside the dish rim
+  const sheetPose = bar => {
+    if (bar < SHEET_IN_A || bar >= SHEET_OUT_B) return null;
+    if (bar < SHEET_ABOVE) {
+      const k = smoother((bar - SHEET_IN_A) / (SHEET_ABOVE - SHEET_IN_A));
+      return { dx: 930 * (1 - k), dy: 760 * (1 - k), sc: 1.12, rot: -0.035 - 0.05 * (1 - k), lift: 1 };
+    }
+    if (bar < SHEET_DOWN) {
+      const k = smoother((bar - SHEET_ABOVE) / (SHEET_DOWN - SHEET_ABOVE));
+      return { dx: 0, dy: 0, sc: lerp(1.12, 1, k), rot: lerp(-0.035, 0, k), lift: 1 - k };
+    }
+    if (bar < SHEET_OUT_A) return { dx: 0, dy: 0, sc: 1, rot: 0, lift: 0 };
+    const k = smoother((bar - SHEET_OUT_A) / (SHEET_OUT_B - SHEET_OUT_A));
+    return { dx: 930 * k, dy: 760 * k, sc: 1 + 0.03 * Math.sin(Math.PI * k), rot: -0.04 * k, lift: 0.25 * Math.sin(Math.PI * k) };
+  };
+  const sheetPoint = (pose, [x, y]) => {
+    const c = Math.cos(pose.rot), sn = Math.sin(pose.rot);
+    const lx = (x - 450) * pose.sc, ly = (y - 450) * pose.sc;
+    return [450 + pose.dx + lx * c - ly * sn, 450 + pose.dy + lx * sn + ly * c];
+  };
+  const railPath = new Path2D();
+  for (const [a, c] of RAIL) {
+    railPath.moveTo(cityPx[a][0], cityPx[a][1]);
+    railPath.lineTo(cityPx[c][0], cityPx[c][1]);
+  }
+  const railStrong = new Path2D(), railWeak = new Path2D();
+  RAIL.forEach(([a, c], k) => {
+    const path = railCover[k] >= 0.7 ? railStrong : railWeak;
+    path.moveTo(cityPx[a][0], cityPx[a][1]);
+    path.lineTo(cityPx[c][0], cityPx[c][1]);
+  });
+  const stationPath = new Path2D();
+  for (const [x, y] of cityPx) {
+    stationPath.moveTo(x + 4.6, y);
+    stationPath.arc(x, y, 4.6, 0, TAU);
+  }
+  const sheetFrame = new Path2D();
+  sheetFrame.roundRect(40, 40, 820, 820, 10);
+
+  function drawSheet(g, pose, bar) {
+    resetCtx(g);
+    const settle = 1 - pose.lift;
+    // the printed lines cast shadows on the dish until the sheet is down
+    if (pose.lift > 0.004) {
+      g.save();
+      g.translate(450 + pose.dx + 18 * pose.lift, 450 + pose.dy + 22 * pose.lift);
+      g.rotate(pose.rot);
+      g.scale(pose.sc, pose.sc);
+      g.translate(-450, -450);
+      g.filter = `blur(${(1 + 5 * pose.lift).toFixed(2)}px)`;
+      g.strokeStyle = `rgba(0, 4, 12, ${0.5 + 0.2 * settle})`;
+      g.lineWidth = 3;
+      g.stroke(railPath);
+      g.stroke(sheetFrame);
+      g.filter = 'none';
+      g.restore();
+    }
+    g.translate(450 + pose.dx, 450 + pose.dy);
+    g.rotate(pose.rot);
+    g.scale(pose.sc, pose.sc);
+    g.translate(-450, -450);
+    g.fillStyle = 'rgba(205, 228, 255, 0.055)';
+    g.fill(sheetFrame);
+    g.strokeStyle = 'rgba(230, 242, 255, 0.42)';
+    g.lineWidth = 1.5;
+    g.stroke(sheetFrame);
+    g.strokeStyle = 'rgba(230, 242, 255, 0.55)';
+    g.lineWidth = 1;
+    for (const [x, y] of [[838, 62], [838, 838]]) {
+      g.beginPath();
+      g.moveTo(x - 9, y);
+      g.lineTo(x + 9, y);
+      g.moveTo(x, y - 9);
+      g.lineTo(x, y + 9);
+      g.stroke();
+      g.beginPath();
+      g.arc(x, y, 5, 0, TAU);
+      g.stroke();
+    }
+    g.fillStyle = 'rgba(236, 242, 250, 0.9)';
+    g.beginPath();
+    g.roundRect(372, 846, 156, 28, 5);
+    g.fill();
+    g.fillStyle = '#18202c';
+    g.font = `600 11px ${SANS}`;
+    g.letterSpacing = '2px';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('RAIL MAP · KANTO', 450, 860.5);
+    g.letterSpacing = '0px';
+    // the printed lines and stations
+    const wave = clamp01((bar - WAVE_A) / (WAVE_RINGS * WAVE_STEP + 0.5));
+    const lit = bar >= SHEET_DOWN ? 1 - ramp(bar, SHEET_OUT_A - 0.1, SHEET_OUT_A + 0.45) : 0;
+    g.strokeStyle = C.railUnder;
+    g.lineWidth = 4;
+    g.stroke(railPath);
+    g.stroke(stationPath);
+    g.strokeStyle = C.rail;
+    g.globalAlpha = 0.9;
+    g.lineWidth = 1.5 + 0.7 * wave * lit;
+    g.stroke(railStrong);
+    g.globalAlpha = 0.9 - 0.32 * wave * lit;
+    g.lineWidth = 1.5;
+    g.stroke(railWeak);
+    g.globalAlpha = 0.95;
+    g.lineWidth = 1.6;
+    g.stroke(stationPath);
+    g.globalAlpha = 1;
+    // a light runs out along each line from Tokyo when the sheet lands
+    if (bar >= WAVE_A && bar < WAVE_A + 2.2) {
+      g.globalCompositeOperation = 'lighter';
+      g.lineCap = 'round';
+      for (const [a, c, depth] of railOrder) {
+        const u = (bar - WAVE_A - depth * WAVE_STEP * 0.9) / 0.4;
+        if (u <= 0 || u >= 1.35) continue;
+        const u1 = clamp01(u), u0 = clamp01(u - 0.35);
+        const [ax, ay] = cityPx[a], [cx, cy] = cityPx[c];
+        g.strokeStyle = `rgba(220, 240, 255, ${0.75 * (1 - smooth((u - 1) / 0.35))})`;
+        g.lineWidth = 3.4;
+        g.beginPath();
+        g.moveTo(lerp(ax, cx, u0), lerp(ay, cy, u0));
+        g.lineTo(lerp(ax, cx, u1), lerp(ay, cy, u1));
+        g.stroke();
+      }
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.font = `600 10px ${SANS}`;
+    g.letterSpacing = '1.5px';
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    for (const [ci, name, ox, oy] of LABELS) {
+      const [x, y] = cityPx[ci];
+      g.fillStyle = C.railUnder;
+      g.fillText(name, x + ox + 1, y + oy + 1);
+      g.fillStyle = C.rail;
+      g.fillText(name, x + ox, y + oy);
+    }
+    g.letterSpacing = '0px';
+  }
+
+  // ClawedCode peeking in over the edge of the bench, face up toward the dish (local +x = up the face)
+  const CAT_PARTS = (() => {
+    const parts = [];
+    const ell = (x, y, rx, ry) => { const q = new Path2D(); q.ellipse(x, y, rx, ry, 0, 0, TAU); parts.push(q); };
+    ell(-128, 0, 72, 128);
+    ell(0, 0, 70, 84);
+    ell(-20, 0, 50, 93);
+    for (const sd of [-1, 1]) {
+      const q = new Path2D();
+      q.moveTo(56, sd * 16);
+      q.quadraticCurveTo(96, sd * 34, 122, sd * 66);
+      q.quadraticCurveTo(84, sd * 76, 38, sd * 74);
+      q.closePath();
+      parts.push(q);
+    }
+    return parts;
+  })();
+  const catLayer = makeLayer();
+  function drawCatHead(g, o) {
+    if (o.alpha <= 0.002) return;
+    if (o.alpha < 0.999) {
+      // fade the whole cat as one picture, not part by part
+      const lg = catLayer.getContext('2d');
+      resetCtx(lg);
+      lg.clearRect(0, 0, 900, 900);
+      drawCatHead(lg, { ...o, alpha: 1 });
+      resetCtx(g);
+      g.globalAlpha = o.alpha;
+      g.drawImage(catLayer, 0, 0);
+      g.globalAlpha = 1;
+      return;
+    }
+    resetCtx(g);
+    g.translate(o.x, o.y);
+    g.rotate(o.ang);
+    g.scale(o.sc, o.sc);
+    g.globalAlpha = o.alpha;
+    // rim light from the lit dish, on the side that faces it (each part filled on its own: mirrored
+    // parts wind oppositely, and one nonzero fill would cancel where they overlap)
+    g.save();
+    g.translate(2.6, 0);
+    g.fillStyle = o.rim || C.rim;
+    for (const part of CAT_PARTS) g.fill(part);
+    g.restore();
+    g.fillStyle = C.fur;
+    for (const part of CAT_PARTS) g.fill(part);
+    g.fillStyle = '#2a1c20';
+    for (const sd of [-1, 1]) {
+      g.beginPath();
+      g.moveTo(60, sd * 28);
+      g.quadraticCurveTo(88, sd * 42, 108, sd * 63);
+      g.quadraticCurveTo(80, sd * 68, 50, sd * 66);
+      g.closePath();
+      g.fill();
+    }
+    // eyes, round-pupilled in the dim room
+    for (const sd of [-1, 1]) {
+      g.save();
+      g.translate(6, sd * 33);
+      g.rotate(sd * 0.32);
+      const open = Math.max(0.07, 1 - o.blink);
+      g.beginPath();
+      g.ellipse(0, 0, 12.5 * open, 16.5, 0, 0, TAU);
+      g.fillStyle = C.eye;
+      g.fill();
+      g.save();
+      g.clip();
+      g.fillStyle = C.pupil;
+      g.beginPath();
+      g.arc(o.lookX * 4.5, o.lookY * 6, 7, 0, TAU);
+      g.fill();
+      g.fillStyle = 'rgba(255, 250, 230, 0.92)';
+      g.beginPath();
+      g.arc(o.lookX * 4.5 + 3, o.lookY * 6 - 3.4, 2.3, 0, TAU);
+      g.fill();
+      g.restore();
+      g.strokeStyle = 'rgba(0,0,0,0.9)';
+      g.lineWidth = 1.5;
+      g.beginPath();
+      g.ellipse(0, 0, 12.5 * open, 16.5, 0, 0, TAU);
+      g.stroke();
+      g.restore();
+    }
+    // nose, mouth, whiskers
+    g.fillStyle = '#3a2428';
+    g.beginPath();
+    g.moveTo(-20, -7);
+    g.lineTo(-20, 7);
+    g.lineTo(-29, 0);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(70, 60, 64, 0.95)';
+    g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(-29, 0);
+    g.quadraticCurveTo(-38, -3, -37, -10);
+    g.moveTo(-29, 0);
+    g.quadraticCurveTo(-38, 3, -37, 10);
+    g.stroke();
+    g.strokeStyle = 'rgba(236, 234, 226, 0.8)';
+    g.lineWidth = 1.25;
+    for (const sd of [-1, 1]) {
+      for (let k = 0; k < 3; k++) {
+        g.beginPath();
+        g.moveTo(-26 - k * 4, sd * 24);
+        g.quadraticCurveTo(-24 - k * 9, sd * 76, -14 - k * 22, sd * (128 + k * 6));
+        g.stroke();
+      }
+    }
+  }
+
+  const PAW_PARTS = (() => {
+    const parts = [];
+    const q = new Path2D();
+    q.roundRect(-520, -28, 500, 56, 26);
+    parts.push(q);
+    const pad = new Path2D();
+    pad.ellipse(0, 0, 34, 31, 0, 0, TAU);
+    parts.push(pad);
+    for (let k = 0; k < 4; k++) {
+      const a = -0.95 + k * 0.63;
+      const toe = new Path2D();
+      toe.arc(27 + Math.cos(a) * 10, Math.sin(a) * 27, 11, 0, TAU);
+      parts.push(toe);
+    }
+    return parts;
+  })();
+
+  function drawPaw(g, x, y, ang, alpha, squash = 1) {
+    if (alpha <= 0.002) return;
+    resetCtx(g);
+    g.translate(x, y);
+    g.rotate(ang);
+    g.globalAlpha = alpha;
+    g.scale(1.25 * squash, 1.25 / squash);
+    g.save();
+    g.translate(2.4, -1.4);
+    g.fillStyle = C.rimCool;
+    for (const part of PAW_PARTS) g.fill(part);
+    g.restore();
+    g.fillStyle = C.fur;
+    for (const part of PAW_PARTS) g.fill(part);
+    g.strokeStyle = 'rgba(52, 58, 70, 0.95)';
+    g.lineWidth = 1.3;
+    for (let k = 0; k < 3; k++) {
+      const a = -0.63 + k * 0.63;
+      g.beginPath();
+      g.moveTo(22, Math.sin(a) * 17);
+      g.lineTo(40, Math.sin(a) * 24);
+      g.stroke();
+    }
+  }
+
+  // ---- choreography -----------------------------------------------------------------
+  const lapseU = u => (u < 0.03 ? u * u / 0.06 : u - 0.015) / 0.985;
+  const hoursAt = bar => {
+    if (bar < LAPSE_A) return 0;
+    if (bar >= LAPSE_B) return HOURS;
+    return HOURS * lapseU((bar - LAPSE_A) / (LAPSE_B - LAPSE_A));
+  };
+  // time-lapse cameos: the camera catches the cat somewhere new every couple of bars
+  const CAMEOS = [
+    { a: 2, b: 4, x: 770, y: 862, ang: -2.25, sc: 0.95, look: [0.6, -0.3] },
+    { a: 6, b: 8, x: 892, y: 520, ang: Math.PI - 0.1, sc: 0.9, look: [0.7, 0.2] },
+    { a: 10, b: 12, x: 812, y: 34, ang: 2.25, sc: 0.9, look: [0.5, 0.5] },
+    { a: 14, b: 24.4, x: 776, y: 866, ang: -2.22, sc: 0.98, look: [0.6, -0.2] }
+  ];
+  function drawHud(g, h, bar) {
+    resetCtx(g);
+    g.drawImage(hudLayer, 0, 0);
+    const lapse = bar >= LAPSE_A && bar < LAPSE_B;
+    const shown = bar >= PAN_A + (PAN_B - PAN_A) / 2 ? 0 : h;
+    const hh = Math.floor(shown + 1e-9);
+    const mm = Math.floor((shown - hh) * 60 + 1e-9);
+    g.fillStyle = C.hud;
+    g.font = `500 27px ${MONO}`;
+    g.fillText(`T+${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, 26, 52);
+    g.font = `600 10px ${SANS}`;
+    g.letterSpacing = '2px';
+    g.fillStyle = lapse ? C.hud : C.hudDim;
+    const label = lapse ? `TIME-LAPSE  ×${SPEED}` : 'REAL TIME  ×1';
+    g.fillText(label, 28, 72);
+    if (lapse) {
+      g.fillStyle = 'rgba(255, 92, 70, 0.9)';
+      g.beginPath();
+      g.arc(28 + g.measureText(label).width + 8, 68.5, 3, 0, TAU);
+      g.fill();
+    }
+    g.letterSpacing = '0px';
+  }
+
+  // ---- frame ---------------------------------------------------------------------------
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const bar = t / BAR;
+    const h = hoursAt(bar);
+    const pan = smoother((bar - PAN_A) / (PAN_B - PAN_A));
+    const ox = -DISH_GAP * pan;
+    resetCtx(ctx);
+    ctx.drawImage(benchLayer, ox % DISH_GAP, 0);
+    const live = bar >= SHEET_DOWN - 0.05 && bar < SHEET_OUT_B ? bar : null;
+    drawDish(ctx, ox, h, t, live);
+    drawDish(ctx, ox + DISH_GAP, 0, t, null);
+    // the acetate and the paw that carries it
+    const pose = sheetPose(bar);
+    if (pose) drawSheet(ctx, pose, bar);
+    const away = [SHEET_ANCHOR[0] + 330, SHEET_ANCHOR[1] + 290];
+    let paw = null;
+    if (pose && bar < SHEET_DOWN) paw = sheetPoint(pose, SHEET_ANCHOR);
+    else if (bar >= SHEET_DOWN && bar < PAW_OFF) {
+      const k = smooth((bar - SHEET_DOWN) / (PAW_OFF - SHEET_DOWN));
+      paw = [lerp(SHEET_ANCHOR[0], away[0], k), lerp(SHEET_ANCHOR[1], away[1], k)];
+    } else if (bar >= PAW_BACK && bar < SHEET_OUT_A) {
+      const k = smooth((bar - PAW_BACK) / (SHEET_OUT_A - PAW_BACK));
+      paw = [lerp(away[0], SHEET_ANCHOR[0], k), lerp(away[1], SHEET_ANCHOR[1], k)];
+    } else if (pose && bar >= SHEET_OUT_A) paw = sheetPoint(pose, SHEET_ANCHOR);
+    if (paw) {
+      // a press when the sheet lands
+      const press = bar >= SHEET_DOWN - 0.15 && bar < SHEET_DOWN + 0.2 ? 1 - Math.abs(bar - SHEET_DOWN + 0.02) / 0.17 : 0;
+      drawPaw(ctx, paw[0], paw[1], -2.28, 1, 1 - 0.05 * clamp01(press));
+    }
+    // the cat
+    for (const cm of CAMEOS) {
+      if (bar < cm.a - 0.05 || bar > cm.b + 0.05) continue;
+      let alpha = smooth((bar - cm.a + 0.05) / 0.1) * (1 - smooth((bar - cm.b + 0.05) / 0.1));
+      let x = cm.x + ox, y = cm.y;
+      let lookX = cm.look[0], lookY = cm.look[1];
+      let blink = 0;
+      if (cm.b > 20) {
+        // real time from bar 17: it follows the paw, then reads the map, then ducks out before the pan
+        const duck = smooth((bar - 23.6) / 0.8);
+        y += duck * 260;
+        x += duck * 90;
+        const lean = ramp(bar, 17.9, 18.6) * (1 - ramp(bar, 21.2, 22.0));
+        x += Math.cos(cm.ang) * 24 * lean;
+        y += Math.sin(cm.ang) * 24 * lean;
+        alpha = smooth((bar - cm.a + 0.05) / 0.1);
+        const follow = ramp(bar, 16.8, 17.3) * (1 - ramp(bar, 18.3, 18.9));
+        lookX = lerp(cm.look[0], 0.2, follow);
+        lookY = lerp(cm.look[1], 0.9, follow);
+        const read = ramp(bar, 18.4, 19.2);
+        lookX = lerp(lookX, 0.55 + 0.35 * Math.sin((bar - 18.4) * 1.7), read);
+        lookY = lerp(lookY, -0.4 + 0.5 * Math.sin((bar - 18.4) * 1.1), read);
+        for (const bk of [15.1, 20.35, 22.9]) blink = Math.max(blink, 1 - Math.abs(bar - bk) / 0.07);
+        if (duck >= 1) alpha = 0;
+      }
+      drawCatHead(ctx, { x, y, ang: cm.ang, sc: cm.sc, lookX, lookY, blink: clamp01(blink), alpha });
+    }
+    drawHud(ctx, h, bar);
+    resetCtx(ctx);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 112\\n// DURATION: 60\\n// FORM: fresh dish 0-1 | the margin spreads 1-9 | the network 9-17 | the railway 17-23 | the pan 23-26 | fresh dish again 26-28\\n// TONAL CENTER: F natural minor (Aeolian)\\n// MOTIF: F5 Eb5 C5 Ab4 - F5 quarter on beat 1, Eb5 eighth on beat 2, C5 dotted quarter on 2.5, Ab4 quarter on beat 4, then rest before the repeat\\n// HARMONIC PLAN: Fm9 | Dbmaj7 two-bar loop across all 28 cycles; pad enters at cycle 9 voicing Ab-C-G over F and F-Ab-C over Db with the maj7 on top, lead lands Ab4 so it reads as Fm third then Dbmaj7 fifth\\n// GROOVE: RolandTR808 - closed hats on all eight eighths from cycle 0, kick four-on-the-floor from cycle 9, clap on 2 and 4 from cycle 17, rim clank on the offbeat eighths of 2 and 4 from cycle 17, one crash on the cycle-18 downbeat; dead straight, no swing, metronomic\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst kit = (p) => s(p).bank(\\\"RolandTR808\\\")\\n\\nconst bassLine = note(\\\"\u003c[f1 f2]*4 [db2 ab2]*4>\\\")\\n\\nconst arpLine = note(\\\"\u003c[f4 ab4 c5 eb5 g5 eb5 c5 ab4]*2 [db4 f4 ab4 c5 f5 c5 ab4 f4]*2>\\\")\\n  .s(\\\"square\\\").lpf(2500).lpq(3)\\n  .attack(0.008).decay(0.09).sustain(0.2).release(0.04).clip(0.6)\\n\\nconst padChord = note(\\\"\u003c[ab3,c4,g4] [f3,ab3,c5]>\\\")\\nconst padVoice = stack(padChord, padChord.add(note(0.1)), padChord.add(note(-0.1)))\\n  .s(\\\"sawtooth\\\").lpq(1)\\n  .attack(0.6).decay(0.4).sustain(0.75).release(1.1).clip(1.25)\\n\\nconst leadTone = (p) => p.s(\\\"square\\\").lpf(4000).lpq(2)\\n  .attack(0.012).decay(0.18).sustain(0.65).release(0.3).clip(0.82)\\nconst motif = leadTone(note(\\\"f5@2 eb5 c5@3 ab4@2\\\"))\\nconst motifHeld = leadTone(note(\\\"f5@4 eb5 c5@2 ab4\\\"))\\nconst motifFrag = leadTone(note(\\\"\u003c[f5@2 eb5@2 ~ ~ ~ ~] ~>\\\"))\\nconst motifTail = leadTone(note(\\\"c5@2 ab4@2 ~ ~ ~ ~\\\"))\\n\\n$: stack(\\n  kit(\\\"hh*8\\\").velocity(\\\"1 0.7 0.85 0.7 1 0.7 0.85 0.75\\\").decay(0.035).sustain(0).clip(0.4).gain(\\\"\u003c0.3!9 0.24!14 0.3!5>\\\"),\\n  arrange([9, silence], [14, kit(\\\"bd*4\\\").decay(0.12).sustain(0).clip(0.5).gain(0.34)], [5, silence]),\\n  arrange([17, silence], [6, kit(\\\"~ cp ~ cp\\\").decay(0.09).sustain(0).gain(0.2)], [5, silence]),\\n  arrange([17, silence], [6, kit(\\\"~ [~ rim] ~ [~ rim]\\\").decay(0.04).sustain(0).gain(0.16)], [5, silence]),\\n  arrange(\\n    [16, silence],\\n    [1, kit(\\\"~ ~ ~ rim\\\").decay(0.05).sustain(0).gain(0.14)],\\n    [1, silence],\\n    [1, kit(\\\"cr ~ ~ ~\\\").gain(0.16)],\\n    [3, silence],\\n    [1, kit(\\\"oh ~ ~ ~\\\").decay(0.9).sustain(0).gain(0.12)],\\n    [5, silence]\\n  )\\n)\\n\\n$: bassLine\\n  .s(\\\"sawtooth\\\").lpf(700).lpq(2)\\n  .attack(0.01).decay(0.14).sustain(0.3).release(0.06).clip(0.5)\\n  .velocity(\\\"1 0.82 0.9 0.82 1 0.82 0.9 0.86\\\")\\n  .gain(\\\"\u003c0.68!9 0.5!14 0.62!5>\\\")\\n\\n// arrange() restarts each section's pattern at its own cycle 0, so a section that starts on an odd cycle\\n// takes .late(1) to keep the two-bar chord alternation in step with the bass (Fm9 over F, Dbmaj7 over Db)\\n$: arrange(\\n  [1, silence],\\n  [2, arpLine.late(1).degradeBy(0.5).gain(0.36)],\\n  [2, arpLine.late(1).degradeBy(0.25).gain(0.38)],\\n  [12, arpLine.late(1).every(4, x => x.rev()).gain(0.3)],\\n  [6, arpLine.late(1).every(4, x => x.rev()).gain(0.2)],\\n  [5, arpLine.late(1).every(4, x => x.rev()).gain(0.3)]\\n)\\n\\n$: arrange(\\n  [9, silence],\\n  [8, padVoice.late(1).lpf(1200).gain(0.13)],\\n  [6, padVoice.late(1).lpf(1200).gain(0.115)],\\n  [1, padVoice.late(1).lpf(1100).gain(0.13)],\\n  [1, padVoice.lpf(700).lpenv(0.78).lpa(0.02).lpd(2).lps(0).gain(0.13)],\\n  [1, padVoice.late(1).lpf(700).gain(0.12)],\\n  [2, silence]\\n)\\n\\n$: arrange(\\n  [5, silence],\\n  [4, motifFrag.gain(0.24)],\\n  [8, silence],\\n  [3, motif.gain(0.26)],\\n  [2, motifHeld.gain(0.26)],\\n  [1, motif.gain(0.26)],\\n  [1, motifTail.gain(0.24)],\\n  [4, silence]\\n)\",\"bpm\":112,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4666666666666667,\"cycles\":28,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

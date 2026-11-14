@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+
+const duration = 30;
+const rotationSpeed = 3;
+
+const palette = {
+  void: '#0a0a0f',
+  cyan: '#00ffff',
+  magenta: '#ff00ff',
+  yellow: '#ffff00',
+  entropy: '#7f00ff'
+};
+
+let seed = 42;
+function seededRandom() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const fragmentShapes = [];
+const gridSize = 8;
+for (let i = 0; i < gridSize; i++) {
+  for (let j = 0; j < gridSize; j++) {
+    fragmentShapes.push({
+      gridX: i,
+      gridY: j,
+      phase: seededRandom(),
+      color: [palette.cyan, palette.magenta, palette.yellow][Math.floor(seededRandom() * 3)],
+      entropy: seededRandom()
+    });
+  }
+}
+
+window.renderFrame = function(time) {
+  ctx.fillStyle = palette.void;
+  ctx.fillRect(0, 0, 800, 800);
+  
+  const progress = (time / duration) * rotationSpeed;
+  const cycle = progress % 1;
+  
+  const cellSize = 800 / gridSize;
+  
+  fragmentShapes.forEach(frag => {
+    const phaseProgress = (cycle + frag.phase) % 1;
+    
+    const centerX = frag.gridX * cellSize + cellSize / 2;
+    const centerY = frag.gridY * cellSize + cellSize / 2;
+    
+    const morphStage = Math.floor(phaseProgress * 3);
+    const subProgress = (phaseProgress * 3) % 1;
+    
+    const eased = subProgress < 0.5 
+      ? 2 * subProgress * subProgress 
+      : 1 - Math.pow(-2 * subProgress + 2, 2) / 2;
+    
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    
+    const rotation = phaseProgress * Math.PI * 2;
+    ctx.rotate(rotation);
+    
+    const baseSize = cellSize * 0.6;
+    const pulseSize = baseSize * (0.8 + 0.2 * Math.sin(phaseProgress * Math.PI * 2));
+    
+    const alpha = 0.3 + 0.4 * (1 - frag.entropy);
+    ctx.globalAlpha = alpha;
+    
+    ctx.strokeStyle = frag.color;
+    ctx.lineWidth = 2;
+    ctx.fillStyle = frag.color + '22';
+    
+    ctx.beginPath();
+    
+    if (morphStage === 0) {
+      const sides = 4;
+      const nextSides = 32;
+      const blendSides = Math.floor(sides + (nextSides - sides) * eased);
+      for (let i = 0; i < blendSides; i++) {
+        const angle = (i / blendSides) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * pulseSize / 2;
+        const y = Math.sin(angle) * pulseSize / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    } else if (morphStage === 1) {
+      const sides = 32;
+      const nextSides = 3;
+      const blendSides = Math.max(3, Math.floor(sides + (nextSides - sides) * eased));
+      for (let i = 0; i < blendSides; i++) {
+        const angle = (i / blendSides) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * pulseSize / 2;
+        const y = Math.sin(angle) * pulseSize / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    } else {
+      const sides = 3;
+      const nextSides = 4;
+      const blendSides = Math.floor(sides + (nextSides - sides) * eased);
+      for (let i = 0; i < blendSides; i++) {
+        const angle = (i / blendSides) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(angle) * pulseSize / 2;
+        const y = Math.sin(angle) * pulseSize / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    }
+    
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.restore();
+  });
+  
+  ctx.globalAlpha = 0.15;
+  ctx.strokeStyle = palette.entropy;
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= gridSize; i++) {
+    const offset = Math.sin(cycle * Math.PI * 2 + i * 0.3) * 5;
+    ctx.beginPath();
+    ctx.moveTo(i * cellSize + offset, 0);
+    ctx.lineTo(i * cellSize + offset, 800);
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.moveTo(0, i * cellSize + offset);
+    ctx.lineTo(800, i * cellSize + offset);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio = function(audioCtx) {
+  const now = audioCtx.currentTime;
+  
+  const root = 200;
+  const third = 250;
+  const fifth = 300;
+  
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sine';
+  osc1.frequency.value = root;
+  
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'sine';
+  osc2.frequency.value = third;
+  
+  const osc3 = audioCtx.createOscillator();
+  osc3.type = 'sine';
+  osc3.frequency.value = fifth;
+  
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.3;
+  
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 8;
+  
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc1.frequency);
+  lfoGain.connect(osc2.frequency);
+  lfoGain.connect(osc3.frequency);
+  
+  const gain1 = audioCtx.createGain();
+  const gain2 = audioCtx.createGain();
+  const gain3 = audioCtx.createGain();
+  
+  gain1.gain.setValueAtTime(0, now);
+  gain1.gain.linearRampToValueAtTime(0.12, now + 2);
+  gain2.gain.setValueAtTime(0, now);
+  gain2.gain.linearRampToValueAtTime(0.10, now + 2.5);
+  gain3.gain.setValueAtTime(0, now);
+  gain3.gain.linearRampToValueAtTime(0.08, now + 3);
+  
+  osc1.connect(gain1);
+  osc2.connect(gain2);
+  osc3.connect(gain3);
+  
+  gain1.connect(audioCtx.destination);
+  gain2.connect(audioCtx.destination);
+  gain3.connect(audioCtx.destination);
+  
+  osc1.start(now);
+  osc2.start(now);
+  osc3.start(now);
+  lfo.start(now);
+  
+  return { osc1, osc2, osc3, lfo, lfoGain, gain1, gain2, gain3 };
+};
+
+window.ready = true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script>
+      // Audio player implementation
+      let audioCtx = null;
+      let audioNodes = null;
+      let isPlaying = false;
+
+      document.getElementById('audio-toggle').addEventListener('click', () => {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        if (audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+
+        if (isPlaying) {
+          // Stop audio
+          if (audioNodes) {
+            Object.values(audioNodes).forEach(node => {
+              if (node && node.stop) node.stop();
+            });
+          }
+          document.getElementById('audio-toggle').textContent = '🔊 PLAY HUM';
+          isPlaying = false;
+        } else {
+          // Start audio
+          audioNodes = window.generateAudio(audioCtx);
+          document.getElementById('audio-toggle').textContent = '🔇 STOP HUM';
+          isPlaying = true;
+        }
+      });
+    </script>
+</body>
+</html>

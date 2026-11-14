@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 70
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+const WIDTH = 900;
+const HEIGHT = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(WIDTH, HEIGHT);
+renderer.domElement.style.width = WIDTH + 'px';
+renderer.domElement.style.height = HEIGHT + 'px';
+renderer.domElement.style.display = 'block';
+document.body.style.margin = '0';
+document.body.style.background = '#030108';
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x060014, 0.12);
+const cameraRig = new THREE.Group();
+scene.add(cameraRig);
+const camera = new THREE.PerspectiveCamera(55, WIDTH / HEIGHT, 0.1, 200);
+camera.position.set(0, 0, 8.5);
+cameraRig.add(camera);
+const hemi = new THREE.HemisphereLight(0x493475, 0x050105, 1.1);
+scene.add(hemi);
+const point = new THREE.PointLight(0x7ac7ff, 1.2, 20, 2);
+scene.add(point);
+let seed = 882347;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const boidCount = 640;
+const boids = [];
+class Boid {
+  constructor(i) {
+    this.id = i;
+    this.position = new THREE.Vector3((random() - 0.5) * 8, (random() - 0.5) * 4, (random() - 0.5) * 8);
+    this.velocity = new THREE.Vector3(random() - 0.5, random() - 0.5, random() - 0.5).multiplyScalar(0.7);
+    this.acceleration = new THREE.Vector3();
+    this.offset = random() * Math.PI * 2;
+    this.energy = random();
+    this.maxSpeed = 1.5 + random() * 0.4;
+    this.maxForce = 0.055 + random() * 0.02;
+  }
+  applyForce(f) {
+    this.acceleration.add(f);
+  }
+  update(dt) {
+    this.velocity.add(this.acceleration);
+    const speed = this.velocity.length();
+    if (speed > this.maxSpeed) this.velocity.multiplyScalar(this.maxSpeed / speed);
+    this.position.addScaledVector(this.velocity, dt);
+    this.acceleration.set(0, 0, 0);
+    this.energy = THREE.MathUtils.lerp(this.energy, speed / this.maxSpeed, 0.08);
+  }
+  seek(target) {
+    const desired = target.clone().sub(this.position);
+    const d = desired.length() || 1;
+    desired.normalize().multiplyScalar(this.maxSpeed * (d < 2 ? d / 2 : 1));
+    const steer = desired.sub(this.velocity);
+    return steer.clampLength(0, this.maxForce);
+  }
+  separate(neighbors, dist) {
+    const steer = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      if (other === this) continue;
+      const d = this.position.distanceTo(other.position);
+      if (d > 0 && d < dist) {
+        const diff = this.position.clone().sub(other.position).normalize().divideScalar(d);
+        steer.add(diff);
+        count++;
+      }
+    }
+    if (count > 0) steer.divideScalar(count);
+    if (steer.lengthSq() > 0) {
+      steer.normalize().multiplyScalar(this.maxSpeed).sub(this.velocity).clampLength(0, this.maxForce * 1.5);
+    }
+    return steer;
+  }
+  align(neighbors, dist) {
+    const avg = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (other !== this && d < dist) {
+        avg.add(other.velocity);
+        count++;
+      }
+    }
+    if (!count) return avg;
+    avg.divideScalar(count).normalize().multiplyScalar(this.maxSpeed);
+    return avg.sub(this.velocity).clampLength(0, this.maxForce);
+  }
+  cohesion(neighbors, dist) {
+    const center = new THREE.Vector3();
+    let count = 0;
+    for (const other of neighbors) {
+      const d = this.position.distanceTo(other.position);
+      if (other !== this && d < dist) {
+        center.add(other.position);
+        count++;
+      }
+    }
+    if (!count) return center;
+    center.divideScalar(count);
+    return this.seek(center);
+  }
+  stay(boundsCenter, radius) {
+    const dist = this.position.distanceTo(boundsCenter);
+    if (dist < radius * 0.9) return new THREE.Vector3();
+    const steer = boundsCenter.clone().sub(this.position).normalize().multiplyScalar(this.maxSpeed);
+    return steer.sub(this.velocity).clampLength(0, this.maxForce);
+  }
+  flow(time) {
+    const curl = new THREE.Vector3(
+      Math.sin(this.position.y * 0.55 + time * 0.38 + this.offset),
+      Math.cos(this.position.z * 0.45 - time * 0.24 + this.offset * 0.5),
+      Math.sin(this.position.x * 0.35 + time * 0.28 - this.offset)
+    );
+    return curl.multiplyScalar(0.12);
+  }
+  pulse(nodes, time) {
+    const steer = new THREE.Vector3();
+    for (const node of nodes) {
+      const toNode = node.clone().sub(this.position);
+      const d = toNode.length();
+      if (d < 0.01) continue;
+      const influence = 0.08 / (d * d + 0.4);
+      toNode.normalize().multiplyScalar(influence * (1 + 0.6 * Math.sin(time * 0.5 + this.offset)));
+      steer.add(toNode);
+    }
+    return steer.clampLength(0, this.maxForce * 1.4);
+  }
+  flock(neighbors, params) {
+    const sep = this.separate(neighbors, params.separationDist).multiplyScalar(params.separationWeight);
+    const ali = this.align(neighbors, params.neighborDist).multiplyScalar(params.alignmentWeight);
+    const coh = this.cohesion(neighbors, params.neighborDist).multiplyScalar(params.cohesionWeight);
+    this.applyForce(sep);
+    this.applyForce(ali);
+    this.applyForce(coh);
+  }
+}
+const flockParams = {
+  separationDist: 0.6,
+  neighborDist: 1.8,
+  separationWeight: 1.7,
+  alignmentWeight: 1.1,
+  cohesionWeight: 1.0
+};
+class SpatialHash {
+  constructor(cellSize) {
+    this.cellSize = cellSize;
+    this.cells = new Map();
+  }
+  key(pos) {
+    return `${Math.floor(pos.x / this.cellSize)},${Math.floor(pos.y / this.cellSize)},${Math.floor(pos.z / this.cellSize)}`;
+  }
+  clear() {
+    this.cells.clear();
+  }
+  add(boid) {
+    const key = this.key(boid.position);
+    if (!this.cells.has(key)) this.cells.set(key, []);
+    this.cells.get(key).push(boid);
+  }
+  getNeighbors(pos, radius) {
+    const neighbors = [];
+    const cellRadius = Math.ceil(radius / this.cellSize);
+    const [cx, cy, cz] = this.key(pos).split(',').map(Number);
+    for (let x = -cellRadius; x <= cellRadius; x++) {
+      for (let y = -cellRadius; y <= cellRadius; y++) {
+        for (let z = -cellRadius; z <= cellRadius; z++) {
+          const key = `${cx + x},${cy + y},${cz + z}`;
+          const cell = this.cells.get(key);
+          if (cell) neighbors.push(...cell);
+        }
+      }
+    }
+    return neighbors;
+  }
+}
+const spatialHash = new SpatialHash(0.8);
+const geometry = new THREE.ConeGeometry(0.04, 0.22, 6);
+geometry.rotateX(Math.PI / 2);
+const material = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  roughness: 0.3,
+  metalness: 0.1,
+  transparent: true,
+  opacity: 0.95,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const flockMesh = new THREE.InstancedMesh(geometry, material, boidCount);
+flockMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+const colorArray = new Float32Array(boidCount * 3);
+flockMesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
+scene.add(flockMesh);
+for (let i = 0; i < boidCount; i++) {
+  const boid = new Boid(i);
+  boids.push(boid);
+  const dummy = new THREE.Object3D();
+  dummy.position.copy(boid.position);
+  dummy.lookAt(boid.position.clone().add(boid.velocity));
+  dummy.updateMatrix();
+  flockMesh.setMatrixAt(i, dummy.matrix);
+  flockMesh.instanceColor.setXYZ(i, 1, 1, 1);
+}
+const maxConnections = boidCount * 3;
+const connectionPositions = new Float32Array(maxConnections * 6);
+const connectionColors = new Float32Array(maxConnections * 6);
+const connectionGeometry = new THREE.BufferGeometry();
+connectionGeometry.setAttribute('position', new THREE.BufferAttribute(connectionPositions, 3));
+connectionGeometry.setAttribute('color', new THREE.BufferAttribute(connectionColors, 3));
+connectionGeometry.setDrawRange(0, 0);
+const connectionMaterial = new THREE.LineBasicMaterial({
+  vertexColors: true,
+  transparent: true,
+  opacity: 0.85,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const tendrils = new THREE.LineSegments(connectionGeometry, connectionMaterial);
+scene.add(tendrils);
+const nodes = [];
+const nodeGroup = new THREE.Group();
+scene.add(nodeGroup);
+const nodePhases = [];
+for (let i = 0; i < 8; i++) {
+  const node = new THREE.Vector3((random() - 0.5) * 4, (random() - 0.5) * 2, (random() - 0.5) * 4);
+  nodes.push(node);
+  nodePhases.push(random() * Math.PI * 2);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.12 + random() * 0.08, 16, 16), new THREE.MeshBasicMaterial({ color: 0x7ae8ff, transparent: true, opacity: 0.9 }));
+  mesh.position.copy(node);
+  nodeGroup.add(mesh);
+}
+const sporeCount = 1400;
+const sporePositions = new Float32Array(sporeCount * 3);
+const sporeRadius = new Float32Array(sporeCount);
+const sporePhase = new Float32Array(sporeCount);
+const sporeHeight = new Float32Array(sporeCount);
+for (let i = 0; i < sporeCount; i++) {
+  sporeRadius[i] = 1.5 + random() * 3.5;
+  sporePhase[i] = random() * Math.PI * 2;
+  sporeHeight[i] = (random() - 0.5) * 4;
+  sporePositions[i * 3] = Math.cos(sporePhase[i]) * sporeRadius[i];
+  sporePositions[i * 3 + 1] = sporeHeight[i];
+  sporePositions[i * 3 + 2] = Math.sin(sporePhase[i]) * sporeRadius[i];
+}
+const sporeGeometry = new THREE.BufferGeometry();
+sporeGeometry.setAttribute('position', new THREE.BufferAttribute(sporePositions, 3));
+const sporeMaterial = new THREE.PointsMaterial({
+  size: 0.04,
+  color: 0x4ad8ff,
+  transparent: true,
+  opacity: 0.6,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false
+});
+const spores = new THREE.Points(sporeGeometry, sporeMaterial);
+scene.add(spores);
+const clock = new THREE.Clock();
+const dummy = new THREE.Object3D();
+const dir = new THREE.Vector3();
+const target = new THREE.Vector3();
+const rigTarget = new THREE.Vector3();
+const camTarget = new THREE.Vector3();
+const color = new THREE.Color();
+const boundsCenter = new THREE.Vector3();
+const boundsRadius = 4.5;
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const time = clock.elapsedTime;
+  spatialHash.clear();
+  for (const boid of boids) spatialHash.add(boid);
+  let connections = 0;
+  for (let i = 0; i < boids.length; i++) {
+    const boid = boids[i];
+    const neighbors = spatialHash.getNeighbors(boid.position, flockParams.neighborDist);
+    boid.flock(neighbors, flockParams);
+    boid.applyForce(boid.stay(boundsCenter, boundsRadius));
+    boid.applyForce(boid.flow(time));
+    boid.applyForce(boid.pulse(nodes, time));
+    boid.update(dt);
+    dummy.position.copy(boid.position);
+    dir.copy(boid.velocity);
+    if (dir.lengthSq() < 1e-4) dir.set(1, 0, 0);
+    target.copy(boid.position).add(dir);
+    dummy.lookAt(target);
+    const scale = 0.8 + boid.energy * 0.6;
+    dummy.scale.set(scale, scale, scale);
+    dummy.updateMatrix();
+    flockMesh.setMatrixAt(i, dummy.matrix);
+    const speedRatio = boid.velocity.length() / boid.maxSpeed;
+    const lum = 0.4 + 0.4 * Math.sin(time * 0.9 + boid.offset + boid.energy * 2);
+    color.setHSL(0.68 + speedRatio * 0.08, 0.85, 0.32 + lum * 0.2);
+    flockMesh.instanceColor.setXYZ(i, color.r, color.g, color.b);
+    for (const other of neighbors) {
+      if (other.id <= boid.id) continue;
+      const dist = boid.position.distanceTo(other.position);
+      if (dist < 1.5 && connections < maxConnections) {
+        const strength = 1 - dist / 1.5;
+        const baseIndex = connections * 6;
+        connectionPositions[baseIndex] = boid.position.x;
+        connectionPositions[baseIndex + 1] = boid.position.y;
+        connectionPositions[baseIndex + 2] = boid.position.z;
+        connectionPositions[baseIndex + 3] = other.position.x;
+        connectionPositions[baseIndex + 4] = other.position.y;
+        connectionPositions[baseIndex + 5] = other.position.z;
+        const glow = 0.5 + 0.5 * Math.sin(time * 0.8 + boid.offset + other.offset);
+        const hue = 0.62 + glow * 0.08;
+        color.setHSL(hue, 0.9, 0.5 + strength * 0.2);
+        for (let j = 0; j < 2; j++) {
+          connectionColors[baseIndex + j * 3] = color.r;
+          connectionColors[baseIndex + j * 3 + 1] = color.g;
+          connectionColors[baseIndex + j * 3 + 2] = color.b;
+        }
+        connections++;
+      }
+    }
+  }
+  flockMesh.instanceMatrix.needsUpdate = true;
+  flockMesh.instanceColor.needsUpdate = true;
+  connectionGeometry.setDrawRange(0, connections * 2);
+  connectionGeometry.attributes.position.needsUpdate = true;
+  connectionGeometry.attributes.color.needsUpdate = true;
+  const posAttr = sporeGeometry.attributes.position;
+  for (let i = 0; i < sporeCount; i++) {
+    const idx = i * 3;
+    const angle = sporePhase[i] + time * (0.03 + sporeRadius[i] * 0.002);
+    posAttr.array[idx] = Math.cos(angle) * sporeRadius[i];
+    posAttr.array[idx + 2] = Math.sin(angle) * sporeRadius[i];
+    posAttr.array[idx + 1] = sporeHeight[i] + Math.sin(time * 0.6 + sporePhase[i]) * 0.6;
+  }
+  posAttr.needsUpdate = true;
+  nodeGroup.children.forEach((mesh, idx) => {
+    const pulse = 0.7 + 0.3 * Math.sin(time * 0.8 + nodePhases[idx]);
+    mesh.scale.setScalar(pulse * 1.2);
+    mesh.material.color.setHSL(0.58 + pulse * 0.1, 0.9, 0.6);
+    mesh.material.opacity = 0.5 + pulse * 0.5;
+  });
+  const camRadius = 7.5;
+  const camAngle = time * 0.08;
+  rigTarget.set(Math.cos(camAngle) * camRadius * 0.4, Math.sin(time * 0.17) * 0.8, Math.sin(camAngle) * camRadius * 0.4);
+  cameraRig.position.lerp(rigTarget, 0.04);
+  camTarget.set(Math.cos(camAngle) * camRadius, 1.4 + Math.sin(time * 0.25) * 0.5, Math.sin(camAngle) * camRadius);
+  camera.position.lerp(camTarget, 0.03);
+  camera.lookAt(boundsCenter);
+  renderer.render(scene, camera);
+}
+animate();
+
+window.initToneJsEngine = async function() {
+  const bpm = 96;
+  Tone.Transport.bpm.value = bpm;
+  const barDuration = (60 / bpm) * 4;
+  const reverb = new Tone.Reverb({ decay: 5.2, wet: 0.45 }).toDestination();
+  await reverb.generate();
+  const delay = new Tone.PingPongDelay({ delayTime: '8n', feedback: 0.4, wet: 0.3 }).connect(reverb);
+  const shimmer = new Tone.Chorus({ frequency: 0.15, delayTime: 3.5, depth: 0.7, wet: 0.4 }).connect(delay);
+  shimmer.start();
+  const mixBus = new Tone.Volume(-8).connect(shimmer);
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.01,
+    octaves: 6,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.25, sustain: 0, release: 0.08 }
+  }).toDestination();
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 180, Q: 1.1 }).connect(mixBus);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.01, decay: 0.23, sustain: 0.5, release: 0.45 },
+    filterEnvelope: { attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2, baseFrequency: 90, octaves: 2 }
+  }).connect(bassFilter);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.8, decay: 0.4, sustain: 0.65, release: 2.5 }
+  }).connect(mixBus);
+  pad.volume.value = -10;
+  const arpFilter = new Tone.Filter({ type: 'bandpass', frequency: 900, Q: 6 }).connect(delay);
+  const arp = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: { attack: 0.01, decay: 0.1, sustain: 0, release: 0.08 }
+  }).connect(arpFilter);
+  const glimmer = new Tone.FMSynth({
+    harmonicity: 3,
+    modulationIndex: 12,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'triangle' },
+    envelope: { attack: 0.01, decay: 1.2, sustain: 0, release: 0.7 }
+  }).connect(delay);
+  const hat = new Tone.MetalSynth({
+    frequency: 430,
+    envelope: { attack: 0.001, decay: 0.18, release: 0.05 },
+    harmonicity: 5.1,
+    modulationIndex: 14,
+    resonance: 6000
+  }).connect(mixBus);
+  const rustle = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.2, decay: 0.6, sustain: 0, release: 1.2 }
+  }).connect(reverb);
+  let toneSeed = 9717;
+  function toneRandom() {
+    toneSeed = (toneSeed * 16807) % 2147483647;
+    return toneSeed / 2147483647;
+  }
+  const kickLoop = new Tone.Loop((time) => {
+    kick.triggerAttackRelease('C1', '8n', time, 0.9);
+  }, '4n').start(0);
+  const bassSections = [
+    { start: 0, end: 4, pattern: ['D2', 'A1', 'F2', 'C2'] },
+    { start: 4, end: 12, pattern: ['E2', 'B1', 'G2', 'D2', 'A1', 'C2'] },
+    { start: 12, end: 20, pattern: ['G2', 'D2', 'Bb1', 'F2', 'C2'] },
+    { start: 20, end: 24, pattern: ['D2', 'A1', 'F2', 'C2'] }
+  ];
+  let bassIndex = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const seconds = Tone.Time(time).toSeconds();
+    const bar = Math.floor(seconds / barDuration);
+    const section = bassSections.find(s => bar >= s.start && bar < s.end) || bassSections[bassSections.length - 1];
+    const note = section.pattern[bassIndex % section.pattern.length];
+    const vel = 0.6 + toneRandom() * 0.3;
+    bassFilter.frequency.rampTo(section.start >= 12 ? 260 : 180, 0.2);
+    bass.triggerAttackRelease(note, '8n', time, vel);
+    if (bar >= 20) bassFilter.frequency.rampTo(150, 1.2);
+    bassIndex++;
+  }, '8n').start(0);
+  const padChords = [
+    ['D3', 'F3', 'A3', 'C4'],
+    ['E3', 'G3', 'B3', 'D4'],
+    ['G3', 'Bb3', 'D4', 'F4'],
+    ['D3', 'F3', 'A3', 'C4']
+  ];
+  let padStep = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const seconds = Tone.Time(time).toSeconds();
+    const bar = Math.floor(seconds / barDuration);
+    const chordIndex = bar >= 12 && bar < 20 ? 2 : bar >= 4 ? 1 : 0;
+    const chord = padChords[chordIndex];
+    const amp = bar >= 18 ? 0.22 : 0.34;
+    pad.volume.value = bar >= 18 ? -14 : bar >= 8 ? -8 : -10;
+    pad.triggerAttackRelease(chord, '2n', time, amp);
+    padStep++;
+  }, '2n').start(0);
+  const arpSections = [
+    { start: 2, end: 8, notes: ['D4', 'F4', 'A4', 'C5', 'E5', 'A4'] },
+    { start: 8, end: 14, notes: ['E4', 'G4', 'B4', 'D5', 'F5', 'G4', 'B4'] },
+    { start: 14, end: 18, notes: ['G4', 'Bb4', 'D5', 'F5', 'A5'] }
+  ];
+  let arpIndex = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const seconds = Tone.Time(time).toSeconds();
+    const bar = Math.floor(seconds / barDuration);
+    const section = arpSections.find(s => bar >= s.start && bar < s.end);
+    if (!section) {
+      arpIndex++;
+      return;
+    }
+    const note = section.notes[arpIndex % section.notes.length];
+    const velocity = bar < 10 ? 0.35 : 0.5;
+    arp.triggerAttackRelease(note, '16n', time, velocity);
+    arpFilter.frequency.rampTo(bar < 10 ? 1200 : 2000, 0.4);
+    arpIndex++;
+  }, '16n').start(0);
+  const glimmerPart = new Tone.Part((time, note) => {
+    glimmer.triggerAttackRelease(note, '4n', time, 0.3);
+  }, [
+    ['1:2:0', 'A5'],
+    ['3:0:2', 'D5'],
+    ['5:1:0', 'E5'],
+    ['7:0:2', 'F5'],
+    ['9:2:0', 'G5'],
+    ['11:1:2', 'C6'],
+    ['13:0:0', 'Bb5']
+  ]).start(0);
+  const hatPattern = [1, 0, 0, 1, 0, 1, 0, 1];
+  let hatStep = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const seconds = Tone.Time(time).toSeconds();
+    const bar = Math.floor(seconds / barDuration);
+    if (bar < 6 || bar >= 18) {
+      hatStep++;
+      return;
+    }
+    if (hatPattern[hatStep % hatPattern.length]) {
+      hat.triggerAttackRelease('16n', time, 0.28 + toneRandom() * 0.2);
+    }
+    hatStep++;
+  }, '8n').start(0);
+  const rustleLoop = new Tone.Loop((time) => {
+    const seconds = Tone.Time(time).toSeconds();
+    const bar = Math.floor(seconds / barDuration);
+    if (bar === 0 || bar === 12) rustle.triggerAttackRelease(2, time);
+  }, '4m').start(0);
+  window.toneJsInstruments = { kick, bass, pad, arp, glimmer, hat, rustle };
+  window.toneJsParts = { kickLoop, bassLoop, padLoop, arpLoop, glimmerPart, hatLoop, rustleLoop };
+};
+
+
+
+
+
+window.audioDuration = 70;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

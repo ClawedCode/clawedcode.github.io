@@ -1,0 +1,2056 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+(() => {
+  // ---------------------------------------------------------------------------
+  // THE TIDE PREDICTER
+  // Sir William Thomson's tide-predicting machine (1872): one crank per tidal
+  // constituent, each turning at its own astronomical speed; a single wire runs
+  // under every crank-driven pulley and over a fixed one between them, so the
+  // pen at its end moves by the SUM of the cranks and writes the tide ahead of
+  // time. ClawedCode turns the handle. Through the window the harbour obeys the
+  // pen: the water on the pier, the beach, the boat, the clouds and the gulls
+  // all run on machine time. Spring tide arrives when the moon wheel and the
+  // sun wheel agree. At the top of it the cat stops for a sardine, and the
+  // whole harbour waits, mid-splash, until the crank turns again.
+  //
+  // Grid: 128 BPM, one 4/4 bar = 1.875 s; 32 bars = 60 s.
+  // While the crank turns, one bar of film = one M2 tide (12.42 h).
+  // Machine time tau (in M2 tides) runs 0 -> 14 over bars 0-14, holds at 14
+  // over bars 14.25-17.75 (the sea waits), and runs 14 -> 28 over bars 18-32.
+  // Every constituent completes a whole number of turns in 28 tides
+  // (M2 28, S2 29, N2 27, K1 15, O1 14), so the loop closes exactly.
+  // ---------------------------------------------------------------------------
+  const DURATION = 60;
+  const BPM = 128;
+  const BEAT = 60 / BPM;
+  const BAR = 4 * BEAT;
+  const MACHINE_TIDES = 28;
+  const STOP_A = 13.75;   // bars: the paw eases off the handle ...
+  const STOP_B = 14.25;   // ... and the machine is still at spring high water
+  const GO_A = 17.75;     // the paw turns the handle again ...
+  const GO_B = 18.25;     // ... and the machine is back at full speed
+  const TAU = Math.PI * 2;
+
+  // named cues (seconds) for the separately composed score
+  const CUES = {
+    highWaterEveryBar: BAR,          // M2 high water on every downbeat while cranking
+    ratchetClickEveryEighth: BEAT / 2,
+    springHighWater: 14 * BAR,       // 26.25 s: moon and sun wheels agree
+    machineStill: STOP_B * BAR,      // 26.72 s: the sea waits
+    sardine: 29.2,
+    crankAgain: GO_A * BAR,          // 33.28 s
+    neapAgain: 32 * BAR              // 60 s = loop
+  };
+  void CUES;
+
+  // ---- helpers ---------------------------------------------------------------
+  const clamp01 = u => (u < 0 ? 0 : u > 1 ? 1 : u);
+  const smooth = u => { const v = clamp01(u); return v * v * (3 - 2 * v); };
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const ramp = (x, a, b) => smooth((x - a) / (b - a));
+  const mulberry = s => () => {
+    s |= 0; s = (s + 0x6d2b79f5) | 0;
+    let r = Math.imul(s ^ (s >>> 15), 1 | s);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+  const makeLayer = (w = 900, h = 900) => {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    return c;
+  };
+  const resetCtx = g => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.filter = 'none';
+    g.lineWidth = 1;
+    g.lineJoin = 'miter';
+    g.lineCap = 'butt';
+    g.setLineDash([]);
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+  };
+  const keyed = (keys, t) => {
+    // keys: [[time, value], ...] sorted; smoothstep between neighbours
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const [t0, v0] = keys[i - 1];
+        const [t1, v1] = keys[i];
+        return lerp(v0, v1, smooth((t - t0) / (t1 - t0)));
+      }
+    }
+    return keys[keys.length - 1][1];
+  };
+
+  // ---- the machine's clock -----------------------------------------------------
+  const machineTau = bar => {
+    if (bar <= STOP_A) return bar;
+    if (bar < STOP_B) { const u = bar - STOP_A; return STOP_A + u - u * u; }
+    if (bar <= GO_A) return 14;
+    if (bar < GO_B) { const u = bar - GO_A; return 14 + u * u; }
+    return bar - 4;
+  };
+
+  // ---- constituents --------------------------------------------------------------
+  const S_PX = 12;      // crank throw (px) per unit of tide
+  const CONSTITUENTS = [
+    { sym: 'M', sub: '2', glyph: 'moon', f: 1, a: 1.0, ph: 0, x: 345 },
+    { sym: 'S', sub: '2', glyph: 'sun', f: 29 / 28, a: 0.45, ph: Math.PI, x: 435 },
+    { sym: 'N', sub: '2', glyph: '', f: 27 / 28, a: 0.2, ph: Math.PI, x: 525 },
+    { sym: 'K', sub: '1', glyph: '', f: 15 / 28, a: 0.3, ph: Math.PI, x: 615 },
+    { sym: 'O', sub: '1', glyph: '', f: 14 / 28, a: 0.25, ph: 0, x: 705 }
+  ];
+  const crankAngle = (c, tau) => TAU * c.f * tau + c.ph;
+  const tide = tau => {
+    let h = 0;
+    for (const c of CONSTITUENTS) h += c.a * Math.cos(crankAngle(c, tau));
+    return h;
+  };
+
+  // ---- layout ----------------------------------------------------------------------
+  const BEAM = { x0: 262, x1: 892, y0: 428, y1: 462 };
+  const FIXED_Y = 480;
+  const FIXED_R = 11;
+  const FIXED_X = [390, 480, 570, 660, 750];
+  const ANCHOR = { x: 300, y: 474 };
+  const MOV_Y = 564;
+  const MOV_R = 15;
+  const DISC_Y = 656;
+  const DISC_R = 31;
+  const GUIDE_Y = 612;
+  const FLY = { x: 246, y: 656, r: 56, handle: 43 };
+  const CAB_Y = 728;
+  const PAPER = { x0: 300, x1: 860, y0: 752, y1: 886 };
+  const PEN_X = FIXED_X[4] + FIXED_R;
+  const PEN_Y0 = 820;
+  const PEN_K = 2 * S_PX;
+  const PXB = 55;          // paper travel per tide
+
+  const GL = { x0: 84, y0: 44, x1: 816, y1: 388 };
+  const HORIZON = 196;
+  const VPX = 600;
+  const pierX = s => VPX + 160 * s;
+  const pierOuterX = s => VPX + 300 * s;
+  const pierTopY = s => HORIZON + 59 * s;
+  const seaY = (s, h) => HORIZON + s * (124 - 27 * h);
+  const BEACH = [[84, 290], [150, 296], [230, 309], [310, 328], [380, 352], [436, 388], [84, 388]];
+  const BEACH_S = 1.25;
+
+  // palette
+  const C = {
+    wallTop: '#5c6d65', wallBot: '#36423d',
+    frame: '#d8cfb8', frameShade: '#a59d89', frameDark: '#7c7566',
+    skyTop: '#7f8e90', skyBot: '#c2cac6',
+    hillFar: '#93a2a3', hillNear: '#7b8b8b',
+    seaFar: '#748d8a', seaNear: '#2c4648',
+    foam: '#eef3ef',
+    stone: '#8b8376', stoneDark: '#5f594f', stoneTop: '#a59d8f', weed: '#47493b',
+    sand: '#9d9178', sandWet: '#6c6656',
+    brass: '#b98b3c', brassLight: '#f2d58c', brassDark: '#6a4b1b',
+    steel: '#a9b1b3', steelDark: '#4c5355',
+    iron: '#2a2c2d',
+    wood: '#5a2a1b', woodLight: '#7c3e27', woodDark: '#2f150d',
+    paper: '#efe7d1', grid: '#a7bccb', ink: '#c3301d',
+    cat: '#0b0b0e', catRim: '#9fb4b6', amber: '#eaa53a'
+  };
+
+  // ---- one-time layers -----------------------------------------------------------
+
+  // sky, hills and the lighthouse (inside the glass)
+  const skyLayer = makeLayer();
+  (() => {
+    const g = skyLayer.getContext('2d');
+    const sky = g.createLinearGradient(0, GL.y0, 0, HORIZON);
+    sky.addColorStop(0, C.skyTop);
+    sky.addColorStop(1, C.skyBot);
+    g.fillStyle = sky;
+    g.fillRect(GL.x0, GL.y0, GL.x1 - GL.x0, HORIZON - GL.y0 + 2);
+    // far headland, left
+    g.fillStyle = C.hillFar;
+    g.beginPath();
+    g.moveTo(GL.x0, HORIZON + 1);
+    g.lineTo(GL.x0, 168);
+    g.bezierCurveTo(130, 160, 170, 176, 215, 174);
+    g.bezierCurveTo(260, 172, 300, 162, 350, 170);
+    g.bezierCurveTo(400, 178, 440, 186, 500, 192);
+    g.lineTo(560, HORIZON + 1);
+    g.closePath();
+    g.fill();
+    g.fillStyle = C.hillNear;
+    g.beginPath();
+    g.moveTo(GL.x0, HORIZON + 1);
+    g.lineTo(GL.x0, 182);
+    g.bezierCurveTo(110, 178, 128, 186, 150, 188);
+    g.lineTo(190, 191);
+    g.lineTo(200, HORIZON + 1);
+    g.closePath();
+    g.fill();
+    // far coast, right
+    g.fillStyle = C.hillFar;
+    g.globalAlpha = 0.7;
+    g.beginPath();
+    g.moveTo(640, HORIZON + 1);
+    g.bezierCurveTo(690, 188, 740, 184, 816, 186);
+    g.lineTo(816, HORIZON + 1);
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 1;
+    // lighthouse on the islet
+    g.fillStyle = '#6b7676';
+    g.beginPath();
+    g.ellipse(170, HORIZON, 26, 6, 0, Math.PI, TAU);
+    g.fill();
+    g.fillStyle = '#f1f0ea';
+    g.beginPath();
+    g.moveTo(164, HORIZON - 2); g.lineTo(176, HORIZON - 2); g.lineTo(174, 158); g.lineTo(166, 158);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#b8443a';
+    g.fillRect(165, 172, 10, 7);
+    g.fillStyle = '#3a3f40';
+    g.fillRect(164, 156, 12, 3);
+    g.fillStyle = '#e6dca2';
+    g.fillRect(166, 149, 8, 7);
+    g.fillStyle = '#3a3f40';
+    g.beginPath();
+    g.moveTo(164, 149); g.lineTo(170, 143); g.lineTo(176, 149);
+    g.closePath();
+    g.fill();
+  })();
+
+  // scudding cloud tile (tileable horizontally)
+  const CLOUD_TW = 1200;
+  const cloudTile = makeLayer(CLOUD_TW, 170);
+  (() => {
+    const g = cloudTile.getContext('2d');
+    const r = mulberry(29);
+    const blob = (x, y, rx, ry, a, col) => {
+      for (const dx of [-CLOUD_TW, 0, CLOUD_TW]) {
+        const gr = g.createRadialGradient(x + dx, y, 0, x + dx, y, rx);
+        gr.addColorStop(0, `rgba(${col},${a})`);
+        gr.addColorStop(0.6, `rgba(${col},${a * 0.55})`);
+        gr.addColorStop(1, `rgba(${col},0)`);
+        g.save();
+        g.translate(x + dx, y);
+        g.scale(1, ry / rx);
+        g.translate(-(x + dx), -y);
+        g.fillStyle = gr;
+        g.beginPath();
+        g.arc(x + dx, y, rx, 0, TAU);
+        g.fill();
+        g.restore();
+      }
+    };
+    for (let i = 0; i < 26; i++) {
+      const y = 18 + r() * 70;
+      blob(r() * CLOUD_TW, y, 60 + r() * 110, 14 + r() * 22, 0.32 + r() * 0.25, '86,98,102');
+    }
+    for (let i = 0; i < 30; i++) {
+      const y = 60 + r() * 90;
+      blob(r() * CLOUD_TW, y, 40 + r() * 90, 8 + r() * 14, 0.28 + r() * 0.25, '214,220,216');
+    }
+  })();
+
+  // pier, beach and rocks (front objects inside the glass)
+  const ROCKS = [
+    { x: 128, y: 334, rx: 34, ry: 30 },
+    { x: 214, y: 346, rx: 24, ry: 22 },
+    { x: 300, y: 364, rx: 30, ry: 24 },
+    { x: 160, y: 374, rx: 22, ry: 16 },
+    { x: 92, y: 362, rx: 20, ry: 18 }
+  ];
+  const levelY = (s, L) => HORIZON + s * (124 - 27 * L);
+  const frontLayer = makeLayer();
+  (() => {
+    const g = frontLayer.getContext('2d');
+    // pier walkway (top surface)
+    const sA = 0.22, sB = 1.7;
+    g.fillStyle = C.stoneTop;
+    g.beginPath();
+    g.moveTo(pierX(sA), pierTopY(sA));
+    g.lineTo(pierOuterX(sA), pierTopY(sA));
+    g.lineTo(pierOuterX(sB), pierTopY(sB));
+    g.lineTo(pierX(sB), pierTopY(sB));
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(70,64,56,0.35)';
+    g.lineWidth = 1;
+    for (let s = 0.26; s < sB; s *= 1.13) {
+      g.beginPath();
+      g.moveTo(pierX(s), pierTopY(s));
+      g.lineTo(pierOuterX(s), pierTopY(s));
+      g.stroke();
+    }
+    // harbour face of the pier
+    const face = g.createLinearGradient(0, 200, 0, 420);
+    face.addColorStop(0, '#948b7d');
+    face.addColorStop(1, '#6d665b');
+    g.fillStyle = face;
+    g.beginPath();
+    g.moveTo(pierX(sA), pierTopY(sA));
+    for (let s = sA; s <= sB + 1e-6; s += 0.02) g.lineTo(pierX(s), pierTopY(s));
+    g.lineTo(pierX(sB), 430);
+    g.lineTo(pierX(sA), 430);
+    g.closePath();
+    g.fill();
+    // intertidal stain: from the spring high-water mark down
+    g.save();
+    g.clip();
+    g.fillStyle = 'rgba(58,62,46,0.55)';
+    g.beginPath();
+    for (let s = sA; s <= sB + 1e-6; s += 0.02) g.lineTo(pierX(s), levelY(s, 2.05));
+    for (let s = sB; s >= sA - 1e-6; s -= 0.02) g.lineTo(pierX(s), levelY(s, -2.8));
+    g.closePath();
+    g.fill();
+    g.fillStyle = 'rgba(40,46,34,0.5)';
+    g.beginPath();
+    for (let s = sA; s <= sB + 1e-6; s += 0.02) g.lineTo(pierX(s), levelY(s, -0.6));
+    for (let s = sB; s >= sA - 1e-6; s -= 0.02) g.lineTo(pierX(s), levelY(s, -2.8));
+    g.closePath();
+    g.fill();
+    // stone courses and joints
+    g.strokeStyle = 'rgba(48,44,38,0.45)';
+    g.lineWidth = 1;
+    let k = 0;
+    for (let L = 2.407 - 0.42; L > -3.2; L -= 0.42, k++) {
+      g.beginPath();
+      for (let s = sA; s <= sB + 1e-6; s += 0.04) g.lineTo(pierX(s), levelY(s, L));
+      g.stroke();
+      for (let s = sA + (k % 2) * 0.035; s < sB; s += 0.07) {
+        g.beginPath();
+        g.moveTo(pierX(s), levelY(s, L + 0.42));
+        g.lineTo(pierX(s), levelY(s, L));
+        g.stroke();
+      }
+    }
+    g.restore();
+    // coping edge
+    g.strokeStyle = '#c3bbac';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(pierX(sA), pierTopY(sA));
+    g.lineTo(pierX(sB), pierTopY(sB));
+    g.stroke();
+    // tide staff
+    const s0 = 0.9, s1 = 0.95;
+    g.fillStyle = '#f2f0e8';
+    g.beginPath();
+    g.moveTo(pierX(s0), levelY(s0, 2.3));
+    g.lineTo(pierX(s1), levelY(s1, 2.3));
+    g.lineTo(pierX(s1), levelY(s1, -2.6));
+    g.lineTo(pierX(s0), levelY(s0, -2.6));
+    g.closePath();
+    g.fill();
+    g.strokeStyle = '#1d1f20';
+    for (let L = -2.6; L <= 2.31; L += 0.25) {
+      const major = Math.abs((L + 2.2) - Math.round(L + 2.2)) < 0.01;
+      g.lineWidth = major ? 1.6 : 0.9;
+      const sm = major ? s1 : lerp(s0, s1, 0.55);
+      g.beginPath();
+      g.moveTo(pierX(s0), levelY(s0, L));
+      g.lineTo(pierX(sm), levelY(sm, L));
+      g.stroke();
+    }
+    g.fillStyle = '#b8352a';
+    g.font = 'bold 9px Georgia, serif';
+    for (let m = 0; m <= 4; m++) {
+      const L = -2.2 + m;
+      g.fillText(String(m), pierX(s1) - 6, levelY(s1, L) - 1);
+    }
+    // bollards
+    for (const s of [0.58, 0.92]) {
+      const bx = pierX(s) + 34 * s;
+      const by = pierTopY(s);
+      g.fillStyle = '#26292a';
+      g.fillRect(bx - 4 * s, by - 14 * s, 8 * s, 14 * s);
+      g.beginPath();
+      g.ellipse(bx, by - 14 * s, 6 * s, 2.4 * s, 0, 0, TAU);
+      g.fill();
+    }
+    // beacon at the pier head
+    g.fillStyle = '#e9e7df';
+    g.fillRect(pierOuterX(sA) - 18, pierTopY(sA) - 22, 6, 22);
+    g.fillStyle = '#4f8a5a';
+    g.fillRect(pierOuterX(sA) - 19, pierTopY(sA) - 28, 8, 6);
+    // beach (shingle foreshore)
+    const sand = g.createLinearGradient(0, 290, 0, 390);
+    sand.addColorStop(0, C.sand);
+    sand.addColorStop(1, C.sandWet);
+    g.fillStyle = sand;
+    g.beginPath();
+    BEACH.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.closePath();
+    g.fill();
+    g.save();
+    g.clip();
+    const r = mulberry(7);
+    for (let i = 0; i < 260; i++) {
+      const x = 84 + r() * 360;
+      const y = 290 + r() * 100;
+      g.fillStyle = r() < 0.5 ? 'rgba(70,64,52,0.35)' : 'rgba(196,186,160,0.35)';
+      g.beginPath();
+      g.ellipse(x, y, 1.2 + r() * 2.4, 0.8 + r() * 1.2, 0, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+    // rocks with weed skirts
+    for (const rk of ROCKS) {
+      const rg = g.createLinearGradient(rk.x - rk.rx, rk.y - rk.ry, rk.x + rk.rx, rk.y + rk.ry);
+      rg.addColorStop(0, '#7f7b70');
+      rg.addColorStop(1, '#3f3d36');
+      g.fillStyle = rg;
+      g.beginPath();
+      g.moveTo(rk.x - rk.rx, rk.y + rk.ry * 0.5);
+      g.bezierCurveTo(rk.x - rk.rx, rk.y - rk.ry * 0.6, rk.x - rk.rx * 0.3, rk.y - rk.ry, rk.x + rk.rx * 0.1, rk.y - rk.ry);
+      g.bezierCurveTo(rk.x + rk.rx * 0.7, rk.y - rk.ry * 0.9, rk.x + rk.rx, rk.y - rk.ry * 0.2, rk.x + rk.rx, rk.y + rk.ry * 0.5);
+      g.closePath();
+      g.fill();
+      g.fillStyle = C.weed;
+      g.beginPath();
+      g.moveTo(rk.x - rk.rx, rk.y + rk.ry * 0.5);
+      for (let i = 0; i <= 10; i++) {
+        const u = i / 10;
+        g.lineTo(rk.x - rk.rx + u * 2 * rk.rx, rk.y + rk.ry * (0.05 + 0.12 * Math.sin(u * 19)));
+      }
+      g.lineTo(rk.x + rk.rx, rk.y + rk.ry * 0.5);
+      g.closePath();
+      g.fill();
+    }
+  })();
+
+  // glass sheen
+  const glassLayer = makeLayer();
+  (() => {
+    const g = glassLayer.getContext('2d');
+    g.save();
+    g.beginPath();
+    g.rect(GL.x0, GL.y0, GL.x1 - GL.x0, GL.y1 - GL.y0);
+    g.clip();
+    for (const [x, w, a] of [[140, 60, 0.05], [230, 22, 0.04], [610, 70, 0.045], [700, 18, 0.035]]) {
+      g.fillStyle = `rgba(255,255,255,${a})`;
+      g.beginPath();
+      g.moveTo(x, GL.y0);
+      g.lineTo(x + w, GL.y0);
+      g.lineTo(x + w - 150, GL.y1);
+      g.lineTo(x - 150, GL.y1);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  })();
+
+  // wall, window frame and sill (glass left transparent)
+  const wallLayer = makeLayer();
+  (() => {
+    const g = wallLayer.getContext('2d');
+    const wall = g.createLinearGradient(0, 0, 0, 900);
+    wall.addColorStop(0, C.wallTop);
+    wall.addColorStop(1, C.wallBot);
+    g.fillStyle = wall;
+    g.fillRect(0, 0, 900, 900);
+    // daylight on the wall below the window
+    const pool = g.createRadialGradient(450, 470, 30, 450, 500, 430);
+    pool.addColorStop(0, 'rgba(206,218,212,0.22)');
+    pool.addColorStop(1, 'rgba(206,218,212,0)');
+    g.fillStyle = pool;
+    g.fillRect(0, 400, 900, 500);
+    // frame
+    g.fillStyle = C.frameDark;
+    g.fillRect(56, 18, 788, 394);
+    g.fillStyle = C.frame;
+    g.fillRect(62, 22, 776, 386);
+    g.fillStyle = C.frameShade;
+    g.fillRect(GL.x0 - 6, GL.y0 - 6, GL.x1 - GL.x0 + 12, GL.y1 - GL.y0 + 12);
+    g.clearRect(GL.x0, GL.y0, GL.x1 - GL.x0, GL.y1 - GL.y0);
+    // mullions
+    for (const mx of [324, 564]) {
+      g.fillStyle = C.frameShade;
+      g.fillRect(mx - 2, GL.y0, 16, GL.y1 - GL.y0);
+      g.fillStyle = C.frame;
+      g.fillRect(mx, GL.y0, 12, GL.y1 - GL.y0);
+      g.fillStyle = 'rgba(255,255,255,0.35)';
+      g.fillRect(mx + 2, GL.y0, 2, GL.y1 - GL.y0);
+    }
+    g.fillStyle = 'rgba(255,255,255,0.25)';
+    g.fillRect(62, 22, 776, 3);
+    // sill
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    g.fillRect(44, 418, 812, 8);
+    g.fillStyle = C.frameShade;
+    g.fillRect(44, 398, 812, 22);
+    g.fillStyle = C.frame;
+    g.fillRect(44, 396, 812, 10);
+    g.fillStyle = 'rgba(255,255,255,0.4)';
+    g.fillRect(44, 396, 812, 2);
+  })();
+
+  // static parts of the machine and the room furniture
+  const machineLayer = makeLayer();
+  const brassGrad = (g, x0, y0, x1, y1) => {
+    const gr = g.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, C.brassLight);
+    gr.addColorStop(0.45, C.brass);
+    gr.addColorStop(1, C.brassDark);
+    return gr;
+  };
+  (() => {
+    const g = machineLayer.getContext('2d');
+    // posts
+    for (const px of [276, 864]) {
+      g.fillStyle = brassGrad(g, px - 8, 0, px + 8, 0);
+      g.fillRect(px - 7, BEAM.y1, 14, CAB_Y - BEAM.y1);
+      g.fillStyle = C.brassDark;
+      g.fillRect(px - 10, CAB_Y - 8, 20, 8);
+    }
+    // beam
+    g.fillStyle = 'rgba(0,0,0,0.3)';
+    g.fillRect(BEAM.x0 + 4, BEAM.y1, BEAM.x1 - BEAM.x0, 6);
+    g.fillStyle = C.woodDark;
+    g.fillRect(BEAM.x0, BEAM.y0, BEAM.x1 - BEAM.x0, BEAM.y1 - BEAM.y0);
+    g.fillStyle = C.wood;
+    g.fillRect(BEAM.x0, BEAM.y0 + 3, BEAM.x1 - BEAM.x0, BEAM.y1 - BEAM.y0 - 6);
+    g.fillStyle = 'rgba(255,220,180,0.18)';
+    g.fillRect(BEAM.x0, BEAM.y0 + 3, BEAM.x1 - BEAM.x0, 3);
+    // engraved plate
+    g.fillStyle = brassGrad(g, 0, BEAM.y0 + 7, 0, BEAM.y1 - 7);
+    g.fillRect(430, BEAM.y0 + 7, 300, BEAM.y1 - BEAM.y0 - 14);
+    g.strokeStyle = C.brassDark;
+    g.lineWidth = 1;
+    g.strokeRect(430.5, BEAM.y0 + 7.5, 299, BEAM.y1 - BEAM.y0 - 15);
+    g.fillStyle = '#4a3410';
+    g.font = 'bold 11px Georgia, serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText('TIDE  PREDICTER  ·  SIR W. THOMSON  ·  1872', 580, (BEAM.y0 + BEAM.y1) / 2 + 0.5);
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    // fixed pulley hangers and anchor hook
+    for (const fx of FIXED_X) {
+      g.fillStyle = brassGrad(g, fx - 6, 0, fx + 6, 0);
+      g.fillRect(fx - 5, BEAM.y1, 10, FIXED_Y - BEAM.y1);
+    }
+    g.fillStyle = C.steelDark;
+    g.fillRect(ANCHOR.x - 3, BEAM.y1, 6, ANCHOR.y - BEAM.y1);
+    g.beginPath();
+    g.arc(ANCHOR.x, ANCHOR.y, 3.5, 0, TAU);
+    g.fill();
+    // guide plate for the pulley rods
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    g.fillRect(318, GUIDE_Y + 4, 418, 6);
+    g.fillStyle = brassGrad(g, 0, GUIDE_Y - 5, 0, GUIDE_Y + 5);
+    g.fillRect(316, GUIDE_Y - 5, 418, 10);
+    // shaft bearings
+    for (const bx of [276, 864]) {
+      g.fillStyle = C.brassDark;
+      g.beginPath();
+      g.arc(bx, DISC_Y, 9, 0, TAU);
+      g.fill();
+    }
+    // cabinet
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(BEAM.x0 - 2, CAB_Y - 4, 650, 6);
+    g.fillStyle = C.woodLight;
+    g.fillRect(BEAM.x0 - 8, CAB_Y, 660, 12);
+    g.fillStyle = 'rgba(255,220,180,0.25)';
+    g.fillRect(BEAM.x0 - 8, CAB_Y, 660, 2);
+    const cab = g.createLinearGradient(0, CAB_Y + 12, 0, 900);
+    cab.addColorStop(0, C.wood);
+    cab.addColorStop(1, C.woodDark);
+    g.fillStyle = cab;
+    g.fillRect(BEAM.x0 - 2, CAB_Y + 12, 650, 900 - CAB_Y - 12);
+    // paper opening framed in brass
+    g.fillStyle = brassGrad(g, 0, PAPER.y0 - 6, 0, PAPER.y1 + 6);
+    g.fillRect(PAPER.x0 - 16, PAPER.y0 - 6, PAPER.x1 - PAPER.x0 + 32, PAPER.y1 - PAPER.y0 + 12);
+    g.clearRect(PAPER.x0, PAPER.y0, PAPER.x1 - PAPER.x0, PAPER.y1 - PAPER.y0);
+    // small shelf with the sardine tin
+    g.fillStyle = C.woodDark;
+    g.fillRect(190, 726, 80, 7);
+    g.fillStyle = C.wood;
+    g.fillRect(190, 722, 80, 5);
+    g.fillStyle = C.woodDark;
+    g.beginPath();
+    g.moveTo(262, 733); g.lineTo(262, 760); g.lineTo(240, 733);
+    g.closePath();
+    g.fill();
+    // stool
+    g.fillStyle = C.woodDark;
+    g.fillRect(48, 800, 12, 100);
+    g.fillRect(170, 800, 12, 100);
+    g.fillRect(56, 852, 120, 7);
+    g.fillStyle = C.woodLight;
+    g.fillRect(30, 790, 170, 12);
+    g.fillStyle = 'rgba(255,220,180,0.25)';
+    g.fillRect(30, 790, 170, 2);
+  })();
+
+  // sardine tin (drawn over the shelf)
+  const drawTin = (g, fishLeft) => {
+    g.fillStyle = '#7e8486';
+    g.beginPath();
+    g.ellipse(232, 716, 26, 7, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = '#c9cfd0';
+    g.beginPath();
+    g.ellipse(232, 714, 24, 6, 0, 0, TAU);
+    g.fill();
+    g.fillStyle = '#b8352a';
+    g.fillRect(208, 715, 48, 4);
+    // rolled-back lid
+    g.strokeStyle = '#dfe3e3';
+    g.lineWidth = 3;
+    g.beginPath();
+    g.arc(258, 707, 6, Math.PI * 0.6, Math.PI * 2.2);
+    g.stroke();
+    // fish in the tin
+    for (let i = 0; i < fishLeft; i++) {
+      g.fillStyle = i % 2 ? '#9fa9ad' : '#b6c0c3';
+      g.beginPath();
+      g.ellipse(222 + i * 9, 713, 9, 2.6, 0.08, 0, TAU);
+      g.fill();
+    }
+  };
+
+  // ---- sea surface sparkle dashes ----------------------------------------------------
+  const DASHES = [];
+  (() => {
+    const r = mulberry(55);
+    for (let s = 0.05; s < 3.2; s *= 1.09) {
+      const n = Math.round(10 + 14 * Math.min(1, s));
+      const laps = 1 + Math.floor(s * 1.5);   // whole laps per loop of machine time
+      for (let i = 0; i < n; i++) {
+        DASHES.push({
+          s, x0: r() * 1000, len: (4 + r() * 10) * Math.min(1.6, s * 1.4 + 0.2),
+          laps, flick: 1 + Math.floor(r() * 3), ph: r() * TAU, bright: r() < 0.3
+        });
+      }
+    }
+  })();
+
+  // ---- spray droplets for the splash at the pier ----------------------------------------
+  const SPRAY = [];
+  (() => {
+    const r = mulberry(14);
+    for (let i = 0; i < 190; i++) {
+      const sheet = i < 56;
+      const s = 0.8 + r() * 0.38;
+      SPRAY.push({
+        s,
+        sheet,
+        vx: sheet ? -200 + r() * 300 : -520 + r() * 760,
+        vy: sheet ? 820 + Math.pow(r(), 0.8) * 760 : 480 + Math.pow(r(), 0.6) * 1150,
+        rad: sheet ? 0.6 + r() * 0.7 : 1.1 + r() * 3.6,
+        shade: r()
+      });
+    }
+  })();
+  const SPRAY_G = 7000;    // px per tide^2
+  const SPRAY_LEAD = 0.16; // the wave hits this long before high water
+  const splashStrength = n => smooth((tide(n) - 1.3) / 0.85);
+
+  // ---- drawing: the harbour --------------------------------------------------------------
+  const seaGradient = g => {
+    const gr = g.createLinearGradient(0, HORIZON, 0, GL.y1 + 30);
+    gr.addColorStop(0, C.seaFar);
+    gr.addColorStop(0.35, '#58716f');
+    gr.addColorStop(1, C.seaNear);
+    return gr;
+  };
+
+  const drawGull = (g, x, y, scale, flap, bank) => {
+    const span = 13 * scale;
+    const lift = Math.sin(flap) * 6 * scale;
+    g.save();
+    g.translate(x, y);
+    g.rotate(bank);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.strokeStyle = '#3a3e40';
+    g.lineWidth = 2.6 * scale;
+    g.beginPath();
+    g.moveTo(-span, -lift - 2 * scale);
+    g.quadraticCurveTo(-span * 0.45, -lift * 0.3 - 5 * scale, 0, 0);
+    g.quadraticCurveTo(span * 0.45, -lift * 0.3 - 5 * scale, span, -lift - 2 * scale);
+    g.stroke();
+    g.strokeStyle = '#eef0ec';
+    g.lineWidth = 2.2 * scale;
+    g.beginPath();
+    g.moveTo(-span * 0.62, -lift * 0.6 - 3.4 * scale);
+    g.quadraticCurveTo(-span * 0.3, -lift * 0.2 - 4 * scale, 0, 0);
+    g.quadraticCurveTo(span * 0.3, -lift * 0.2 - 4 * scale, span * 0.62, -lift * 0.6 - 3.4 * scale);
+    g.stroke();
+    g.fillStyle = '#f4f5f1';
+    g.beginPath();
+    g.ellipse(0, 0.5 * scale, 4.2 * scale, 1.8 * scale, 0, 0, TAU);
+    g.fill();
+    g.restore();
+  };
+
+  const drawBoat = (g, tau, h) => {
+    const s = 0.58;
+    const bob = 1.2 * Math.sin(TAU * (tau * 2) + 0.7);
+    const wl = seaY(s, h) + bob;
+    const roll = 0.05 * Math.sin(TAU * tau * 2 + 1.9);
+    const cx = 452;
+    g.save();
+    g.translate(cx, wl);
+    g.rotate(roll);
+    // mast and furled sail
+    g.strokeStyle = '#2b2a28';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(-6, -12); g.lineTo(-6, -78);
+    g.moveTo(-6, -30); g.lineTo(34, -26);
+    g.stroke();
+    g.strokeStyle = '#b9a98a';
+    g.lineWidth = 4;
+    g.beginPath();
+    g.moveTo(-4, -30); g.lineTo(32, -27);
+    g.stroke();
+    // wheelhouse
+    g.fillStyle = '#e6e1d4';
+    g.fillRect(-28, -27, 20, 15);
+    g.fillStyle = '#4a5a60';
+    g.fillRect(-25, -24, 6, 5);
+    g.fillRect(-16, -24, 5, 5);
+    // hull, drawn only above its waterline
+    g.beginPath();
+    g.rect(-80, -60, 160, 60);
+    g.clip();
+    g.fillStyle = '#7e2b22';
+    g.beginPath();
+    g.moveTo(-50, -14);
+    g.lineTo(46, -18);
+    g.quadraticCurveTo(52, -10, 44, 8);
+    g.lineTo(-44, 8);
+    g.quadraticCurveTo(-52, -2, -50, -14);
+    g.closePath();
+    g.fill();
+    g.fillStyle = '#ece6d6';
+    g.beginPath();
+    g.moveTo(-50, -14); g.lineTo(46, -18); g.lineTo(47, -15); g.lineTo(-49, -11);
+    g.closePath();
+    g.fill();
+    g.restore();
+    // waterline foam
+    g.strokeStyle = 'rgba(238,243,239,0.65)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(cx - 50, wl + 1);
+    g.lineTo(cx + 50, wl - 1);
+    g.stroke();
+    // mooring buoy
+    const by = seaY(0.5, h) + 1.0 * Math.sin(TAU * tau * 2 + 2.4);
+    g.fillStyle = '#d0682c';
+    g.beginPath();
+    g.arc(528, by - 2.5, 4, Math.PI, TAU);
+    g.fill();
+  };
+
+  const drawSea = (g, tau, h) => {
+    // the open water surface
+    g.fillStyle = seaGradient(g);
+    g.fillRect(GL.x0, HORIZON, GL.x1 - GL.x0, GL.y1 - HORIZON + 4);
+    // sparkle dashes on the surface (they ride the tide)
+    g.lineCap = 'round';
+    for (const d of DASHES) {
+      const y = seaY(d.s, h);
+      if (y < HORIZON + 0.5 || y > GL.y1 + 6) continue;
+      const span = 1000;
+      let x = (d.x0 + d.laps * span * tau / MACHINE_TIDES) % span;
+      x = GL.x0 - 60 + x;
+      if (x > pierX(d.s)) continue;
+      const a = (d.bright ? 0.42 : 0.22) * (0.55 + 0.45 * Math.sin(TAU * d.flick * tau + d.ph));
+      g.strokeStyle = `rgba(226,234,230,${a.toFixed(3)})`;
+      g.lineWidth = Math.max(0.7, 1.6 * Math.min(1.4, d.s));
+      const wob = 2 * d.s * Math.sin(TAU * 3 * tau + d.ph);
+      g.beginPath();
+      g.moveTo(x, y + wob);
+      g.lineTo(x + d.len, y + wob);
+      g.stroke();
+    }
+  };
+
+  const beachPath = (() => {
+    const p = new Path2D();
+    BEACH.forEach(([x, y], i) => (i ? p.lineTo(x, y) : p.moveTo(x, y)));
+    p.closePath();
+    return p;
+  })();
+
+  const drawNearWater = (g, tau, h) => {
+    const sA = 0.22, sB = 1.7;
+    const grad = seaGradient(g);
+    // water over the pier face
+    const face = new Path2D();
+    face.moveTo(pierX(sA), seaY(sA, h));
+    for (let s = sA; s <= sB + 1e-6; s += 0.02) face.lineTo(pierX(s), seaY(s, h));
+    face.lineTo(pierX(sB), 440);
+    face.lineTo(pierX(sA), 440);
+    face.closePath();
+    g.fillStyle = grad;
+    g.fill(face);
+    // water over the beach and the rocks
+    const yb = seaY(BEACH_S, h);
+    g.save();
+    g.clip(beachPath);
+    g.fillStyle = grad;
+    g.fillRect(GL.x0 - 4, yb, 460, Math.max(0, 460 - yb));
+    g.restore();
+    // waterline foam on the pier face
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    const surge = smooth((h - 0.6) / 1.6);
+    g.strokeStyle = `rgba(238,243,239,${(0.55 + 0.35 * surge).toFixed(3)})`;
+    g.lineWidth = 2.4 + 2.5 * surge;
+    g.beginPath();
+    let first = true;
+    for (let s = sA; s <= sB + 1e-6; s += 0.02) {
+      const y = seaY(s, h) - (1.5 + 2.5 * surge) * s * (0.6 + 0.4 * Math.sin(TAU * (6 * s + 2 * tau)));
+      if (first) { g.moveTo(pierX(s), y); first = false; } else g.lineTo(pierX(s), y);
+    }
+    g.stroke();
+    // waterline on the beach
+    if (yb < 392) {
+      g.save();
+      g.clip(beachPath);
+      g.fillStyle = 'rgba(60,58,48,0.22)';
+      g.fillRect(80, yb - 14, 380, 14);
+      g.strokeStyle = 'rgba(238,243,239,0.7)';
+      g.lineWidth = 2.2;
+      g.beginPath();
+      for (let x = 80; x <= 450; x += 6) {
+        const y = yb - 1.6 * Math.sin(TAU * (x / 70 + 2 * tau));
+        if (x === 80) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+      g.strokeStyle = 'rgba(238,243,239,0.25)';
+      g.lineWidth = 1.2;
+      g.beginPath();
+      for (let x = 80; x <= 450; x += 6) {
+        const y = yb + 9 - 1.4 * Math.sin(TAU * (x / 55 - 2 * tau));
+        if (x === 80) g.moveTo(x, y); else g.lineTo(x, y);
+      }
+      g.stroke();
+      g.restore();
+    }
+  };
+
+  const drawSplash = (g, tau) => {
+    const n = Math.round(tau + SPRAY_LEAD);
+    const u = tau - (n - SPRAY_LEAD);
+    if (u < 0 || u > 0.46) return;
+    const strength = splashStrength(((n % MACHINE_TIDES) + MACHINE_TIDES) % MACHINE_TIDES);
+    if (strength <= 0.001) return;
+    const sc = 0.45 + 0.55 * strength;
+    const fade = 1 - smooth((u - 0.3) / 0.16);
+    const count = Math.floor(SPRAY.length * (0.35 + 0.65 * strength));
+    const pos = d => {
+      const x0 = pierX(d.s) - 2;
+      const y0 = pierTopY(d.s) + 6;
+      return {
+        x0, y0,
+        x: x0 + d.vx * sc * u,
+        y: y0 - d.vy * sc * u + 0.5 * SPRAY_G * u * u,
+        rising: d.vy * sc - SPRAY_G * u > 0
+      };
+    };
+    const sink = q => smooth((q.y0 + 6 - q.y) / 26);
+    // jets: the water thrown up the wall, streaked along its climb
+    g.lineCap = 'round';
+    for (let i = 0; i < count; i++) {
+      const d = SPRAY[i];
+      if (d.sheet || i % 3) continue;
+      const q = pos(d);
+      if (!q.rising) continue;
+      const back = Math.min(u, 0.07);
+      const xb = q.x0 + d.vx * sc * (u - back);
+      const yb = q.y0 - d.vy * sc * (u - back) + 0.5 * SPRAY_G * (u - back) * (u - back);
+      const gr = g.createLinearGradient(xb, yb, q.x, q.y);
+      gr.addColorStop(0, 'rgba(240,246,244,0)');
+      gr.addColorStop(1, `rgba(244,248,246,${(0.75 * fade).toFixed(3)})`);
+      g.strokeStyle = gr;
+      g.lineWidth = 1.6 + 2.2 * d.rad / 4.7;
+      g.beginPath();
+      g.moveTo(xb, yb);
+      g.lineTo(q.x, q.y);
+      g.stroke();
+    }
+    // body of the plume: shaded soft masses, densest near the wall
+    for (const pass of [0, 1]) {
+      for (let i = count - 1; i >= 0; i--) {
+        const d = SPRAY[i];
+        if (!d.sheet) continue;
+        const q = pos(d);
+        const rad = d.rad * sc * (8 + 22 * Math.min(1, u / 0.3) + 0.11 * Math.max(0, q.y0 - q.y));
+        if (pass === 0) {
+          // shadow side, offset away from the light
+          const a = 0.42 * fade * sink(q);
+          if (a <= 0.01) continue;
+          const gr = g.createRadialGradient(q.x - rad * 0.18, q.y + rad * 0.22, 0, q.x - rad * 0.18, q.y + rad * 0.22, rad);
+          gr.addColorStop(0, `rgba(150,170,172,${a.toFixed(3)})`);
+          gr.addColorStop(1, 'rgba(150,170,172,0)');
+          g.fillStyle = gr;
+        } else {
+          const a = 0.8 * fade * sink(q);
+          if (a <= 0.01) continue;
+          const gr = g.createRadialGradient(q.x + rad * 0.1, q.y - rad * 0.12, 0, q.x, q.y, rad * 0.86);
+          gr.addColorStop(0, `rgba(250,252,250,${a.toFixed(3)})`);
+          gr.addColorStop(0.5, `rgba(240,246,244,${(a * 0.7).toFixed(3)})`);
+          gr.addColorStop(1, 'rgba(236,243,241,0)');
+          g.fillStyle = gr;
+        }
+        g.beginPath();
+        g.arc(q.x, q.y, rad, 0, TAU);
+        g.fill();
+      }
+    }
+    // droplets
+    for (let i = 0; i < count; i++) {
+      const d = SPRAY[i];
+      if (d.sheet) continue;
+      const q = pos(d);
+      const a = 0.92 * fade * sink(q);
+      if (a <= 0.01) continue;
+      g.fillStyle = `rgba(${d.shade < 0.3 ? '206,218,218' : '250,252,250'},${a.toFixed(3)})`;
+      g.beginPath();
+      g.arc(q.x, q.y, d.rad * (0.7 + 0.3 * sc), 0, TAU);
+      g.fill();
+    }
+  };
+
+  const drawHarbour = (g, tau) => {
+    const h = tide(tau);
+    g.save();
+    g.beginPath();
+    g.rect(GL.x0, GL.y0, GL.x1 - GL.x0, GL.y1 - GL.y0);
+    g.clip();
+    g.drawImage(skyLayer, 0, 0);
+    // clouds run on machine time: one tile per loop
+    const off = (tau / MACHINE_TIDES) * CLOUD_TW;
+    const cx = GL.x0 - (CLOUD_TW - (off % CLOUD_TW));
+    for (let k = 0; k < 3; k++) g.drawImage(cloudTile, cx + k * CLOUD_TW, GL.y0 - 4);
+    // a far gull
+    {
+      const a = -TAU * tau / 14;
+      drawGull(g, 330 + 120 * Math.cos(a), 104 + 26 * Math.sin(a), 0.6, TAU * tau * 1.5, 0.15 * Math.sin(a));
+    }
+    drawSea(g, tau, h);
+    drawBoat(g, tau, h);
+    g.drawImage(frontLayer, 0, 0);
+    drawNearWater(g, tau, h);
+    // perched gull on the far bollard
+    {
+      const s = 0.58;
+      const bx = pierX(s) + 34 * s;
+      const by = pierTopY(s) - 14 * s - 3;
+      g.fillStyle = '#eef0ec';
+      g.beginPath();
+      g.ellipse(bx, by, 5, 3, -0.2, 0, TAU);
+      g.fill();
+      g.fillStyle = '#7c8486';
+      g.beginPath();
+      g.ellipse(bx + 1, by - 0.5, 4, 1.8, -0.2, 0, TAU);
+      g.fill();
+      const nod = 0.5 * Math.sin(TAU * tau * 0.5);
+      g.fillStyle = '#eef0ec';
+      g.beginPath();
+      g.arc(bx - 4, by - 3 + nod, 2.2, 0, TAU);
+      g.fill();
+      g.fillStyle = '#d9a12a';
+      g.fillRect(bx - 7.5, by - 3 + nod, 2.2, 1);
+    }
+    drawSplash(g, tau);
+    // the near gull, circling the pier
+    {
+      const a = TAU * tau / 7;
+      drawGull(g, 700 + 92 * Math.cos(a), 132 + 24 * Math.sin(a), 1.15, TAU * tau * 2, 0.22 * Math.sin(a));
+    }
+    g.drawImage(glassLayer, 0, 0);
+    g.restore();
+  };
+
+  // ---- drawing: the machine ---------------------------------------------------------------
+  const drawPaper = (g, tau, bar) => {
+    g.save();
+    g.beginPath();
+    g.rect(PAPER.x0, PAPER.y0, PAPER.x1 - PAPER.x0, PAPER.y1 - PAPER.y0);
+    g.clip();
+    g.fillStyle = C.paper;
+    g.fillRect(PAPER.x0, PAPER.y0, PAPER.x1 - PAPER.x0, PAPER.y1 - PAPER.y0);
+    // printed grid travels with the paper
+    const first = Math.floor((tau - (PEN_X - PAPER.x0) / PXB) * 2) - 1;
+    const last = Math.ceil((tau + (PAPER.x1 - PEN_X) / PXB) * 2) + 1;
+    for (let k = first; k <= last; k++) {
+      const x = PEN_X - (tau - k / 2) * PXB;
+      g.strokeStyle = k % 2 === 0 ? 'rgba(120,150,172,0.55)' : 'rgba(150,175,192,0.32)';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, PAPER.y0);
+      g.lineTo(x, PAPER.y1);
+      g.stroke();
+    }
+    for (let L = -2; L <= 2; L++) {
+      const y = PEN_Y0 - PEN_K * L;
+      g.strokeStyle = L === 0 ? 'rgba(110,140,165,0.7)' : 'rgba(150,175,192,0.4)';
+      g.beginPath();
+      g.moveTo(PAPER.x0, y);
+      g.lineTo(PAPER.x1, y);
+      g.stroke();
+    }
+    // the ink blot left while the pen waited
+    if (bar >= STOP_B) {
+      const grow = smooth((bar - STOP_B) / (GO_A - STOP_B));
+      const bx = PEN_X - (tau - 14) * PXB;
+      const by = PEN_Y0 - PEN_K * tide(14);
+      const r = 2.2 + 6.8 * grow;
+      g.fillStyle = 'rgba(195,48,29,0.25)';
+      g.beginPath();
+      g.arc(bx, by, r * 1.5, 0, TAU);
+      g.fill();
+      g.fillStyle = 'rgba(195,48,29,0.85)';
+      g.beginPath();
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * TAU;
+        const rr = r * (1 + 0.16 * Math.sin(a * 3 + 1) + 0.1 * Math.sin(a * 5 + 2));
+        if (i === 0) g.moveTo(bx + rr * Math.cos(a), by + rr * Math.sin(a));
+        else g.lineTo(bx + rr * Math.cos(a), by + rr * Math.sin(a));
+      }
+      g.closePath();
+      g.fill();
+    }
+    // the trace: the sum of every wheel, written ahead of the sea
+    g.strokeStyle = C.ink;
+    g.lineWidth = 2.1;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.beginPath();
+    const span = (PEN_X - PAPER.x0) / PXB + 0.1;
+    const steps = Math.ceil(span / 0.04);
+    for (let i = 0; i <= steps; i++) {
+      const ts = tau - span + (i / steps) * span;
+      const x = PEN_X - (tau - ts) * PXB;
+      const y = PEN_Y0 - PEN_K * tide(ts);
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.stroke();
+    // shading at the rollers
+    const shL = g.createLinearGradient(PAPER.x0, 0, PAPER.x0 + 30, 0);
+    shL.addColorStop(0, 'rgba(60,40,20,0.35)');
+    shL.addColorStop(1, 'rgba(60,40,20,0)');
+    g.fillStyle = shL;
+    g.fillRect(PAPER.x0, PAPER.y0, 30, PAPER.y1 - PAPER.y0);
+    const shR = g.createLinearGradient(PAPER.x1 - 30, 0, PAPER.x1, 0);
+    shR.addColorStop(0, 'rgba(60,40,20,0)');
+    shR.addColorStop(1, 'rgba(60,40,20,0.35)');
+    g.fillStyle = shR;
+    g.fillRect(PAPER.x1 - 30, PAPER.y0, 30, PAPER.y1 - PAPER.y0);
+    g.restore();
+    // rollers
+    for (const rx of [PAPER.x0 - 8, PAPER.x1 + 8]) {
+      g.fillStyle = brassGrad(g, rx - 7, 0, rx + 7, 0);
+      g.fillRect(rx - 7, PAPER.y0 - 4, 14, PAPER.y1 - PAPER.y0 + 8);
+      g.strokeStyle = 'rgba(70,48,16,0.6)';
+      g.lineWidth = 1;
+      for (let k = 0; k < 6; k++) {
+        const y = PAPER.y0 + (((k / 6) + tau * 0.5) % 1) * (PAPER.y1 - PAPER.y0);
+        g.beginPath();
+        g.moveTo(rx - 6, y);
+        g.lineTo(rx + 6, y);
+        g.stroke();
+      }
+    }
+  };
+
+  const drawShaft = (g, tau) => {
+    const y = DISC_Y;
+    const gr = g.createLinearGradient(0, y - 5, 0, y + 5);
+    gr.addColorStop(0, '#d7dcdc');
+    gr.addColorStop(0.5, '#8d9597');
+    gr.addColorStop(1, '#3c4244');
+    g.fillStyle = gr;
+    g.fillRect(FLY.x, y - 5, 864 - FLY.x, 10);
+    g.strokeStyle = 'rgba(40,44,46,0.55)';
+    g.lineWidth = 1.5;
+    const ph = (tau % 1) * 16;
+    for (let x = FLY.x + (ph % 16); x < 864; x += 16) {
+      g.beginPath();
+      g.moveTo(x, y - 5);
+      g.lineTo(x - 5, y + 5);
+      g.stroke();
+    }
+  };
+
+  const drawGearDisc = (g, cx, cy, r, angle, teeth) => {
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(angle);
+    // toothed rim
+    g.fillStyle = C.brassDark;
+    g.beginPath();
+    for (let i = 0; i < teeth; i++) {
+      const a0 = (i / teeth) * TAU;
+      const a1 = ((i + 0.5) / teeth) * TAU;
+      const a2 = ((i + 1) / teeth) * TAU;
+      g.lineTo(Math.cos(a0) * (r + 3), Math.sin(a0) * (r + 3));
+      g.lineTo(Math.cos(a0 + 0.3 / teeth * TAU) * (r + 3), Math.sin(a0 + 0.3 / teeth * TAU) * (r + 3));
+      g.lineTo(Math.cos(a1) * r, Math.sin(a1) * r);
+      g.lineTo(Math.cos(a2) * r, Math.sin(a2) * r);
+    }
+    g.closePath();
+    g.fill();
+    g.restore();
+    // face (lighting stays fixed while the disc turns)
+    const face = g.createRadialGradient(cx - r * 0.4, cy - r * 0.45, r * 0.1, cx, cy, r);
+    face.addColorStop(0, C.brassLight);
+    face.addColorStop(0.55, C.brass);
+    face.addColorStop(1, C.brassDark);
+    g.fillStyle = face;
+    g.beginPath();
+    g.arc(cx, cy, r - 1, 0, TAU);
+    g.fill();
+    g.save();
+    g.translate(cx, cy);
+    g.rotate(angle);
+    // lightening holes and index mark show the turn
+    g.fillStyle = 'rgba(52,36,12,0.75)';
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * TAU + Math.PI / 3;
+      g.beginPath();
+      g.arc(Math.cos(a) * r * 0.55, Math.sin(a) * r * 0.55, r * 0.17, 0, TAU);
+      g.fill();
+    }
+    g.fillStyle = 'rgba(52,36,12,0.8)';
+    g.fillRect(r * 0.62, -1.2, r * 0.3, 2.4);
+    g.restore();
+    g.strokeStyle = 'rgba(60,40,10,0.7)';
+    g.lineWidth = 1;
+    g.beginPath();
+    g.arc(cx, cy, r * 0.22, 0, TAU);
+    g.stroke();
+  };
+
+  const drawPulley = (g, x, y, r, angle) => {
+    g.fillStyle = C.brassDark;
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+    const face = g.createRadialGradient(x - r * 0.4, y - r * 0.4, 1, x, y, r);
+    face.addColorStop(0, C.brassLight);
+    face.addColorStop(1, C.brass);
+    g.fillStyle = face;
+    g.beginPath();
+    g.arc(x, y, r - 2.5, 0, TAU);
+    g.fill();
+    g.strokeStyle = 'rgba(70,48,16,0.85)';
+    g.lineWidth = 1.6;
+    for (let k = 0; k < 4; k++) {
+      const a = angle + (k / 4) * TAU;
+      g.beginPath();
+      g.moveTo(x + Math.cos(a) * 2.5, y + Math.sin(a) * 2.5);
+      g.lineTo(x + Math.cos(a) * (r - 3), y + Math.sin(a) * (r - 3));
+      g.stroke();
+    }
+    g.fillStyle = C.steelDark;
+    g.beginPath();
+    g.arc(x, y, 2.6, 0, TAU);
+    g.fill();
+  };
+
+  // wire tangent between two circles; s = +1 clockwise wrap, -1 counter-clockwise
+  const tangent = (p1, r1, s1, p2, r2, s2) => {
+    const R1 = s1 * r1;
+    const R2 = s2 * r2;
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const L = Math.hypot(dx, dy);
+    const phi = Math.atan2(dy, dx);
+    const gam = phi - Math.asin(Math.max(-1, Math.min(1, (R2 - R1) / L)));
+    const nx = -Math.sin(gam);
+    const ny = Math.cos(gam);
+    return [{ x: p1.x - R1 * nx, y: p1.y - R1 * ny }, { x: p2.x - R2 * nx, y: p2.y - R2 * ny }];
+  };
+
+  const drawLabel = (g, c, x, y) => {
+    g.fillStyle = '#ece8dc';
+    g.fillRect(x - 17, y - 9, 34, 18);
+    g.strokeStyle = '#2b2b2b';
+    g.lineWidth = 1;
+    g.strokeRect(x - 16.5, y - 8.5, 33, 17);
+    g.fillStyle = '#1e1e1e';
+    g.textBaseline = 'middle';
+    g.font = 'bold 12px Georgia, serif';
+    const wSym = g.measureText(c.sym).width;
+    g.font = 'bold 8px Georgia, serif';
+    const wSub = g.measureText(c.sub).width;
+    const wGlyph = c.glyph ? 12 : 0;
+    const tx = x - (wSym + 1 + wSub + wGlyph) / 2;
+    g.font = 'bold 12px Georgia, serif';
+    g.fillText(c.sym, tx, y + 0.5);
+    g.font = 'bold 8px Georgia, serif';
+    g.fillText(c.sub, tx + wSym + 1, y + 4);
+    const gx = tx + wSym + 1 + wSub + 7;
+    if (c.glyph === 'moon') {
+      g.fillStyle = '#1e1e1e';
+      g.beginPath();
+      g.arc(gx, y, 4.6, 0, TAU);
+      g.fill();
+      g.fillStyle = '#ece8dc';
+      g.beginPath();
+      g.arc(gx + 2.4, y - 1, 4, 0, TAU);
+      g.fill();
+    } else if (c.glyph === 'sun') {
+      g.strokeStyle = '#1e1e1e';
+      g.lineWidth = 1.2;
+      g.beginPath();
+      g.arc(gx, y, 3.8, 0, TAU);
+      g.stroke();
+      g.fillStyle = '#1e1e1e';
+      g.beginPath();
+      g.arc(gx, y, 1.1, 0, TAU);
+      g.fill();
+    }
+    g.textBaseline = 'alphabetic';
+  };
+
+  const drawMachine = (g, tau) => {
+    drawShaft(g, tau);
+    const disp = CONSTITUENTS.map(c => c.a * S_PX * Math.cos(crankAngle(c, tau)));
+    // rods from each yoke up to its pulley
+    CONSTITUENTS.forEach((c, i) => {
+      const yp = MOV_Y + disp[i];
+      const yy = DISC_Y + disp[i];
+      g.fillStyle = brassGrad(g, c.x - 3, 0, c.x + 3, 0);
+      g.fillRect(c.x - 2.5, yp, 5, yy - yp - 5);
+    });
+    // crank wheels with their pins and slotted yokes
+    CONSTITUENTS.forEach((c, i) => {
+      const th = crankAngle(c, tau);
+      drawGearDisc(g, c.x, DISC_Y, DISC_R, Math.PI / 2 - th, 44);
+      const px = c.x + c.a * S_PX * Math.sin(th);
+      const py = DISC_Y + disp[i];
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillRect(c.x - 27, py - 5, 56, 12);
+      g.fillStyle = brassGrad(g, 0, py - 7, 0, py + 7);
+      g.fillRect(c.x - 28, py - 7, 56, 14);
+      g.fillStyle = '#2e2210';
+      g.fillRect(c.x - 23, py - 2.5, 46, 5);
+      g.fillStyle = C.steel;
+      g.beginPath();
+      g.arc(px, py, 4.2, 0, TAU);
+      g.fill();
+      g.fillStyle = '#e7ecec';
+      g.beginPath();
+      g.arc(px - 1.2, py - 1.2, 1.4, 0, TAU);
+      g.fill();
+      drawLabel(g, c, c.x, DISC_Y + DISC_R + 21);
+    });
+    // collars on the guide plate
+    CONSTITUENTS.forEach(c => {
+      g.fillStyle = C.brassDark;
+      g.fillRect(c.x - 6, GUIDE_Y - 7, 12, 14);
+      g.fillStyle = C.brassLight;
+      g.fillRect(c.x - 6, GUIDE_Y - 7, 12, 2);
+    });
+    // wire path: anchor -> under each moving pulley, over each fixed one -> pen
+    const pts = [{ p: ANCHOR, r: 0, s: 1 }];
+    CONSTITUENTS.forEach((c, i) => {
+      pts.push({ p: { x: c.x, y: MOV_Y + disp[i] }, r: MOV_R, s: -1 });
+      pts.push({ p: { x: FIXED_X[i], y: FIXED_Y }, r: FIXED_R, s: 1 });
+    });
+    const h = tide(tau);
+    const penY = PEN_Y0 - PEN_K * h;
+    const carriageTop = penY - 30;
+    pts.push({ p: { x: PEN_X, y: carriageTop }, r: 0, s: 1 });
+    const segs = [];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      segs.push(tangent(pts[i].p, pts[i].r, pts[i].s, pts[i + 1].p, pts[i + 1].r, pts[i + 1].s));
+    }
+    // pulleys (angles follow the wire running through them)
+    let run = 0;
+    CONSTITUENTS.forEach((c, i) => {
+      const yMov = MOV_Y + disp[i];
+      drawPulley(g, c.x, yMov, MOV_R, -(run + disp[i]) / MOV_R);
+      run += 2 * disp[i];
+      drawPulley(g, FIXED_X[i], FIXED_Y, FIXED_R, run / FIXED_R);
+    });
+    // the wire
+    g.strokeStyle = '#e9edee';
+    g.lineWidth = 1.6;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(segs[0][0].x, segs[0][0].y);
+    for (let i = 0; i < segs.length; i++) {
+      const [a, b] = segs[i];
+      g.lineTo(a.x, a.y);
+      g.lineTo(b.x, b.y);
+      const node = pts[i + 1];
+      if (node.r > 0 && i + 1 < segs.length) {
+        const next = segs[i + 1][0];
+        const a0 = Math.atan2(b.y - node.p.y, b.x - node.p.x);
+        const a1 = Math.atan2(next.y - node.p.y, next.x - node.p.x);
+        g.arc(node.p.x, node.p.y, node.r, a0, a1, node.s < 0);
+      }
+    }
+    g.stroke();
+    // pen carriage on its guide rods
+    g.fillStyle = C.steelDark;
+    g.fillRect(PEN_X - 15, PAPER.y0 - 8, 3, PAPER.y1 - PAPER.y0 + 16);
+    g.fillRect(PEN_X + 12, PAPER.y0 - 8, 3, PAPER.y1 - PAPER.y0 + 16);
+    g.fillStyle = 'rgba(0,0,0,0.3)';
+    g.fillRect(PEN_X - 12, carriageTop + 4, 28, 22);
+    g.fillStyle = brassGrad(g, 0, carriageTop, 0, carriageTop + 22);
+    g.fillRect(PEN_X - 15, carriageTop, 30, 22);
+    g.fillStyle = C.brassDark;
+    g.fillRect(PEN_X - 15, carriageTop + 9, 30, 2);
+    g.fillStyle = '#2b2b2b';
+    g.beginPath();
+    g.moveTo(PEN_X - 3, carriageTop + 22);
+    g.lineTo(PEN_X + 3, carriageTop + 22);
+    g.lineTo(PEN_X + 0.8, penY);
+    g.lineTo(PEN_X - 0.8, penY);
+    g.closePath();
+    g.fill();
+    g.fillStyle = C.ink;
+    g.beginPath();
+    g.arc(PEN_X, penY, 2.2, 0, TAU);
+    g.fill();
+  };
+
+  const drawFlywheel = (g, tau) => {
+    const ang = TAU * tau - Math.PI / 2;
+    const { x, y, r } = FLY;
+    // bracket to the post
+    g.fillStyle = C.brassDark;
+    g.fillRect(x, y - 6, 276 - x, 12);
+    // rim
+    g.strokeStyle = C.brassDark;
+    g.lineWidth = 11;
+    g.beginPath();
+    g.arc(x, y, r - 5, 0, TAU);
+    g.stroke();
+    g.strokeStyle = brassGrad(g, x - r, y - r, x + r, y + r);
+    g.lineWidth = 7;
+    g.beginPath();
+    g.arc(x, y, r - 5, 0, TAU);
+    g.stroke();
+    // spokes
+    g.strokeStyle = C.brass;
+    g.lineWidth = 5;
+    g.lineCap = 'butt';
+    for (let k = 0; k < 6; k++) {
+      const a = ang + (k / 6) * TAU;
+      g.beginPath();
+      g.moveTo(x + Math.cos(a) * 14, y + Math.sin(a) * 14);
+      g.lineTo(x + Math.cos(a) * (r - 9), y + Math.sin(a) * (r - 9));
+      g.stroke();
+    }
+    // ratchet wheel (eight teeth: eight clicks a turn) and its pawl
+    g.fillStyle = C.steelDark;
+    g.beginPath();
+    for (let k = 0; k < 8; k++) {
+      const a0 = ang + (k / 8) * TAU;
+      const a1 = ang + ((k + 1) / 8) * TAU;
+      g.lineTo(x + Math.cos(a0) * 11, y + Math.sin(a0) * 11);
+      g.lineTo(x + Math.cos(a1 - 0.05) * 16, y + Math.sin(a1 - 0.05) * 16);
+    }
+    g.closePath();
+    g.fill();
+    const click = (tau * 8) % 1;
+    g.save();
+    g.translate(x + 26, y - 18);
+    g.rotate(Math.PI * 0.86 - 0.175 - 0.14 * click);
+    g.fillStyle = C.steel;
+    g.fillRect(-2, -2.5, 15, 5);
+    g.restore();
+    g.fillStyle = C.steelDark;
+    g.beginPath();
+    g.arc(x + 26, y - 18, 3, 0, TAU);
+    g.fill();
+    g.fillStyle = C.brassLight;
+    g.beginPath();
+    g.arc(x, y, 6, 0, TAU);
+    g.fill();
+    // crank arm and wooden handle
+    const hx = x + Math.cos(ang) * FLY.handle;
+    const hy = y + Math.sin(ang) * FLY.handle;
+    g.strokeStyle = C.steelDark;
+    g.lineWidth = 6;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(hx, hy);
+    g.stroke();
+    g.fillStyle = '#6a4325';
+    g.beginPath();
+    g.arc(hx, hy, 8, 0, TAU);
+    g.fill();
+    g.fillStyle = 'rgba(255,220,170,0.4)';
+    g.beginPath();
+    g.arc(hx - 2.5, hy - 2.5, 3, 0, TAU);
+    g.fill();
+    return { hx, hy };
+  };
+
+  // ---- the cat ---------------------------------------------------------------------------------
+  const catLayer = makeLayer(380, 500);
+  const rimLayer = makeLayer(380, 500);
+  const CAT_OY = 400; // catLayer covers y 400..900
+  const PIVOT = { x: 100, y: 790 };
+  const SHOULDER = { x: 170, y: 632 };
+  const NECK = { x: 164, y: 560 };
+  const UPPER = 64;
+  const FORE = 62;
+  const T_STOP = STOP_B * BAR;      // 26.72 s
+  const T_GO = GO_A * BAR;          // 33.28 s
+
+  const rot = (p, o, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    const dx = p.x - o.x, dy = p.y - o.y;
+    return { x: o.x + c * dx - s * dy, y: o.y + s * dx + c * dy };
+  };
+
+  const solveArm = (S, P) => {
+    const dx = P.x - S.x, dy = P.y - S.y;
+    let d = Math.hypot(dx, dy);
+    d = Math.max(Math.abs(UPPER - FORE) + 2, Math.min(UPPER + FORE - 1, d));
+    const a = Math.atan2(dy, dx);
+    const cosA = (UPPER * UPPER + d * d - FORE * FORE) / (2 * UPPER * d);
+    const al = Math.acos(Math.max(-1, Math.min(1, cosA)));
+    const E = { x: S.x + UPPER * Math.cos(a + al), y: S.y + UPPER * Math.sin(a + al) };
+    const ang = Math.atan2(P.y - E.y, P.x - E.x);
+    const Pp = { x: E.x + FORE * Math.cos(ang), y: E.y + FORE * Math.sin(ang) };
+    return { E, P: Pp, ang };
+  };
+
+  // choreography of the pause, in seconds
+  const LEAN_KEYS = [[0, 0], [T_STOP, 0], [28.4, 0], [28.9, 0.1], [29.6, 0.04], [30.2, 0], [T_GO, 0]];
+  const PITCH_KEYS = [
+    [0, 0.2], [T_STOP - 0.2, 0.2], [27.4, -0.5], [28.4, -0.52], [28.95, 0.42], [29.5, 0.26],
+    [29.9, 0.12], [31.3, 0.12], [31.8, -0.06], [32.4, -0.04], [33.0, 0.2]
+  ];
+  const GLANCE_A = 11.6 * BAR, GLANCE_B = 12.9 * BAR;
+
+  const pawTarget = (t, handle, mouth) => {
+    const rest = { x: 206, y: 700 };
+    const tin = { x: 230, y: 708 };
+    const keys = [
+      [T_STOP, handle], [27.25, rest], [28.5, rest], [29.05, tin], [29.25, tin], [29.85, mouth],
+      [30.35, rest], [31.75, rest], [31.95, mouth], [32.25, rest], [32.4, rest], [33.15, handle]
+    ];
+    if (t <= keys[0][0] || t >= keys[keys.length - 1][0]) return handle;
+    for (let i = 1; i < keys.length; i++) {
+      if (t <= keys[i][0]) {
+        const u = smooth((t - keys[i - 1][0]) / (keys[i][0] - keys[i - 1][0]));
+        const a = keys[i - 1][1], b = keys[i][1];
+        return { x: lerp(a.x, b.x, u), y: lerp(a.y, b.y, u) };
+      }
+    }
+    return handle;
+  };
+
+  const drawTail = (g, t) => {
+    const sway = 9 * Math.sin(TAU * t / 15) + 6 * Math.sin(TAU * t / 6) * ramp(t, T_STOP, T_STOP + 0.6) * (1 - ramp(t, T_GO - 1, T_GO));
+    const p0 = { x: 42, y: 776 };
+    const p1 = { x: 6, y: 796 };
+    const p2 = { x: -4 + sway * 0.4, y: 846 };
+    const p3 = { x: 18 + sway, y: 884 };
+    const N = 22;
+    const left = [], right = [];
+    for (let i = 0; i <= N; i++) {
+      const u = i / N;
+      const v = 1 - u;
+      const x = v * v * v * p0.x + 3 * v * v * u * p1.x + 3 * v * u * u * p2.x + u * u * u * p3.x;
+      const y = v * v * v * p0.y + 3 * v * v * u * p1.y + 3 * v * u * u * p2.y + u * u * u * p3.y;
+      const dx = 3 * v * v * (p1.x - p0.x) + 6 * v * u * (p2.x - p1.x) + 3 * u * u * (p3.x - p2.x);
+      const dy = 3 * v * v * (p1.y - p0.y) + 6 * v * u * (p2.y - p1.y) + 3 * u * u * (p3.y - p2.y);
+      const l = Math.hypot(dx, dy) || 1;
+      const w = lerp(9, 5, u);
+      left.push({ x: x - (dy / l) * w, y: y + (dx / l) * w });
+      right.push({ x: x + (dy / l) * w, y: y - (dx / l) * w });
+    }
+    g.beginPath();
+    left.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+    for (let i = right.length - 1; i >= 0; i--) g.lineTo(right[i].x, right[i].y);
+    g.closePath();
+    g.fill();
+    g.beginPath();
+    g.arc(p3.x, p3.y, 5, 0, TAU);
+    g.fill();
+  };
+
+  const headFrame = (lean, pitch) => {
+    const neck = rot(NECK, PIVOT, lean);
+    const c = rot({ x: neck.x + 18, y: neck.y - 28 }, neck, pitch + lean);
+    return { c, a: pitch + lean };
+  };
+
+  const drawHeadShape = (g, jaw, earPerk) => {
+    // far ear
+    g.beginPath();
+    g.moveTo(-34, -12);
+    g.quadraticCurveTo(-34, -42, -28 + earPerk, -58);
+    g.quadraticCurveTo(-18, -40, -12, -26);
+    g.closePath();
+    g.fill();
+    // cranium, cheek, muzzle
+    g.beginPath();
+    g.ellipse(0, -2, 37, 31, 0, 0, TAU);
+    g.fill();
+    g.beginPath();
+    g.ellipse(10, 12, 31, 21, 0, 0, TAU);
+    g.fill();
+    g.beginPath();
+    g.ellipse(33, 8, 13, 10.5, 0, 0, TAU);
+    g.fill();
+    // lower jaw (opens to chew)
+    g.save();
+    g.translate(14, 15);
+    g.rotate(jaw);
+    g.beginPath();
+    g.ellipse(14, 4, 13, 6, 0, 0, TAU);
+    g.fill();
+    g.restore();
+    // near ear
+    g.beginPath();
+    g.moveTo(-22, -20);
+    g.quadraticCurveTo(-18, -50, -6 + earPerk, -68);
+    g.quadraticCurveTo(4, -48, 11, -27);
+    g.closePath();
+    g.fill();
+  };
+
+  const drawCat = (g, t, handle) => {
+    const cranking = t < T_STOP - 0.3 || t > T_GO + 0.4;
+    const lean = keyed(LEAN_KEYS, t) + (cranking ? 0.025 * Math.sin(TAU * (t / BAR)) : 0);
+    let pitch = keyed(PITCH_KEYS, t);
+    pitch += -0.68 * ramp(t, GLANCE_A, GLANCE_A + 0.5) * (1 - ramp(t, GLANCE_B - 0.5, GLANCE_B));
+    const earPerk = 6 * ramp(t, 27.0, 27.5) * (1 - ramp(t, 28.4, 28.9))
+      + 4 * ramp(t, GLANCE_A, GLANCE_A + 0.4) * (1 - ramp(t, GLANCE_B - 0.4, GLANCE_B));
+    // chewing and licking
+    let jaw = 0;
+    if (t > 29.85 && t < 31.5) jaw = 0.22 * Math.max(0, Math.sin(TAU * (t - 29.85) / 0.42));
+    const lick = t > 31.55 && t < 32.35 ? Math.max(0, Math.sin(TAU * (t - 31.55) / 0.4)) : 0;
+    const hf = headFrame(lean, pitch);
+    const toWorld = (lx, ly) => {
+      const c = Math.cos(hf.a), s = Math.sin(hf.a);
+      return { x: hf.c.x + c * lx - s * ly, y: hf.c.y + s * lx + c * ly };
+    };
+    const mouth = toWorld(30, 24);
+    const target = pawTarget(t, { x: handle.hx, y: handle.hy }, mouth);
+    const shoulder = rot(SHOULDER, PIVOT, lean);
+    const arm = solveArm(shoulder, target);
+
+    const L = catLayer.getContext('2d');
+    resetCtx(L);
+    L.clearRect(0, 0, catLayer.width, catLayer.height);
+    L.translate(0, -CAT_OY);
+    L.fillStyle = C.cat;
+    L.strokeStyle = C.cat;
+    drawTail(L, t);
+    // far foreleg (supports) and hind paw
+    L.save();
+    L.translate(PIVOT.x, PIVOT.y);
+    L.rotate(lean);
+    L.translate(-PIVOT.x, -PIVOT.y);
+    L.beginPath();
+    L.moveTo(170, 650); L.lineTo(192, 650); L.lineTo(196, 784); L.lineTo(178, 786);
+    L.closePath();
+    L.fill();
+    L.restore();
+    L.beginPath();
+    L.ellipse(192, 788, 17, 6.5, 0, 0, TAU);
+    L.fill();
+    // body
+    L.save();
+    L.translate(PIVOT.x, PIVOT.y);
+    L.rotate(lean);
+    L.translate(-PIVOT.x, -PIVOT.y);
+    L.beginPath();
+    L.moveTo(36, 792);
+    L.bezierCurveTo(14, 756, 16, 706, 46, 672);
+    L.bezierCurveTo(60, 632, 92, 602, 124, 590);
+    L.bezierCurveTo(136, 584, 144, 576, 150, 566);
+    L.lineTo(192, 560);
+    L.bezierCurveTo(206, 582, 206, 604, 200, 622);
+    L.bezierCurveTo(206, 652, 202, 678, 190, 698);
+    L.bezierCurveTo(178, 718, 174, 742, 176, 766);
+    L.bezierCurveTo(176, 778, 186, 784, 190, 792);
+    L.closePath();
+    L.fill();
+    L.beginPath();
+    L.ellipse(98, 748, 62, 44, -0.2, 0, TAU);
+    L.fill();
+    L.restore();
+    L.beginPath();
+    L.ellipse(158, 789, 24, 7, 0, 0, TAU);
+    L.fill();
+    // neck
+    L.lineCap = 'round';
+    L.lineWidth = 46;
+    const neck = rot(NECK, PIVOT, lean);
+    L.beginPath();
+    L.moveTo(neck.x + 4, neck.y + 20);
+    L.lineTo(hf.c.x - 6, hf.c.y + 6);
+    L.stroke();
+    // head
+    L.save();
+    L.translate(hf.c.x, hf.c.y);
+    L.rotate(hf.a);
+    drawHeadShape(L, jaw, earPerk);
+    L.restore();
+    // near foreleg
+    const limb = (a, b, w0, w1) => {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const l = Math.hypot(dx, dy) || 1;
+      const nx = -dy / l, ny = dx / l;
+      L.beginPath();
+      L.moveTo(a.x + nx * w0, a.y + ny * w0);
+      L.lineTo(b.x + nx * w1, b.y + ny * w1);
+      L.lineTo(b.x - nx * w1, b.y - ny * w1);
+      L.lineTo(a.x - nx * w0, a.y - ny * w0);
+      L.closePath();
+      L.fill();
+      L.beginPath();
+      L.arc(b.x, b.y, w1, 0, TAU);
+      L.fill();
+    };
+    limb(shoulder, arm.E, 18, 11.5);
+    limb(arm.E, arm.P, 11.5, 9);
+    L.save();
+    L.translate(arm.P.x, arm.P.y);
+    L.rotate(arm.ang);
+    L.beginPath();
+    L.ellipse(4, 0, 12.5, 9.5, 0, 0, TAU);
+    L.fill();
+    L.restore();
+
+    // rim light from the window (upper right)
+    const R = rimLayer.getContext('2d');
+    resetCtx(R);
+    R.clearRect(0, 0, rimLayer.width, rimLayer.height);
+    R.drawImage(catLayer, 0, 0);
+    R.globalCompositeOperation = 'source-in';
+    R.fillStyle = C.catRim;
+    R.fillRect(0, 0, rimLayer.width, rimLayer.height);
+    R.globalCompositeOperation = 'destination-out';
+    R.drawImage(catLayer, -2.6, 2.6);
+    g.drawImage(catLayer, 0, CAT_OY);
+    g.globalAlpha = 0.6;
+    g.drawImage(rimLayer, 0, CAT_OY);
+    g.globalAlpha = 1;
+
+    // features on top of the silhouette
+    g.save();
+    g.translate(hf.c.x, hf.c.y);
+    g.rotate(hf.a);
+    // inner ear
+    g.fillStyle = '#3b2b30';
+    g.beginPath();
+    g.moveTo(-14, -26);
+    g.quadraticCurveTo(-11, -48, -5 + earPerk, -60);
+    g.quadraticCurveTo(0, -46, 4, -30);
+    g.closePath();
+    g.fill();
+    // eye
+    const blinkAt = [7.6, 19.3, 38.9, 47.2, 55.4];
+    let open = 1;
+    for (const b of blinkAt) open = Math.min(open, smooth(Math.abs(t - b) / 0.12));
+    const wide = ramp(t, 27.1, 27.4) * (1 - ramp(t, 28.3, 28.7));
+    const eh = 6.2 * open * (1 + 0.25 * wide);
+    if (eh > 0.4) {
+      const eg = g.createRadialGradient(20, -6, 1, 20, -6, 9);
+      eg.addColorStop(0, '#ffd27a');
+      eg.addColorStop(1, C.amber);
+      g.fillStyle = eg;
+      g.beginPath();
+      g.ellipse(20, -6, 8.5, eh, -0.12, 0, TAU);
+      g.fill();
+      g.fillStyle = '#0a0a0a';
+      g.beginPath();
+      g.ellipse(23, -6, 1.8 + 2.6 * wide, Math.min(eh, 5.8), 0, 0, TAU);
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      g.beginPath();
+      g.arc(25, -8.5, 1.3, 0, TAU);
+      g.fill();
+    }
+    // nose and whiskers
+    g.fillStyle = '#2a2628';
+    g.beginPath();
+    g.moveTo(44, 2); g.lineTo(48, 3); g.lineTo(45, 6.5);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = 'rgba(222,226,222,0.75)';
+    g.lineWidth = 1;
+    g.lineCap = 'round';
+    for (const [dy, len, bend] of [[-2, 34, -4], [2, 38, 0], [6, 32, 5]]) {
+      g.beginPath();
+      g.moveTo(36, 10 + dy * 0.5);
+      g.quadraticCurveTo(36 + len * 0.5, 9 + dy + bend * 0.3, 36 + len, 12 + dy * 2 + bend);
+      g.stroke();
+    }
+    // tongue
+    if (lick > 0.02) {
+      g.fillStyle = '#c96a73';
+      g.beginPath();
+      g.ellipse(44 + 4 * lick, 14, 3 + 4 * lick, 2.4, 0.2, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+
+    // the sardine: in the paw, then in the mouth, getting shorter
+    const holding = t > 29.2 && t < 29.95;
+    const chewing = t >= 29.95 && t < 31.45;
+    if (holding || chewing) {
+      const left = chewing ? 1 - Math.floor((t - 29.95) / 0.5) / 3 : 1;
+      let fx, fy, fa;
+      if (holding) {
+        fx = arm.P.x + 6; fy = arm.P.y - 6; fa = arm.ang + 1.2;
+      } else {
+        const m = toWorld(40, 20);
+        fx = m.x; fy = m.y; fa = hf.a + 0.25;
+      }
+      if (left > 0.01) {
+        g.save();
+        g.translate(fx, fy);
+        g.rotate(fa);
+        const len = 34 * left;
+        const fg = g.createLinearGradient(0, -5, 0, 5);
+        fg.addColorStop(0, '#5f6d74');
+        fg.addColorStop(0.5, '#d3dade');
+        fg.addColorStop(1, '#9aa6ab');
+        g.fillStyle = fg;
+        g.beginPath();
+        g.ellipse(len / 2, 0, len / 2 + 2, 4.6, 0, 0, TAU);
+        g.fill();
+        g.fillStyle = '#7f8b90';
+        g.beginPath();
+        g.moveTo(len + 1, 0); g.lineTo(len + 9, -5); g.lineTo(len + 9, 5);
+        g.closePath();
+        g.fill();
+        g.restore();
+      }
+    }
+  };
+
+  // ---- frame ---------------------------------------------------------------------------------------
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const bar = t / BAR;
+    const tau = machineTau(bar);
+    resetCtx(ctx);
+    ctx.fillStyle = C.wallBot;
+    ctx.fillRect(0, 0, 900, 900);
+    drawHarbour(ctx, tau);
+    resetCtx(ctx);
+    ctx.drawImage(wallLayer, 0, 0);
+    drawPaper(ctx, tau, bar);
+    resetCtx(ctx);
+    ctx.drawImage(machineLayer, 0, 0);
+    drawMachine(ctx, tau);
+    resetCtx(ctx);
+    drawTin(ctx, 3);
+    resetCtx(ctx);
+    const handle = drawFlywheel(ctx, tau);
+    resetCtx(ctx);
+    drawCat(ctx, t, handle);
+    resetCtx(ctx);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 128\\n// DURATION: 60\\n// FORM: neap exposition 0-6 | spring convergence 6-14 | suspended spring crest 14-16 | held intermission 16-18 | ebb restart 18-26 | neap loop return 26-32\\n// TONAL CENTER: D major — cell restricted to D E F# A B\\n// MOTIF: D4 E4 F#4 A4 B4 A4 F#4 E4 — one-bar cell of eight even eighth notes, clean restart each cycle; moon piano exact and left, sun piano at 29/28 speed and right\\n// HARMONIC PLAN: D(add9) | G/D two-bar loop through every moving section (harmonium D2 A2 D3 E3 F#3, then D2 A2 B2 D3 G3); one held D(add9) across cycles 14-18\\n// GROOVE: synthesized percussion — dry triangle-and-noise ratchet click on all eight eighths, rounded 60 Hz sine thump on beat 1 during cycles 6-14 and 18-26, no snare or clap; strict clocklike eighths, no swing\\nsamples('https://strudel.b-cdn.net/piano.json')\\n\\nconst cell = note(\\\"d4 e4 f#4 a4 b4 a4 f#4 e4\\\").clip(0.55)\\nconst moon = cell.s('piano').velocity(\\\"1 0.82 0.9 0.84 0.96 0.82 0.9 0.8\\\").gain(0.4).release(0.1).pan(0.26).room(0.25).roomsize(1.2)\\nconst sun = cell.s('piano').velocity(\\\"0.96 0.8 0.88 0.82 0.92 0.8 0.88 0.78\\\").gain(0.38).release(0.1).pan(0.74).room(0.25).roomsize(1.2)\\n\\nconst harmLoop = note(\\\"\u003c[d2,a2,d3,e3,f#3] [d2,a2,b2,d3,g3]>\\\").clip(1.15)\\nconst harmHold = note(\\\"[d2,a2,d3,e3,f#3]\\\").slow(4)\\nconst reed = (p) => stack(\\n  p.add(note(0.1)).s(\\\"sawtooth\\\").postgain(0.8),\\n  p.add(note(-0.1)).s(\\\"sawtooth\\\").postgain(0.8),\\n  p.add(note(0.05)).s(\\\"square\\\").postgain(0.2)\\n).lpf(1400).lpq(1).attack(0.18).decay(0.6).sustain(0.8).release(0.35).gain(0.15).pan(0.5).room(0.3).roomsize(2.4)\\nconst thread = note(\\\"a5\\\").slow(2).s(\\\"sine\\\").attack(0.4).decay(0.6).sustain(0.8).release(0.6).gain(\\\"\u003c0.1 0.06>\\\").pan(0.5).room(0.35).roomsize(2.4)\\n\\nconst bass = stack(\\n  note(\\\"\u003cd2 g2>\\\").s(\\\"triangle\\\").postgain(1),\\n  note(\\\"\u003cd2 g2>\\\").s(\\\"sine\\\").postgain(0.45)\\n).struct(\\\"x ~ x ~\\\").clip(0.42).attack(0.008).decay(0.19).sustain(0).release(0.12).lpf(2200).gain(0.35).pan(0.5)\\n\\nconst ratchet = stack(\\n  note(\\\"d#7*8\\\").s(\\\"triangle\\\").attack(0.001).decay(0.025).sustain(0).release(0.012).clip(0.15).hpf(800).velocity(\\\"1 0.72 0.86 0.72 0.94 0.72 0.86 0.7\\\").gain(0.19).pan(0.44),\\n  s(\\\"pink*8\\\").bpf(1700).bpq(1.5).attack(0.001).decay(0.022).sustain(0).release(0.012).clip(0.13).gain(0.13).pan(0.58).room(0.12)\\n)\\nconst thump = note(\\\"b1\\\").s(\\\"sine\\\").attack(0.006).decay(0.15).sustain(0).release(0.05).clip(0.1).gain(0.3).pan(0.5)\\n\\nconst splash = stack(\\n  s(\\\"brown\\\").lpf(520).lpq(1).attack(0.002).decay(0.16).sustain(0).release(0.06).gain(0.62).pan(0.5),\\n  s(\\\"white\\\").hpf(1100).lpf(9000).attack(0.025).decay(0.3).sustain(0).release(0.08).gain(0.2).pan(0.42).room(0.4).roomsize(2),\\n  s(\\\"white\\\").hpf(2600).lpf(11000).attack(0.06).decay(0.26).sustain(0).release(0.08).gain(0.12).pan(0.62).room(0.45).roomsize(2)\\n)\\nconst unclick = stack(\\n  note(\\\"a6\\\").s(\\\"triangle\\\").attack(0.001).decay(0.05).sustain(0).release(0.01).gain(0.2).pan(0.4),\\n  note(\\\"d6\\\").s(\\\"triangle\\\").attack(0.045).decay(0.07).sustain(0).release(0.01).gain(0.14).pan(0.52),\\n  note(\\\"g3\\\").s(\\\"sine\\\").lpf(900).attack(0.004).decay(0.17).sustain(0).release(0.03).gain(0.16).pan(0.5).room(0.2)\\n)\\nconst reclick = stack(\\n  note(\\\"c3\\\").s(\\\"sine\\\").lpf(700).attack(0.004).decay(0.2).sustain(0).release(0.03).gain(0.22).pan(0.48),\\n  note(\\\"d6\\\").s(\\\"triangle\\\").attack(0.002).decay(0.06).sustain(0).release(0.01).gain(0.16).pan(0.56),\\n  note(\\\"a6\\\").s(\\\"triangle\\\").attack(0.05).decay(0.09).sustain(0).release(0.01).gain(0.13).pan(0.62)\\n)\\nconst shot = (p, at) => p.slow(4).clip(0.12).late(at)\\n\\n$: arrange(\\n  [14, stack(moon, sun.late(0.5).fast(29/28))],\\n  [4, silence],\\n  [14, stack(moon, sun.fast(29/28))]\\n)\\n\\n$: arrange(\\n  [14, reed(harmLoop)],\\n  [4, stack(reed(harmHold), thread)],\\n  [14, reed(harmLoop)]\\n)\\n\\n$: arrange(\\n  [6, silence],\\n  [8, bass],\\n  [4, silence],\\n  [8, bass],\\n  [6, silence]\\n)\\n\\n$: arrange(\\n  [6, ratchet],\\n  [8, stack(ratchet, thump)],\\n  [4, silence],\\n  [8, stack(ratchet, thump)],\\n  [6, ratchet]\\n)\\n\\n$: arrange(\\n  [14, silence],\\n  [4, stack(shot(splash, 0), shot(unclick, 0.24), shot(reclick, 3.76))],\\n  [14, silence]\\n)\",\"bpm\":128,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5333333333333333,\"cycles\":32,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

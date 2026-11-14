@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = `
+    precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+const float DURATION = 40.0;
+const float TAU = 6.28318530718;
+const float CREATIVE_SEED = 15873001.0;
+float bell(float x,float c,float w){
+  return smoothstep(c-w,c,x)*(1.0-smoothstep(c,c+w,x));
+}
+float crackGate(float p){
+  return smoothstep(0.15,0.20,p)*(1.0-smoothstep(0.82,0.99,p));
+}
+float invertGate(float p){
+  return smoothstep(0.45,0.52,p)*(1.0-smoothstep(0.74,0.80,p));
+}
+float jewelGate(float p){
+  return smoothstep(0.48,0.57,p)*(1.0-smoothstep(0.92,1.0,p));
+}
+float burstGate(float p){
+  return clamp(bell(p,0.19,0.035)+bell(p,0.49,0.045)+bell(p,0.79,0.035),0.0,1.0);
+}
+mat2 rot2(float a){
+  float c=cos(a),s=sin(a);
+  return mat2(c,-s,s,c);
+}
+mat3 rotateY(float a){
+  float c=cos(a),s=sin(a);
+  return mat3(c,0.0,s,0.0,1.0,0.0,-s,0.0,c);
+}
+mat3 rotateZ(float a){
+  float c=cos(a),s=sin(a);
+  return mat3(c,-s,0.0,s,c,0.0,0.0,0.0,1.0);
+}
+float hash13(vec3 p){
+  p=fract(p*0.1031);
+  p+=dot(p,p.yzx+333.321);
+  return fract((p.x+p.y)*p.z);
+}
+vec2 hash22(vec2 p){
+  vec3 q=fract(vec3(p.x,p.y,p.x)*vec3(0.1031,0.1030,0.0973));
+  q+=dot(q,q.yzx+33.33);
+  return fract((q.xx+q.yz)*q.zy);
+}
+vec3 hash33(vec3 p){
+  p=fract(p*vec3(0.1031,0.1030,0.0973));
+  p+=dot(p,p.yxz+333.321);
+  return fract((p.xxy+p.yxx)*p.zyx);
+}
+vec3 voronoi3d(vec3 p){
+  vec3 c=floor(p),f=fract(p),id=vec3(0.0);
+  float md=10.0;
+  for(int x=-1;x<=1;x++){
+    for(int y=-1;y<=1;y++){
+      for(int z=-1;z<=1;z++){
+        vec3 n=vec3(float(x),float(y),float(z));
+        float d=length(n+hash33(c+n)-f);
+        if(d<md){
+          md=d;
+          id=c+n;
+        }
+      }
+    }
+  }
+  return id;
+}
+float voronoiEdge(vec3 p,float w){
+  vec3 c=floor(p),f=fract(p);
+  float a=10.0,b=10.0;
+  for(int x=-1;x<=1;x++){
+    for(int y=-1;y<=1;y++){
+      for(int z=-1;z<=1;z++){
+        vec3 n=vec3(float(x),float(y),float(z));
+        float d=length(n+hash33(c+n)-f);
+        if(d<a){
+          b=a;
+          a=d;
+        }else if(d<b){
+          b=d;
+        }
+      }
+    }
+  }
+  return smoothstep(0.0,w,b-a);
+}
+float scene(vec3 p,float ph){
+  float t=ph*TAU;
+  float cr=crackGate(ph),iv=invertGate(ph),jw=jewelGate(ph),bu=burstGate(ph);
+  float cadence=pow(0.5+0.5*sin(t*8.0),6.0);
+  vec3 q=p;
+  q.x+=q.y*0.075;
+  q.z+=q.y*0.025;
+  q.xz=rot2(0.04*sin(t)+0.055*bu)*q.xz;
+  float ds=(abs(q.x)*0.92+abs(q.y)*0.45+abs(q.z)*1.18-0.62)*0.62;
+  ds=max(ds,dot(q,normalize(vec3(0.78,0.22,0.58)))-0.54);
+  ds=max(ds,dot(q,normalize(vec3(-0.70,-0.18,0.69)))-0.57);
+  float dj=(abs(q.x)*0.78+abs(q.y)*0.72+abs(q.z)*0.94-0.63)*0.62;
+  dj=max(dj,abs(q.y)-0.90);
+  float d=mix(ds,dj,jw);
+  float scar=sin(q.y*13.0+sin(q.y*4.0)*2.0)*sin(q.x*17.0-q.z*9.0);
+  d+=cr*(0.010+0.022*cadence+0.018*iv)*scar;
+  d-=bu*0.025*(0.5+0.5*sin(q.y*21.0-q.x*15.0));
+  return d;
+}
+float march(vec3 ro,vec3 rd,float ph,mat3 r){
+  float t=0.2;
+  for(int i=0;i<88;i++){
+    vec3 p=ro+rd*t;
+    float d=scene(r*p,ph);
+    if(d<0.001)return t;
+    t+=d*0.58;
+    if(t>10.0)break;
+  }
+  return 11.0;
+}
+vec3 cellColor(vec3 id,float ph,float jw){
+  float salt=mod(CREATIVE_SEED,4093.0)*0.001;
+  float r=hash13(id+vec3(salt,1.73,4.19));
+  if(r>0.50)return vec3(0.002,0.003,0.004);
+  float b=r*6.0;
+  vec3 violet;
+  if(b<1.0)violet=vec3(0.19,0.055,0.27);
+  else if(b<2.0)violet=vec3(0.36,0.10,0.48);
+  else violet=vec3(0.55,0.20,0.63);
+  vec3 cool;
+  if(b<1.0)cool=vec3(0.12,0.27,0.36);
+  else if(b<2.0)cool=vec3(0.25,0.48,0.57);
+  else cool=vec3(0.48,0.68,0.72);
+  float f=0.72+0.28*pow(0.5+0.5*sin(ph*TAU*8.0+r*TAU),5.0);
+  return mix(violet,cool,jw*(0.45+0.45*step(1.0,b)))*f;
+}
+float lineMask(float d,float w){
+  return 1.0-smoothstep(w,w*2.0,d);
+}
+vec3 fragments(vec2 uv,float ph){
+  float cr=crackGate(ph),iv=invertGate(ph),bu=burstGate(ph);
+  float salt=mod(CREATIVE_SEED,8191.0);
+  vec3 col=vec3(0.0);
+  for(int i=0;i<72;i++){
+    float fi=float(i);
+    vec2 h=hash22(vec2(fi+salt*0.01,fi*1.731+salt*0.003));
+    float y=(h.y-0.5)*0.58;
+    float taper=1.0-0.72*abs(y)/0.30;
+    vec2 base=vec2((h.x-0.5)*0.34*max(taper,0.18),y);
+    vec2 dir=normalize(base+vec2(h.y-0.43,h.x-0.57)*0.16+vec2(0.001));
+    vec2 tanv=vec2(-dir.y,dir.x);
+    float freq=5.0+floor(h.x*5.0);
+    float spread=cr*(0.018+0.075*iv+0.040*bu)*(0.55+h.y*0.65);
+    vec2 pos=base+dir*spread;
+    pos+=tanv*cr*(0.006+0.010*iv)*sin(ph*TAU*freq+fi*1.91);
+    pos/=1.0+0.28*iv;
+    vec2 q=rot2(h.y*TAU+ph*TAU*(1.0+h.x*3.0))*((uv-pos));
+    float sz=0.0035+0.0045*h.x;
+    float d=abs(q.x)+abs(q.y)*0.68;
+    float core=lineMask(d,sz);
+    float halo=lineMask(d,sz*2.6)*0.18;
+    vec3 fc=h.x<0.52?vec3(0.52,0.18,0.66):vec3(0.26,0.52,0.62);
+    float pulse=0.65+0.35*pow(0.5+0.5*sin(ph*TAU*freq+fi),4.0);
+    col+=(fc*core+vec3(0.92,0.82,0.16)*halo)*pulse*cr;
+  }
+  return col;
+}
+void main(){
+  vec2 uv=(gl_FragCoord.xy-0.5*iResolution.xy)/iResolution.y;
+  float ph=mod(iTime,DURATION)/DURATION;
+  float t=ph*TAU;
+  float iv=invertGate(ph),jw=jewelGate(ph),cr=crackGate(ph),bu=burstGate(ph);
+  float cadence=pow(0.5+0.5*sin(t*8.0),6.0);
+  mat3 r=rotateZ(-0.09+0.10*sin(t)+0.035*cadence)*rotateY(0.16*sin(t*2.0)+0.10*bu);
+  vec3 ro=vec3(0.0,0.0,3.5);
+  vec3 rd=normalize(vec3(uv*(1.0+0.28*iv),-1.0));
+  float md=march(ro,rd,ph,r);
+  vec3 col=vec3(0.0);
+  if(md<10.0){
+    vec3 wp=ro+rd*md;
+    vec3 p=r*wp;
+    vec3 vp=p*3.9;
+    vec3 id=voronoi3d(vp);
+    float edge=voronoiEdge(vp,0.055);
+    vec3 graphite=vec3(0.012,0.010,0.016);
+    vec3 sulfur=vec3(0.92,0.82,0.16);
+    col=cellColor(id,ph,jw);
+    col+=sulfur*(1.0-edge)*(6.2+1.3*bu);
+    float sf=p.x-(0.10*sin(p.y*5.2)+0.032*sin(p.y*17.0));
+    float scar=lineMask(abs(sf),0.012)*(1.0-smoothstep(1.08,1.26,abs(p.y)));
+    float b1=lineMask(abs(p.x-0.19*(p.y-0.05)-0.035*sin(p.y*14.0)),0.010);
+    float b2=lineMask(abs(p.x+0.16*(p.y+0.18)+0.028*sin(p.y*19.0)),0.009);
+    float fracture=max(scar,max(b1,b2)*cr);
+    col+=sulfur*fracture*(0.42+3.8*cr+1.8*bu);
+    float fy=fract((p.y+1.36)*2.45);
+    float contour=lineMask(min(fy,1.0-fy),0.012);
+    col=mix(col,graphite,contour*(0.38+0.22*jw));
+    vec2 m=vec2(p.x+0.20,p.y-0.31);
+    float ring=lineMask(abs(length(m)-0.105),0.009);
+    float crossMark=lineMask(min(abs(m.x),abs(m.y)),0.007)*(1.0-smoothstep(0.105,0.135,max(abs(m.x),abs(m.y))));
+    col+=sulfur*max(ring,crossMark)*(0.32+1.15*jw+0.75*bu);
+    col*=1.85;
+  }
+  col+=fragments(uv,ph);
+  col=vec3(1.0)-exp(-col*0.78);
+  gl_FragColor=vec4(col,1.0);
+}
+  `;
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 40;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 40;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 40;
+  const targetBpm = 102;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x0809e723;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const secondsPerBar = 240 / bpm;
+  const at = (fraction) => totalBars * fraction * secondsPerBar;
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterCompressor = new Tone.Compressor({
+    threshold: -17,
+    ratio: 2.4,
+    attack: 0.012,
+    release: 0.24
+  });
+  masterCompressor.connect(masterLimiter);
+  const anchorVolume = new Tone.Volume(-9);
+  anchorVolume.connect(masterCompressor);
+  const anchorFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 260,
+    Q: 1.1,
+    rolloff: -24
+  });
+  anchorFilter.connect(anchorVolume);
+  const anchor = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.035,
+      decay: 0.5,
+      sustain: 0.86,
+      release: 1.3
+    }
+  });
+  anchor.connect(anchorFilter);
+  const grindVolume = new Tone.Volume(-12);
+  grindVolume.connect(masterCompressor);
+  const grindCrusher = new Tone.BitCrusher({
+    bits: 5,
+    wet: 0.62
+  });
+  grindCrusher.connect(grindVolume);
+  const grindFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 680,
+    Q: 2.8,
+    rolloff: -24
+  });
+  grindFilter.connect(grindCrusher);
+  const grind = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: {
+      attack: 0.002,
+      decay: 0.16,
+      sustain: 0,
+      release: 0.025
+    }
+  });
+  grind.connect(grindFilter);
+  const partialVolume = new Tone.Volume(-14);
+  partialVolume.connect(masterCompressor);
+  const partialFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 940,
+    Q: 1.7,
+    rolloff: -12
+  });
+  partialFilter.connect(partialVolume);
+  const partial = new Tone.AMSynth({
+    harmonicity: 1.47,
+    oscillator: { type: 'triangle' },
+    envelope: {
+      attack: 0.018,
+      decay: 0.32,
+      sustain: 0.22,
+      release: 0.9
+    },
+    modulation: { type: 'sine' },
+    modulationEnvelope: {
+      attack: 0.09,
+      decay: 0.42,
+      sustain: 0.28,
+      release: 0.7
+    }
+  });
+  partial.connect(partialFilter);
+  const facetVolume = new Tone.Volume(-15);
+  facetVolume.connect(masterCompressor);
+  const facetFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 2100,
+    Q: 0.8,
+    rolloff: -12
+  });
+  facetFilter.connect(facetVolume);
+  const facetDelay = new Tone.FeedbackDelay({
+    delayTime: '8n.',
+    feedback: 0.31,
+    wet: 0.38
+  });
+  facetDelay.connect(facetFilter);
+  const facet = new Tone.FMSynth({
+    harmonicity: 5.2,
+    modulationIndex: 8.5,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.006,
+      decay: 0.75,
+      sustain: 0.08,
+      release: 1.5
+    },
+    modulation: { type: 'triangle' },
+    modulationEnvelope: {
+      attack: 0.01,
+      decay: 0.48,
+      sustain: 0,
+      release: 0.8
+    }
+  });
+  facet.connect(facetDelay);
+  const scarVolume = new Tone.Volume(-18);
+  scarVolume.connect(masterCompressor);
+  const scarFilter = new Tone.Filter({
+    type: 'highpass',
+    frequency: 2700,
+    Q: 2.1,
+    rolloff: -24
+  });
+  scarFilter.connect(scarVolume);
+  const scar = new Tone.Synth({
+    oscillator: { type: 'square' },
+    envelope: {
+      attack: 0.001,
+      decay: 0.035,
+      sustain: 0,
+      release: 0.018
+    }
+  });
+  scar.connect(scarFilter);
+  const anchorEvents = [
+    [at(0.00), { note: 'C2', duration: '1m', velocity: 0.86 }],
+    [at(0.12), { note: 'G1', duration: '2n.', velocity: 0.72 }],
+    [at(0.25), { note: 'Ab1', duration: '1m', velocity: 0.78 }],
+    [at(0.40), { note: 'Db2', duration: '1m', velocity: 0.74 }],
+    [at(0.56), { note: 'B1', duration: '1m', velocity: 0.76 }],
+    [at(0.71), { note: 'Eb2', duration: '2n.', velocity: 0.68 }],
+    [at(0.84), { note: 'G1', duration: '2n.', velocity: 0.65 }],
+    [at(0.92), { note: 'C2', duration: '2n', velocity: 0.72 }]
+  ];
+  const anchorPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.00 && bar < totalBars * 1.00) {
+      const velocity = event.velocity * (0.94 + R() * 0.06);
+      anchor.triggerAttackRelease(event.note, event.duration, time + H(8), velocity);
+    }
+  }, anchorEvents).start(0);
+  const grindEvents = [
+    [at(0.00), { duration: '8n', velocity: 0.74, cutoff: 520 }],
+    [at(0.035), { duration: '32n', velocity: 0.38, cutoff: 910 }],
+    [at(0.09), { duration: '16n', velocity: 0.52, cutoff: 640 }],
+    [at(0.155), { duration: '32n', velocity: 0.44, cutoff: 1280 }],
+    [at(0.22), { duration: '16n', velocity: 0.58, cutoff: 760 }],
+    [at(0.29), { duration: '32n', velocity: 0.46, cutoff: 1540 }],
+    [at(0.36), { duration: '16n', velocity: 0.62, cutoff: 1040 }],
+    [at(0.44), { duration: '32n', velocity: 0.51, cutoff: 1820 }],
+    [at(0.52), { duration: '16n', velocity: 0.48, cutoff: 880 }],
+    [at(0.58), { duration: '32n', velocity: 0.32, cutoff: 610 }]
+  ];
+  const grindPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.00 && bar < totalBars * 0.64) {
+      grindFilter.frequency.setValueAtTime(event.cutoff, time);
+      grind.triggerAttackRelease(
+        event.duration,
+        time + H(4),
+        event.velocity * (0.9 + R() * 0.1)
+      );
+    }
+  }, grindEvents).start(0);
+  const partialEvents = [
+    [at(0.16), { note: 'C4', duration: '4n', velocity: 0.48, cutoff: 720 }],
+    [at(0.24), { note: 'G3', duration: '4n.', velocity: 0.52, cutoff: 860 }],
+    [at(0.32), { note: 'Ab3', duration: '2n', velocity: 0.49, cutoff: 980 }],
+    [at(0.41), { note: 'Db4', duration: '4n.', velocity: 0.56, cutoff: 1140 }],
+    [at(0.50), { note: 'B3', duration: '2n', velocity: 0.53, cutoff: 1280 }],
+    [at(0.59), { note: 'Eb4', duration: '4n.', velocity: 0.58, cutoff: 1420 }],
+    [at(0.68), { note: 'Ab3', duration: '2n', velocity: 0.49, cutoff: 1040 }],
+    [at(0.78), { note: 'G3', duration: '4n', velocity: 0.42, cutoff: 760 }]
+  ];
+  const partialPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.10 && bar < totalBars * 0.84) {
+      partialFilter.frequency.setValueAtTime(event.cutoff, time);
+      partial.triggerAttackRelease(
+        event.note,
+        event.duration,
+        time + H(10),
+        event.velocity * (0.92 + R() * 0.08)
+      );
+    }
+  }, partialEvents).start(0);
+  const facetEvents = [
+    [at(0.34), { note: 'G5', duration: '8n', velocity: 0.42 }],
+    [at(0.40), { note: 'Db6', duration: '4n', velocity: 0.48 }],
+    [at(0.47), { note: 'Ab5', duration: '8n.', velocity: 0.45 }],
+    [at(0.53), { note: 'B5', duration: '4n', velocity: 0.52 }],
+    [at(0.59), { note: 'Eb6', duration: '8n.', velocity: 0.49 }],
+    [at(0.65), { note: 'C6', duration: '4n', velocity: 0.54 }],
+    [at(0.70), { note: 'Ab5', duration: '8n', velocity: 0.44 }],
+    [at(0.76), { note: 'G5', duration: '8n', velocity: 0.37 }]
+  ];
+  const facetPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.28 && bar < totalBars * 0.80) {
+      facet.triggerAttackRelease(
+        event.note,
+        event.duration,
+        time + H(13),
+        event.velocity * (0.9 + R() * 0.1)
+      );
+    }
+  }, facetEvents).start(0);
+  const scarEvents = [
+    [at(0.22), { note: 'G6', velocity: 0.38 }],
+    [at(0.265), { note: 'Db7', velocity: 0.31 }],
+    [at(0.31), { note: 'B6', velocity: 0.42 }],
+    [at(0.365), { note: 'Eb7', velocity: 0.34 }],
+    [at(0.43), { note: 'Ab6', velocity: 0.45 }],
+    [at(0.485), { note: 'C7', velocity: 0.36 }],
+    [at(0.55), { note: 'Db7', velocity: 0.43 }],
+    [at(0.61), { note: 'G6', velocity: 0.32 }],
+    [at(0.68), { note: 'C7', velocity: 0.28 }]
+  ];
+  const scarPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar >= totalBars * 0.16 && bar < totalBars * 0.72) {
+      scar.triggerAttackRelease(
+        event.note,
+        '64n',
+        time + H(3),
+        event.velocity * (0.88 + R() * 0.12)
+      );
+    }
+  }, scarEvents).start(0);
+  window.toneJsInstruments = {
+    anchor,
+    anchorFilter,
+    anchorVolume,
+    grind,
+    grindFilter,
+    grindCrusher,
+    grindVolume,
+    partial,
+    partialFilter,
+    partialVolume,
+    facet,
+    facetDelay,
+    facetFilter,
+    facetVolume,
+    scar,
+    scarFilter,
+    scarVolume,
+    masterCompressor,
+    masterLimiter
+  };
+  window.toneJsParts = {
+    anchorPart,
+    grindPart,
+    partialPart,
+    facetPart,
+    scarPart
+  };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

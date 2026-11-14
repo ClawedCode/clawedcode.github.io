@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+const rotationSpeed = 2;
+const colors = [[255,176,0],[255,0,60],[0,229,255]];
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+window.renderFrame = function(time) {
+  let p = ((time / duration) * rotationSpeed) % 1;
+  let flare = Math.max(0, 1 - Math.abs(p - 0.5) * 6);
+  let collapse = Math.pow(Math.abs(Math.cos(p * Math.PI)), 0.8);
+  let major = 300 * collapse;
+  let minor = 120 * collapse;
+  ctx.globalCompositeOperation = 'source-over';
+  let bgGrad = ctx.createRadialGradient(450, 450, 0, 450, 450, 650);
+  bgGrad.addColorStop(0, `rgba(${15+flare*40},${15+flare*40},${20+flare*50},1)`);
+  bgGrad.addColorStop(1, `rgba(5,5,5,1)`);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, 900, 900);
+  if (flare > 0) {
+    ctx.globalCompositeOperation = 'screen';
+    let fGrad = ctx.createRadialGradient(450, 450, 0, 450, 450, flare * 450);
+    fGrad.addColorStop(0, `rgba(255,255,255,${flare})`);
+    fGrad.addColorStop(0.3, `rgba(0,229,255,${flare*0.4})`);
+    fGrad.addColorStop(1, `rgba(0,0,0,0)`);
+    ctx.fillStyle = fGrad;
+    ctx.beginPath();
+    ctx.arc(450, 450, flare * 450, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  if (p > 0.5) {
+    ctx.globalCompositeOperation = 'screen';
+    let rp = (p - 0.5) * 2;
+    for (let r_i = 0; r_i < 3; r_i++) {
+      let phase = rp - r_i * 0.15;
+      if (phase > 0 && phase < 1) {
+        let rip_radius = phase * 700;
+        let rip_alpha = Math.max(0, (1 - Math.pow(phase, 1.5)) * 0.8);
+        let r_col = colors[r_i];
+        ctx.beginPath();
+        ctx.arc(450, 450, rip_radius, 0, Math.PI * 2);
+        ctx.lineWidth = 2 + (1 - phase) * 6;
+        ctx.strokeStyle = `rgba(${r_col[0]},${r_col[1]},${r_col[2]},${rip_alpha})`;
+        ctx.stroke();
+        ctx.lineWidth = 10 + (1 - phase) * 20;
+        ctx.strokeStyle = `rgba(${r_col[0]},${r_col[1]},${r_col[2]},${rip_alpha*0.3})`;
+        ctx.stroke();
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  let z_buffer = [];
+  let rx = p * Math.PI * 4;
+  let ry = p * Math.PI * 2;
+  for(let k=0; k<3; k++) {
+    for(let i=0; i<800; i++) {
+      let u1 = i / 800;
+      let u2 = (i+1) / 800;
+      let getPt = (u) => {
+        let theta = u * Math.PI * 2 + p * Math.PI * 2;
+        let phi = u * Math.PI * 2 * 6 - p * Math.PI * 4 + k * Math.PI * 2 / 3;
+        let x = (major + minor * Math.cos(phi)) * Math.cos(theta);
+        let y = (major + minor * Math.cos(phi)) * Math.sin(theta);
+        let z = minor * Math.sin(phi);
+        let y1 = y * Math.cos(rx) - z * Math.sin(rx);
+        let z1 = y * Math.sin(rx) + z * Math.cos(rx);
+        let x2 = x * Math.cos(ry) + z1 * Math.sin(ry);
+        let z2 = -x * Math.sin(ry) + z1 * Math.cos(ry);
+        return {x: x2, y: y1, z: z2};
+      }
+      let p1 = getPt(u1);
+      let p2 = getPt(u2);
+      z_buffer.push({ k, p1, p2, z: (p1.z + p2.z)/2 });
+    }
+  }
+  z_buffer.sort((a, b) => a.z - b.z);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  z_buffer.forEach(seg => {
+     let nz = seg.z / (420 * collapse + 0.001);
+     let alpha = 0.1 + ((nz + 1) / 2) * 0.9;
+     if(alpha < 0) alpha = 0; if(alpha > 1) alpha = 1;
+     let fr = Math.round(colors[seg.k][0] + (255 - colors[seg.k][0]) * flare);
+     let fg = Math.round(colors[seg.k][1] + (255 - colors[seg.k][1]) * flare);
+     let fb = Math.round(colors[seg.k][2] + (255 - colors[seg.k][2]) * flare);
+     ctx.beginPath();
+     ctx.moveTo(450 + seg.p1.x, 450 + seg.p1.y);
+     ctx.lineTo(450 + seg.p2.x, 450 + seg.p2.y);
+     if (alpha > 0.2 || flare > 0.1) {
+       ctx.lineWidth = (2 + flare * 8 + nz * 3) * 2.5;
+       if(ctx.lineWidth < 0.5) ctx.lineWidth = 0.5;
+       ctx.strokeStyle = `rgba(${fr},${fg},${fb},${alpha * 0.25})`;
+       ctx.stroke();
+     }
+     ctx.lineWidth = 1.5 + flare * 4 + nz * 2;
+     if(ctx.lineWidth < 0.5) ctx.lineWidth = 0.5;
+     ctx.strokeStyle = `rgba(${fr},${fg},${fb},${alpha})`;
+     ctx.stroke();
+  });
+  return canvas.toDataURL('image/png');
+};
+window.ready = true;
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+</body>
+</html>

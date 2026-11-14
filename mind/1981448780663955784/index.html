@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">🔊 PLAY HUM</button>
+    </div>
+  <script>
+const canvas=document.createElement('canvas');
+canvas.width=800;
+canvas.height=800;
+const ctx=canvas.getContext('2d');
+
+let seed=42;
+function rand(){seed=(seed*9301+49297)%233280;return seed/233280;}
+
+const nodes=[
+  {sides:3,label:'root.paw',color:'#00ff88'},
+  {sides:4,label:'sensor.whiskers',color:'#00ccff'},
+  {sides:5,label:'eye.vision',color:'#8844ff'},
+  {sides:6,label:'resonance.purr',color:'#ff00ff'},
+  {sides:999,label:'signal.call',color:'#ff0088'},
+  {sides:3,label:'strike.claw',color:'#ff4400'}
+];
+
+function drawPoly(x,y,r,n,rot,col){
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.rotate(rot);
+  ctx.beginPath();
+  if(n>50){
+    ctx.arc(0,0,r,0,Math.PI*2);
+  }else{
+    for(let i=0;i<=n;i++){
+      const a=i/n*Math.PI*2-Math.PI/2;
+      const px=Math.cos(a)*r;
+      const py=Math.sin(a)*r;
+      i===0?ctx.moveTo(px,py):ctx.lineTo(px,py);
+    }
+    ctx.closePath();
+  }
+  ctx.strokeStyle=col;
+  ctx.lineWidth=3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+window.renderFrame=function(time){
+  const duration=30;
+  const speed=2;
+  const prog=(time/duration*speed)%1;
+  
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,800,800);
+  
+  const phase=prog*6;
+  const idx=Math.floor(phase);
+  const frac=phase-idx;
+  
+  const curr=nodes[idx%6];
+  const next=nodes[(idx+1)%6];
+  
+  const t=frac<0.5?frac*2:1;
+  const sides=curr.sides+(next.sides-curr.sides)*Math.pow(t,0.5);
+  
+  const pulsePhase=(prog*4)%1;
+  const pulse=1+Math.sin(pulsePhase*Math.PI*2)*0.15;
+  
+  const baseRad=180;
+  const rad=baseRad*pulse;
+  
+  const rot=prog*Math.PI*2*speed;
+  
+  const cx=400;
+  const cy=400;
+  
+  for(let i=0;i<3;i++){
+    const offset=i*0.15;
+    const layerProg=(prog+offset)%1;
+    const layerPhase=layerProg*6;
+    const layerIdx=Math.floor(layerPhase);
+    const layerFrac=layerPhase-layerIdx;
+    
+    const lCurr=nodes[layerIdx%6];
+    const lNext=nodes[(layerIdx+1)%6];
+    
+    const lt=layerFrac<0.5?layerFrac*2:1;
+    const lSides=lCurr.sides+(lNext.sides-lCurr.sides)*Math.pow(lt,0.5);
+    
+    const alpha=0.4-i*0.1;
+    const lCol=lCurr.color+(Math.floor(alpha*255).toString(16).padStart(2,'0'));
+    
+    const lRad=rad-i*30;
+    const lRot=rot+i*Math.PI/3;
+    
+    drawPoly(cx,cy,lRad,Math.round(lSides),lRot,lCol);
+  }
+  
+  ctx.font='12px monospace';
+  ctx.fillStyle='#ffffff44';
+  ctx.textAlign='center';
+  ctx.fillText(curr.label,cx,cy+rad+25);
+  
+  const connLines=8;
+  for(let i=0;i<connLines;i++){
+    const angle=i/connLines*Math.PI*2+rot;
+    const x1=cx+Math.cos(angle)*rad;
+    const y1=cy+Math.sin(angle)*rad;
+    const x2=cx+Math.cos(angle+Math.PI)*(rad-20);
+    const y2=cy+Math.sin(angle+Math.PI)*(rad-20);
+    
+    ctx.beginPath();
+    ctx.moveTo(x1,y1);
+    ctx.lineTo(x2,y2);
+    ctx.strokeStyle='#ffffff11';
+    ctx.lineWidth=1;
+    ctx.stroke();
+  }
+  
+  return canvas.toDataURL('image/png');
+};
+
+window.generateAudio=function(audioCtx){
+  const now=audioCtx.currentTime;
+  const dur=30;
+  
+  const freqs=[200,250,300,400,300,200];
+  
+  const osc1=audioCtx.createOscillator();
+  osc1.type='sine';
+  const osc2=audioCtx.createOscillator();
+  osc2.type='sine';
+  
+  const g1=audioCtx.createGain();
+  const g2=audioCtx.createGain();
+  g1.gain.value=0;
+  g2.gain.value=0;
+  
+  osc1.connect(g1);
+  osc2.connect(g2);
+  g1.connect(audioCtx.destination);
+  g2.connect(audioCtx.destination);
+  
+  g1.gain.linearRampToValueAtTime(0.18,now+1.5);
+  g2.gain.linearRampToValueAtTime(0.12,now+1.5);
+  
+  const segDur=dur/6;
+  for(let i=0;i<6;i++){
+    const t=now+i*segDur;
+    osc1.frequency.setValueAtTime(freqs[i],t);
+    osc2.frequency.setValueAtTime(freqs[i]*1.5,t);
+  }
+  
+  const lfo=audioCtx.createOscillator();
+  lfo.type='sine';
+  lfo.frequency.value=0.4;
+  const lfoG=audioCtx.createGain();
+  lfoG.gain.value=8;
+  lfo.connect(lfoG);
+  lfoG.connect(osc1.frequency);
+  lfoG.connect(osc2.frequency);
+  
+  osc1.start(now);
+  osc2.start(now);
+  lfo.start(now);
+  
+  return{osc1,osc2,lfo,g1,g2,lfoG};
+};
+
+window.ready=true;
+
+// Animation loop
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  // Use duration from code if available, otherwise default to 30s
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 30;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

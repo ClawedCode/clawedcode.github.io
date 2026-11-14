@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\nconst float TAU = 6.28318530718;\nconst float SEED = 15678876.0;\nmat2 rot(float angle) {\n  float c = cos(angle);\n  float s = sin(angle);\n  return mat2(c, -s, s, c);\n}\nfloat hash11(float n) {\n  return fract(sin(n * 91.713 + SEED * 0.0001) * 43758.5453);\n}\nfloat hash21(vec2 p) {\n  return fract(sin(dot(p, vec2(127.1, 311.7)) + SEED * 0.0001) * 43758.5453);\n}\nfloat sdBox2D(vec2 p, vec2 halfSize) {\n  vec2 q = abs(p) - halfSize;\n  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);\n}\nfloat sdEllipseApprox(vec2 p, vec2 radius) {\n  return (length(p / radius) - 1.0) * min(radius.x, radius.y);\n}\nfloat sdSegment2D(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.000001), 0.0, 1.0);\n  return length(pa - ba * h);\n}\nfloat fillMask(float distanceToShape, float softness) {\n  return 1.0 - smoothstep(-softness, softness, distanceToShape);\n}\nfloat strokeMask(float distanceToShape, float width, float softness) {\n  return 1.0 - smoothstep(\n    width - softness,\n    width + softness,\n    abs(distanceToShape)\n  );\n}\nfloat sdSlate(vec2 p, vec2 halfSize, float facet) {\n  p.x += p.y * (facet - 0.5) * 0.34;\n  float body = sdBox2D(p, halfSize);\n  float cutA = (\n    p.x + p.y - halfSize.x - halfSize.y * (0.42 + 0.20 * facet)\n  ) * 0.70710678;\n  float cutB = (\n    -p.x + p.y - halfSize.x - halfSize.y * (0.56 - 0.16 * facet)\n  ) * 0.70710678;\n  float cutC = (\n    p.x - p.y - halfSize.x - halfSize.y * (0.66 + 0.10 * facet)\n  ) * 0.70710678;\n  return max(body, max(cutA, max(cutB, cutC)));\n}\nfloat sdForegroundBoulder(vec2 p, vec2 halfSize, float angle) {\n  p = rot(-angle) * p;\n  float body = sdBox2D(p, halfSize);\n  float bevelA = (\n    p.x + p.y - halfSize.x * 0.82 - halfSize.y * 0.78\n  ) * 0.70710678;\n  float bevelB = (\n    -p.x + p.y - halfSize.x * 0.90 - halfSize.y * 0.68\n  ) * 0.70710678;\n  float bevelC = (\n    p.x - p.y - halfSize.x * 0.76 - halfSize.y * 0.88\n  ) * 0.70710678;\n  float bevelD = (\n    -p.x - p.y - halfSize.x * 0.84 - halfSize.y * 0.82\n  ) * 0.70710678;\n  return max(body, max(max(bevelA, bevelB), max(bevelC, bevelD)));\n}\nfloat isKeystone(float id) {\n  float a = 1.0 - step(0.25, abs(id - 6.0));\n  float b = 1.0 - step(0.25, abs(id - 7.0));\n  float c = 1.0 - step(0.25, abs(id - 8.0));\n  return max(a, max(b, c));\n}\nfloat isThroughStone(float column, float course) {\n  float correctCourse = 1.0 - step(0.25, abs(course - 2.0));\n  float a = 1.0 - step(0.25, abs(column - 1.0));\n  float b = 1.0 - step(0.25, abs(column - 4.0));\n  float c = 1.0 - step(0.25, abs(column - 8.0));\n  float d = 1.0 - step(0.25, abs(column - 10.0));\n  return correctCourse * max(max(a, b), max(c, d));\n}\nfloat isStileCopstone(float column, float course) {\n  float crest = step(3.75, course);\n  float leftEdge = step(4.75, column);\n  float rightEdge = 1.0 - step(7.25, column);\n  return crest * leftEdge * rightEdge;\n}\nvec2 wallStoneTarget(\n  float column,\n  float course,\n  float jitter,\n  vec2 wallDirection,\n  vec2 wallNormal\n) {\n  float wallU = -0.39 + column * (0.78 / 11.0);\n  float wallV = -0.052 + course * 0.034;\n  if (course > 3.5) {\n    wallV += (jitter - 0.5) * 0.014;\n  }\n  return wallDirection * wallU + wallNormal * wallV;\n}\nvec2 rockfallTrack(\n  float id,\n  float laneIndex,\n  float keystone,\n  float phase,\n  vec2 fallDirection,\n  vec2 fallNormal\n) {\n  float laneSpeed = 1.0 + laneIndex;\n  float keyTrack = fract(0.18 + laneIndex * 0.27 + phase * laneSpeed);\n  float smallTrack = fract(hash11(id + 19.0) + phase * laneSpeed);\n  float track = mix(smallTrack, keyTrack, keystone);\n  float wrapped = fract(track - keyTrack + 0.5) - 0.5;\n  float avoidance = 1.0 - smoothstep(0.045, 0.16, abs(wrapped));\n  float sideChoice = sign(wrapped + 0.0001);\n  float lane = (laneIndex - 1.0) * 0.082;\n  float braid = sin(track * TAU * 2.0 + laneIndex * 2.1) * 0.014;\n  float route = sideChoice * avoidance * 0.038 * (1.0 - keystone);\n  return fallDirection * mix(-0.57, 0.57, track)\n    + fallNormal * (lane + braid + route);\n}\nfloat wallLifecycle(float column, float course, float phase) {\n  float columnProgress = column / 11.0;\n  float topFirst = (4.0 - course) * 0.013;\n  if (column \u003c 2.5) {\n    float releaseAt = 0.765 + topFirst + column * 0.007;\n    float returnAt = 0.940 + column * 0.012;\n    float released = smoothstep(releaseAt, releaseAt + 0.035, phase);\n    float returned = smoothstep(returnAt, min(returnAt + 0.026, 0.998), phase);\n    return clamp(1.0 - released + returned, 0.0, 1.0);\n  }\n  float arrivalAt = 0.150\n    + ((column - 3.0) / 8.0) * 0.280\n    + course * 0.004;\n  float releaseAt = 0.760 + columnProgress * 0.075 + topFirst;\n  float arrived = smoothstep(arrivalAt, arrivalAt + 0.032, phase);\n  float released = smoothstep(releaseAt, releaseAt + 0.038, phase);\n  return arrived * (1.0 - released);\n}\nvoid main() {\n  vec2 p = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  vec2 wallDirection = normalize(vec2(0.89, 0.46));\n  vec2 wallNormal = vec2(-wallDirection.y, wallDirection.x);\n  vec2 fallDirection = normalize(vec2(0.70, -0.714));\n  vec2 fallNormal = vec2(-fallDirection.y, fallDirection.x);\n  float wallAngle = atan(wallDirection.y, wallDirection.x);\n  float fallAngle = atan(fallDirection.y, fallDirection.x);\n  vec3 deepGraphite = vec3(0.026, 0.027, 0.025);\n  vec3 warmGraphite = vec3(0.064, 0.059, 0.052);\n  vec3 gullyGraphite = vec3(0.039, 0.041, 0.037);\n  vec3 flank = vec3(0.175, 0.180, 0.164);\n  vec3 rearStone = vec3(0.305, 0.305, 0.276);\n  vec3 bone = vec3(0.705, 0.685, 0.610);\n  vec3 boneLight = vec3(0.875, 0.840, 0.720);\n  vec3 verdigris = vec3(0.190, 0.560, 0.385);\n  vec3 seamGreen = vec3(0.285, 0.940, 0.610);\n  vec3 rust = vec3(0.790, 0.265, 0.075);\n  float groundLift = smoothstep(\n    -0.52,\n    0.42,\n    dot(p, normalize(vec2(-0.45, 0.89)))\n  );\n  vec3 color = mix(deepGraphite, warmGraphite, 0.46 + groundLift * 0.20);\n  float gullyDistance = abs(dot(p, fallNormal) + 0.008);\n  float gully = 1.0 - smoothstep(0.095, 0.245, gullyDistance);\n  color = mix(color, gullyGraphite, gully * 0.68);\n  float groundCell = hash21(floor((p + vec2(0.62)) * 34.0));\n  color *= 0.965 + groundCell * 0.035;\n  vec2 dustLocal = rot(-fallAngle) * (p - vec2(0.015, -0.005));\n  float dustPocket = fillMask(\n    sdEllipseApprox(dustLocal, vec2(0.315, 0.095)),\n    0.025\n  );\n  float dustBreath = 0.72 + 0.10 * sin(tau + dot(p, fallDirection) * 7.0);\n  color = mix(\n    color,\n    vec3(0.120, 0.120, 0.103),\n    dustPocket * dustBreath * 0.24\n  );\n  for (int i = 0; i \u003c 18; i++) {\n    float fi = float(i);\n    float laneIndex = mod(fi, 3.0);\n    float travel = fract(hash11(fi + 320.0) + phase * (2.0 + laneIndex));\n    vec2 chipPosition = fallDirection * mix(-0.57, 0.57, travel)\n      + fallNormal * ((laneIndex - 1.0) * 0.082);\n    chipPosition += fallNormal * sin(travel * TAU * 2.0 + fi) * 0.012;\n    float chipLength = 0.010 + hash11(fi + 420.0) * 0.018;\n    float chipDistance = sdSegment2D(\n      p,\n      chipPosition - fallDirection * chipLength,\n      chipPosition + fallDirection * chipLength\n    );\n    float chip = 1.0 - smoothstep(0.0015, 0.0038, chipDistance);\n    color = mix(color, bone * 0.48, chip * dustPocket * 0.68);\n  }\n  float seamAccumulator = 0.0;\n  float waveFrontAccumulator = 0.0;\n  float sparkAccumulator = 0.0;\n  float waveProgress = clamp((phase - 0.635) / 0.125, 0.0, 1.0);\n  float waveU = mix(-0.415, 0.415, waveProgress);\n  float waveLife = smoothstep(0.625, 0.645, phase)\n    * (1.0 - smoothstep(0.770, 0.800, phase));\n  float standingWindow = smoothstep(0.455, 0.505, phase)\n    * (1.0 - smoothstep(0.755, 0.790, phase));\n  for (int i = 0; i \u003c 60; i++) {\n    float fi = float(i);\n    float course = floor(fi / 12.0);\n    float column = mod(fi, 12.0);\n    float columnProgress = column / 11.0;\n    float saltA = hash11(fi + 41.0);\n    float saltB = hash11(fi + 103.0);\n    float keystone = isKeystone(fi);\n    float throughStone = isThroughStone(column, course);\n    float stileCopstone = isStileCopstone(column, course);\n    float built = wallLifecycle(column, course, phase);\n    built *= 1.0 - stileCopstone;\n    float laneIndex = mod(fi, 3.0);\n    vec2 loosePosition = rockfallTrack(\n      fi,\n      laneIndex,\n      keystone,\n      phase,\n      fallDirection,\n      fallNormal\n    );\n    vec2 targetPosition = wallStoneTarget(\n      column,\n      course,\n      saltA,\n      wallDirection,\n      wallNormal\n    );\n    float wallU = -0.39 + column * (0.78 / 11.0);\n    float standingShape = sin(columnProgress * TAU * 2.0)\n      * sin(tau)\n      * standingWindow;\n    targetPosition += wallNormal * standingShape * 0.0055;\n    float handoff = 4.0 * built * (1.0 - built);\n    vec2 stonePosition = mix(loosePosition, targetPosition, built);\n    stonePosition += wallNormal\n      * handoff\n      * (0.018 + 0.010 * saltB)\n      * (saltA > 0.5 ? 1.0 : -1.0);\n    vec2 looseSize = vec2(\n      0.030 + saltA * 0.017,\n      0.011 + saltB * 0.009\n    );\n    vec2 wallSize = vec2(\n      0.031 + saltA * 0.009,\n      0.0125 + saltB * 0.0045\n    );\n    looseSize = mix(looseSize, vec2(0.074, 0.038), keystone);\n    wallSize = mix(wallSize, vec2(0.052, 0.024), keystone);\n    vec2 halfSize = mix(looseSize, wallSize, built);\n    vec2 throughSize = vec2(0.040, 0.0145);\n    halfSize = mix(halfSize, throughSize, throughStone * built);\n    float targetAngle = wallAngle + throughStone * TAU * 0.25;\n    float angle = mix(fallAngle, targetAngle, built);\n    angle += (saltA - 0.5) * mix(0.24, 0.065, built);\n    angle += handoff * (0.24 + saltB * 0.25);\n    vec2 backPosition = stonePosition + wallNormal * 0.026 * built;\n    vec2 backLocal = rot(-angle) * (p - backPosition);\n    vec2 sideLocal = rot(-angle) * (\n      p - stonePosition - vec2(0.006, -0.009)\n    );\n    vec2 localStone = rot(-angle) * (p - stonePosition);\n    float backDistance = sdSlate(\n      backLocal,\n      halfSize + vec2(0.002, 0.001),\n      saltB\n    );\n    float sideDistance = sdSlate(sideLocal, halfSize, saltA);\n    float faceDistance = sdSlate(localStone, halfSize, saltA);\n    float backMask = fillMask(backDistance, 0.0018);\n    float sideMask = fillMask(sideDistance, 0.0016);\n    float faceMask = fillMask(faceDistance, 0.0014);\n    vec2 innerSize = max(\n      halfSize - vec2(0.0042, 0.0032),\n      vec2(0.004)\n    );\n    float innerDistance = sdSlate(localStone, innerSize, saltA);\n    float innerMask = fillMask(innerDistance, 0.0012);\n    float stoneJoint = max(faceMask - innerMask, 0.0);\n    color = mix(color, rearStone, backMask * (0.66 + built * 0.24));\n    color = mix(color, flank, sideMask * 0.95);\n    float topLight = clamp(\n      0.54\n      + 0.30 * (localStone.y / max(halfSize.y, 0.004))\n      + 0.12 * saltB,\n      0.0,\n      1.0\n    );\n    vec3 faceColor = mix(vec3(0.405, 0.405, 0.365), boneLight, topLight);\n    faceColor = mix(faceColor, boneLight, throughStone * built * 0.22);\n    faceColor = mix(faceColor, bone * 0.88, keystone * 0.30);\n    color = mix(color, faceColor, faceMask * 0.98);\n    vec2 lichenCenter = vec2(\n      (saltA - 0.5) * halfSize.x * 0.95,\n      (saltB - 0.5) * halfSize.y\n    );\n    float lichenDistance = sdEllipseApprox(\n      localStone - lichenCenter,\n      vec2(0.0055 + saltB * 0.003, 0.0028 + saltA * 0.002)\n    );\n    float lichen = fillMask(lichenDistance, 0.0015);\n    float oldStone = (1.0 - smoothstep(-0.34, 0.22, wallU))\n      * step(0.68, hash11(fi + 500.0));\n    color = mix(\n      color,\n      verdigris * 0.68,\n      lichen * oldStone * built * faceMask * 0.72\n    );\n    float keyCrackA = strokeMask(\n      sdSegment2D(\n        localStone,\n        vec2(-halfSize.x * 0.42, halfSize.y * 0.20),\n        vec2(halfSize.x * 0.05, -halfSize.y * 0.10)\n      ),\n      0.0013,\n      0.0008\n    );\n    float keyCrackB = strokeMask(\n      sdSegment2D(\n        localStone,\n        vec2(halfSize.x * 0.05, -halfSize.y * 0.10),\n        vec2(halfSize.x * 0.34, -halfSize.y * 0.52)\n      ),\n      0.0012,\n      0.0008\n    );\n    float keyCrack = max(keyCrackA, keyCrackB) * keystone * faceMask;\n    color = mix(color, deepGraphite, keyCrack * 0.78);\n    float illuminatedWake = 1.0 - smoothstep(\n      waveU - 0.018,\n      waveU + 0.030,\n      wallU\n    );\n    float frontBand = 1.0 - smoothstep(\n      0.026,\n      0.068,\n      abs(wallU - waveU)\n    );\n    seamAccumulator = max(\n      seamAccumulator,\n      stoneJoint\n        * illuminatedWake\n        * waveLife\n        * built\n        * (0.58 + throughStone * 0.32)\n    );\n    waveFrontAccumulator = max(\n      waveFrontAccumulator,\n      stoneJoint * frontBand * waveLife * built\n    );\n    float arrivalAt = 0.150\n      + ((column - 3.0) / 8.0) * 0.280\n      + course * 0.004;\n    float seatingBeat = 1.0 - smoothstep(\n      0.003,\n      0.009,\n      abs(phase - arrivalAt)\n    );\n    vec2 contactPoint = targetPosition - wallNormal * (halfSize.y + 0.004);\n    float contactSpark = 1.0 - smoothstep(\n      0.002,\n      0.010,\n      length(p - contactPoint)\n    );\n    sparkAccumulator = max(\n      sparkAccumulator,\n      contactSpark * seatingBeat * keystone\n    );\n  }\n  color += verdigris * seamAccumulator * 0.70;\n  color += seamGreen * waveFrontAccumulator * 0.94;\n  color = mix(color, rust, sparkAccumulator * 0.95);\n  vec2 leftCenter = vec2(-0.145, -0.155);\n  float leftDistance = sdForegroundBoulder(\n    p - leftCenter,\n    vec2(0.116, 0.098),\n    -0.16\n  );\n  float leftMask = fillMask(leftDistance, 0.0020);\n  vec3 leftColor = mix(\n    vec3(0.065, 0.067, 0.062),\n    vec3(0.170, 0.168, 0.150),\n    smoothstep(-0.09, 0.08, p.y - leftCenter.y)\n  );\n  color = mix(color, leftColor, leftMask);\n  float leftFacet = strokeMask(\n    sdSegment2D(\n      p,\n      leftCenter + vec2(-0.080, 0.025),\n      leftCenter + vec2(0.052, 0.062)\n    ),\n    0.0018,\n    0.0010\n  );\n  float leftCrack = strokeMask(\n    sdSegment2D(\n      p,\n      leftCenter + vec2(0.008, 0.052),\n      leftCenter + vec2(-0.020, -0.038)\n    ),\n    0.0015,\n    0.0009\n  );\n  color += bone * leftFacet * leftMask * 0.12;\n  color = mix(color, deepGraphite, leftCrack * leftMask * 0.72);\n  vec2 rightCenter = vec2(0.325, 0.075);\n  float rightDistance = sdForegroundBoulder(\n    p - rightCenter,\n    vec2(0.090, 0.132),\n    0.13\n  );\n  float rightMask = fillMask(rightDistance, 0.0020);\n  vec3 rightColor = mix(\n    vec3(0.057, 0.060, 0.056),\n    vec3(0.155, 0.153, 0.139),\n    smoothstep(-0.12, 0.11, p.y - rightCenter.y)\n  );\n  color = mix(color, rightColor, rightMask);\n  float rightFacet = strokeMask(\n    sdSegment2D(\n      p,\n      rightCenter + vec2(-0.060, 0.090),\n      rightCenter + vec2(0.035, -0.080)\n    ),\n    0.0018,\n    0.0010\n  );\n  float rightCrack = strokeMask(\n    sdSegment2D(\n      p,\n      rightCenter + vec2(-0.052, 0.015),\n      rightCenter + vec2(0.032, 0.047)\n    ),\n    0.0015,\n    0.0009\n  );\n  color += bone * rightFacet * rightMask * 0.10;\n  color = mix(color, deepGraphite, rightCrack * rightMask * 0.74);\n  float vignette = 1.0 - smoothstep(\n    0.35,\n    0.72,\n    length(p * vec2(0.90, 1.0))\n  );\n  color *= 0.84 + vignette * 0.16;\n  color = max(color, vec3(0.0));\n  color = pow(color, vec3(0.94));\n  gl_FragColor = vec4(color, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 60;
+  const targetBpm = 116;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) =>
+    Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x5d866469;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const beatSeconds = 60 / bpm;
+  const barSeconds = 240 / bpm;
+  const removeStart = Math.max(1, Math.round(totalBars * 0.18));
+  const rebuildStart = Math.max(removeStart + 1, Math.round(totalBars * 0.36));
+  const bridgeStart = Math.max(rebuildStart + 1, Math.round(totalBars * 0.58));
+  const thinStart = Math.max(bridgeStart + 1, Math.round(totalBars * 0.74));
+  const returnStart = Math.max(thinStart + 1, Math.round(totalBars * 0.86));
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterBus = new Tone.Gain(0.78).connect(masterLimiter);
+  const currentVolume = new Tone.Volume(-9).connect(masterBus);
+  const current = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: {
+      attack: 0.035,
+      decay: 0.35,
+      sustain: 0.42,
+      release: 0.65
+    }
+  }).connect(currentVolume);
+  const feltVolume = new Tone.Volume(-11).connect(masterBus);
+  const feltFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1250,
+    Q: 0.65,
+    rolloff: -24
+  }).connect(feltVolume);
+  const feltKeys = new Tone.AMSynth({
+    harmonicity: 1.25,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'triangle' },
+    envelope: {
+      attack: 0.008,
+      decay: 0.22,
+      sustain: 0.06,
+      release: 0.48
+    },
+    modulationEnvelope: {
+      attack: 0.015,
+      decay: 0.12,
+      sustain: 0.04,
+      release: 0.28
+    }
+  }).connect(feltFilter);
+  const sandVolume = new Tone.Volume(-23).connect(masterBus);
+  const sandFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 520,
+    Q: 0.75,
+    rolloff: -24
+  }).connect(sandVolume);
+  const sandBreath = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: {
+      attack: 0.12,
+      decay: 0.55,
+      sustain: 0.08,
+      release: 0.7
+    }
+  }).connect(sandFilter);
+  const resonanceVolume = new Tone.Volume(-17).connect(masterBus);
+  const deepResonance = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 2.2,
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.008,
+      decay: 0.7,
+      sustain: 0.01,
+      release: 1.1
+    }
+  }).connect(resonanceVolume);
+  const openingCenter = ['A2', 'E2', 'C3', 'E2'];
+  const hollowCenter = ['C3', 'E3'];
+  const distantCenter = ['Eb2', 'Bb2', 'G2', 'Bb2'];
+  const commonToneBridge = ['C3', 'E3', 'Bb2', 'E3'];
+  const separatedCenters = ['A2', 'Eb2'];
+  const motifA = ['A3', 'C4', 'E4', 'Eb4', 'C4'];
+  const motifHollow = ['C4', 'E4', 'G4', 'E4', 'C4'];
+  const motifEb = ['Eb4', 'G4', 'Bb4', 'C5', 'G4'];
+  const motifBridge = ['C4', 'E4', 'Bb4', 'G4', 'C4'];
+  const motifSeparated = ['A3', 'Eb4', 'C4'];
+  const motifOffsets = [0.18, 0.98, 1.84, 2.78, 3.48];
+  const currentEvents = [];
+  for (let bar = 0; bar < totalBars; bar += 1) {
+    let note;
+    let velocity;
+    if (bar < removeStart) {
+      note = openingCenter[bar % openingCenter.length];
+      velocity = 0.7 + R() * 0.07;
+    } else if (bar < rebuildStart) {
+      if ((bar - removeStart) % 2 !== 0) {
+        continue;
+      }
+      note = hollowCenter[
+        Math.floor((bar - removeStart) / 2) % hollowCenter.length
+      ];
+      velocity = 0.54 + R() * 0.06;
+    } else if (bar < bridgeStart) {
+      note = distantCenter[(bar - rebuildStart) % distantCenter.length];
+      velocity = 0.64 + R() * 0.08;
+    } else if (bar < thinStart) {
+      note = commonToneBridge[(bar - bridgeStart) % commonToneBridge.length];
+      velocity = 0.68 + R() * 0.08;
+    } else if (bar < returnStart) {
+      if ((bar - thinStart) % 2 !== 0) {
+        continue;
+      }
+      note = separatedCenters[
+        Math.floor((bar - thinStart) / 2) % separatedCenters.length
+      ];
+      velocity = 0.5 + R() * 0.05;
+    } else {
+      note = openingCenter[(bar - returnStart) % openingCenter.length];
+      velocity = 0.68 + R() * 0.06;
+    }
+    currentEvents.push([
+      bar * barSeconds + H(12),
+      {
+        note,
+        velocity,
+        startBar: bar,
+        endBar: bar + 1
+      }
+    ]);
+  }
+  const currentPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (
+      bar >= event.startBar &&
+      bar < event.endBar &&
+      bar >= 0 &&
+      bar < totalBars
+    ) {
+      current.triggerAttackRelease(event.note, '2n', time, event.velocity);
+    }
+  }, currentEvents).start(0);
+  const motifEvents = [];
+  const addMotif = (startBar, endBar, notes, cutoff, level) => {
+    notes.forEach((note, index) => {
+      motifEvents.push([
+        startBar * barSeconds +
+          motifOffsets[index] * beatSeconds +
+          H(15),
+        {
+          note,
+          cutoff,
+          velocity: level + R() * 0.07,
+          startBar,
+          endBar
+        }
+      ]);
+    });
+  };
+  addMotif(0, removeStart, motifA, 1250, 0.62);
+  addMotif(removeStart, rebuildStart, motifHollow, 820, 0.47);
+  addMotif(rebuildStart, bridgeStart, motifEb, 1680, 0.58);
+  addMotif(bridgeStart, thinStart, motifBridge, 2180, 0.66);
+  addMotif(thinStart, returnStart, motifSeparated, 980, 0.45);
+  addMotif(returnStart, totalBars, motifA, 1250, 0.59);
+  const motifPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (
+      bar >= event.startBar &&
+      bar < event.endBar &&
+      bar >= 0 &&
+      bar < totalBars
+    ) {
+      feltFilter.frequency.setValueAtTime(event.cutoff, time);
+      feltKeys.triggerAttackRelease(event.note, '8n', time, event.velocity);
+    }
+  }, motifEvents).start(0);
+  const sandEvents = [];
+  for (let bar = 0; bar < totalBars; bar += 2) {
+    let cutoff = 520;
+    let velocity = 0.18 + R() * 0.05;
+    if (bar >= removeStart && bar < rebuildStart) {
+      if ((bar - removeStart) % 4 !== 0) {
+        continue;
+      }
+      cutoff = 380;
+      velocity = 0.12 + R() * 0.03;
+    } else if (bar >= rebuildStart && bar < bridgeStart) {
+      cutoff = 690;
+      velocity = 0.22 + R() * 0.06;
+    } else if (bar >= bridgeStart && bar < thinStart) {
+      cutoff = 860;
+      velocity = 0.25 + R() * 0.06;
+    } else if (bar >= thinStart && bar < returnStart) {
+      if ((bar - thinStart) % 4 !== 0) {
+        continue;
+      }
+      cutoff = 440;
+      velocity = 0.13 + R() * 0.03;
+    } else if (bar >= returnStart) {
+      cutoff = 520;
+      velocity = 0.17 + R() * 0.04;
+    }
+    sandEvents.push([
+      bar * barSeconds + 0.62 * beatSeconds + H(18),
+      {
+        cutoff,
+        velocity,
+        startBar: bar,
+        endBar: Math.min(totalBars, bar + 1)
+      }
+    ]);
+  }
+  const sandPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (
+      bar >= event.startBar &&
+      bar < event.endBar &&
+      bar >= 0 &&
+      bar < totalBars
+    ) {
+      sandFilter.frequency.setValueAtTime(event.cutoff, time);
+      sandBreath.triggerAttackRelease('2n', time, event.velocity);
+    }
+  }, sandEvents).start(0);
+  const resonanceEvents = [
+    [
+      0.72 * barSeconds + H(10),
+      {
+        note: 'A1',
+        velocity: 0.46,
+        startBar: 0,
+        endBar: removeStart
+      }
+    ],
+    [
+      rebuildStart * barSeconds + 0.12 * beatSeconds + H(10),
+      {
+        note: 'Eb1',
+        velocity: 0.52,
+        startBar: rebuildStart,
+        endBar: bridgeStart
+      }
+    ],
+    [
+      returnStart * barSeconds + 0.12 * beatSeconds + H(10),
+      {
+        note: 'A1',
+        velocity: 0.42,
+        startBar: returnStart,
+        endBar: totalBars
+      }
+    ]
+  ];
+  const resonancePart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (
+      bar >= event.startBar &&
+      bar < event.endBar &&
+      bar >= 0 &&
+      bar < totalBars
+    ) {
+      deepResonance.triggerAttackRelease(
+        event.note,
+        '8n',
+        time,
+        event.velocity
+      );
+    }
+  }, resonanceEvents).start(0);
+  window.toneJsInstruments = {
+    masterLimiter,
+    masterBus,
+    currentVolume,
+    current,
+    feltVolume,
+    feltFilter,
+    feltKeys,
+    sandVolume,
+    sandFilter,
+    sandBreath,
+    resonanceVolume,
+    deepResonance
+  };
+  window.toneJsParts = {
+    currentPart,
+    motifPart,
+    sandPart,
+    resonancePart
+  };
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

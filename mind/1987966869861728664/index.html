@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+
+let seed = 42;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+const lineCount = 24;
+const lines = [];
+const cx = 400;
+const cy = 400;
+
+for (let i = 0; i < lineCount; i++) {
+  const angle = (i / lineCount) * Math.PI * 2;
+  const length = 120 + random() * 80;
+  const thickness = 2 + random() * 4;
+  const color = random() > 0.5 ? '#e8d5b7' : '#c7a882';
+  lines.push({ angle, length, thickness, color, offset: random() * Math.PI * 2 });
+}
+
+const bookPages = [];
+for (let i = 0; i < 8; i++) {
+  const angle = (i / 8) * Math.PI * 2;
+  const dist = 200 + i * 15;
+  bookPages.push({ angle, dist, width: 60 + random() * 30, height: 40 + random() * 20 });
+}
+
+const particles = [];
+for (let i = 0; i < 60; i++) {
+  const angle = random() * Math.PI * 2;
+  const dist = 100 + random() * 150;
+  particles.push({
+    angle,
+    dist,
+    size: 1 + random() * 2,
+    speed: 0.3 + random() * 0.7,
+    phase: random() * Math.PI * 2
+  });
+}
+
+window.renderFrame = function(time) {
+  ctx.fillStyle = '#0a0a0f';
+  ctx.fillRect(0, 0, 800, 800);
+
+  const progress = (time / duration) % 1;
+  const rotationSpeed = 1;
+  const mainRotation = progress * rotationSpeed * Math.PI * 2;
+  
+  const sectionProgress = progress * 4;
+  const section = Math.floor(sectionProgress);
+  const sectionPhase = sectionProgress % 1;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+
+  if (section === 0) {
+    ctx.globalAlpha = Math.min(1, sectionPhase * 2);
+  } else if (section >= 3) {
+    ctx.globalAlpha = Math.max(0, 1 - (sectionPhase * 2));
+  } else {
+    ctx.globalAlpha = 1;
+  }
+
+  const gravityWellIntensity = section === 1 ? sectionPhase : (section === 2 ? 1 - sectionPhase * 0.5 : 0);
+
+  for (let i = 0; i < particles.length; i++) {
+    const p = particles[i];
+    const particleRotation = mainRotation * p.speed + p.phase;
+    
+    let currentDist = p.dist;
+    if (gravityWellIntensity > 0) {
+      currentDist = p.dist * (1 - gravityWellIntensity * 0.7);
+    }
+    
+    const x = Math.cos(p.angle + particleRotation) * currentDist;
+    const y = Math.sin(p.angle + particleRotation) * currentDist;
+    
+    const pulsePhase = (progress + i / particles.length) % 1;
+    const pulse = Math.sin(pulsePhase * Math.PI * 2) * 0.3 + 0.7;
+    
+    ctx.fillStyle = '#8b7355';
+    ctx.globalAlpha *= pulse;
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha /= pulse;
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineRotation = mainRotation + line.offset;
+    const lineAngle = line.angle + lineRotation;
+    
+    let currentLength = line.length;
+    if (section === 2) {
+      currentLength *= (1 + sectionPhase * 0.5);
+    }
+    
+    const x1 = Math.cos(lineAngle) * 80;
+    const y1 = Math.sin(lineAngle) * 80;
+    const x2 = Math.cos(lineAngle) * (80 + currentLength);
+    const y2 = Math.sin(lineAngle) * (80 + currentLength);
+    
+    ctx.strokeStyle = line.color;
+    ctx.lineWidth = line.thickness;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+
+  const bookRotation = -mainRotation * 0.5;
+  for (let i = 0; i < bookPages.length; i++) {
+    const page = bookPages[i];
+    const pageAngle = page.angle + bookRotation;
+    const x = Math.cos(pageAngle) * page.dist;
+    const y = Math.sin(pageAngle) * page.dist;
+    
+    let openAmount = 0;
+    if (section === 1 || section === 2) {
+      openAmount = section === 1 ? sectionPhase : 1;
+    }
+    
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(pageAngle + Math.PI / 2);
+    
+    ctx.fillStyle = '#f5e6d3';
+    ctx.strokeStyle = '#8b7355';
+    ctx.lineWidth = 1;
+    
+    const leftOffset = -page.width / 2 - openAmount * 8;
+    const rightOffset = page.width / 2 + openAmount * 8;
+    
+    ctx.beginPath();
+    ctx.rect(leftOffset, -page.height / 2, page.width / 2, page.height);
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.rect(0, -page.height / 2, rightOffset - page.width / 2, page.height);
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.strokeStyle = '#c7a882';
+    ctx.lineWidth = 0.5;
+    for (let l = 0; l < 3; l++) {
+      const lineY = -page.height / 2 + 8 + l * 8;
+      ctx.beginPath();
+      ctx.moveTo(leftOffset + 4, lineY);
+      ctx.lineTo(leftOffset + page.width / 2 - 4, lineY);
+      ctx.stroke();
+      
+      ctx.beginPath();
+      ctx.moveTo(4, lineY);
+      ctx.lineTo(rightOffset - 4, lineY);
+      ctx.stroke();
+    }
+    
+    ctx.restore();
+  }
+
+  ctx.strokeStyle = '#6b5d4f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, 70, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.restore();
+
+  ctx.fillStyle = '#e8d5b7';
+  ctx.font = '12px monospace';
+  ctx.textAlign = 'center';
+  const marginText = 'gravity well';
+  const marginAlpha = section === 1 ? Math.min(1, sectionPhase * 3) : (section === 2 ? Math.max(0, 1 - sectionPhase * 3) : 0);
+  ctx.globalAlpha = marginAlpha;
+  ctx.fillText(marginText, cx, cy + 320);
+  ctx.globalAlpha = 1;
+
+  return canvas.toDataURL('image/png');
+};
+
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 76;
+  Tone.Transport.bpm.value = bpm;
+
+  // === FX BUSES ===
+  const masterReverb = new Tone.Reverb({ decay: 3.2, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+
+  const compressor = new Tone.Compressor({ threshold: -20, ratio: 8, attack: 0.005, release: 0.2 }).toDestination();
+
+  // === DEEP PULSE (sub kick, slow, gravity-like) ===
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 7,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.1 }
+  }).toDestination();
+
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 2) {
+      kick.triggerAttackRelease("C0", "4n", time, 0.9);
+      compressor.threshold.setValueAtTime(-35, time);
+      compressor.threshold.exponentialRampToValueAtTime(-20, time + 0.25);
+    }
+  }, "2n").start(0);
+
+  // === GRAVITY WELL BASS (slow evolving, detuned) ===
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 120, Q: 2.5 }).connect(compressor);
+  const bassChorus = new Tone.Chorus({ frequency: 0.08, delayTime: 8, depth: 0.4, wet: 0.5 }).connect(bassFilter).start();
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    portamento: 0.15,
+    envelope: { attack: 0.08, decay: 0.3, sustain: 0.6, release: 0.4 }
+  }).connect(bassChorus);
+
+  const bassRoots = ["C1", "A0", "F0", "G0"];
+  let bassPhrase = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    if (bar >= 4) {
+      const rootIndex = Math.floor(bassPhrase / 4) % bassRoots.length;
+      const octaveShift = (bassPhrase % 4 === 3) ? 12 : 0;
+      const midiNote = Tone.Frequency(bassRoots[rootIndex]).toMidi() + octaveShift;
+      bass.triggerAttackRelease(Tone.Frequency(midiNote, "midi"), "2n", time, 0.7);
+      bassPhrase++;
+    }
+  }, "2n").start(0);
+
+  // Bass filter opens slowly (120Hz → 380Hz over 12 bars)
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.exponentialRampToValueAtTime(380, time + 12 * (60 / bpm) * 4);
+  }, "4:0:0");
+
+  // === SINGULARITY BELLS (FM, sparse, high register) ===
+  const bellReverb = new Tone.Reverb({ decay: 4.5, wet: 0.7 }).toDestination();
+  await bellReverb.generate();
+  const bell = new Tone.FMSynth({
+    harmonicity: 4.2,
+    modulationIndex: 18,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.002, decay: 3.5, sustain: 0, release: 0.2 },
+    modulation: { type: "sine" },
+    modulationEnvelope: { attack: 0.01, decay: 2.8, sustain: 0, release: 0.1 }
+  }).connect(bellReverb);
+
+  const bellNotes = ["C6", "E6", "G6", "A6", "D6", "F6", "B5"];
+  let bellCount = 0;
+  const bellLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const density = bar < 6 ? 0.15 : (bar < 12 ? 0.35 : 0.55);
+    
+    if (Math.random() < density) {
+      const noteIndex = Math.floor(Math.random() * bellNotes.length);
+      const velocity = 0.25 + Math.random() * 0.3;
+      bell.triggerAttackRelease(bellNotes[noteIndex], "1n", time, velocity);
+    }
+    bellCount++;
+  }, "2n").start(0);
+
+  // === MARGIN TEXTURE (filtered noise, evolving HPF) ===
+  const textureHPF = new Tone.Filter({ type: "highpass", frequency: 800 }).connect(masterReverb);
+  const textureLPF = new Tone.Filter({ type: "lowpass", frequency: 4500 }).connect(textureHPF);
+  const texture = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.3, decay: 0.5, sustain: 0.3, release: 0.8 }
+  }).connect(textureLPF);
+
+  let textureStep = 0;
+  const textureLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const shouldPlay = (textureStep % 3 === 0) || (bar >= 10 && Math.random() > 0.4);
+    
+    if (shouldPlay) {
+      const duration = ["2n", "4n", "1n"][Math.floor(Math.random() * 3)];
+      texture.triggerAttackRelease(duration, time, 0.12);
+    }
+    textureStep++;
+  }, "1n").start(0);
+
+  // HPF sweep (800Hz → 200Hz, opens the margins)
+  Tone.Transport.schedule((time) => {
+    textureHPF.frequency.exponentialRampToValueAtTime(200, time + 8 * (60 / bpm) * 4);
+  }, "6:0:0");
+
+  // === PORTAL PAD (detuned layers, slow morph) ===
+  const padFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 1.8 }).connect(compressor);
+  const padDelay = new Tone.FeedbackDelay({ delayTime: "8n.", feedback: 0.25, wet: 0.2 }).connect(padFilter);
+  const pad1 = new Tone.Synth({
+    oscillator: { type: "sawtooth" },
+    detune: -12,
+    envelope: { attack: 1.2, decay: 0.5, sustain: 0.7, release: 2.0 }
+  }).connect(padDelay);
+
+  const pad2 = new Tone.Synth({
+    oscillator: { type: "sawtooth" },
+    detune: 8,
+    envelope: { attack: 1.4, decay: 0.6, sustain: 0.6, release: 2.2 }
+  }).connect(padDelay);
+
+  const padChords = [
+    ["C3", "E3", "G3"],
+    ["A2", "C3", "E3"],
+    ["F2", "A2", "C3"],
+    ["G2", "B2", "D3"]
+  ];
+
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const chord = padChords[chordIndex % padChords.length];
+    
+    const velocity = bar < 3 ? 0.08 : (bar < 8 ? 0.15 : 0.22);
+    
+    pad1.triggerAttackRelease(chord[0], "1n", time, velocity);
+    pad2.triggerAttackRelease(chord[1], "1n", time + 0.05, velocity);
+    pad1.triggerAttackRelease(chord[2], "1n", time + 0.1, velocity * 0.8);
+    
+    chordIndex++;
+  }, "1n").start(0);
+
+  // Pad filter opens (600Hz → 2200Hz from bar 8)
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.exponentialRampToValueAtTime(2200, time + 8 * (60 / bpm) * 4);
+  }, "8:0:0");
+
+  // === COLLAPSE SWELLS (noise risers at key moments) ===
+  const swellFilter = new Tone.Filter({ type: "bandpass", frequency: 1200, Q: 3 }).connect(masterReverb);
+  const swell = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 1.2, decay: 0.4, sustain: 0, release: 1.0 }
+  }).connect(swellFilter);
+
+  // Swell 1: Bar 5 (portal opening)
+  Tone.Transport.schedule((time) => {
+    swellFilter.frequency.exponentialRampToValueAtTime(3500, time + 1.8);
+    swell.triggerAttackRelease(2.0, time, 0.18);
+  }, "5:0:0");
+
+  // Swell 2: Bar 11 (narrative collapse)
+  Tone.Transport.schedule((time) => {
+    swellFilter.frequency.exponentialRampToValueAtTime(4800, time + 2.2);
+    swell.triggerAttackRelease(2.5, time, 0.22);
+  }, "11:0:0");
+
+  // === MICRO GLITCH (metallic ticks, random placement) ===
+  const glitch = new Tone.MetalSynth({
+    frequency: 180,
+    envelope: { attack: 0.001, decay: 0.05, release: 0.02 },
+    harmonicity: 8.2,
+    modulationIndex: 45,
+    resonance: 2800
+  }).connect(masterReverb);
+
+  let glitchStep = 0;
+  const glitchLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const density = bar < 6 ? 0.05 : (bar < 12 ? 0.12 : 0.25);
+    
+    if (Math.random() < density) {
+      const freq = 180 + Math.random() * 400;
+      glitch.frequency.setValueAtTime(freq, time);
+      glitch.triggerAttackRelease("32n", time, 0.3 + Math.random() * 0.2);
+    }
+    glitchStep++;
+  }, "16n").start(0);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = { kick, bass, bell, texture, pad1, pad2, swell, glitch };
+  window.toneJsParts = { kickLoop, bassLoop, bellLoop, textureLoop, padLoop, glitchLoop };
+};
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

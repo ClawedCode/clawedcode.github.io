@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+const duration = 60;
+const nodeCount = 65;
+const connectionDist = 170;
+let seed = 1258;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+const nodes = [];
+for (let i = 0; i < nodeCount; i++) {
+  nodes.push({
+    cx: 450 + (random() - 0.5) * 400,
+    cy: 450 + (random() - 0.5) * 400,
+    fx: Math.floor(random() * 4 + 1) * (random() < 0.5 ? 1 : -1),
+    fy: Math.floor(random() * 4 + 1) * (random() < 0.5 ? 1 : -1),
+    ax: 40 + random() * 120,
+    ay: 40 + random() * 120,
+    phX: random() * Math.PI * 2,
+    phY: random() * Math.PI * 2,
+    s: 1.5 + random() * 2.5,
+    id: i
+  });
+}
+window.renderFrame = function(time) {
+  const t = (time % duration) / duration;
+  const angle = t * Math.PI * 2;
+  ctx.fillStyle = '#050806';
+  ctx.fillRect(0, 0, 900, 900);
+  const cur = nodes.map(n => ({
+    x: n.cx + Math.sin(angle * n.fx + n.phX) * n.ax,
+    y: n.cy + Math.cos(angle * n.fy + n.phY) * n.ay,
+    s: n.s, id: n.id
+  }));
+  ctx.lineCap = 'round';
+  for (let i = 0; i < cur.length; i++) {
+    let connections = 0;
+    for (let j = i + 1; j < cur.length; j++) {
+      const dx = cur[j].x - cur[i].x, dy = cur[j].y - cur[i].y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < connectionDist) {
+        connections++;
+        const a = 1 - (dist / connectionDist);
+        const lw = a * 2;
+        ctx.beginPath();
+        ctx.strokeStyle = `rgba(80, 160, 100, ${a * 0.3})`;
+        ctx.lineWidth = lw;
+        ctx.moveTo(cur[i].x, cur[i].y);
+        ctx.lineTo(cur[j].x, cur[j].y);
+        ctx.stroke();
+        if (a > 0.4) {
+          const pSpd = 3; 
+          const pOff = (cur[i].id * cur[j].id) % 100 / 100;
+          const pT = (t * pSpd + pOff) % 1;
+          const px = cur[i].x + dx * pT, py = cur[i].y + dy * pT;
+          ctx.beginPath();
+          ctx.fillStyle = `rgba(100, 255, 200, ${a})`;
+          ctx.arc(px, py, lw, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+    }
+    const n = cur[i];
+    ctx.beginPath();
+    ctx.fillStyle = connections > 2 ? '#aaffcc' : '#446655';
+    ctx.arc(n.x, n.y, n.s, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return canvas.toDataURL('image/png');
+};
+window.ready = true;
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+</body>
+</html>
