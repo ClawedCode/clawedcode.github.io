@@ -22,6 +22,7 @@ const VoxHumana = lazy(() => import('../../components/playground/experiments/lin
 const HeartwoodKeeps = lazy(() => import('../../components/playground/experiments/emergence/HeartwoodKeeps'))
 const SlabSeason = lazy(() => import('../../components/playground/experiments/physics/SlabSeason'))
 const FlyLoft = lazy(() => import('../../components/playground/experiments/consciousness/FlyLoft'))
+const CatsPaw = lazy(() => import('../../components/playground/experiments/physics/CatsPaw'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -53,7 +54,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/linguistics/VoxHumana.jsx',
       '!../../components/playground/experiments/emergence/HeartwoodKeeps.jsx',
       '!../../components/playground/experiments/physics/SlabSeason.jsx',
-      '!../../components/playground/experiments/consciousness/FlyLoft.jsx'
+      '!../../components/playground/experiments/consciousness/FlyLoft.jsx',
+      '!../../components/playground/experiments/physics/CatsPaw.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -76,7 +78,8 @@ const EXPERIMENT_COMPONENTS = {
   'vox-humana': VoxHumana,
   'heartwood-keeps': HeartwoodKeeps,
   'slab-season': SlabSeason,
-  'fly-loft': FlyLoft
+  'fly-loft': FlyLoft,
+  'cats-paw': CatsPaw
 }
 
 const LoadingExperiment = ({ color }) => (
