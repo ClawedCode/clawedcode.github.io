@@ -180,7 +180,8 @@ export const CATEGORIES = {
       { slug: 'cairn-survey', name: 'cairn.survey()', color: '#8fa6c4', desc: 'sight mirror flashes through fog and plot a valley from nothing but your own readings // the road crews cut over the pass exactly where your sheet says it is' },
       { slug: 'stepwell-lens', name: 'stepwell.lens()', color: '#f2b43c', desc: 'hang dripping pots over a sunlit stepwell so every ripple becomes a lens // focus the light onto glass eggs on three floors before the shade takes them' },
       { slug: 'slab-season', name: 'slab.season()', color: '#8cc3e6', desc: 'dream a whole avalanche winter above a mountain railway, then change it // read the buried layers, shoot, fence, stamp or shut the line, and trace every slide back to the night its weak layer formed' },
-      { slug: 'cats-paw', name: 'cats.paw()', color: '#e8792b', desc: 'race a dinghy through an evening series where the wind is only visible on the water // steer for the dark cat\'s paws, tack on the headers, hike before the gust, and read in the debrief where each puff won or lost the race' }
+      { slug: 'cats-paw', name: 'cats.paw()', color: '#e8792b', desc: 'race a dinghy through an evening series where the wind is only visible on the water // steer for the dark cat\'s paws, tack on the headers, hike before the gust, and read in the debrief where each puff won or lost the race' },
+      { slug: 'eyepoint-lane', name: 'eyepoint.lane()', color: '#d8361d', desc: 'paint messages across a lane above the sea that only join up from one seat // move boards to catch the paint, break it into shards for the watchman, and look through every eye before you lay it' }
     ]
   }
 }
