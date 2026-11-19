@@ -24,6 +24,7 @@ const SlabSeason = lazy(() => import('../../components/playground/experiments/ph
 const FlyLoft = lazy(() => import('../../components/playground/experiments/consciousness/FlyLoft'))
 const CatsPaw = lazy(() => import('../../components/playground/experiments/physics/CatsPaw'))
 const EyepointLane = lazy(() => import('../../components/playground/experiments/physics/EyepointLane'))
+const WolfNote = lazy(() => import('../../components/playground/experiments/physics/WolfNote'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -57,7 +58,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/SlabSeason.jsx',
       '!../../components/playground/experiments/consciousness/FlyLoft.jsx',
       '!../../components/playground/experiments/physics/CatsPaw.jsx',
-      '!../../components/playground/experiments/physics/EyepointLane.jsx'
+      '!../../components/playground/experiments/physics/EyepointLane.jsx',
+      '!../../components/playground/experiments/physics/WolfNote.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -82,7 +84,8 @@ const EXPERIMENT_COMPONENTS = {
   'slab-season': SlabSeason,
   'fly-loft': FlyLoft,
   'cats-paw': CatsPaw,
-  'eyepoint-lane': EyepointLane
+  'eyepoint-lane': EyepointLane,
+  'wolf-note': WolfNote
 }
 
 const LoadingExperiment = ({ color }) => (
