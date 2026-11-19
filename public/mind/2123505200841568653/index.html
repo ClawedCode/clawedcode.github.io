@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+
+(() => {
+  // GHOST STRIPES. A black cat asleep on floorboards in a window's sunbeam, seen from straight above.
+  // Black is one switch (non-agouti, a/a) painting over a pattern that is still there. The pattern is computed
+  // here, on the cat's own body: Turing's two-chemical reaction-diffusion (Gray-Scott form) on a grid laid along
+  // the spine, spreading six times faster around the body than along it. Nothing about the stripes is drawn by hand.
+  const W = 900, H = 900, DURATION = 60, BPM = 120, BAR = 240 / BPM, BARS = DURATION / BAR;
+
+  // ------------------------------------------------------------------ seeded PRNG and value noise (setup only)
+  let seed = 1952;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const smooth = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const keys = (table, x) => {
+    if (x <= table[0][0]) return table[0][1];
+    for (let i = 1; i < table.length; i++) if (x <= table[i][0]) return lerp(table[i - 1][1], table[i][1], smooth(table[i - 1][0], table[i][0], x));
+    return table[table.length - 1][1];
+  };
+  const NOISE_N = 256;
+  const lattice = new Float32Array(NOISE_N * NOISE_N);
+  for (let i = 0; i < lattice.length; i++) lattice[i] = rnd();
+  const vnoise = (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+    const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+    const i0 = xi & 255, i1 = (xi + 1) & 255, j0 = (yi & 255) * NOISE_N, j1 = ((yi + 1) & 255) * NOISE_N;
+    const a = lattice[j0 + i0], b = lattice[j0 + i1], c = lattice[j1 + i0], d = lattice[j1 + i1];
+    return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+  };
+
+  // ------------------------------------------------------------------ the coat: Turing's equations on the body
+  // Body coordinates in "coat units": s runs 0 (nose) .. 1080 (tail tip); n runs across the coat.
+  const CELL = 4.5, NS = 240, NN = 56, COAT_L = NS * CELL;
+  const PROFILE = [[0, 0], [14, 40], [50, 66], [95, 70], [125, 56], [160, 60], [260, 100], [480, 112], [570, 118], [640, 84], [700, 30], [750, 18], [1000, 12], [1068, 6], [1080, 0]];
+  const halfW = (sp) => {
+    if (sp <= 0) return 0;
+    for (let i = 1; i < PROFILE.length; i++) if (sp <= PROFILE[i][0]) {
+      const [a, wa] = PROFILE[i - 1], [b, wb] = PROFILE[i];
+      const x = (sp - a) / (b - a), e = x * x * (3 - 2 * x);
+      return wa + (wb - wa) * e;
+    }
+    return 0;
+  };
+  const SIM = { F: 0.030, K: 0.057, Du: 0.16, Dv: 0.08, anis: 6, steps: 3600, seeds: 90 };
+  const N2 = NS * NN;
+  const mask = new Uint8Array(N2);
+  for (let i = 0; i < NS; i++) { const w = halfW((i + 0.5) * CELL); for (let j = 0; j < NN; j++) mask[i * NN + j] = Math.abs((j + 0.5 - NN / 2) * CELL) < w + CELL ? 1 : 0; }
+  const fLocal = new Float32Array(N2);
+  for (let i = 0; i < NS; i++) for (let j = 0; j < NN; j++) {
+    fLocal[i * NN + j] = SIM.F * (1 + 0.1 * (vnoise(i * 0.08 + 40, j * 0.08 + 9) - 0.5));
+  }
+  const wS = new Float32Array(NS), wN = new Float32Array(NS);
+  for (let i = 0; i < NS; i++) {
+    // faster across the body than along it, so bands form across it (mackerel); the head flips, so its lines run lengthways
+    const head = 1 - smooth(120, 170, i * CELL);
+    const a = lerp(1, SIM.anis, 1 - head), b = lerp(1, SIM.anis, head);
+    const norm = 2 / (a + b);
+    wS[i] = b * norm; wN[i] = a * norm;
+  }
+  let u = new Float32Array(N2).fill(1), v = new Float32Array(N2);
+  const seedList = [];
+  for (let q = 0; q < SIM.seeds; q++) {
+    const ci = Math.floor(rnd() * NS), cj = Math.floor(NN / 2 + (rnd() - 0.5) * NN * 0.7), amp = 0.25 + rnd() * 0.05;
+    seedList.push([ci, cj]);
+    for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) {
+      const i = ci + a, j = cj + b, w = smooth(3.2, 1.6, Math.hypot(a, b));
+      if (w > 0 && i >= 0 && i < NS && j >= 0 && j < NN) { u[i * NN + j] = lerp(u[i * NN + j], 0.5, w); v[i * NN + j] = Math.max(v[i * NN + j], amp * w); }
+    }
+  }
+  // snapshots along the solve, front-loaded where the pattern changes fastest
+  const NSNAP = 40;
+  const snapAt = Array.from({ length: NSNAP }, (_, k) => Math.round(SIM.steps * Math.pow(k / (NSNAP - 1), 2.4)));
+  const snaps = [];
+  let u2 = new Float32Array(N2), v2 = new Float32Array(N2);
+  const t0 = performance.now();
+  let next = 0;
+  for (let st = 0; st <= SIM.steps; st++) {
+    while (next < NSNAP && snapAt[next] === st) { snaps.push(Float32Array.from(v)); next++; }
+    if (st === SIM.steps) break;
+    for (let i = 0; i < NS; i++) {
+      const im = i > 0 ? i - 1 : i, ip = i < NS - 1 ? i + 1 : i, ws = wS[i], wn = wN[i];
+      for (let j = 0; j < NN; j++) {
+        const id = i * NN + j;
+        if (!mask[id]) { u2[id] = 1; v2[id] = 0; continue; }
+        const jm = j > 0 ? j - 1 : j, jp = j < NN - 1 ? j + 1 : j;
+        const a = mask[im * NN + j] ? im * NN + j : id, b = mask[ip * NN + j] ? ip * NN + j : id;
+        const c = mask[i * NN + jm] ? i * NN + jm : id, d = mask[i * NN + jp] ? i * NN + jp : id;
+        const uc = u[id], vc = v[id];
+        const lu = ws * (u[a] + u[b] - 2 * uc) + wn * (u[c] + u[d] - 2 * uc);
+        const lv = ws * (v[a] + v[b] - 2 * vc) + wn * (v[c] + v[d] - 2 * vc);
+        const uvv = uc * vc * vc, F = fLocal[id];
+        u2[id] = uc + SIM.Du * lu - uvv + F * (1 - uc);
+        v2[id] = vc + SIM.Dv * lv + uvv - (F + SIM.K) * vc;
+      }
+    }
+    let t = u; u = u2; u2 = t; t = v; v = v2; v2 = t;
+  }
+  const simMs = performance.now() - t0;
+  const vFinal = snaps[NSNAP - 1];
+  const vCur = new Float32Array(N2);
+
+  // ------------------------------------------------------------------ the curled body, seen from above
+  // Each limb is a tube along a spine polyline: projected half-width wp, raised height hp, resting height z0.
+  // From straight above, the visible surface at a pixel is the highest tube there.
+  const CX = 452, CY = 470;
+  const limbs = [];
+  const buildSpine = (x0, y0, th0, len, kappa, step) => {
+    const pts = [];
+    let x = x0, y = y0, th = th0;
+    for (let s = 0; s <= len + 1e-6; s += step) {
+      pts.push({ x, y, th, s });
+      const k = kappa(s);
+      th += k * step;
+      x += Math.cos(th) * step;
+      y += Math.sin(th) * step;
+    }
+    return pts;
+  };
+  // The torso is a closed ring about (RCX, RCY); the head lies in its middle with its nose in its own flank;
+  // the tail wraps the outside. Each spine is a Catmull-Rom curve through points tagged with their coat position s.
+  const RCX = 474, RCY = 468, RR = 124;
+  const Z = 1.3, ZX = 450 - RCX * Z, ZY = 452 - RCY * Z; // scene -> screen
+  const ring = (deg) => [RCX + RR * Math.cos(deg * Math.PI / 180), RCY + RR * Math.sin(deg * Math.PI / 180)];
+  const curve = (P) => {
+    const cr = (p0, p1, p2, p3, f) => {
+      const f2 = f * f, f3 = f2 * f;
+      return 0.5 * (2 * p1 + (-p0 + p2) * f + (2 * p0 - 5 * p1 + 4 * p2 - p3) * f2 + (-p0 + 3 * p1 - 3 * p2 + p3) * f3);
+    };
+    const dense = [];
+    for (let i = 0; i < P.length - 1; i++) {
+      const P0 = P[Math.max(0, i - 1)], P1 = P[i], P2 = P[i + 1], P3 = P[Math.min(P.length - 1, i + 2)];
+      for (let k = 0; k < 400; k++) {
+        const f = k / 400;
+        dense.push({ s: cr(P0[0], P1[0], P2[0], P3[0], f), x: cr(P0[1], P1[1], P2[1], P3[1], f), y: cr(P0[2], P1[2], P2[2], P3[2], f) });
+      }
+    }
+    const last = P[P.length - 1];
+    dense.push({ s: last[0], x: last[1], y: last[2] });
+    const pts = [];
+    let acc = 0, nextAt = 0;
+    for (let i = 0; i < dense.length; i++) {
+      if (i > 0) acc += Math.hypot(dense[i].x - dense[i - 1].x, dense[i].y - dense[i - 1].y);
+      if (acc >= nextAt || i === dense.length - 1) {
+        const j = Math.min(dense.length - 1, i + 1), h = Math.max(0, i - 1);
+        pts.push({ x: dense[i].x, y: dense[i].y, s: dense[i].s, th: Math.atan2(dense[j].y - dense[h].y, dense[j].x - dense[h].x) });
+        nextAt += 1.2;
+      }
+    }
+    return pts;
+  };
+  const headW = (s) => 80 * Math.sqrt(Math.max(0, 1 - Math.pow((s - 84) / 86, 2))) * (0.78 + 0.22 * smooth(0, 70, s));
+  const coatOf = (s, q) => [s / CELL, NN / 2 + (Math.asin(Math.max(-1, Math.min(1, q))) / (Math.PI / 2)) * halfW(s) / CELL];
+  limbs.push({
+    name: 'body',
+    pts: curve([
+      [150, ...ring(138)], [210, ...ring(190)], [280, ...ring(246)], [370, ...ring(303)], [470, ...ring(358)], [560, ...ring(52)], [640, ...ring(110)],
+      [700, 380, 602], [780, 302, 588], [870, 250, 512], [960, 250, 414], [1030, 288, 342], [1080, 330, 304]
+    ]),
+    wp: (s) => halfW(s) * (s < 660 ? 0.86 : 0.95) * (0.3 + 0.7 * smooth(150, 235, s)),
+    hp: (s) => halfW(s) * (s < 660 ? 0.8 : 0.9) * (0.3 + 0.7 * smooth(150, 235, s)),
+    z0: () => 0,
+    coat: coatOf
+  });
+  limbs.push({
+    name: 'head',
+    pts: curve([[0, 500, 560], [80, 486, 482], [160, 468, 402]]),
+    // a rounded skull: broad over the cheeks and ears, a blunt muzzle, a round back
+    wp: (s) => headW(s),
+    hp: (s) => headW(s) * 0.9,
+    z0: () => 30,
+    coat: coatOf
+  });
+  const body = limbs[1];
+  const bodyAt = (s) => {
+    let best = body.pts[0];
+    body.pts.forEach((p) => { if (Math.abs(p.s - s) < Math.abs(best.s - s)) best = p; });
+    return best;
+  };
+  const bodyPoint = (s, q) => {
+    // screen point on the body at coat position s and signed fraction q of the half-width (q > 0 is the left side)
+    const p = bodyAt(s), w = body.wp(s) * q;
+    return { x: p.x - Math.sin(p.th) * w, y: p.y + Math.cos(p.th) * w, th: p.th };
+  };
+  // ears: flaps at the back corners of the skull, pointing out and back
+  [1, -1].forEach((side) => {
+    const base = bodyPoint(118, 0.6 * side);
+    const th = base.th + side * 0.62;
+    const EL = 76;
+    const pts = buildSpine(base.x, base.y, th, EL, () => 0, 1);
+    limbs.push({
+      name: side > 0 ? 'earL' : 'earR', pts,
+      wp: (s) => 31 * Math.pow(1 - s / (EL + 1), 1.15),
+      hp: (s) => 10 * (1 - s / 70),
+      z0: (s) => 92 - s * 1.0,
+      inner: (s, q) => smooth(0.75, 0.35, Math.abs(q)) * smooth(EL * 0.85, EL * 0.4, s) * smooth(0, 8, s),
+      coat: (s, q) => [(98 - s * 0.3) / CELL, NN / 2 + side * (44 + s * 0.4) / CELL + q * 1.5]
+    });
+  });
+  // ------------------------------------------------------------------ per-pixel maps
+  const NPX = W * H;
+  const limbId = new Int8Array(NPX).fill(-1);
+  const coatI = new Float32Array(NPX), coatJ = new Float32Array(NPX), height = new Float32Array(NPX), innerEar = new Float32Array(NPX);
+  const t1 = performance.now();
+  limbs.forEach((L, li) => {
+    // bounding box
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9, wmax = 0;
+    L.pts.forEach((p) => { const w = L.wp(p.s); wmax = Math.max(wmax, w); x0 = Math.min(x0, p.x - w); y0 = Math.min(y0, p.y - w); x1 = Math.max(x1, p.x + w); y1 = Math.max(y1, p.y + w); });
+    x0 = Math.max(0, Math.floor(x0 * Z + ZX)); y0 = Math.max(0, Math.floor(y0 * Z + ZY)); x1 = Math.min(W - 1, Math.ceil(x1 * Z + ZX)); y1 = Math.min(H - 1, Math.ceil(y1 * Z + ZY));
+    const P = L.pts.length, PX = new Float32Array(P), PY = new Float32Array(P), CS = new Float32Array(P), SN = new Float32Array(P), WP = new Float32Array(P), HP = new Float32Array(P), Z0 = new Float32Array(P);
+    L.pts.forEach((p, k) => { PX[k] = p.x; PY[k] = p.y; CS[k] = Math.cos(p.th); SN[k] = Math.sin(p.th); WP[k] = L.wp(p.s); HP[k] = L.hp(p.s); Z0[k] = L.z0(p.s); });
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const px = (x + 0.5 - ZX) / Z, py = (y + 0.5 - ZY) / Z;
+      let best = -1, bestH = -1, bestQ = 0;
+      for (let k = 0; k < P; k++) {
+        const dx = px - PX[k];
+        const w = WP[k];
+        if (dx > w || dx < -w) continue;
+        const dy = py - PY[k];
+        if (dy > w || dy < -w) continue;
+        // distance across the spine (along its normal) and along it
+        const along = dx * CS[k] + dy * SN[k];
+        if (along > 2.0 || along < -2.0) continue;
+        const across = -dx * SN[k] + dy * CS[k];
+        const q = across / w;
+        if (q >= 1 || q <= -1) continue;
+        const h = Z0[k] + HP[k] * Math.sqrt(1 - q * q);
+        if (h > bestH) { bestH = h; best = k; bestQ = q; }
+      }
+      if (best < 0) continue;
+      const id = y * W + x;
+      if (bestH * Z <= height[id] && limbId[id] >= 0) continue;
+      height[id] = bestH * Z;
+      limbId[id] = li;
+      const c = L.coat(L.pts[best].s, bestQ);
+      coatI[id] = c[0]; coatJ[id] = c[1];
+      innerEar[id] = L.inner ? L.inner(L.pts[best].s, bestQ) : 0;
+    }
+  });
+  // fill pinholes left by the along-spine slab test (a pixel between two samples on the outside of a bend)
+  for (let pass = 0; pass < 4; pass++) for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const id = y * W + x;
+    if (limbId[id] >= 0) continue;
+    let n = 0, hs = 0, ci = 0, cj = 0, lid = -1;
+    for (const o of [-1, 1, -W, W]) { const k = id + o; if (limbId[k] >= 0) { n++; hs += height[k]; ci += coatI[k]; cj += coatJ[k]; lid = limbId[k]; } }
+    if (n >= 3) { limbId[id] = lid; height[id] = hs / n; coatI[id] = ci / n; coatJ[id] = cj / n; }
+  }
+  // normals from the height map, crease occlusion from a blurred height map
+  const nx = new Float32Array(NPX), ny = new Float32Array(NPX), nz = new Float32Array(NPX), occ = new Float32Array(NPX).fill(1);
+  const hs = Float32Array.from(height);
+  for (let pass = 0; pass < 3; pass++) {
+    const src = Float32Array.from(hs);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const id = y * W + x;
+      if (limbId[id] < 0) continue;
+      hs[id] = (src[id] * 4 + src[id - 1] + src[id + 1] + src[id - W] + src[id + W]) / 8;
+    }
+  }
+  for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
+    const id = y * W + x;
+    const gx = (hs[id + 2] - hs[id - 2]) * 0.25, gy = (hs[id + 2 * W] - hs[id - 2 * W]) * 0.25;
+    const l = Math.hypot(gx, gy, 1);
+    nx[id] = -gx / l; ny[id] = -gy / l; nz[id] = 1 / l;
+  }
+  {
+    const R = 14, tmp = new Float32Array(NPX), blur = new Float32Array(NPX);
+    for (let y = 0; y < H; y++) { let acc = 0; for (let x = -R; x < W + R; x++) { const xa = Math.min(W - 1, Math.max(0, x)); acc += height[y * W + xa]; const xr = x - 2 * R - 1; if (xr >= -R) acc -= height[y * W + Math.min(W - 1, Math.max(0, xr))]; if (x - R >= 0 && x - R < W) tmp[y * W + x - R] = acc / (2 * R + 1); } }
+    for (let x = 0; x < W; x++) { let acc = 0; for (let y = -R; y < H + R; y++) { const ya = Math.min(H - 1, Math.max(0, y)); acc += tmp[ya * W + x]; const yr = y - 2 * R - 1; if (yr >= -R) acc -= tmp[Math.min(H - 1, Math.max(0, yr)) * W + x]; if (y - R >= 0 && y - R < H) blur[(y - R) * W + x] = acc / (2 * R + 1); } }
+    for (let id = 0; id < NPX; id++) occ[id] = 1 - 0.75 * smooth(0, 34, blur[id] - height[id]);
+  }
+
+  // ------------------------------------------------------------------ the sun: fixed direction, so shadows are fixed too
+  const SUN_AZ = Math.atan2(-0.62, -0.78); // toward the window, up and to the left
+  const SUN_EL = 0.82;                      // radians above the floor
+  const sdx = Math.cos(SUN_AZ), sdy = Math.sin(SUN_AZ), rise = Math.tan(SUN_EL);
+  const Lx = sdx * Math.cos(SUN_EL), Ly = sdy * Math.cos(SUN_EL), Lz = Math.sin(SUN_EL);
+  const sunVis = new Float32Array(NPX).fill(1);
+  const pfx = new Float32Array(NPX), pfy = new Float32Array(NPX);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const id = y * W + x, h = height[id];
+    // where the sun ray through this point meets the floor: the beam's gate is evaluated there
+    pfx[id] = x + sdx * h / rise; pfy[id] = y + sdy * h / rise;
+    let minD = 1e9;
+    for (let k = 1; k <= 22; k++) {
+      const d = k * 6, qx = Math.round(x + sdx * d), qy = Math.round(y + sdy * d);
+      if (qx < 0 || qy < 0 || qx >= W || qy >= H) break;
+      const diff = (h + d * rise) - height[qy * W + qx];
+      if (diff < minD) minD = diff;
+    }
+    sunVis[id] = smooth(-18, 5, minD);
+  }
+
+  // ------------------------------------------------------------------ the floor
+  const BOARD_ANG = 0.21, bc = Math.cos(BOARD_ANG), bs = Math.sin(BOARD_ANG), BOARD_W = 92;
+  const floorR = new Float32Array(NPX), floorG = new Float32Array(NPX), floorB = new Float32Array(NPX);
+  const grain = new Float32Array(NPX);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const id = y * W + x;
+    const u1 = x * bc + y * bs, v1 = -x * bs + y * bc + 2000;
+    const board = Math.floor(v1 / BOARD_W), fv = v1 / BOARD_W - board;
+    const tone = 0.82 + 0.3 * lattice[(board * 37) & 0xffff & (lattice.length - 1)];
+    const joint = Math.floor((u1 + 3000 + lattice[(board * 11) & 0xffff] * 700) / 640);
+    const ju = (u1 + 3000 + lattice[(board * 11) & 0xffff] * 700) / 640 - joint;
+    const g = vnoise(u1 * 0.012 + board * 13, v1 * 0.32) * 0.6 + vnoise(u1 * 0.05, v1 * 0.9 + board * 7) * 0.4;
+    const streak = 0.78 + 0.32 * g;
+    const gap = Math.min(smooth(0, 0.022, fv), smooth(0, 0.022, 1 - fv), smooth(0, 0.004, ju), smooth(0, 0.004, 1 - ju));
+    const a = tone * streak * (0.25 + 0.75 * gap);
+    floorR[id] = 0.40 * a; floorG[id] = 0.25 * a; floorB[id] = 0.13 * a;
+    grain[id] = rnd();
+  }
+
+  // ------------------------------------------------------------------ the window's beam on the floor
+  // A tall four-pane window, off frame to the upper left, projected down and to the right by a low sun. In floor
+  // coordinates the beam is a parallelogram origin + a*A + b*B, a, b in [0, 1]. The muntin cross is a = 1/2, b = 1/2.
+  const BEAM_A = [-sdy * 300 + sdx * 40, sdx * 300 + sdy * 40];
+  const BEAM_B = [-sdx * 980, -sdy * 980];
+  const det = BEAM_A[0] * BEAM_B[1] - BEAM_A[1] * BEAM_B[0];
+  const MI = [BEAM_B[1] / det, -BEAM_B[0] / det, -BEAM_A[1] / det, BEAM_A[0] / det];
+  const beamOrigin = (m) => {
+    // m = 0: the beam lies over the hindquarters; m = 1: it has slid up to the head
+    const x0 = 566, y0 = 572, x1 = 384, y1 = 396;
+    // the beam reaches back toward the window, off frame; its lit end stays where the cat is
+    return [lerp(x0, x1, m) + sdx * 170 - BEAM_A[0] * 0.5 - BEAM_B[0] * 0.5, lerp(y0, y1, m) + sdy * 170 - BEAM_A[1] * 0.5 - BEAM_B[1] * 0.5];
+  };
+
+  // ------------------------------------------------------------------ the score's clock, shared with strudel.js
+  // bars of 2 s at 120 BPM, 30 bars. Every picture event is placed in bars; the score uses the same numbers.
+  const T = {
+    slide: [[0, 0], [12, 1], [24, 1], [29.25, 0], [30, 0]],
+    flood: [[12.5, 0], [15.5, 1], [23, 1], [25.5, 0]],
+    paint: [[16, 0], [16.75, 1], [22, 1], [23.5, 0]],
+    melt: [[16, 0], [17, 1], [21.5, 1], [22, 0]],
+    solveStart: 17, solveEnd: 21.5,
+    words: [[17.5, 0], [18.25, 1], [21.75, 1], [22.5, 0]],
+    eye: [[24.5, 0], [24.75, 1], [26.4, 1], [26.5, 0.15], [26.62, 1], [27.6, 1], [28, 0]]
+  };
+  const solveIndex = (b) => {
+    // the pattern advances one snapshot per eighth note, each step eased over a sixteenth
+    if (b < T.solveStart) return 0;
+    if (b >= T.solveEnd) return NSNAP - 1;
+    const e = (b - T.solveStart) * 8, k = Math.floor(e), f = smooth(0, 0.5, e - k);
+    const total = (T.solveEnd - T.solveStart) * 8;
+    const idx = (k + f) / total * (NSNAP - 1);
+    return Math.min(NSNAP - 1, idx);
+  };
+
+  // ------------------------------------------------------------------ dust in the beam
+  const furTex = new Float32Array(NPX);
+  for (let id = 0; id < NPX; id++) if (limbId[id] >= 0) furTex[id] = vnoise(coatI[id] * 0.35, coatJ[id] * 1.3) * 0.6 + vnoise(coatI[id] * 0.9, coatJ[id] * 2.6 + 50) * 0.4 - 0.5;
+  const motes = Array.from({ length: 90 }, () => ({
+    x: rnd() * 900, y: rnd() * 900, ax: 8 + rnd() * 26, ay: 8 + rnd() * 26,
+    kx: 1 + Math.floor(rnd() * 3), ky: 1 + Math.floor(rnd() * 3), px: rnd() * 6.283, py: rnd() * 6.283, r: 0.8 + rnd() * 1.6, tw: rnd() * 6.283, k: 2 + Math.floor(rnd() * 5)
+  }));
+
+  // ------------------------------------------------------------------ colour
+  const GAMMA = new Uint8ClampedArray(4097);
+  for (let i = 0; i <= 4096; i++) { const c = i / 4096; GAMMA[i] = Math.round(255 * Math.pow(c / (1 + 0.18 * c), 1 / 2.2) * 1.09); }
+  const enc = (c) => GAMMA[c >= 1 ? 4096 : c <= 0 ? 0 : (c * 4096) | 0];
+  const img = ctx.createImageData(W, H);
+  const pix = img.data;
+
+  const sampleCoat = (i, j) => {
+    if (i < 0) i = 0; if (i > NS - 1.001) i = NS - 1.001; if (j < 0) j = 0; if (j > NN - 1.001) j = NN - 1.001;
+    const i0 = i | 0, j0 = j | 0, fi = i - i0, fj = j - j0, k = i0 * NN + j0;
+    const a = vCur[k], b = vCur[k + NN], c = vCur[k + 1], d = vCur[k + NN + 1];
+    return a + (b - a) * fi + (c - a) * fj + (a - b - c + d) * fi * fj;
+  };
+
+  const face = { tip: bodyAt(0), mid: bodyAt(60), back: bodyAt(150) };
+  // the beam's gate at a point raised h above the floor (for the overlays drawn after the per-pixel pass)
+  const litAt = (x, y, h, ccx, ccy, grow, flood) => {
+    const fx = (x + sdx * h / rise - ccx) / grow, fy = (y + sdy * h / rise - ccy) / grow;
+    const a = MI[0] * fx + MI[1] * fy + 0.5, bb = MI[2] * fx + MI[3] * fy + 0.5;
+    return Math.max(flood, Math.min(smooth(-0.02, 0.02, a), smooth(-0.02, 0.02, 1 - a), smooth(-0.02, 0.02, bb), smooth(-0.02, 0.02, 1 - bb)));
+  };
+
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const b = t / BAR;
+    const tau = (t / DURATION) * Math.PI * 2;
+    const slide = keys(T.slide, b), flood = keys(T.flood, b), paint = keys(T.paint, b), melt = keys(T.melt, b);
+    const words = keys(T.words, b), eye = keys(T.eye, b);
+    // the coat on show: the solved pattern, or (in the signature) the same solve replayed from its seeds
+    const si = solveIndex(b), s0 = Math.floor(si), s1 = Math.min(NSNAP - 1, s0 + 1), sf = si - s0;
+    const A = snaps[s0], B = snaps[s1];
+    for (let k = 0; k < N2; k++) {
+      const replay = A[k] + (B[k] - A[k]) * sf;
+      vCur[k] = vFinal[k] + (replay - vFinal[k]) * melt;
+    }
+    const breath = Math.sin(tau * 15);
+    const [ox, oy] = beamOrigin(slide);
+    const soft = 0.018 + flood * 0.05;
+    const grow = 1 + flood * 3.2;
+    // grow the beam about its own centre
+    const ccx = ox + (BEAM_A[0] + BEAM_B[0]) * 0.5, ccy = oy + (BEAM_A[1] + BEAM_B[1]) * 0.5;
+    const muntin = 1 - flood;
+    const sunR = 1.75, sunG = 1.3, sunB = 0.86;
+    const ambR = 0.035, ambG = 0.042, ambB = 0.062;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const id = y * W + x;
+        // the beam gate where this point's sun ray meets the floor
+        const fx = (pfx[id] - ccx) / grow, fy = (pfy[id] - ccy) / grow;
+        const a = MI[0] * fx + MI[1] * fy + 0.5, bb = MI[2] * fx + MI[3] * fy + 0.5;
+        let gate = Math.min(smooth(-soft, soft, a), smooth(-soft, soft, 1 - a), smooth(-soft, soft, bb), smooth(-soft, soft, 1 - bb));
+        if (gate > 0 && muntin > 0) {
+          const ma = Math.abs(a - 0.5), mb = Math.abs(bb - 0.5);
+          const bar = Math.max(1 - smooth(0.012, 0.012 + soft, ma), 1 - smooth(0.006, 0.006 + soft * 0.5, mb));
+          gate *= 1 - bar * 0.92 * muntin;
+        }
+        gate = Math.max(gate, flood * flood);
+        const li = limbId[id];
+        let r, g, bl;
+        if (li < 0) {
+          const sun = gate * sunVis[id];
+          const gr = 0.94 + grain[id] * 0.12;
+          r = floorR[id] * (ambR * 0.8 + sunR * sun) * gr;
+          g = floorG[id] * (ambG * 0.8 + sunG * sun) * gr;
+          bl = floorB[id] * (ambB * 0.8 + sunB * sun) * gr;
+        } else {
+          const vv = sampleCoat(coatI[id], coatJ[id]);
+          const fur = furTex[id];
+          const m = smooth(0.11, 0.21, vv + fur * 0.06);
+          // ghost (black cat: rusty in sun, stripes darker) -> tabby (the agouti ground the black paints over)
+          const gR = lerp(0.062, 0.44, paint), gG = lerp(0.043, 0.29, paint), gB = lerp(0.033, 0.15, paint);
+          const sR = lerp(0.026, 0.034, paint), sG = lerp(0.021, 0.025, paint), sB = lerp(0.019, 0.02, paint);
+          const tick = 1 + fur * (0.25 + 0.35 * paint);
+          let aR = lerp(gR, sR, m) * tick, aG = lerp(gG, sG, m) * tick, aB = lerp(gB, sB, m) * tick;
+          if (li === 1 && paint > 0) {
+            const sp = coatI[id] * CELL, mz = smooth(52, 26, sp) * paint * 0.85;
+            aR = lerp(aR, 0.6, mz); aG = lerp(aG, 0.5, mz); aB = lerp(aB, 0.38, mz);
+          }
+          const ie = innerEar[id];
+          if (ie > 0) { aR = lerp(aR, 0.16, ie); aG = lerp(aG, 0.075, ie); aB = lerp(aB, 0.07, ie); }
+          let nX = nx[id], nY = ny[id], nZ = nz[id];
+          if (li === 0) { const k = 1 + 0.18 * breath; nX *= k; nY *= k; }
+          const ndl = nX * Lx + nY * Ly + nZ * Lz;
+          const wrap = Math.max(0, (ndl + 0.35) / 1.35);
+          const sun = gate * sunVis[id] * wrap;
+          // half vector between the sun and straight up (the camera)
+          const hx = Lx, hy = Ly, hz = Lz + 1, hl = Math.hypot(hx, hy, hz);
+          const ndh = Math.max(0, (nX * hx + nY * hy + nZ * hz) / hl);
+          const spec = Math.pow(ndh, 18) * 0.22 * gate * sunVis[id] * (1 - 0.7 * paint);
+          const rim = Math.pow(1 - nZ, 2.2) * 0.05;
+          const o = occ[id];
+          r = (aR * (ambR + sunR * sun) + spec * 0.9 + rim * 0.55 * (1 - gate)) * o;
+          g = (aG * (ambG + sunG * sun) + spec * 0.85 + rim * 0.62 * (1 - gate)) * o;
+          bl = (aB * (ambB + sunB * sun) + spec * 0.8 + rim * 0.9 * (1 - gate)) * o;
+        }
+        // vignette
+        const dx = (x - 450) / 450, dy = (y - 470) / 470;
+        const vig = 1 - 0.55 * smooth(0.55, 1.5, dx * dx + dy * dy) * (1 - flood * 0.6);
+        const p = id * 4;
+        pix[p] = enc(r * vig); pix[p + 1] = enc(g * vig); pix[p + 2] = enc(bl * vig); pix[p + 3] = 255;
+      }
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.putImageData(img, 0, 0);
+
+    // dust: lit only where the beam is
+    ctx.globalCompositeOperation = 'lighter';
+    motes.forEach((d) => {
+      const x = d.x + d.ax * Math.sin(tau * d.kx + d.px), y = d.y + d.ay * Math.sin(tau * d.ky + d.py) - 0;
+      const fx = (x - ccx) / grow, fy = (y - ccy) / grow;
+      const a = MI[0] * fx + MI[1] * fy + 0.5, bb = MI[2] * fx + MI[3] * fy + 0.5;
+      let gate = Math.min(smooth(-0.03, 0.03, a), smooth(-0.03, 0.03, 1 - a), smooth(-0.03, 0.03, bb), smooth(-0.03, 0.03, 1 - bb));
+      gate = Math.max(gate, flood * 0.6);
+      if (gate <= 0.01) return;
+      const tw = 0.55 + 0.45 * Math.sin(tau * d.k + d.tw);
+      ctx.globalAlpha = Math.min(1, gate * tw * 0.55);
+      ctx.fillStyle = '#ffe2b0';
+      ctx.beginPath();
+      ctx.arc(x, y, d.r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+
+    // the face: nose pad, whiskers, eyes. Positions come from the head's own spine, so they sit on the skull.
+    const headAxis = Math.atan2(face.back.y - face.tip.y, face.back.x - face.tip.x);
+    const ua = [Math.cos(headAxis), Math.sin(headAxis)], va = [-ua[1], ua[0]];
+    const at = (u, v) => [face.tip.x + ua[0] * u + va[0] * v, face.tip.y + ua[1] * u + va[1] * v];
+    const faceLit = litAt(face.mid.x * Z + ZX, face.mid.y * Z + ZY, 120, ccx, ccy, grow, flood);
+    ctx.save();
+    ctx.setTransform(Z, 0, 0, Z, ZX, ZY);
+    // whiskers
+    ctx.lineCap = 'round';
+    [1, -1].forEach((side) => {
+      for (let k = 0; k < 3; k++) {
+        const [x0, y0] = at(30 + k * 4, side * (14 + k * 1.5));
+        const ang = headAxis + side * (1.75 + k * 0.2);
+        const len = 58 - k * 6, droop = -5 - k * 2;
+        const x1 = x0 + Math.cos(ang) * len, y1 = y0 + Math.sin(ang) * len;
+        const mx = (x0 + x1) / 2 + ua[0] * droop, my = (y0 + y1) / 2 + ua[1] * droop;
+        ctx.strokeStyle = `rgba(232,222,204,${0.1 + 0.42 * faceLit})`;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.quadraticCurveTo(mx, my, x1, y1);
+        ctx.stroke();
+      }
+    });
+    // nose pad
+    {
+      const p0 = at(30, 0), p1 = at(39, 7), p2 = at(39, -7);
+      ctx.fillStyle = `rgb(${lerp(24, 112, faceLit * paint) | 0},${lerp(18, 66, faceLit * paint) | 0},${lerp(20, 62, faceLit * paint) | 0})`;
+      ctx.beginPath();
+      ctx.moveTo(p0[0], p0[1]);
+      ctx.quadraticCurveTo(p1[0] + ua[0] * 2, p1[1] + ua[1] * 2, p1[0], p1[1]);
+      ctx.lineTo(p2[0], p2[1]);
+      ctx.quadraticCurveTo(p2[0] + ua[0] * 2, p2[1] + ua[1] * 2, p0[0], p0[1]);
+      ctx.fill();
+    }
+    // eyes: closed seams; in bars 24.5-28 the near eye opens and looks straight up at the camera
+    [1, -1].forEach((side) => {
+      const open = eye;
+      const inner = at(62, side * 8), outer = at(77, side * 37), mid = at(69, side * 22);
+      const sag = [ -ua[0] * 4, -ua[1] * 4 ];
+      const lift = 22 * open;
+      if (open > 0.02) {
+        const upper = [mid[0] + ua[0] * lift, mid[1] + ua[1] * lift], lower = [mid[0] - ua[0] * lift * 0.8, mid[1] - ua[1] * lift * 0.8];
+        ctx.beginPath();
+        ctx.moveTo(inner[0], inner[1]);
+        ctx.quadraticCurveTo(upper[0], upper[1], outer[0], outer[1]);
+        ctx.quadraticCurveTo(lower[0], lower[1], inner[0], inner[1]);
+        ctx.closePath();
+        const gr = ctx.createRadialGradient(mid[0], mid[1], 1, mid[0], mid[1], 16);
+        gr.addColorStop(0, '#ffd970');
+        gr.addColorStop(0.65, '#e6a021');
+        gr.addColorStop(1, '#6e420a');
+        ctx.fillStyle = gr;
+        ctx.fill();
+        ctx.save();
+        ctx.clip();
+        ctx.translate(mid[0], mid[1]);
+        ctx.rotate(headAxis);
+        ctx.fillStyle = '#060403';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 11 * open, 1.8 + 3.5 * (1 - faceLit), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,250,236,0.9)';
+        ctx.beginPath();
+        ctx.arc(2.5, -side * 3, 1.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.strokeStyle = `rgba(${lerp(60, 14, faceLit) | 0},${lerp(70, 10, faceLit) | 0},${lerp(96, 8, faceLit) | 0},${0.6 + 0.35 * faceLit})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(inner[0], inner[1]);
+      if (open > 0.02) ctx.quadraticCurveTo(mid[0] + ua[0] * lift, mid[1] + ua[1] * lift, outer[0], outer[1]);
+      else ctx.quadraticCurveTo(mid[0] + sag[0], mid[1] + sag[1], outer[0], outer[1]);
+      ctx.stroke();
+    });
+
+    ctx.restore();
+
+    // the equations, written on the lit floor while the coat solves again
+    if (words > 0.01) {
+      ctx.globalAlpha = words * 0.8;
+      ctx.fillStyle = '#3b2210';
+      ctx.font = '600 22px "Courier New", monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.fillText('∂u/∂t = Dᵤ∇²u − uv² + F(1−u)', 40, 800);
+      ctx.fillText('∂v/∂t = Dᵥ∇²v + uv² − (F+k)v', 40, 832);
+      ctx.font = 'italic 20px Georgia, serif';
+      ctx.fillText('turing 1952 \u00b7 gray & scott 1984', 40, 864);
+      ctx.globalAlpha = 1;
+    }
+    return canvas.toDataURL('image/png');
+  };
+  window.__ghost = { simMs: Math.round(simMs), mapMs: Math.round(performance.now() - t1), snaps: NSNAP };
+  window.ready = true;
+})();
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 120\\n// DURATION: 60\\n// FORM: the nap 0-12 | the light 12-16 | the answer 16-22 | painted over 22-24 | one look 24-28 | the nap again 28-30\\n// TONAL CENTER: Ab major\\n// MOTIF: the activator, a marimba sixteenth figure Eb5 Ab4 C5 Eb5 F5 Eb5 C5 on sixteenths 0, 2, 3, 5, 7, 8 and 10. Under the black it is muffled; in the answer it is rebuilt two notes per bar while the stripes grow\\n// HARMONIC PLAN: Dbmaj9 | Cm9 | Fm9 | Eb9sus4, one four-bar loop all the way through, voiced on a soft electric piano with the bass on the roots\\n// GROOVE: warm minimalist house on a TR-909: four on the floor, closed hats on the off-beats, claps on 2 and 4 from bar 8, and snare ghost notes on sixteenths 3, 6, 11 and 14 that are barely there while the cat is black and become full hits while the coat is shown\\n//\\n// Turing's two chemicals as two voices: a fast, short-range activator (the marimba) and a slow, wide inhibitor (the pad).\\n// The picture and this score share one clock: bars of 2 s, the beam, the flood, the paint, the solve and the eye all land on these bars.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst BARS = 30;\\nconst SEMI = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };\\nconst hz = (name) => {\\n  const m = name.match(/^([A-G](?:#|b)?)(-?\\\\d)$/);\\n  return 440 * Math.pow(2, (SEMI[m[1]] + 12 * (Number(m[2]) + 1) - 69) / 12);\\n};\\nconst lane = () => Array.from({ length: BARS }, () => []);\\n// an event at a bar and a beat of it, lenBeats long\\nconst put = (L, bar, beat, lenBeats, v) => {\\n  let b = bar + Math.floor(beat / 4), bt = beat - Math.floor(beat / 4) * 4;\\n  b = ((b % BARS) + BARS) % BARS;\\n  const a = bt / 4;\\n  L[b].push(pure(v).compress(a, Math.min(0.9999, a + Math.max(lenBeats, 0.02) / 4)));\\n};\\nconst play = (L) => cat(...L.map((list) => (list.length ? stack(...list) : silence)));\\n\\nconst KIT = lane(), LOW = lane(), KEYS = lane(), HOOK = lane(), AIR = lane();\\nconst TR = 'RolandTR909';\\nconst drum = (bar, beat, name, n, gain, extra = {}) => put(KIT, bar, beat, 0.5, { s: name, bank: TR, n, gain, orbit: 1, ...extra });\\n\\n// ------------------------------------------------------------------ the shared clock (the picture reads the same bars)\\nconst inRange = (b, a, z) => b >= a && b \u003c z;\\nconst NAP = (b) => inRange(b, 0, 12) || inRange(b, 28, 30);\\nconst ANSWER = (b) => inRange(b, 16, 22);\\n// how bright the coat is: 0 under the black, 1 while the tabby ground shows (paint, bars 16-22, closing over 22-23.5)\\nconst paint = (b) => (b \u003c 16 ? 0 : b \u003c 22 ? 1 : b \u003c 24 ? Math.max(0, 1 - (b - 22) / 1.5) : 0);\\n\\n// ------------------------------------------------------------------ the kit\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  const breakdown = inRange(bar, 14, 16), look = inRange(bar, 24, 28);\\n  for (let beat = 0; beat \u003c 4; beat++) {\\n    if (breakdown) continue;\\n    if (look && beat % 2 === 1) continue;\\n    drum(bar, beat, 'bd', 1, look ? 0.2 : ANSWER(bar) ? 0.29 : 0.25, { cutoff: 4000 });\\n    put(KIT, bar, beat, 0.25, { s: 'sine', freq: 52, penv: 18, pattack: 0.001, pdecay: 0.045, psustain: 0, attack: 0.002, decay: 0.22, sustain: 0, release: 0.02, gain: look ? 0.08 : 0.1, orbit: 1 });\\n  }\\n  if (breakdown || look) continue;\\n  // off-beat hats; open hats in the answer\\n  const hatCut = bar >= 22 && bar \u003c 24 ? 2600 - (bar - 22) * 1000 : 9000;\\n  for (let beat = 0; beat \u003c 4; beat++) {\\n    if (ANSWER(bar)) drum(bar, beat + 0.5, 'oh', 1, 0.09, { cut: 1, cutoff: hatCut });\\n    else drum(bar, beat + 0.5, 'hh', 1, 0.12, { cut: 1, cutoff: hatCut });\\n  }\\n  // claps on 2 and 4 once the beam is moving\\n  if (bar >= 8) [1, 3].forEach((beat) => drum(bar, beat + 0.01, 'cp', 2, ANSWER(bar) ? 0.2 : 0.16, { cutoff: hatCut }));\\n  // ghost notes: barely there under the black, full hits while the coat shows\\n  const p = paint(bar);\\n  [3, 6, 11, 14].forEach((six) => drum(bar, six / 4, 'sd', 3, 0.04 + 0.16 * p, { cutoff: 1800 + 6000 * p }));\\n  // sixteenth shaker from bar 8, a ride on the quarters in the answer\\n  if (bar >= 8) for (let six = 0; six \u003c 16; six++) put(KIT, bar, six / 4 + 0.02, 0.2, { s: 'sh', bank: 'RolandTR808', n: 0, gain: six % 4 === 2 ? 0.08 : 0.045, cutoff: hatCut, orbit: 1 });\\n  if (ANSWER(bar)) for (let beat = 0; beat \u003c 4; beat++) drum(bar, beat, 'rd', 0, 0.07);\\n}\\n// a snare roll into the drop\\nfor (let six = 0; six \u003c 16; six++) drum(15, six / 4, 'sd', 1, 0.05 + six * 0.012, { cutoff: 2500 + six * 300 });\\ndrum(16, 0, 'cr', 0, 0.18);\\ndrum(24, 0, 'cr', 1, 0.08, { cutoff: 2500 });\\n\\n// ------------------------------------------------------------------ the chord loop: Dbmaj9 | Cm9 | Fm9 | Eb9sus4\\nconst LOOP = [\\n  { root: 'Db2', keys: ['F3', 'Ab3', 'C4', 'Eb4'] },\\n  { root: 'C2', keys: ['Eb3', 'G3', 'Bb3', 'D4'] },\\n  { root: 'F2', keys: ['Ab3', 'C4', 'Eb4', 'G4'] },\\n  { root: 'Eb2', keys: ['Ab3', 'Bb3', 'Db4', 'F4'] }\\n];\\nconst chordOf = (bar) => LOOP[bar % 4];\\n\\n// bass: house off-beat eighths on the root, a pickup on the last sixteenth\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  const { root } = chordOf(bar), f = hz(root), look = inRange(bar, 24, 28), breakdown = inRange(bar, 14, 16);\\n  if (breakdown) continue;\\n  const hits = look ? [0, 2.5] : [0.5, 1.5, 2.5, 3.5];\\n  hits.forEach((beat) => {\\n    put(LOW, bar, beat + 0.03, look ? 1.6 : 0.42, { s: 'sine', freq: f, attack: 0.006, decay: 0.2, sustain: 0.7, release: 0.06, gain: 0.3, orbit: 2 });\\n    put(LOW, bar, beat + 0.035, look ? 1.2 : 0.32, { s: 'sawtooth', freq: f * 2, cutoff: 1000, attack: 0.006, decay: 0.12, sustain: 0.4, release: 0.05, gain: 0.19, orbit: 2 });\\n  });\\n  if (!look && bar !== 13 && bar !== 29) {\\n    const next = chordOf(bar + 1).root;\\n    put(LOW, bar, 3.75 + 0.03, 0.2, { s: 'sine', freq: hz(next) * 2, attack: 0.004, decay: 0.12, sustain: 0.3, release: 0.04, gain: 0.22, orbit: 2 });\\n  }\\n}\\n\\n// electric piano: one held chord and an answering stab per bar; muffled under the black, open while the coat shows\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  const { keys } = chordOf(bar), p = paint(bar), look = inRange(bar, 24, 28);\\n  const cutoff = 900 + 2600 * p;\\n  const g = look ? 0.15 : 0.2;\\n  keys.forEach((name, i) => {\\n    const f = hz(name);\\n    put(KEYS, bar, 0.04 + i * 0.012, 1.6, { s: 'triangle', freq: f, cutoff, attack: 0.01, decay: 0.9, sustain: 0.35, release: 0.35, gain: g, orbit: 3, room: 0.22, roomsize: 2 });\\n    put(KEYS, bar, 0.04 + i * 0.012, 1.6, { s: 'sine', freq: f * 2, attack: 0.004, decay: 0.25, sustain: 0, release: 0.2, gain: g * 0.35, orbit: 3 });\\n    if (!look && bar !== BARS - 1) put(KEYS, bar, 2.5 + 0.03 + i * 0.01, 0.6, { s: 'triangle', freq: f, cutoff, attack: 0.008, decay: 0.3, sustain: 0.2, release: 0.2, gain: g * 0.75, orbit: 3, room: 0.22, roomsize: 2 });\\n  });\\n}\\n\\n// ------------------------------------------------------------------ the activator: the marimba hook\\nconst HOOK_SIX = [0, 2, 3, 5, 7, 8, 10];\\nconst HOOK_NOTES = ['Eb5', 'Ab4', 'C5', 'Eb5', 'F5', 'Eb5', 'C5'];\\nconst ANSWER_NOTES = ['Ab5', 'G5', 'Eb5', 'F5', 'Eb5', 'C5', 'Bb4'];\\nconst mallet = (bar, six, name, gain, cutoff, wet = 0.18) => {\\n  const f = hz(name), bright = 0.25 + 0.75 * paint(bar);\\n  put(HOOK, bar, six / 4 + 0.012, 0.6, { s: 'sine', freq: f, attack: 0.002, decay: 0.32, sustain: 0, release: 0.08, gain, cutoff, orbit: wet ? 4 : 8, delay: wet, delaytime: 0.375, delayfeedback: 0.3 });\\n  put(HOOK, bar, six / 4 + 0.012, 0.15, { s: 'sine', freq: f * 4, attack: 0.001, decay: 0.045, sustain: 0, release: 0.02, gain: gain * 0.36 * bright, orbit: 4 });\\n  put(HOOK, bar, six / 4 + 0.012, 0.3, { s: 'triangle', freq: f, attack: 0.002, decay: 0.12, sustain: 0, release: 0.04, gain: gain * 0.5, cutoff, orbit: 4 });\\n};\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  if (inRange(bar, 16, 17) || inRange(bar, 24, 28)) continue;\\n  const p = paint(bar);\\n  // under the black the figure is there but muffled; in the light it opens\\n  let count = 7;\\n  if (inRange(bar, 17, 21)) count = Math.min(7, (bar - 16) * 2); // the answer rebuilds it, two notes a bar, as the stripes grow\\n  const answerBar = bar === 21 || bar === 20;\\n  const notes = bar === 21 ? ANSWER_NOTES : HOOK_NOTES;\\n  const g = inRange(bar, 14, 16) ? 0.24 - (bar - 14) * 0.07 : 0.2 + 0.1 * p;\\n  // the last bar stops after the fifth note, dry, so nothing rings past 60 s\\n  if (bar === BARS - 1) count = 5;\\n  for (let i = 0; i \u003c count; i++) mallet(bar, HOOK_SIX[i], notes[i], g, 1100 + 5000 * p, bar === BARS - 1 ? 0 : 0.18);\\n  if (answerBar && bar === 20) for (let i = 0; i \u003c 4; i++) mallet(bar, 12 + i, ['Ab5', 'G5', 'F5', 'Eb5'][i], g * 0.7, 6100);\\n}\\n\\n// ------------------------------------------------------------------ the inhibitor: a slow, wide pad\\nconst pad = (bar, name, gain, cutoff, lenBeats = 4) => {\\n  const f = hz(name);\\n  [0, 0.12, -0.12].forEach((d, k) => put(AIR, bar, 0.02, lenBeats - 0.05, { s: 'sawtooth', freq: f * Math.pow(2, d / 12), cutoff, attack: 0.9, decay: 0.3, sustain: 0.85, release: 0.6, gain: gain * (k ? 0.7 : 1), orbit: 5, room: 0.35, roomsize: 3 }));\\n};\\nfor (let bar = 12; bar \u003c 28; bar++) {\\n  const { keys } = chordOf(bar);\\n  const swell = inRange(bar, 14, 16) ? 1.25 : inRange(bar, 24, 28) ? 0.9 : 0.75;\\n  const cutoff = bar \u003c 16 ? 700 + (bar - 12) * 300 : bar \u003c 22 ? 1800 : 900;\\n  [keys[0], keys[2]].forEach((name) => pad(bar, name, 0.08 * swell, cutoff));\\n}\\n// the riser: the beam widening to fill the room\\nput(AIR, 14, 0, 7.9, { s: 'white', gain: 0.06, bandf: 400, bandq: 0.6, bpenv: 4, bpattack: 3.8, bpdecay: 0.1, bpsustain: 1, attack: 3.6, decay: 0.1, sustain: 0.9, release: 0.05, orbit: 6 });\\n\\n// the look: the eyes open on bar 24.75, blink at 26.5, shut over 27.6-28\\n[['Ab5', 0], ['C6', 0.02], ['Eb6', 0.04]].forEach(([n, d]) => {\\n  const f = hz(n);\\n  put(AIR, 24, 3 + d, 4, { s: 'sine', freq: f, attack: 0.004, decay: 2.6, sustain: 0, release: 0.5, gain: 0.11, orbit: 7, room: 0.4, roomsize: 3 });\\n  put(AIR, 24, 3 + d, 0.3, { s: 'sine', freq: f * 3.01, attack: 0.002, decay: 0.3, sustain: 0, release: 0.1, gain: 0.03, orbit: 7 });\\n});\\nput(AIR, 26, 1.6, 0.25, { s: 'sine', freq: hz('Eb6'), attack: 0.002, decay: 0.18, sustain: 0, release: 0.05, gain: 0.07, orbit: 7, room: 0.3, roomsize: 2 });\\n[['Eb5', 2.4], ['C5', 3.1]].forEach(([n, beat]) => put(AIR, 27, beat, 1.4, { s: 'sine', freq: hz(n), attack: 0.004, decay: 1.2, sustain: 0, release: 0.3, gain: 0.08, orbit: 7, room: 0.4, roomsize: 3 }));\\n\\n$: play(KIT);\\n$: play(LOW);\\n$: play(KEYS);\\n$: play(HOOK);\\n$: play(AIR);\",\"bpm\":120,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5,\"cycles\":30,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
