@@ -1,0 +1,1156 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+
+(() => {
+  // ---------------------------------------------------------------- the two drums
+  // Fifteen right isosceles tiles, glued along the Schreier graphs of three involutions of PG(3,2): one action on the
+  // points, one on the planes. Two tiles that touch on screen without being glued have a pinned wall between them.
+  // Gordon, Webb and Wolpert (1992); Buser, Conway, Doyle and Semmler (1994).
+  const TAB = {"n":40,"N":15,"assign":[0,1,2],"cat":[[[-0.707107,0.0],[-0.0,0.707107],[-1.414214,0.707107]],[[-0.707107,-1.414214],[-1.414214,-0.707107],[-0.0,-0.707107]],[[-0.707107,0.0],[-0.0,0.707107],[-0.0,-0.707107]],[[0.707107,1.414214],[-0.0,0.707107],[1.414214,0.707107]],[[-0.707107,0.0],[-1.414214,-0.707107],[-1.414214,0.707107]],[[0.707107,1.414214],[-0.0,0.707107],[0.0,2.12132]],[[-0.707107,0.0],[-1.414214,-0.707107],[-0.0,-0.707107]],[[0.707107,0.0],[1.414214,-0.707107],[-0.0,-0.707107]],[[-0.707107,1.414214],[-0.0,0.707107],[0.0,2.12132]],[[0.707107,0.0],[1.414214,-0.707107],[1.414214,0.707107]],[[-0.707107,1.414214],[-0.0,0.707107],[-1.414214,0.707107]],[[0.707107,0.0],[-0.0,0.707107],[-0.0,-0.707107]],[[0.707107,-1.414214],[1.414214,-0.707107],[-0.0,-0.707107]],[[0.707107,0.0],[-0.0,0.707107],[1.414214,0.707107]],[[0.707107,-1.414214],[1.414214,-0.707107],[1.414214,-2.12132]]],"blank":[[[1.06066,-0.707107],[1.767767,-0.0],[0.353553,-0.0]],[[1.06066,0.707107],[0.353553,1.414214],[0.353553,-0.0]],[[-0.353553,0.707107],[-1.06066,0.0],[-1.06066,1.414214]],[[-0.353553,-0.707107],[-1.06066,0.0],[0.353553,-0.0]],[[-1.767767,0.707107],[-2.474874,1.414214],[-1.06066,1.414214]],[[1.06066,0.707107],[1.767767,-0.0],[1.767767,1.414214]],[[-0.353553,0.707107],[0.353553,1.414214],[0.353553,-0.0]],[[1.06066,-0.707107],[0.353553,-1.414214],[0.353553,-0.0]],[[2.474874,0.707107],[1.767767,-0.0],[1.767767,1.414214]],[[-0.353553,0.707107],[0.353553,1.414214],[-1.06066,1.414214]],[[1.06066,0.707107],[1.767767,-0.0],[0.353553,-0.0]],[[-1.767767,0.707107],[-1.06066,0.0],[-1.06066,1.414214]],[[-0.353553,-0.707107],[0.353553,-1.414214],[0.353553,-0.0]],[[-0.353553,0.707107],[-1.06066,0.0],[0.353553,-0.0]],[[1.06066,0.707107],[0.353553,1.414214],[1.767767,1.414214]]],"permsCat":[[2,1,0,5,4,3,6,9,8,7,10,11,14,13,12],[4,1,6,3,0,5,2,11,8,13,10,7,12,9,14],[10,6,11,13,4,8,1,12,5,9,0,2,7,3,14]],"permsBlank":[[0,14,13,3,4,10,9,7,8,6,5,11,12,2,1],[0,1,2,12,11,14,13,7,8,9,10,4,3,6,5],[10,6,11,13,4,8,1,12,5,9,0,2,7,3,14]],"T":[[1,2,-1,-2,-1,2,1,2,1,-2,-1,-2,1,2,-1],[-2,-1,-1,-2,2,-1,1,2,-2,1,-1,-2,-2,-1,-1],[-1,1,-2,2,1,1,2,-2,-1,-1,-2,2,-1,1,-2],[2,-2,-2,-1,1,1,-1,-2,2,2,-2,-1,-1,1,1],[-1,-2,1,-1,-2,1,2,-2,-1,2,1,-1,2,1,-2],[-2,-1,-1,1,-1,2,-2,2,-2,1,-1,1,1,2,2],[-1,1,-2,-1,-2,-2,-1,-2,-1,-1,-2,-1,2,-2,1],[2,-2,-2,2,-2,-2,2,1,-1,-1,1,-1,-1,1,1],[-1,-2,1,2,1,-2,-1,1,2,-1,-2,-1,2,1,-2],[-2,-1,-1,-2,2,-1,1,-1,1,-2,2,1,1,2,2],[-1,1,-2,2,1,1,2,1,2,2,1,-1,2,-2,1],[-2,2,2,1,-1,-1,1,-1,1,1,-1,-2,-2,2,2],[1,2,-1,1,2,-1,-2,-1,-2,1,2,-2,1,2,-1],[-2,-1,-1,1,-1,2,-2,-1,1,-2,2,-2,-2,-1,-1],[-1,1,-2,-1,-2,-2,-1,1,2,2,1,2,-1,1,-2]],"match":[2,12,13,1,11,14,3,0,9,10,4,6,7,5,8]};
+  const SCORE = {"events":[{"kind":"mode","role":"bell","t":0,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":0.20893,"k":2,"a":1},{"kind":"mode","role":"bell","t":0.56607,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":1.07143,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":1.42857,"k":0,"a":0.95},{"kind":"mode","role":"bass","t":0,"k":0,"a":1},{"kind":"mode","role":"bass","t":1.28036,"k":0,"a":0.6},{"kind":"mode","role":"bass","t":1.78571,"k":1,"a":0.7},{"kind":"mode","role":"bass","t":1.99464,"k":2,"a":0.9},{"kind":"mode","role":"bass","t":2.5,"k":4,"a":0.75},{"kind":"strike","role":"kick","t":0,"x":0,"y":-0.3,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":1.28036,"x":1,"y":0.95,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":1.78571,"x":-1.05,"y":0.55,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":0.71429,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":2.14286,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":2.85714,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":3.42321,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":3.92857,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":4.28571,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":4.85179,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":5.35714,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":2.85714,"k":0,"a":1},{"kind":"mode","role":"bass","t":3.92857,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":4.28571,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":4.64286,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":5.20893,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":5.35714,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":2.85714,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":3.92857,"x":-0.72,"y":-0.95,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":4.64286,"x":1.12,"y":-1.6,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":4.85179,"x":0,"y":-0.3,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":3.57143,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":5,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":5.71429,"k":0,"a":0.209},{"kind":"mode","role":"bass","t":5.71429,"k":0,"a":0.042},{"kind":"strike","role":"kick","t":5.71429,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"mode","role":"bell","t":10,"k":1,"a":0.187},{"kind":"mode","role":"bell","t":10.20893,"k":2,"a":0.22},{"kind":"mode","role":"bass","t":8.57143,"k":0,"a":0.042},{"kind":"strike","role":"kick","t":8.57143,"x":1,"y":1,"r":0.085,"a":1},{"kind":"mode","role":"bell","t":12.85714,"k":3,"a":0.187},{"kind":"mode","role":"bell","t":13.57143,"k":4,"a":0.198},{"kind":"mode","role":"bass","t":11.42857,"k":0,"a":0.042},{"kind":"strike","role":"kick","t":11.42857,"x":-1.05,"y":0.55,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":13.21429,"x":1.05,"y":0.5,"r":0.085,"a":0.8},{"kind":"mode","role":"bell","t":15.71429,"k":6,"a":0.187},{"kind":"mode","role":"bell","t":16.42857,"k":7,"a":0.198},{"kind":"mode","role":"bass","t":14.28571,"k":0,"a":0.045000000000000005},{"kind":"mode","role":"bass","t":16.07143,"k":1,"a":0.045000000000000005},{"kind":"mode","role":"bass","t":16.28036,"k":2,"a":0.05500000000000001},{"kind":"mode","role":"bass","t":16.78571,"k":4,"a":0.05},{"kind":"strike","role":"kick","t":14.28571,"x":-0.15,"y":-0.25,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":16.07143,"x":-0.72,"y":-1,"r":0.085,"a":0.8},{"kind":"mode","role":"bell","t":17.14286,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":17.35179,"k":2,"a":1},{"kind":"mode","role":"bell","t":17.70893,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":18.21429,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":18.57143,"k":0,"a":0.95},{"kind":"mode","role":"bell","t":19.28571,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":19.64286,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":19.85179,"k":0,"a":0.95},{"kind":"mode","role":"bass","t":17.14286,"k":0,"a":0.6},{"kind":"mode","role":"bass","t":18.92857,"k":1,"a":0.6},{"kind":"mode","role":"bass","t":19.1375,"k":2,"a":0.75},{"kind":"mode","role":"bass","t":19.64286,"k":4,"a":0.65},{"kind":"strike","role":"kick","t":17.14286,"x":1.15,"y":-0.5,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":18.92857,"x":1.15,"y":-1.72,"r":0.085,"a":0.86},{"kind":"mode","role":"bell","t":20,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":20.20893,"k":2,"a":1},{"kind":"mode","role":"bell","t":20.56607,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":21.07143,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":21.42857,"k":0,"a":0.95},{"kind":"mode","role":"bass","t":20,"k":0,"a":1},{"kind":"mode","role":"bass","t":21.28036,"k":0,"a":0.6},{"kind":"mode","role":"bass","t":21.78571,"k":1,"a":0.7},{"kind":"mode","role":"bass","t":21.99464,"k":2,"a":0.9},{"kind":"mode","role":"bass","t":22.5,"k":4,"a":0.75},{"kind":"strike","role":"kick","t":20,"x":0,"y":-0.3,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":21.28036,"x":1,"y":0.95,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":21.78571,"x":-1.05,"y":0.55,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":20.71429,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":22.14286,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":22.85714,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":23.42321,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":23.92857,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":24.28571,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":24.85179,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":25.35714,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":22.85714,"k":0,"a":1},{"kind":"mode","role":"bass","t":23.92857,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":24.28571,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":24.64286,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":25.20893,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":25.35714,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":22.85714,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":23.92857,"x":-0.72,"y":-0.95,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":24.64286,"x":1.12,"y":-1.6,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":24.85179,"x":0,"y":-0.3,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":23.57143,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":25,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":25.71429,"k":6,"a":0.9},{"kind":"mode","role":"bell","t":26.28036,"k":10,"a":0.9},{"kind":"mode","role":"bell","t":26.78571,"k":6,"a":0.8},{"kind":"mode","role":"bell","t":27.14286,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":27.70893,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":27.85714,"k":2,"a":0.95},{"kind":"mode","role":"bell","t":28.21429,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":25.71429,"k":3,"a":1},{"kind":"mode","role":"bass","t":26.78571,"k":0,"a":0.7},{"kind":"mode","role":"bass","t":27.14286,"k":6,"a":0.8},{"kind":"mode","role":"bass","t":27.5,"k":3,"a":0.7},{"kind":"mode","role":"bass","t":27.70893,"k":4,"a":0.8},{"kind":"mode","role":"bass","t":28.21429,"k":2,"a":0.8},{"kind":"strike","role":"kick","t":25.71429,"x":1,"y":0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":26.99464,"x":-1.05,"y":0.55,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":27.5,"x":0,"y":1.85,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":26.42857,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":27.85714,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":28.57143,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":29.1375,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":29.64286,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":30,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":30.56607,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":31.07143,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":28.57143,"k":0,"a":1},{"kind":"mode","role":"bass","t":29.64286,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":30,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":30.35714,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":30.92321,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":31.07143,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":28.57143,"x":-0.72,"y":-0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":29.64286,"x":1.12,"y":-1.6,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":30.35714,"x":0,"y":-0.3,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":30.56607,"x":1,"y":0.95,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":29.28571,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":30.71429,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":31.42857,"k":4,"a":0.85},{"kind":"mode","role":"bell","t":31.78571,"k":4,"a":0.7},{"kind":"mode","role":"bell","t":32.14286,"k":3,"a":0.8},{"kind":"mode","role":"bell","t":32.5,"k":2,"a":0.8},{"kind":"mode","role":"bell","t":32.85714,"k":1,"a":0.75},{"kind":"mode","role":"bell","t":33.06607,"k":2,"a":0.95},{"kind":"mode","role":"bell","t":33.57143,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":33.92857,"k":4,"a":0.85},{"kind":"mode","role":"bass","t":31.42857,"k":0,"a":1},{"kind":"mode","role":"bass","t":32.5,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":32.85714,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":33.21429,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":33.78036,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":33.92857,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":31.42857,"x":-1.05,"y":0.55,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":32.5,"x":0,"y":1.85,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":33.21429,"x":-0.72,"y":-0.95,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":33.42321,"x":1.12,"y":-1.6,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":32.14286,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":33.57143,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":34.28571,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":34.49464,"k":2,"a":1},{"kind":"mode","role":"bell","t":34.85179,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":35.35714,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":35.71429,"k":0,"a":0.95},{"kind":"mode","role":"bass","t":34.28571,"k":0,"a":1},{"kind":"mode","role":"bass","t":35.56607,"k":0,"a":0.6},{"kind":"mode","role":"bass","t":36.07143,"k":1,"a":0.7},{"kind":"mode","role":"bass","t":36.28036,"k":2,"a":0.9},{"kind":"mode","role":"bass","t":36.78571,"k":4,"a":0.75},{"kind":"strike","role":"kick","t":34.28571,"x":0,"y":-0.3,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":35.56607,"x":1,"y":0.95,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":36.07143,"x":-1.05,"y":0.55,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":35,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":36.42857,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":37.14286,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":37.70893,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":38.21429,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":38.57143,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":39.1375,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":39.64286,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":37.14286,"k":0,"a":1},{"kind":"mode","role":"bass","t":38.21429,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":38.57143,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":38.92857,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":39.49464,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":39.64286,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":37.14286,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":38.21429,"x":-0.72,"y":-0.95,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":38.92857,"x":1.12,"y":-1.6,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":39.1375,"x":0,"y":-0.3,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":37.85714,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":39.28571,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":40,"k":6,"a":0.9},{"kind":"mode","role":"bell","t":40.56607,"k":10,"a":0.9},{"kind":"mode","role":"bell","t":41.07143,"k":6,"a":0.8},{"kind":"mode","role":"bell","t":41.42857,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":41.99464,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":42.14286,"k":2,"a":0.95},{"kind":"mode","role":"bell","t":42.5,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":40,"k":3,"a":1},{"kind":"mode","role":"bass","t":41.07143,"k":0,"a":0.7},{"kind":"mode","role":"bass","t":41.42857,"k":6,"a":0.8},{"kind":"mode","role":"bass","t":41.78571,"k":3,"a":0.7},{"kind":"mode","role":"bass","t":41.99464,"k":4,"a":0.8},{"kind":"mode","role":"bass","t":42.5,"k":2,"a":0.8},{"kind":"strike","role":"kick","t":40,"x":1,"y":0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":41.28036,"x":-1.05,"y":0.55,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":41.78571,"x":0,"y":1.85,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":40.71429,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":42.14286,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":42.85714,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":43.42321,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":43.92857,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":44.28571,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":44.85179,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":45.35714,"k":0,"a":0.85},{"kind":"mode","role":"bass","t":42.85714,"k":0,"a":1},{"kind":"mode","role":"bass","t":43.92857,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":44.28571,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":44.64286,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":45.20893,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":45.35714,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":42.85714,"x":-0.72,"y":-0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":43.92857,"x":1.12,"y":-1.6,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":44.64286,"x":0,"y":-0.3,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":44.85179,"x":1,"y":0.95,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":43.57143,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":45,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":45.71429,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":45.92321,"k":2,"a":1},{"kind":"mode","role":"bell","t":46.28036,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":46.78571,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":47.14286,"k":0,"a":0.95},{"kind":"mode","role":"bell","t":46.42857,"k":14,"a":0.496},{"kind":"mode","role":"bell","t":46.99464,"k":10,"a":0.48},{"kind":"mode","role":"bell","t":47.5,"k":12,"a":0.44000000000000006},{"kind":"mode","role":"bell","t":47.85714,"k":10,"a":0.48},{"kind":"mode","role":"bass","t":45.71429,"k":0,"a":1},{"kind":"mode","role":"bass","t":46.99464,"k":0,"a":0.6},{"kind":"mode","role":"bass","t":47.5,"k":1,"a":0.7},{"kind":"mode","role":"bass","t":47.70893,"k":2,"a":0.9},{"kind":"mode","role":"bass","t":48.21429,"k":4,"a":0.75},{"kind":"strike","role":"kick","t":45.71429,"x":0,"y":-0.3,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":46.99464,"x":1,"y":0.95,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":47.5,"x":-1.05,"y":0.55,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":46.42857,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":47.85714,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":48.57143,"k":4,"a":0.9},{"kind":"mode","role":"bell","t":49.1375,"k":7,"a":0.9},{"kind":"mode","role":"bell","t":49.64286,"k":4,"a":0.8},{"kind":"mode","role":"bell","t":50,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":50.56607,"k":2,"a":0.9},{"kind":"mode","role":"bell","t":51.07143,"k":0,"a":0.85},{"kind":"mode","role":"bell","t":49.28571,"k":14,"a":0.496},{"kind":"mode","role":"bell","t":49.85179,"k":10,"a":0.48},{"kind":"mode","role":"bell","t":50.35714,"k":12,"a":0.44000000000000006},{"kind":"mode","role":"bell","t":50.71429,"k":10,"a":0.48},{"kind":"mode","role":"bass","t":48.57143,"k":0,"a":1},{"kind":"mode","role":"bass","t":49.64286,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":50,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":50.35714,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":50.92321,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":51.07143,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":48.57143,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":49.64286,"x":-0.72,"y":-0.95,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":50.35714,"x":1.12,"y":-1.6,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":50.56607,"x":0,"y":-0.3,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":49.28571,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":50.71429,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":51.42857,"k":6,"a":0.9},{"kind":"mode","role":"bell","t":51.99464,"k":10,"a":0.9},{"kind":"mode","role":"bell","t":52.5,"k":6,"a":0.8},{"kind":"mode","role":"bell","t":52.85714,"k":3,"a":0.85},{"kind":"mode","role":"bell","t":53.42321,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":53.57143,"k":2,"a":0.95},{"kind":"mode","role":"bell","t":53.92857,"k":0,"a":0.85},{"kind":"mode","role":"bell","t":52.14286,"k":14,"a":0.496},{"kind":"mode","role":"bell","t":52.70893,"k":10,"a":0.48},{"kind":"mode","role":"bell","t":53.21429,"k":12,"a":0.44000000000000006},{"kind":"mode","role":"bell","t":53.57143,"k":10,"a":0.48},{"kind":"mode","role":"bass","t":51.42857,"k":3,"a":1},{"kind":"mode","role":"bass","t":52.5,"k":0,"a":0.7},{"kind":"mode","role":"bass","t":52.85714,"k":6,"a":0.8},{"kind":"mode","role":"bass","t":53.21429,"k":3,"a":0.7},{"kind":"mode","role":"bass","t":53.42321,"k":4,"a":0.8},{"kind":"mode","role":"bass","t":53.92857,"k":2,"a":0.8},{"kind":"strike","role":"kick","t":51.42857,"x":1,"y":0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":52.70893,"x":-1.05,"y":0.55,"r":0.085,"a":0.62},{"kind":"strike","role":"kick","t":53.21429,"x":0,"y":1.85,"r":0.085,"a":0.86},{"kind":"strike","role":"snare","t":52.14286,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":53.57143,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":54.28571,"k":4,"a":0.85},{"kind":"mode","role":"bell","t":54.64286,"k":4,"a":0.7},{"kind":"mode","role":"bell","t":55,"k":3,"a":0.8},{"kind":"mode","role":"bell","t":55.35714,"k":2,"a":0.8},{"kind":"mode","role":"bell","t":55.71429,"k":1,"a":0.75},{"kind":"mode","role":"bell","t":55.92321,"k":2,"a":0.95},{"kind":"mode","role":"bell","t":56.42857,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":56.78571,"k":4,"a":0.85},{"kind":"mode","role":"bell","t":55,"k":14,"a":0.496},{"kind":"mode","role":"bell","t":55.56607,"k":10,"a":0.48},{"kind":"mode","role":"bell","t":56.07143,"k":12,"a":0.44000000000000006},{"kind":"mode","role":"bell","t":56.42857,"k":10,"a":0.48},{"kind":"mode","role":"bass","t":54.28571,"k":0,"a":1},{"kind":"mode","role":"bass","t":55.35714,"k":4,"a":0.7},{"kind":"mode","role":"bass","t":55.71429,"k":7,"a":0.8},{"kind":"mode","role":"bass","t":56.07143,"k":4,"a":0.65},{"kind":"mode","role":"bass","t":56.6375,"k":2,"a":0.8},{"kind":"mode","role":"bass","t":56.78571,"k":1,"a":0.7},{"kind":"strike","role":"kick","t":54.28571,"x":-0.72,"y":-0.95,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":55.35714,"x":1.12,"y":-1.6,"r":0.085,"a":0.6},{"kind":"strike","role":"kick","t":56.07143,"x":0,"y":-0.3,"r":0.085,"a":0.86},{"kind":"strike","role":"kick","t":56.28036,"x":1,"y":0.95,"r":0.085,"a":0.5},{"kind":"strike","role":"snare","t":55,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"strike","role":"snare","t":56.42857,"x":0,"y":-0.15,"r":0.2,"a":1},{"kind":"mode","role":"bell","t":57.14286,"k":1,"a":0.8},{"kind":"mode","role":"bell","t":57.35179,"k":2,"a":1},{"kind":"mode","role":"bell","t":57.70893,"k":0,"a":0.9},{"kind":"mode","role":"bell","t":58.21429,"k":7,"a":0.85},{"kind":"mode","role":"bell","t":58.57143,"k":0,"a":0.95},{"kind":"mode","role":"bass","t":57.14286,"k":0,"a":1},{"kind":"mode","role":"bass","t":58.57143,"k":0,"a":1},{"kind":"strike","role":"kick","t":57.14286,"x":-1.05,"y":0.55,"r":0.085,"a":1},{"kind":"strike","role":"kick","t":58.57143,"x":0,"y":1.85,"r":0.085,"a":1},{"kind":"strike","role":"snare","t":57.85714,"x":0,"y":-0.15,"r":0.2,"a":1}],"bellGain":1.5,"bassGain":0.55,"kickGain":0.9,"snareGain":0.65,"echoFromBar":2.25,"echoToBar":6.75,"echoThreshold":0.1};
+
+  const DURATION = 60, FPS = 30, FRAMES = DURATION * FPS;
+  const BPM = 84, BAR = 240 / BPM, SIX = BAR / 16, BARS = 21;
+  const n = TAB.n, NT = TAB.N, SZ = n + 3, T6 = TAB.T;
+  const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);
+  const smooth = (x) => { const u = clamp(x, 0, 1); return u * u * (3 - 2 * u); };
+  const seg = (t, a, b) => smooth((t - a) / (b - a));
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const gid = (i, j) => (i + 1) * SZ + (j + 1);
+
+  const COLOUR_OF_SIDE = [0, 0, 0];
+  TAB.assign.forEach((side, colour) => { COLOUR_OF_SIDE[side] = colour; });
+
+  function buildLattice(perms) {
+    const total = NT * SZ * SZ;
+    const parent = new Int32Array(total).map((_, i) => i);
+    const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const addr = (t, i, j) => t * SZ * SZ + gid(i, j);
+    const pinned = new Uint8Array(total);
+    for (let t = 0; t < NT; t++) {
+      for (let i = 0; i <= n; i++) {
+        for (let j = 0; j + i <= n; j++) {
+          const sides = [];
+          if (j === 0) sides.push(0);
+          if (i === 0) sides.push(1);
+          if (i + j === n) sides.push(2);
+          if (sides.length >= 2) pinned[addr(t, i, j)] = 1;
+          else if (sides.length === 1) {
+            const other = perms[COLOUR_OF_SIDE[sides[0]]][t];
+            if (other === t) pinned[addr(t, i, j)] = 1;
+            else { const a = find(addr(t, i, j)), b = find(addr(other, i, j)); if (a !== b) parent[a] = b; }
+          }
+        }
+      }
+    }
+    const key = new Int32Array(total).fill(-1);
+    const ids = new Map();
+    for (let t = 0; t < NT; t++) {
+      for (let i = 0; i <= n; i++) {
+        for (let j = 0; j + i <= n; j++) {
+          const a = addr(t, i, j);
+          if (pinned[a]) continue;
+          const r = find(a);
+          if (!ids.has(r)) ids.set(r, ids.size);
+          key[a] = ids.get(r);
+        }
+      }
+    }
+    const M = ids.size;
+    const sets = Array.from({ length: M }, () => new Set());
+    for (let t = 0; t < NT; t++) {
+      for (let i = 0; i <= n; i++) {
+        for (let j = 0; j + i <= n; j++) {
+          const k = key[addr(t, i, j)];
+          if (k < 0) continue;
+          for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const ii = i + di, jj = j + dj;
+            if (ii < 0 || jj < 0 || ii + jj > n) continue;
+            const m = key[addr(t, ii, jj)];
+            if (m >= 0) sets[k].add(m);
+          }
+        }
+      }
+    }
+    const nbr = new Int32Array(M * 4).fill(M);
+    sets.forEach((s, k) => { let c = 0; for (const m of s) nbr[k * 4 + c++] = m; });
+    return { key, M, nbr, perms, addr };
+  }
+  const CAT = buildLattice(TAB.permsCat);
+  const BLANK = buildLattice(TAB.permsBlank);
+  const M = CAT.M;
+
+  const applyL = (lat, u, out) => {
+    const { nbr, M: m } = lat;
+    for (let k = 0, q = 0; k < m; k++, q += 4) out[k] = 4 * u[k] - u[nbr[q]] - u[nbr[q + 1]] - u[nbr[q + 2]] - u[nbr[q + 3]];
+  };
+
+  // ---------------------------------------------------------------- the spectrum, solved on this page
+  let seed = 19660404;
+  const rnd = () => { seed = (seed + 0x6d2b79f5) | 0; let z = Math.imul(seed ^ (seed >>> 15), 1 | seed); z = (z + Math.imul(z ^ (z >>> 7), 61 | z)) ^ z; return ((z ^ (z >>> 14)) >>> 0) / 4294967296; };
+
+  function jacobi(A, p) {
+    const V = Array.from({ length: p }, (_, i) => { const r = new Float64Array(p); r[i] = 1; return r; });
+    for (let sweep = 0; sweep < 40; sweep++) {
+      let off = 0;
+      for (let a = 0; a < p; a++) for (let b = a + 1; b < p; b++) off += A[a][b] * A[a][b];
+      if (off < 1e-30) break;
+      for (let a = 0; a < p; a++) {
+        for (let b = a + 1; b < p; b++) {
+          if (Math.abs(A[a][b]) < 1e-300) continue;
+          const th = (A[b][b] - A[a][a]) / (2 * A[a][b]);
+          const tt = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+          const c = 1 / Math.sqrt(tt * tt + 1), s = tt * c;
+          for (let k = 0; k < p; k++) { const x = A[k][a], y = A[k][b]; A[k][a] = c * x - s * y; A[k][b] = s * x + c * y; }
+          for (let k = 0; k < p; k++) { const x = A[a][k], y = A[b][k]; A[a][k] = c * x - s * y; A[b][k] = s * x + c * y; }
+          for (let k = 0; k < p; k++) { const x = V[k][a], y = V[k][b]; V[k][a] = c * x - s * y; V[k][b] = s * x + c * y; }
+        }
+      }
+    }
+    return V;
+  }
+
+  function solveModes(K) {
+    const p = K + 8, size = M + 1;
+    let X = Array.from({ length: p }, () => { const v = new Float64Array(size); for (let k = 0; k < M; k++) v[k] = rnd() - 0.5; return v; });
+    const bUp = 8.0, a0 = 0.002;
+    let aCut = 0.05, lam = new Float64Array(p), resid = 1;
+    const Y = new Float64Array(size), Z = new Float64Array(size), W = new Float64Array(size);
+    for (let iter = 0; iter < 40; iter++) {
+      const e = (bUp - aCut) / 2, c = (bUp + aCut) / 2;
+      for (const x of X) {
+        let sigma = e / (a0 - c);
+        const s1 = sigma;
+        applyL(CAT, x, W);
+        for (let k = 0; k < M; k++) Y[k] = (W[k] - c * x[k]) * s1 / e;
+        let prev = x.slice(), cur = Y.slice();
+        for (let d = 2; d <= 40; d++) {
+          const s2 = 1 / (2 / s1 - sigma);
+          applyL(CAT, cur, W);
+          for (let k = 0; k < M; k++) Z[k] = 2 * (W[k] - c * cur[k]) * s2 / e - sigma * s2 * prev[k];
+          const t = prev; prev = cur; cur = t; cur.set(Z);
+          sigma = s2;
+        }
+        x.set(cur);
+        x[M] = 0;
+      }
+      for (let a = 0; a < p; a++) {
+        const v = X[a];
+        for (let b = 0; b < a; b++) { const w = X[b]; let d = 0; for (let k = 0; k < M; k++) d += v[k] * w[k]; for (let k = 0; k < M; k++) v[k] -= d * w[k]; }
+        let nn = 0; for (let k = 0; k < M; k++) nn += v[k] * v[k]; nn = Math.sqrt(nn); for (let k = 0; k < M; k++) v[k] /= nn;
+      }
+      const LX = X.map((v) => { const o = new Float64Array(size); applyL(CAT, v, o); return o; });
+      const H = Array.from({ length: p }, () => new Float64Array(p));
+      for (let a = 0; a < p; a++) for (let b = a; b < p; b++) { let d = 0; const u = X[a], w = LX[b]; for (let k = 0; k < M; k++) d += u[k] * w[k]; H[a][b] = H[b][a] = d; }
+      const Q = jacobi(H, p);
+      const order = Array.from({ length: p }, (_, i) => i).sort((a, b) => H[a][a] - H[b][b]);
+      const nx = order.map((o) => { const v = new Float64Array(size); for (let a = 0; a < p; a++) { const w = X[a], q = Q[a][o]; for (let k = 0; k < M; k++) v[k] += q * w[k]; } return v; });
+      lam = Float64Array.from(order.map((o) => H[o][o]));
+      X = nx;
+      aCut = lam[p - 1];
+      resid = 0;
+      for (let a = 0; a < K; a++) { applyL(CAT, X[a], W); let r = 0; for (let k = 0; k < M; k++) { const d = W[k] - lam[a] * X[a][k]; r += d * d; } resid = Math.max(resid, Math.sqrt(r)); }
+      if (resid < 1e-9) break;
+    }
+    return { vecs: X.slice(0, K), lam: lam.slice(0, K), resid };
+  }
+
+  const K = 16;
+  const SPEC = solveModes(K);
+  const LAM = SPEC.lam, RATIO = Array.from(LAM, (x) => Math.sqrt(x / LAM[0]));
+  // fix each mode's sign so its largest lobe is positive: the look of a figure must not depend on the solver's start
+  for (const v of SPEC.vecs) { let hi = 0; for (let k = 0; k < M; k++) if (Math.abs(v[k]) > Math.abs(hi)) hi = v[k]; if (hi < 0) for (let k = 0; k < M; k++) v[k] = -v[k]; }
+
+  // ---------------------------------------------------------------- body layouts
+  const lay = (tri) => ({ o: tri[0], a: [tri[1][0] - tri[0][0], tri[1][1] - tri[0][1]], b: [tri[2][0] - tri[0][0], tri[2][1] - tri[0][1]] });
+  const LAYOUT = { cat: TAB.cat.map(lay), blank: TAB.blank.map(lay) };
+
+  // world position of every cat node in leg units, for placing strikes
+  const POS = new Float32Array(M * 2);
+  for (let t = 0; t < NT; t++) {
+    const L = LAYOUT.cat[t];
+    for (let i = 0; i <= n; i++) {
+      for (let j = 0; j + i <= n; j++) {
+        const k = CAT.key[CAT.addr(t, i, j)];
+        if (k < 0) continue;
+        POS[k * 2] = L.o[0] + (L.a[0] * i + L.b[0] * j) / n;
+        POS[k * 2 + 1] = L.o[1] + (L.a[1] * i + L.b[1] * j) / n;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- one wave equation, driven by the score's own table
+  const F1_VIS = 0.7;                                  // the fundamental's visible frequency: one swing per two beats
+  const C_CELLS = 2 * Math.PI * F1_VIS / Math.sqrt(LAM[0]) / FPS;   // cells per frame
+  const SUB = 4;
+  const DT = 1 / SUB;
+  const GAMMA = 0.017;                       // damping per frame
+  const EVENTS = SCORE.events.map((e) => ({ ...e, f: e.t * FPS })).sort((a, b) => a.f - b.f);
+  const strikeShapes = new Map();
+  const strikeShape = (x, y, r) => {
+    const id = `${x},${y},${r}`;
+    if (strikeShapes.has(id)) return strikeShapes.get(id);
+    const list = [];
+    for (let k = 0; k < M; k++) {
+      const dx = POS[k * 2] - x, dy = POS[k * 2 + 1] - y, d2 = dx * dx + dy * dy;
+      const w = Math.exp(-d2 / (2 * r * r));
+      if (w > 0.002) list.push(k, w);
+    }
+    strikeShapes.set(id, list);
+    return list;
+  };
+  const FIELD = new Int16Array(M * FRAMES);
+  const FSCALE = 1200;
+  {
+    const u = new Float64Array(M + 1), v = new Float64Array(M + 1), lap = new Float64Array(M + 1);
+    const c2 = C_CELLS * C_CELLS * DT * DT;
+    const damp = 1 - 2 * GAMMA * DT;
+    const nbr = CAT.nbr;
+    const preroll = 14 * FPS;
+    let ev = 0;
+    const events = [];
+    for (const e of EVENTS) if (e.f >= FRAMES - preroll) events.push({ ...e, f: e.f - FRAMES });
+    for (const e of EVENTS) events.push(e);
+    for (let f = -preroll; f < FRAMES; f++) {
+      for (let s = 0; s < SUB; s++) {
+        const now = f + s * DT;
+        while (ev < events.length && events[ev].f <= now) {
+          const e = events[ev++];
+          if (e.kind === 'mode') {
+            const phi = SPEC.vecs[e.k], g = e.a * (e.role === 'bass' ? SCORE.bassGain : SCORE.bellGain);
+            for (let k = 0; k < M; k++) v[k] += g * phi[k];
+          } else {
+            const list = strikeShape(e.x, e.y, e.r), g = e.a * (e.role === 'kick' ? SCORE.kickGain : SCORE.snareGain);
+            for (let q = 0; q < list.length; q += 2) v[list[q]] += g * list[q + 1];
+          }
+        }
+        for (let k = 0, q = 0; k < M; k++, q += 4) lap[k] = u[nbr[q]] + u[nbr[q + 1]] + u[nbr[q + 2]] + u[nbr[q + 3]] - 4 * u[k];
+        for (let k = 0; k < M; k++) { v[k] = v[k] * damp + c2 * lap[k]; u[k] += v[k]; }
+      }
+      if (f >= 0) { const base = f * M; for (let k = 0; k < M; k++) FIELD[base + k] = clamp(u[k] * FSCALE, -32000, 32000); }
+    }
+  }
+
+  // ---------------------------------------------------------------- field on a tile: inner nodes, then a ghost ring
+  const makeGrids = () => ({ u: Array.from({ length: NT }, () => new Float32Array(SZ * SZ)), gx: Array.from({ length: NT }, () => new Float32Array(SZ * SZ)), gy: Array.from({ length: NT }, () => new Float32Array(SZ * SZ)) });
+  const GCAT = makeGrids(), GBLANK = makeGrids();
+  const INNER = [];
+  for (let i = 0; i <= n; i++) for (let j = 0; j + i <= n; j++) INNER.push(gid(i, j));
+
+  function loadCat(frame) {
+    const base = frame * M, key = CAT.key, q = SZ * SZ;
+    for (let t = 0; t < NT; t++) {
+      const U = GCAT.u[t], off = t * q;
+      for (let c = 0; c < INNER.length; c++) { const g = INNER[c], k = key[off + g]; U[g] = k < 0 ? 0 : FIELD[base + k] / FSCALE; }
+    }
+  }
+  function loadBlank() {
+    for (let j = 0; j < NT; j++) {
+      const W = GBLANK.u[j];
+      for (let c = 0; c < INNER.length; c++) W[INNER[c]] = 0;
+      const row = T6[j];
+      for (let m = 0; m < NT; m++) {
+        const w = row[m] / 6, U = GCAT.u[m];
+        for (let c = 0; c < INNER.length; c++) { const g = INNER[c]; W[g] += w * U[g]; }
+      }
+    }
+  }
+  function finishGrids(G, perms) {
+    for (let t = 0; t < NT; t++) {
+      const U = G.u[t];
+      const s0 = perms[COLOUR_OF_SIDE[0]][t], s1 = perms[COLOUR_OF_SIDE[1]][t], s2 = perms[COLOUR_OF_SIDE[2]][t];
+      const V0 = G.u[s0], V1 = G.u[s1], V2 = G.u[s2];
+      for (let i = 0; i <= n; i++) U[gid(i, -1)] = i + 1 > n ? 0 : (s0 === t ? -U[gid(i, 1)] : V0[gid(i, 1)]);
+      for (let j = 0; j <= n; j++) U[gid(-1, j)] = j + 1 > n ? 0 : (s1 === t ? -U[gid(1, j)] : V1[gid(1, j)]);
+      for (let i = 0; i <= n + 1; i++) {
+        const j = n + 1 - i;
+        const ii = n - j, jj = n - i;
+        if (ii < 0 || jj < 0) { U[gid(i, j)] = 0; continue; }
+        U[gid(i, j)] = s2 === t ? -U[gid(ii, jj)] : V2[gid(ii, jj)];
+      }
+    }
+    for (let t = 0; t < NT; t++) {
+      const U = G.u[t], X = G.gx[t], Y = G.gy[t];
+      for (let c = 0; c < INNER.length; c++) {
+        const g = INNER[c];
+        X[g] = (U[g + SZ] - U[g - SZ]) * 0.5;
+        Y[g] = (U[g + 1] - U[g - 1]) * 0.5;
+      }
+      // the far ghost diagonal only feeds bilinear samples: copy its neighbour's slope
+      for (let i = 0; i <= n + 1; i++) {
+        const j = n + 1 - i;
+        const g = gid(i, j);
+        const src = i > 0 ? gid(i - 1, j) : gid(i, j - 1);
+        X[g] = X[src]; Y[g] = Y[src];
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- lacquer: a matcap read by the skin's slope
+  const LUTS = 256;
+  const lutFull = new Float32Array(LUTS * LUTS * 3);
+  const lutCrest = new Float32Array(LUTS * LUTS * 3);
+  const lut = new Uint32Array(LUTS * LUTS);
+  (() => {
+    const lobe = (nx, ny, nz, lx, ly, lz, p) => Math.pow(Math.max(0, nx * lx + ny * ly + nz * lz), p);
+    for (let y = 0; y < LUTS; y++) {
+      for (let x = 0; x < LUTS; x++) {
+        const nx = (x - 127.5) / 127.5, ny = (y - 127.5) / 127.5;
+        const r2 = Math.min(1, nx * nx + ny * ny), nz = Math.sqrt(1 - r2);
+        const q = (y * LUTS + x) * 3;
+        // Black lacquer in a dark studio: a flat skin reflects almost nothing and only a tilt finds a light.
+        // A long softbox high to the left, a thin cold strip across the lower right, one small warm lamp, and a faint room.
+        const r = Math.sqrt(r2);
+        const box = (cx, cy, hw, hh, rot, edge) => {
+          const c = Math.cos(rot), s = Math.sin(rot);
+          const dx = (nx - cx) * c + (ny - cy) * s, dy = -(nx - cx) * s + (ny - cy) * c;
+          return smooth((hw - Math.abs(dx)) / edge) * smooth((hh - Math.abs(dy)) / edge);
+        };
+        const soft = box(-0.3, -0.34, 0.22, 0.06, -0.72, 0.045) * (0.45 + 0.55 * smooth((0.56 - r) / 0.2));
+        const strip = box(0.3, 0.3, 0.46, 0.022, -0.72, 0.016);
+        const strip2 = box(-0.36, 0.26, 0.2, 0.014, 0.74, 0.012);
+        const lamp = Math.exp(-(Math.pow(nx - 0.34, 2) + Math.pow(ny + 0.24, 2)) / 0.0016);
+        const room = 0.009 + 0.036 * r2 + 0.3 * Math.pow(r, 7);
+        const warm = 0.5 - 0.5 * ny;
+        lutFull[q] = room * (0.6 + 0.3 * warm) + 1.05 * soft + 0.2 * strip + 0.5 * strip2 + 1.0 * lamp;
+        lutFull[q + 1] = room * (0.66 + 0.2 * warm) + 0.98 * soft + 0.42 * strip + 0.56 * strip2 + 0.72 * lamp;
+        lutFull[q + 2] = room * (1.0 - 0.17 * warm) + 0.9 * soft + 0.98 * strip + 0.68 * strip2 + 0.34 * lamp;
+        // in the dark only the steep flank of a crest catches anything: a thin pale edge on black
+        const rim = Math.pow(smooth((r - 0.1) / 0.8), 2.2);
+        const hot = smooth((r - 0.62) / 0.3);
+        lutCrest[q] = rim * 0.46 + hot * 0.5 + 0.34 * rim * soft;
+        lutCrest[q + 1] = rim * 0.66 + hot * 0.34 + 0.3 * rim * soft;
+        lutCrest[q + 2] = rim * 0.96 + hot * 0.04 + 0.22 * rim * soft;
+      }
+    }
+  })();
+  let lutLit = -1;
+  function setLut(lit) {
+    const v = Math.round(lit * 64) / 64;
+    if (v === lutLit) return;
+    lutLit = v;
+    for (let c = 0, q = 0; c < LUTS * LUTS; c++, q += 3) {
+      const r = lutCrest[q] + (lutFull[q] - lutCrest[q]) * v, g = lutCrest[q + 1] + (lutFull[q + 1] - lutCrest[q + 1]) * v, b = lutCrest[q + 2] + (lutFull[q + 2] - lutCrest[q + 2]) * v;
+      lut[c] = (255 << 24) | (clamp(b * 255, 0, 255) << 16) | (clamp(g * 255, 0, 255) << 8) | clamp(r * 255, 0, 255);
+    }
+  }
+
+  // ---------------------------------------------------------------- background
+  const W = 900, H = 900;
+  const img = ctx.createImageData(W, H);
+  const pix = new Uint32Array(img.data.buffer);
+  const BG = new Uint32Array(W * H);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const dx = (x - 450) / 640, dy = (y - 420) / 640, g = Math.max(0, 1 - dx * dx - dy * dy);
+      const r = 3 + 3 * g, gg = 3 + 3 * g, b = 6 + 8 * g;
+      BG[y * W + x] = (255 << 24) | (b << 16) | (gg << 8) | r;
+    }
+  }
+
+  // ---------------------------------------------------------------- rasterizer
+  const SLOPE_LIT = 11, SLOPE_DARK = 6.5;
+  let SLOPE = SLOPE_LIT, voidK = 0;
+  function drawTile(G, t, m, Rm, shade) {
+    const [a, b, c, d, e, f] = m;     // local cell (i, j) to pixels
+    const det = a * d - b * c;
+    if (Math.abs(det) < 0.004) return;
+    const ia = d / det, ib = -b / det, ic = -c / det, id = a / det;
+    const xs = [e, e + a * n, e + c * n], ys = [f, f + b * n, f + d * n];
+    const x0 = clamp(Math.floor(Math.min(...xs)) - 1, 0, W - 1), x1 = clamp(Math.ceil(Math.max(...xs)) + 1, 0, W - 1);
+    const y0 = clamp(Math.floor(Math.min(...ys)) - 1, 0, H - 1), y1 = clamp(Math.ceil(Math.max(...ys)) + 1, 0, H - 1);
+    const GX = G.gx[t], GY = G.gy[t];
+    const [r0, r1, r2, r3] = Rm;
+    const useShade = shade < 0.999;
+    for (let y = y0; y <= y1; y++) {
+      const py = y + 0.5 - f;
+      let row = y * W + x0;
+      for (let x = x0; x <= x1; x++, row++) {
+        const px = x + 0.5 - e;
+        const i = ia * px + ic * py, j = ib * px + id * py;
+        if (i < 0 || j < 0 || i + j > n) continue;
+        const ci = i | 0, cj = j | 0, fi = i - ci, fj = j - cj;
+        const g0 = (ci + 1) * SZ + cj + 1, g1 = g0 + SZ, g2 = g0 + 1, g3 = g1 + 1;
+        const w0 = (1 - fi) * (1 - fj), w1 = fi * (1 - fj), w2 = (1 - fi) * fj, w3 = fi * fj;
+        const sx = GX[g0] * w0 + GX[g1] * w1 + GX[g2] * w2 + GX[g3] * w3;
+        const sy = GY[g0] * w0 + GY[g1] * w1 + GY[g2] * w2 + GY[g3] * w3;
+        const wx = (r0 * sx + r2 * sy) * SLOPE, wy = (r1 * sx + r3 * sy) * SLOPE;
+        const nz = 1 / Math.sqrt(1 + wx * wx + wy * wy);
+        const mx = (127.5 - wx * nz * 127.5) | 0, my = (127.5 - wy * nz * 127.5) | 0;
+        let col = lut[my * LUTS + mx];
+        if (voidK > 0.004) {
+          const bg = BG[row];
+          const rr = Math.min(255, (col & 255) + (bg & 255) * voidK), gg = Math.min(255, ((col >>> 8) & 255) + ((bg >>> 8) & 255) * voidK), bb = Math.min(255, ((col >>> 16) & 255) + ((bg >>> 16) & 255) * voidK);
+          col = (255 << 24) | (bb << 16) | (gg << 8) | rr;
+        }
+        if (useShade) {
+          col = (255 << 24) | ((((col >>> 16) & 255) * shade) << 16) | ((((col >>> 8) & 255) * shade) << 8) | ((col & 255) * shade);
+        }
+        pix[row] = col;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- walls: every side that is not glued
+  const SIDE_ENDS = [[0, 1], [0, 2], [1, 2]];
+  function wallSegments(key) {
+    const perms = key === 'cat' ? TAB.permsCat : TAB.permsBlank;
+    const out = [];
+    TAB[key].forEach((tri, t) => {
+      SIDE_ENDS.forEach(([p, q], s) => {
+        if (perms[COLOUR_OF_SIDE[s]][t] === t) out.push({ t, s, a: tri[p], b: tri[q] });
+      });
+    });
+    return out;
+  }
+  const WALLS = { cat: wallSegments('cat'), blank: wallSegments('blank') };
+
+  // ---------------------------------------------------------------- when an echo first reaches each stretch of the cat's walls
+  // The same equation again with nothing but the kicks of the dark section on it, because that is the only thing that is echoing there.
+  const ECHO_FROM = Math.round(SCORE.echoFromBar * BAR * FPS), ECHO_TO = Math.round(SCORE.echoToBar * BAR * FPS);
+  const WALL_BITS = [];
+  for (const w of WALLS.cat) {
+    for (let c = 1; c < n - 1; c += 1) {
+      let i, j;
+      if (w.s === 0) { i = c; j = 1; } else if (w.s === 1) { i = 1; j = c; } else { i = c; j = n - c - 1; }
+      const k = CAT.key[CAT.addr(w.t, i, j)];
+      const u0 = (c - 0.5) / n, u1 = (c + 0.5 + 1) / n;
+      WALL_BITS.push({ k, ax: lerp(w.a[0], w.b[0], u0), ay: lerp(w.a[1], w.b[1], u0), bx: lerp(w.a[0], w.b[0], u1), by: lerp(w.a[1], w.b[1], u1), hit: ECHO_TO });
+    }
+  }
+  {
+    const u = new Float64Array(M + 1), v = new Float64Array(M + 1), lap = new Float64Array(M + 1);
+    const c2 = C_CELLS * C_CELLS * DT * DT, damp = 1 - 2 * GAMMA * DT, nbr = CAT.nbr;
+    const kicks = EVENTS.filter((e) => e.role === 'kick' && e.f >= ECHO_FROM - 2 && e.f < ECHO_TO);
+    let ev = 0;
+    for (let f = ECHO_FROM - 3; f < ECHO_TO; f++) {
+      for (let s = 0; s < SUB; s++) {
+        const now = f + s * DT;
+        while (ev < kicks.length && kicks[ev].f <= now) {
+          const e = kicks[ev++], list = strikeShape(e.x, e.y, e.r), g = e.a * SCORE.kickGain;
+          for (let q = 0; q < list.length; q += 2) v[list[q]] += g * list[q + 1];
+        }
+        for (let k = 0, q = 0; k < M; k++, q += 4) lap[k] = u[nbr[q]] + u[nbr[q + 1]] + u[nbr[q + 2]] + u[nbr[q + 3]] - 4 * u[k];
+        for (let k = 0; k < M; k++) { v[k] = v[k] * damp + c2 * lap[k]; u[k] += v[k]; }
+      }
+      for (const w of WALL_BITS) if (w.hit === ECHO_TO && w.k >= 0 && Math.abs(u[w.k]) > SCORE.echoThreshold) w.hit = f;
+    }
+  }
+
+  // ---------------------------------------------------------------- the score's readout: how much of each mode is on the skin, read from the solved field
+  const READ = new Float32Array(FRAMES * K);
+  for (let f = 0; f < FRAMES; f++) {
+    const base = f * M;
+    for (let k = 0; k < K; k++) {
+      const phi = SPEC.vecs[k];
+      let d = 0;
+      for (let q = 0; q < M; q += 3) d += phi[q] * FIELD[base + q];
+      READ[f * K + k] = Math.abs(d) * 3 / FSCALE;
+    }
+  }
+
+  // ---------------------------------------------------------------- the blank's spectrum, measured on its own Laplacian
+  // Each cat mode is carried across by T (entries +-1/3 and +-1/6) and tested on the blank's own lattice.
+  const BLANK_LAM = new Float64Array(K);
+  let transplantResidual = 0;
+  {
+    const q = SZ * SZ;
+    const w = new Float64Array(BLANK.M + 1), o = new Float64Array(BLANK.M + 1);
+    for (let kk = 0; kk < K; kk++) {
+      const phi = SPEC.vecs[kk];
+      w.fill(0);
+      for (let j = 0; j < NT; j++) {
+        for (let c = 0; c < INNER.length; c++) {
+          const g = INNER[c], tk = BLANK.key[j * q + g];
+          if (tk < 0) continue;
+          let val = 0;
+          for (let m = 0; m < NT; m++) { const ck = CAT.key[m * q + g]; if (ck >= 0) val += T6[j][m] / 6 * phi[ck]; }
+          w[tk] = val;
+        }
+      }
+      applyL(BLANK, w, o);
+      let num = 0, den = 0, res = 0;
+      for (let k = 0; k < BLANK.M; k++) { num += w[k] * o[k]; den += w[k] * w[k]; }
+      BLANK_LAM[kk] = num / den;
+      for (let k = 0; k < BLANK.M; k++) { const d = o[k] - BLANK_LAM[kk] * w[k]; res += d * d; }
+      transplantResidual = Math.max(transplantResidual, Math.sqrt(res / den));
+    }
+  }
+
+  // ---------------------------------------------------------------- pose helpers
+  const matrixFor = (L, P) => {
+    const u = P.S / n;
+    return [L.a[0] * u, L.a[1] * u, L.b[0] * u, L.b[1] * u, P.cx + L.o[0] * P.S, P.cy + L.o[1] * P.S];
+  };
+  const unit = (L) => [L.a[0], L.a[1], L.b[0], L.b[1]];
+  const mixPose = (A, B, k) => ({ cx: lerp(A.cx, B.cx, k), cy: lerp(A.cy, B.cy, k), S: lerp(A.S, B.S, k) });
+  const HERO = { cx: 450, cy: 438, S: 168 };
+  const BLANK_HERO = { cx: 450, cy: 568, S: 168 };
+  const PROOF_CAT = { cx: 192, cy: 366, S: 100 };
+  const PROOF_BLANK = { cx: 632, cy: 366, S: 100 };
+
+  // Rigid part of a flight from layout A to layout B: a turn in the plane plus a flip through the third dimension.
+  const flightKey = (LA, LB) => {
+    const a = LA.a, b = LA.b, c = LB.a, d = LB.b;
+    const det0 = a[0] * b[1] - a[1] * b[0];
+    const i00 = b[1] / det0, i01 = -b[0] / det0, i10 = -a[1] / det0, i11 = a[0] / det0;
+    const r00 = c[0] * i00 + d[0] * i10, r01 = c[0] * i01 + d[0] * i11, r10 = c[1] * i00 + d[1] * i10, r11 = c[1] * i01 + d[1] * i11;
+    const det = r00 * r11 - r01 * r10;
+    return { alpha: Math.atan2(r10, r00), flips: det < 0 ? 1 : 2 };
+  };
+  const MATCH = TAB.match;
+  const FLIGHT_C2B = MATCH.map((j, i) => flightKey(LAYOUT.cat[i], LAYOUT.blank[j]));
+  const FLIGHT_B2C = MATCH.map((j, i) => flightKey(LAYOUT.blank[j], LAYOUT.cat[i]));
+  const centroid = (L) => [L.o[0] + (L.a[0] + L.b[0]) / 3, L.o[1] + (L.a[1] + L.b[1]) / 3];
+  const ORDER_DOWN = MATCH.map((_, i) => i).sort((p, q) => centroid(LAYOUT.cat[q])[1] - centroid(LAYOUT.cat[p])[1]);
+  const RANK = new Array(NT); ORDER_DOWN.forEach((tile, rank) => { RANK[tile] = rank; });
+
+  function flyTile(GA, tA, LA, PA, GB, tB, LB, PB, key, s, lift) {
+    const e = smooth(s);
+    const phi = Math.PI * key.flips * e;
+    const cosPhi = Math.cos(phi);
+    const scale = lerp(PA.S, PB.S, e) * (1 + 0.1 * Math.sin(Math.PI * s));
+    const al = key.alpha * e, ca = Math.cos(al), sa = Math.sin(al);
+    // Rot(al) * diag(1, cos phi) applied to A's unit axes
+    const ax = LA.a[0], ay = LA.a[1] * cosPhi, bx = LA.b[0], by = LA.b[1] * cosPhi;
+    const r = [ca * ax - sa * ay, sa * ax + ca * ay, ca * bx - sa * by, sa * bx + ca * by];
+    const c0 = centroid(LA), c1 = centroid(LB);
+    const x0 = PA.cx + c0[0] * PA.S, y0 = PA.cy + c0[1] * PA.S, x1 = PB.cx + c1[0] * PB.S, y1 = PB.cy + c1[1] * PB.S;
+    const dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+    const arc = lift * Math.sin(Math.PI * s);
+    const mx = lerp(x0, x1, e) - dy / len * arc, my = lerp(y0, y1, e) + dx / len * arc;
+    const u = scale / n;
+    const m = [r[0] * u, r[1] * u, r[2] * u, r[3] * u, 0, 0];
+    m[4] = mx - (m[0] + m[2]) * n / 3;
+    m[5] = my - (m[1] + m[3]) * n / 3;
+    const swapAt = key.flips === 1 ? 0.5 : 0.25;
+    const useB = e >= swapAt;
+    const shade = 0.42 + 0.58 * Math.abs(cosPhi);
+    drawTile(useB ? GB : GA, useB ? tB : tA, m, r, shade);
+    return { m, edge: Math.sin(Math.PI * s) };
+  }
+
+  const SIDES_OF_TILE = (key, t) => {
+    const perms = key === 'cat' ? TAB.permsCat : TAB.permsBlank;
+    return SIDE_ENDS.map(([p, q], s) => ({ p, q, wall: perms[COLOUR_OF_SIDE[s]][t] === t }));
+  };
+
+  function strokeTile(key, t, P, wallAlpha, doorAlpha, width) {
+    const tri = TAB[key][t];
+    for (const side of SIDES_OF_TILE(key, t)) {
+      const al = side.wall ? wallAlpha : doorAlpha;
+      if (al <= 0.004) continue;
+      ctx.strokeStyle = `rgba(232,196,132,${al.toFixed(3)})`;
+      ctx.lineWidth = width;
+      ctx.beginPath();
+      ctx.moveTo(P.cx + tri[side.p][0] * P.S, P.cy + tri[side.p][1] * P.S);
+      ctx.lineTo(P.cx + tri[side.q][0] * P.S, P.cy + tri[side.q][1] * P.S);
+      ctx.stroke();
+    }
+  }
+
+  function strokeEdges(m, alpha) {
+    if (alpha <= 0.004) return;
+    const [a, b, c, d, e, f] = m;
+    ctx.strokeStyle = `rgba(232,196,132,${alpha.toFixed(3)})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(e, f);
+    ctx.lineTo(e + a * n, f + b * n);
+    ctx.lineTo(e + c * n, f + d * n);
+    ctx.closePath();
+    ctx.stroke();
+  }
+
+  // ---------------------------------------------------------------- a slit-eyed lacquer eye, drawn on the skin or in the air
+  function eye(x, y, r, open, slit, gx, gy) {
+    if (open <= 0.012) return;
+    ctx.save();
+    ctx.translate(x, y);
+    // a soft amber halo so the eye reads at phone size and in the dark
+    const halo = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 2.1);
+    halo.addColorStop(0, `rgba(255,170,60,${(0.2 * open).toFixed(3)})`);
+    halo.addColorStop(1, 'rgba(255,170,60,0)');
+    ctx.fillStyle = halo;
+    ctx.fillRect(-r * 2.2, -r * 2.2, r * 4.4, r * 4.4);
+    ctx.beginPath();
+    const h = r * 0.74 * open;
+    ctx.moveTo(-r, 0);
+    ctx.bezierCurveTo(-r * 0.45, -h * 1.28, r * 0.45, -h * 1.28, r, 0);
+    ctx.bezierCurveTo(r * 0.45, h * 1.28, -r * 0.45, h * 1.28, -r, 0);
+    ctx.closePath();
+    ctx.fillStyle = '#050406';
+    ctx.fill();
+    ctx.clip();
+    const ix = gx * r * 0.22, iy = gy * r * 0.12;
+    const g = ctx.createRadialGradient(ix, iy, r * 0.05, ix, iy, r * 0.98);
+    g.addColorStop(0, '#ffe08a');
+    g.addColorStop(0.42, '#f7ab38');
+    g.addColorStop(0.78, '#b4610f');
+    g.addColorStop(1, '#311705');
+    ctx.fillStyle = g;
+    ctx.fillRect(-r * 1.2, -r, r * 2.4, r * 2);
+    ctx.fillStyle = '#040305';
+    ctx.beginPath();
+    const px = gx * r * 0.34, py = gy * r * 0.16, w = r * (0.06 + 0.52 * slit);
+    ctx.moveTo(px, py - r * 0.8);
+    ctx.bezierCurveTo(px + w, py - r * 0.26, px + w, py + r * 0.26, px, py + r * 0.8);
+    ctx.bezierCurveTo(px - w, py + r * 0.26, px - w, py - r * 0.26, px, py - r * 0.8);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(255,246,224,0.9)';
+    ctx.beginPath();
+    ctx.ellipse(px - r * 0.3, py - r * 0.24, r * 0.1, r * 0.075, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- nose and whiskers, painted on the cat alone
+  const nearestNode = (x, y) => {
+    let best = 0, bd = 1e9;
+    for (let k = 0; k < M; k++) { const d = (POS[k * 2] - x) ** 2 + (POS[k * 2 + 1] - y) ** 2; if (d < bd) { bd = d; best = k; } }
+    return best;
+  };
+  const WHISKERS = [];
+  for (const side of [-1, 1]) {
+    [[0.98, 1.74, 0.72], [1.1, 1.84, 1.12], [1.21, 1.72, 1.5]].forEach(([y0, x1, y1], w) => {
+      const root = [side * 0.3, y0], tip = [side * x1, y1];
+      WHISKERS.push({ root, tip, node: nearestNode(root[0] * 1.6, root[1]), side, w });
+    });
+  }
+  function face(P, alpha, frame) {
+    if (alpha <= 0.01) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineWidth = Math.max(0.9, P.S / 120);
+    ctx.strokeStyle = `rgba(236,226,206,${(0.62 * alpha).toFixed(3)})`;
+    for (const wh of WHISKERS) {
+      const sway = FIELD[frame * M + wh.node] / FSCALE * 0.34;
+      const x0 = P.cx + wh.root[0] * P.S, y0 = P.cy + wh.root[1] * P.S;
+      const x1 = P.cx + wh.tip[0] * P.S, y1 = P.cy + (wh.tip[1] + sway) * P.S;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.quadraticCurveTo((x0 + x1) / 2, (y0 + y1) / 2 - 0.1 * P.S, x1, y1);
+      ctx.stroke();
+    }
+    ctx.fillStyle = `rgba(216,132,108,${(0.95 * alpha).toFixed(3)})`;
+    const nx = P.cx, ny = P.cy + 0.96 * P.S, ns = 0.1 * P.S;
+    ctx.beginPath();
+    ctx.moveTo(nx - ns, ny - ns * 0.55);
+    ctx.quadraticCurveTo(nx, ny - ns * 0.8, nx + ns, ny - ns * 0.55);
+    ctx.quadraticCurveTo(nx + ns * 0.3, ny + ns * 0.5, nx, ny + ns * 0.72);
+    ctx.quadraticCurveTo(nx - ns * 0.3, ny + ns * 0.5, nx - ns, ny - ns * 0.55);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- the readout: the only thing a listener ever has
+  const RULER_X0 = 70, RULER_X1 = 830, RULER_Y = 866;
+  const LOGMAX = Math.log(RATIO[K - 1]);
+  const rungX = (k) => RULER_X0 + (RULER_X1 - RULER_X0) * Math.log(RATIO[k]) / LOGMAX;
+  const FIRST_HEARD = new Array(K).fill(Infinity);
+  for (const e of EVENTS) if (e.kind === 'mode' && e.role === 'bell' && e.t >= 2 * BAR && e.t < FIRST_HEARD[e.k]) FIRST_HEARD[e.k] = e.t;
+  const LAST_BELL = EVENTS.filter((e) => e.kind === 'mode' && e.role === 'bell');
+  const bellAt = (t) => { let c = LAST_BELL[LAST_BELL.length - 1]; for (const e of LAST_BELL) { if (e.t <= t) c = e; else break; } return c; };
+
+  function ruler(t, frame, alphaAll, reveal) {
+    ctx.save();
+    ctx.lineCap = 'butt';
+    for (let k = 0; k < K; k++) {
+      const seen = reveal ? seg(t, FIRST_HEARD[k] - 0.02, FIRST_HEARD[k] + 0.08) : 1;
+      const al = alphaAll * Math.max(seen, 0);
+      if (al <= 0.01) continue;
+      const amp = clamp(READ[frame * K + k] * 2.1, 0, 1);
+      const h = 6 + 34 * Math.pow(amp, 0.8);
+      const x = rungX(k);
+      ctx.strokeStyle = `rgba(${Math.round(190 + 60 * amp)},${Math.round(186 + 8 * amp)},${Math.round(170 - 100 * amp)},${(al * (0.5 + 0.5 * amp)).toFixed(3)})`;
+      ctx.lineWidth = 1.6 + 1.5 * amp;
+      ctx.beginPath();
+      ctx.moveTo(x, RULER_Y);
+      ctx.lineTo(x, RULER_Y - h);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- when things happen, in bars
+  const B_DARK = 2, B_LIGHT = 6.75, B_DROP = 7;
+  const RETILE_A = 12, RETILE_B = 14;
+  const SPLIT_A = 15, SPLIT_B = 16.5;
+  const RETURN_A = 19.5, RETURN_B = 20.75;
+
+  window.renderFrame = function (time) {
+    let t = time % DURATION; if (t < 0) t += DURATION;
+    const frame = Math.round(t * FPS) % FRAMES;
+    const tq = frame / FPS;
+    const b = tq / BAR, six = b * 16;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    pix.set(BG);
+
+    const lit = 1 - seg(b, B_DARK, B_DARK + 0.5) + seg(b, B_LIGHT, B_DROP);
+    setLut(clamp(lit, 0, 1));
+    SLOPE = lerp(SLOPE_DARK, SLOPE_LIT, clamp(lit, 0, 1));
+    voidK = 1 - clamp(lit, 0, 1);
+    loadCat(frame);
+    finishGrids(GCAT, TAB.permsCat);
+    const blankOn = b >= RETILE_A && b < RETURN_B + 0.02;
+    if (blankOn) { loadBlank(); finishGrids(GBLANK, TAB.permsBlank); }
+
+    // the cat's and the blank's poses for this moment
+    const splitK = seg(b, SPLIT_A, SPLIT_A + 1);
+    const blankPose = mixPose(BLANK_HERO, PROOF_BLANK, splitK);
+    const returnK = seg(b, RETURN_A, RETURN_B - 0.1);
+    const catPose = b >= SPLIT_A ? mixPose(PROOF_CAT, HERO, returnK) : HERO;
+    const flying = [];
+
+    if (b < RETILE_A || b >= RETURN_B) {
+      LAYOUT.cat.forEach((L, c) => drawTile(GCAT, c, matrixFor(L, catPose), unit(L), 1));
+    } else if (b < SPLIT_A) {
+      // the cat becomes the blank, one tile per sixteenth or so, chin first and the long ear last. The score does not change.
+      const start = RETILE_A * 16, len = 7, spread = (RETILE_B - RETILE_A) * 16 - len;
+      for (let i = 0; i < NT; i++) {
+        const j = MATCH[i];
+        const s = clamp((six - start - Math.floor(RANK[i] * spread / (NT - 1))) / len, 0, 1);
+        if (s <= 0) drawTile(GCAT, i, matrixFor(LAYOUT.cat[i], HERO), unit(LAYOUT.cat[i]), 1);
+        else if (s >= 1) drawTile(GBLANK, j, matrixFor(LAYOUT.blank[j], BLANK_HERO), unit(LAYOUT.blank[j]), 1);
+        else flying.push(flyTile(GCAT, i, LAYOUT.cat[i], HERO, GBLANK, j, LAYOUT.blank[j], BLANK_HERO, FLIGHT_C2B[i], s, 70));
+      }
+    } else {
+      // a copy of the blank's tiles leaves it and builds the cat again beside it
+      if (b < RETURN_A) {
+        for (let j = 0; j < NT; j++) drawTile(GBLANK, j, matrixFor(LAYOUT.blank[j], blankPose), unit(LAYOUT.blank[j]), 1);
+        const start = (SPLIT_A + 0.25) * 16, len = 7, spread = (SPLIT_B - SPLIT_A - 0.25) * 16 - len;
+        for (let i = 0; i < NT; i++) {
+          const j = MATCH[i];
+          const s = clamp((six - start - Math.floor(RANK[i] * spread / (NT - 1))) / len, 0, 1);
+          if (s >= 1) drawTile(GCAT, i, matrixFor(LAYOUT.cat[i], PROOF_CAT), unit(LAYOUT.cat[i]), 1);
+          else if (s > 0) flying.push(flyTile(GBLANK, j, LAYOUT.blank[j], blankPose, GCAT, i, LAYOUT.cat[i], PROOF_CAT, FLIGHT_B2C[i], s, 40));
+        }
+      } else {
+        // the blank goes back into the cat, tile by tile, while the cat comes forward
+        const start = RETURN_A * 16, len = 6, spread = (RETURN_B - RETURN_A) * 16 - len;
+        for (let i = 0; i < NT; i++) {
+          const j = MATCH[i];
+          const s = clamp((six - start - Math.floor(RANK[NT - 1 - i] * spread / (NT - 1))) / len, 0, 1);
+          if (s <= 0) drawTile(GBLANK, j, matrixFor(LAYOUT.blank[j], PROOF_BLANK), unit(LAYOUT.blank[j]), 1);
+        }
+        LAYOUT.cat.forEach((L, c) => drawTile(GCAT, c, matrixFor(L, catPose), unit(L), 1));
+        for (let i = 0; i < NT; i++) {
+          const j = MATCH[i];
+          const s = clamp((six - start - Math.floor(RANK[NT - 1 - i] * spread / (NT - 1))) / len, 0, 1);
+          if (s > 0 && s < 1) flying.push(flyTile(GBLANK, j, LAYOUT.blank[j], PROOF_BLANK, GCAT, i, LAYOUT.cat[i], catPose, FLIGHT_B2C[i], s, 50));
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // walls. In the dark each stretch appears when an echo first reaches it, and that is all anyone knows of the outline.
+    ctx.lineCap = 'round';
+    if (b < RETILE_A || b >= RETURN_B) {
+      if (b >= B_DARK && b < B_DROP) {
+        const fadeOld = 1 - seg(b, B_DARK, B_DARK + 0.42);
+        const all = seg(b, B_LIGHT - 0.04, B_LIGHT + 0.1);
+        const buckets = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+        const P = catPose;
+        for (const w of WALL_BITS) {
+          const known = Math.max(fadeOld, all, frame >= w.hit ? 0.25 + 0.75 * seg(frame, w.hit, w.hit + 10) : 0);
+          if (known <= 0.01) continue;
+          const q = Math.min(3, Math.floor(known * 3.999));
+          buckets[q].moveTo(P.cx + w.ax * P.S, P.cy + w.ay * P.S);
+          buckets[q].lineTo(P.cx + w.bx * P.S, P.cy + w.by * P.S);
+        }
+        const A = [0.3, 0.5, 0.72, 0.95];
+        ctx.lineWidth = 2.1;
+        buckets.forEach((path, q) => { ctx.strokeStyle = `rgba(232,196,132,${A[q]})`; ctx.stroke(path); });
+      } else {
+        for (let c = 0; c < NT; c++) strokeTile('cat', c, catPose, 0.92, 0, 2.1);
+      }
+    } else if (b < SPLIT_A) {
+      const start = RETILE_A * 16, len = 7, spread = (RETILE_B - RETILE_A) * 16 - len;
+      for (let i = 0; i < NT; i++) {
+        const j = MATCH[i];
+        const s = clamp((six - start - Math.floor(RANK[i] * spread / (NT - 1))) / len, 0, 1);
+        const door = 0.34 * (seg(b, RETILE_A, RETILE_A + 0.1) * (1 - seg(b, RETILE_B, RETILE_B + 0.2)));
+        if (s <= 0) strokeTile('cat', i, HERO, 0.92, door, 2.1);
+        else if (s >= 1) strokeTile('blank', j, BLANK_HERO, 0.92, door, 2.1);
+      }
+    } else {
+      const wid = 2.1 * blankPose.S / 168 + 0.7;
+      if (b < RETURN_A) {
+        for (let j = 0; j < NT; j++) strokeTile('blank', j, blankPose, 0.92, 0, wid);
+        const start = (SPLIT_A + 0.25) * 16, len = 7, spread = (SPLIT_B - SPLIT_A - 0.25) * 16 - len;
+        for (let i = 0; i < NT; i++) {
+          const s = clamp((six - start - Math.floor(RANK[i] * spread / (NT - 1))) / len, 0, 1);
+          if (s >= 1) strokeTile('cat', i, PROOF_CAT, 0.92, 0.26 * (1 - seg(b, SPLIT_B, SPLIT_B + 0.25)), wid);
+        }
+      } else {
+        const start = RETURN_A * 16, len = 6, spread = (RETURN_B - RETURN_A) * 16 - len;
+        for (let i = 0; i < NT; i++) {
+          const s = clamp((six - start - Math.floor(RANK[NT - 1 - i] * spread / (NT - 1))) / len, 0, 1);
+          if (s <= 0) strokeTile('blank', MATCH[i], PROOF_BLANK, 0.92, 0.28, wid);
+          strokeTile('cat', i, catPose, 0.92, 0, 2.1 * catPose.S / 168 + 0.7 * (1 - returnK));
+        }
+      }
+    }
+    for (const f of flying) strokeEdges(f.m, 0.85 * f.edge + 0.15);
+
+    // the painted face belongs to the cat alone; the blank has nothing painted on it
+    const faceAlpha = (1 - seg(b, B_DARK, B_DARK + 0.3)) * (b < B_DARK + 1 ? 1 : 0) + (b >= B_LIGHT && b < RETILE_A ? seg(b, B_LIGHT, B_LIGHT + 0.25) : 0)
+      + (b >= RETILE_A ? (1 - seg(b, RETILE_A, RETILE_A + 0.5)) * (b < SPLIT_A ? 1 : 0) : 0) + (b >= SPLIT_B ? seg(b, SPLIT_B - 0.1, SPLIT_B + 0.2) : 0);
+    face(catPose, clamp(faceAlpha, 0, 1), frame);
+
+    // the eyes stay when everything else has gone
+    const eyesOf = (P) => ({ x: P.cx, y: P.cy - 0.02 * P.S, d: 0.7071 * P.S, r: 0.205 * P.S });
+    const home = eyesOf(catPose), heroEyes = eyesOf(HERO), AIR = { x: 450, y: 214, d: 94, r: 30 };
+    let eyes = home;
+    if (b >= RETILE_A + 0.5 && b < SPLIT_A + 0.5) {
+      const up = seg(b, RETILE_A + 0.5, RETILE_B);
+      eyes = { x: 450, y: lerp(heroEyes.y, AIR.y, up), d: lerp(heroEyes.d, AIR.d, up), r: lerp(heroEyes.r, AIR.r, up) };
+    } else if (b >= SPLIT_A + 0.5) {
+      const k = seg(b, SPLIT_A + 0.5, SPLIT_B);
+      eyes = { x: lerp(AIR.x, home.x, k), y: lerp(AIR.y, home.y, k), d: lerp(AIR.d, home.d, k), r: lerp(AIR.r, home.r, k) };
+    }
+    let open = 1;
+    open *= 1 - seg(b, B_DARK, B_DARK + 0.14);
+    if (b >= B_DARK + 0.14) open = seg(b, B_LIGHT - 0.1, B_LIGHT + 0.05);
+    if (b >= 14.55 && b < 15.72) open = 1 - seg(b, 14.55, 14.92);
+    else if (b >= 15.72 && b < 16.2) open = seg(b, 15.72, 16.05);
+    // two quick blinks so it is plainly alive
+    for (const bl of [9.5, 11.0, 17.75]) open *= 1 - 0.96 * (seg(b, bl, bl + 0.035) * (1 - seg(b, bl + 0.05, bl + 0.09)));
+    // gaze: at you, except that it inspects the blank, twice
+    let gx = 0, gy = 0;
+    const lookDown = seg(b, 13.9, 14.05) * (1 - seg(b, 14.45, 14.55));
+    gy += 1 * lookDown;
+    const lookAcross = seg(b, 17.1, 17.2) * (1 - seg(b, 17.62, 17.72)) + seg(b, 18.6, 18.7) * (1 - seg(b, 19.1, 19.2));
+    gx += 1 * lookAcross;
+    const slit = 0.16 + 0.34 * lookDown + 0.25 * seg(b, B_LIGHT, B_DROP) * (1 - seg(b, B_DROP, B_DROP + 0.5));
+    eye(eyes.x - eyes.d, eyes.y, eyes.r, open, slit, gx, gy);
+    eye(eyes.x + eyes.d, eyes.y, eyes.r, open, slit, gx, gy);
+
+    // the proof: the note on the skin, as each drum's own Laplacian measures it
+    const proof = seg(b, SPLIT_B - 0.1, SPLIT_B + 0.25) * (1 - seg(b, RETURN_A, RETURN_A + 0.2));
+    if (proof > 0.01) {
+      const e = bellAt(tq);
+      const left = LAM[e.k].toFixed(10), right = BLANK_LAM[e.k].toFixed(10);
+      ctx.save();
+      ctx.globalAlpha = proof;
+      ctx.font = '500 29px Menlo, Consolas, monospace';
+      ctx.textAlign = 'center';
+      const y = 730;
+      const glow = Math.exp(-(tq - e.t) * 3.2);
+      ctx.fillStyle = `rgb(${Math.round(226 + 26 * glow)},${Math.round(216 - 10 * glow)},${Math.round(196 - 90 * glow)})`;
+      ctx.fillText(left, PROOF_CAT.cx, y);
+      ctx.fillText(right, PROOF_BLANK.cx, y);
+      ctx.fillStyle = '#f7ab38';
+      ctx.font = '500 33px Menlo, Consolas, monospace';
+      ctx.fillText('=', (PROOF_CAT.cx + PROOF_BLANK.cx) / 2, y + 1);
+      ctx.fillStyle = 'rgba(205,197,180,0.8)';
+      ctx.font = '400 15px Menlo, Consolas, monospace';
+      ctx.fillText(`note ${e.k + 1}`, PROOF_CAT.cx, y + 27);
+      ctx.fillText(`note ${e.k + 1}`, PROOF_BLANK.cx, y + 27);
+      ctx.restore();
+    }
+
+    // the ruler goes dark with the lights and comes back one rung at a time
+    const rulerAll = b < B_DARK ? 1 : b < B_DARK + 0.4 ? 1 - seg(b, B_DARK, B_DARK + 0.4) : 0;
+    if (rulerAll > 0.01) ruler(tq, frame, rulerAll, false);
+    if (b >= B_DARK + 0.2) ruler(tq, frame, 1, b < B_DROP);
+
+    return canvas.toDataURL('image/png');
+  };
+
+  window.__drums = { lam: Array.from(LAM), blankLam: Array.from(BLANK_LAM), ratio: RATIO, resid: SPEC.resid, transplantResidual, M, wallBits: WALL_BITS.length, unreached: WALL_BITS.filter((w) => w.hit >= ECHO_TO).length, revealByBar: [3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5].map((x) => WALL_BITS.filter((w) => w.hit <= x * BAR * FPS).length), C_CELLS };
+  window.ready = true;
+})();
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 84\\n// DURATION: 60\\n// FORM: the cat 0-2 | the dark 2-7 | the blues 7-12 | the blank 12-16 | the proof 16-20 | the last hit 20-21\\n// TONAL CENTER: A blues, in the drum's own tuning: every pitch is a computed resonance of the drum on screen, named after its nearest conventional note\\n// MOTIF: C4 C#4 A3 G3 A3, the blue third grace, the third, the root, the flat seventh, home, on sixteenths 0, 1, 3, 6 and 8. These are rungs 2, 3, 1, 8 and 1 of the drum\\n// HARMONIC PLAN: A7 | A7 | D7 | A7 on an organ. Rungs 1, 3, 5 and 8 sit within 8 cents of 4:5:6:7 without being tuned; D7 is rungs 4, 7, 11 and 15. A pedal in the dark, a turnaround in bar 11\\n// GROOVE: SP-12 boom-bap at 84, sixteenths swung 17 percent: kick on 0, 7, 10, snare on 4 and 12, ghosts on 9 and 15, hats on most sixteenths. One kick a bar in the dark\\n//\\n// A slow blues played on the drum in the picture. RATIO is that drum's spectrum: the square roots of its Laplacian eigenvalues over the first one.\\n// PLAN is shared with the picture. A kick strikes the solved skin at a point, a snare strikes it broadly, and each bell and bass note strikes its own mode.\\n// Bars 12 to 15 are bars 7 to 10 again, note for note, because the cat turns into the blank over them and nothing audible may change.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst BPM = 84, BARS = 21, BAR = 240 / BPM, SIX = BAR / 16, SWING = 0.17;\\n// The drum's own spectrum, sqrt(lambda_k / lambda_1), solved on the glued 15-tile lattice (n = 40). Nobody tuned it.\\nconst RATIO = [1, 1.16517398, 1.25469862, 1.32913714, 1.49404320, 1.53393745, 1.69212182, 1.74680108, 1.89028779, 1.93623357, 2.02267032, 2.04862210, 2.20191619, 2.29275382, 2.33494021, 2.36667398];\\n// Conventional names label the nearest rung; the frequency is always the rung's. A3 = rung 1 at 220 Hz.\\nconst RUNG = { A: 0, C: 1, 'C#': 2, D: 3, E: 4, 'F#': 6, G: 7 };\\nconst TOP = { A4: 10, B4: 12, C5: 14 };\\nconst parseNote = (name) => {\\n  if (name in TOP) return { k: TOP[name], hz: 220 * RATIO[TOP[name]] };\\n  const m = name.match(/^([A-G]#?)(\\\\d)$/);\\n  const k = RUNG[m[1]], home = m[1] === 'A' ? 3 : 4;\\n  return { k, hz: 220 * RATIO[k] * Math.pow(2, Number(m[2]) - home) };\\n};\\nconst stepTime = (bar, step) => (bar * 16 + step + (step % 2 ? SWING : 0)) * SIX;\\n\\nconst HOOK_A = [[0, 'C4', 0.8], [1, 'C#4', 1], [3, 'A3', 0.9], [6, 'G3', 0.85], [8, 'A3', 0.95]];\\nconst HOOK_B = [[0, 'E4', 0.9], [3, 'G4', 0.9], [6, 'E4', 0.8], [8, 'D4', 0.85], [11, 'C#4', 0.9], [14, 'A3', 0.85]];\\nconst ANSWER = [[0, 'F#4', 0.9], [3, 'A4', 0.9], [6, 'F#4', 0.8], [8, 'D4', 0.85], [11, 'C4', 0.8], [12, 'C#4', 0.95], [14, 'A3', 0.85]];\\nconst TURN = [[0, 'E4', 0.85], [2, 'E4', 0.7], [4, 'D4', 0.8], [6, 'C#4', 0.8], [8, 'C4', 0.75], [9, 'C#4', 0.95], [12, 'A3', 0.9], [14, 'E3', 0.85]];\\nconst TOPLINE = [[4, 'C5', 0.62], [7, 'A4', 0.6], [10, 'B4', 0.55], [12, 'A4', 0.6]];\\n\\nconst BASS_A = [[0, 'A1', 1, 5], [7, 'A1', 0.6, 2], [10, 'C2', 0.7, 1], [11, 'C#2', 0.9, 2], [14, 'E2', 0.75, 2]];\\nconst BASS_B = [[0, 'A1', 1, 5], [6, 'E2', 0.7, 2], [8, 'G2', 0.8, 2], [10, 'E2', 0.65, 2], [13, 'C#2', 0.8, 1], [14, 'C2', 0.7, 2]];\\nconst BASS_D = [[0, 'D2', 1, 5], [6, 'A1', 0.7, 2], [8, 'F#2', 0.8, 2], [10, 'D2', 0.7, 1], [11, 'E2', 0.8, 2], [14, 'C#2', 0.8, 2]];\\n\\nconst KICK_A = [[0, 1], [7, 0.62], [10, 0.86]];\\nconst KICK_B = [[0, 1], [6, 0.6], [10, 0.86], [11, 0.5]];\\nconst SNARE = [[4, 1], [12, 1]];\\nconst GHOST = [[9, 0.26], [15, 0.34]];\\nconst HATS = [[0, 0.9], [2, 0.7], [3, 0.3], [4, 0.85], [6, 0.7], [7, 0.34], [8, 0.9], [10, 0.7], [11, 0.3], [12, 0.85], [14, 0.72], [15, 0.34]];\\n\\n// Where a kick lands, in leg units from the head's centre. A section opens between the eyes. In the dark the kicks work up from the chin, so the ears are found last.\\nconst PAWS = [[0, -0.3], [1.0, 0.95], [-1.05, 0.55], [0, 1.85], [-0.72, -0.95], [1.12, -1.6]];\\nconst ECHO_PAWS = [[0, 1.85], [1.0, 1.0], [-1.05, 0.55], [1.05, 0.5], [-0.15, -0.25], [-0.72, -1.0], [1.15, -0.5], [1.15, -1.72]];\\n\\n// The plan, bar by bar. Bars 12-15 are the same four bars as 7-10, note for note and hit for hit: the cat turns into the blank over them.\\nconst PLAN = [];\\nconst barPlan = (bar, p) => { PLAN[bar] = p; };\\nconst full = (hook, bass, kick, chord, extra = {}) => ({ hook, bass, kick, snare: true, ghost: true, hats: true, chord, ...extra });\\nbarPlan(0, full(HOOK_A, BASS_A, KICK_A, 'A7'));\\nbarPlan(1, full(HOOK_B, BASS_B, KICK_B, 'A7'));\\nbarPlan(2, { hook: [[0, 'A3', 0.95]], bass: [[0, 'A1', 0.42, 12]], kick: [[0, 1]], echo: 0 });\\nbarPlan(3, { hook: [[8, 'C4', 0.85], [9, 'C#4', 1]], bass: [[0, 'A1', 0.42, 12]], kick: [[0, 1]], echo: 1 });\\nbarPlan(4, { hook: [[8, 'D4', 0.85], [12, 'E4', 0.9]], bass: [[0, 'A1', 0.42, 12]], kick: [[0, 1], [10, 0.8]], echo: 2, rim: [[8, 0.6]] });\\nbarPlan(5, { hook: [[8, 'F#4', 0.85], [12, 'G4', 0.9]], bass: [[0, 'A1', 0.45, 8], [10, 'C2', 0.45, 1], [11, 'C#2', 0.55, 2], [14, 'E2', 0.5, 2]], kick: [[0, 1], [10, 0.8]], echo: 4, rim: [[4, 0.5], [8, 0.6], [12, 0.5]] });\\nbarPlan(6, { hook: HOOK_A.concat([[12, 'E3', 0.8], [14, 'G3', 0.85], [15, 'A3', 0.95]]), bass: [[0, 'A1', 0.6, 8], [10, 'C2', 0.6, 1], [11, 'C#2', 0.75, 2], [14, 'E2', 0.65, 2]], kick: [[0, 1], [10, 0.86]], echo: 6, rim: [[4, 0.7], [12, 0.8]], hats: 'late', fill: true });\\nbarPlan(7, full(HOOK_A, BASS_A, KICK_A, 'A7'));\\nbarPlan(8, full(HOOK_B, BASS_B, KICK_B, 'A7'));\\nbarPlan(9, full(ANSWER, BASS_D, KICK_A, 'D7'));\\nbarPlan(10, full(HOOK_B, BASS_B, KICK_B, 'A7'));\\nbarPlan(11, full(TURN, BASS_B, KICK_B, 'A7'));\\nbarPlan(12, PLAN[7]);\\nbarPlan(13, PLAN[8]);\\nbarPlan(14, PLAN[9]);\\nbarPlan(15, PLAN[10]);\\nbarPlan(16, full(HOOK_A, BASS_A, KICK_A, 'A7', { top: TOPLINE }));\\nbarPlan(17, full(HOOK_B, BASS_B, KICK_B, 'A7', { top: TOPLINE }));\\nbarPlan(18, full(ANSWER, BASS_D, KICK_A, 'D7', { top: TOPLINE }));\\nbarPlan(19, full(TURN, BASS_B, KICK_B, 'A7', { top: TOPLINE }));\\n// the last bar stops on beat 3 so every voice has finished before the cut at 60 s\\nbarPlan(20, { hook: HOOK_A, bass: [[0, 'A1', 1, 5], [8, 'A1', 1, 4]], kick: [[0, 1], [8, 1]], snare: 'first', hats: 'half', chord: 'A7half' });\\n\\n\\n// ------------------------------------------------------------------ the voices\\nconst lane = () => Array.from({ length: BARS }, () => []);\\n// an event at a sixteenth of a bar, on the score's swing, with an optional lag in seconds\\nconst put = (L, bar, step, lenSteps, v, lag = 0) => {\\n  const a = (step + (step % 2 ? SWING : 0)) / 16 + lag / BAR;\\n  L[bar].push(pure(v).compress(a, Math.min(0.9999, a + Math.max(lenSteps, 0.05) / 16)));\\n};\\nconst play = (L) => cat(...L.map((list) => (list.length ? stack(...list) : silence)));\\nconst KIT = lane(), LOW = lane(), BELL = lane(), ORGAN = lane();\\nconst SP = 'EmuSP12';\\n\\nconst LEVEL = { kick: 0.5, sub: 0.2, snare: 0.5, ghost: 0.4, hat: 0.3, open: 0.2, rim: 0.42, bass: 0.31, bassEdge: 0.2, bell: 0.46, bellOct: 0.13, bellFifth: 0.07, organ: 0.085 };\\n\\n// a note of the drum: the rung itself, its octave as a brief tine, and the drum's own fifth as the strike\\nconst strike = (bar, step, name, v, ring, wet) => {\\n  const hz = parseNote(name).hz;\\n  const space = wet ? { room: 0.34, roomsize: 3, delay: 0.42, delaytime: SIX * 3, delayfeedback: 0.46, orbit: 3 } : { room: 0.14, roomsize: 1.6, orbit: 4 };\\n  put(BELL, bar, step, 1, { s: 'sine', freq: hz, attack: 0.002, decay: ring, sustain: 0, release: 0.06, gain: LEVEL.bell * v, ...space }, 0.012);\\n  put(BELL, bar, step, 1, { s: 'sine', freq: hz * 2, attack: 0.001, decay: ring * 0.32, sustain: 0, release: 0.03, gain: LEVEL.bellOct * v, ...space }, 0.012);\\n  put(BELL, bar, step, 1, { s: 'triangle', freq: hz * RATIO[4], attack: 0.001, decay: ring * 0.16, sustain: 0, release: 0.02, gain: LEVEL.bellFifth * v, ...space }, 0.012);\\n};\\nconst bassNote = (bar, step, name, v, len) => {\\n  const hz = parseNote(name).hz;\\n  const hold = Math.max(0.1, len * SIX * 0.86);\\n  put(LOW, bar, step, len, { s: 'sine', freq: hz, attack: 0.006, decay: hold, sustain: 0.6, release: 0.05, gain: LEVEL.bass * v, orbit: 2 }, 0.014);\\n  put(LOW, bar, step, len, { s: 'sawtooth', freq: hz, cutoff: 460, attack: 0.008, decay: hold * 0.8, sustain: 0.2, release: 0.05, gain: LEVEL.bassEdge * v, orbit: 2 }, 0.014);\\n};\\nconst CHORDS = {\\n  // rungs 1, 3, 5, 8 sit within 8 cents of 4:5:6:7, a harmonic seventh nobody tuned\\n  A7: ['A2', 'C#3', 'E3', 'G3'],\\n  // rungs 4, 7, 11, 15\\n  D7: ['D3', 'F#3', 'A4', 'C5'],\\n  A7half: ['A2', 'C#3', 'E3', 'G3']\\n};\\nconst chordHz = (name) => (name === 'A4' || name === 'C5' ? parseNote(name).hz / 2 : parseNote(name).hz);\\nconst organBar = (bar, chord) => {\\n  const half = chord === 'A7half';\\n  CHORDS[chord].forEach((name) => {\\n    const hz = chordHz(name);\\n    [-0.0028, 0.0028].forEach((d) => {\\n      put(ORGAN, bar, 0, half ? 11 : 15.6, { s: 'sawtooth', freq: hz * (1 + d), cutoff: 760, attack: 0.09, decay: 0.1, sustain: 0.85, release: half ? 0.5 : 0.22, gain: LEVEL.organ, orbit: 5, room: 0.2, roomsize: 2 });\\n    });\\n  });\\n};\\n\\nPLAN.forEach((p, bar) => {\\n  const wet = p.echo !== undefined;\\n  (p.hook || []).forEach(([s, name, v]) => strike(bar, s, name, v, wet ? 1.5 : 0.8, wet && p.echo \u003c 6));\\n  (p.top || []).forEach(([s, name, v]) => strike(bar, s, name, v, 0.6, false));\\n  (p.bass || []).forEach(([s, name, v, len]) => bassNote(bar, s, name, v, len));\\n  if (p.chord) organBar(bar, p.chord);\\n  (p.kick || []).forEach(([s, v]) => {\\n    put(KIT, bar, s, 2, { s: 'bd', bank: SP, n: 2, gain: LEVEL.kick * v, orbit: 1 });\\n    put(KIT, bar, s, 1.5, { s: 'sine', freq: 55, penv: 14, pattack: 0.001, pdecay: 0.05, psustain: 0, attack: 0.002, decay: 0.19, sustain: 0, release: 0.03, gain: LEVEL.sub * v, orbit: 1 }, 0.002);\\n  });\\n  if (p.snare) {\\n    SNARE.filter(([s]) => p.snare !== 'first' || s === 4).forEach(([s, v]) => put(KIT, bar, s, 2, { s: 'sd', bank: SP, n: 0, gain: LEVEL.snare * v, orbit: 1, room: 0.12, roomsize: 1.4 }, 0.004));\\n  }\\n  if (p.ghost) GHOST.forEach(([s, v]) => put(KIT, bar, s, 1, { s: 'sd', bank: SP, n: 6, gain: LEVEL.ghost * v, orbit: 1 }));\\n  if (p.hats) {\\n    HATS.filter(([s]) => (p.hats === 'half' ? s \u003c 8 : p.hats === 'late' ? s >= 8 : true)).forEach(([s, v]) => {\\n      const open = s === 14 && bar % 2 === 1 && p.hats !== 'half';\\n      put(KIT, bar, s, 1, { s: open ? 'oh' : 'hh', bank: SP, n: 0, gain: (open ? LEVEL.open : LEVEL.hat) * v, orbit: 1 });\\n    });\\n  }\\n  (p.rim || []).forEach(([s, v]) => put(KIT, bar, s, 1, { s: 'sd', bank: SP, n: 11, gain: LEVEL.rim * v, orbit: 6, room: 0.3, roomsize: 3, delay: 0.3, delaytime: SIX * 3, delayfeedback: 0.3 }));\\n  if (p.fill) [[13, 0.5], [14, 0.72], [15, 1]].forEach(([s, v]) => put(KIT, bar, s, 1, { s: 'sd', bank: SP, n: 0, gain: LEVEL.snare * 0.72 * v, orbit: 1 }));\\n});\\n\\n$: play(KIT);\\n$: play(LOW);\\n$: play(BELL);\\n$: play(ORGAN);\",\"bpm\":84,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.35,\"cycles\":21,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

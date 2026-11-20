@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 34
+'use strict';
+// ============================================================
+// hand-drawn canvas core
+// Everything a film needs except the film itself: palettes and colour
+// maths, four surface finishes (ink, riso, screen, pencil), the marks,
+// lattices, reveals, camera, timeline, score plumbing and the player.
+//
+// A film is an HTML file that loads this script, then defines puppets,
+// scenes and a timeline and calls defineFilm({...}). See film-template.html.
+//
+// Sections: CONFIG · COLOUR · PALETTES · RANDOM & EASING · GEOMETRY ·
+// MARKS · FINISHES · LATTICES & PARTICLES · MOTIFS · REVEALS & COMPOSITION ·
+// STYLE SHEETS · TIMELINE & RUNTIME
+// ============================================================
+
+// ===================== CONFIG =====================
+// Logical frame: the short side is always 1080 units, the long side follows the aspect ratio.
+// Scenes draw in logical units. S scales them to the output width chosen at render time.
+const SHORT = 1080;
+let W = 1080, H = 1080, S = 1, CX = 540, CY = 540, OUT_W = 1080, OUT_H = 1080;
+const _layers = [];   // every layer() canvas, resized when the format changes
+function setFormat({ ar = '1:1', width } = {}) {
+  const [a, b] = String(ar).split(/[:x\/]/).map(Number); const r = (a > 0 && b > 0) ? a / b : 1;
+  if (r >= 1) { H = SHORT; W = Math.round(SHORT * r); } else { W = SHORT; H = Math.round(SHORT / r); }
+  S = width ? width / W : 1; OUT_H = 2 * Math.round(H * S / 2); S = OUT_H / H; OUT_W = 2 * Math.round(W * S / 2);
+  CX = W / 2; CY = H / 2;
+  for (const L of _layers) { L.o.width = Math.round(L.w * S); L.o.height = Math.round(L.h * S); }   // layers made at file scope follow the format
+  return { W, H, S, OUT_W, OUT_H };
+}
+{ const q = new URLSearchParams(location.search); if (q.has('ar') || q.has('w')) setFormat({ ar: q.get('ar') || '1:1', width: +q.get('w') || undefined }); }
+const FPS_DRAW = 12, FPS_OUT = 24;          // drawn on twos, packed to 24 fps
+const TAU = Math.PI * 2;
+const HAND_FONT = '"Bradley Hand", "Segoe Script", "Chalkboard", "Comic Sans MS", cursive';
+
+// ===================== COLOUR =====================
+// All helpers take and return CSS colours. Hex in, hex out, except alpha().
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function parseColor(c) {
+  if (c[0] === '#') { let h = c.slice(1); if (h.length === 3) h = h.split('').map(x => x + x).join(''); const n = parseInt(h, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const m = c.match(/[\d.]+/g).map(Number); return [m[0], m[1], m[2]];
+}
+const toHex = ([r, g, b]) => '#' + [r, g, b].map(v => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, '0')).join('');
+function mix(a, b, t) { const A = parseColor(a), B = parseColor(b); return toHex(A.map((v, i) => lerp(v, B[i], t))); }
+const tint = (c, t) => mix(c, '#ffffff', t);       // towards white
+const shade = (c, t) => mix(c, '#000000', t);      // towards black
+function alpha(c, a) { const [r, g, b] = parseColor(c); return `rgba(${r},${g},${b},${a})`; }
+function rgbToHsl([r, g, b]) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2; if (mx === mn) return [0, 0, l];
+  const d = mx - mn, s = l > .5 ? d / (2 - mx - mn) : d / (mx + mn); let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return [h * 60, s, l]; }
+function hslToRgb([h, s, l]) { h = ((h % 360) + 360) % 360 / 360; const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+  const f = t => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < .5 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+  return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255]; }
+const hsl = c => rgbToHsl(parseColor(c));
+const withHsl = (c, fn) => toHex(hslToRgb(fn(hsl(c))));
+const rotateHue = (c, deg) => withHsl(c, ([h, s, l]) => [h + deg, s, l]);
+const saturate = (c, k) => withHsl(c, ([h, s, l]) => [h, clamp(s * k, 0, 1), l]);
+const lighten = (c, d) => withHsl(c, ([h, s, l]) => [h, s, clamp(l + d, 0, 1)]);
+// ramp: n steps from a light tint through the colour to a dark shade
+function ramp(c, n = 5) { return Array.from({ length: n }, (_, i) => { const t = i / (n - 1); return t < .5 ? tint(c, (.5 - t) * 1.4) : shade(c, (t - .5) * 1.4); }); }
+function harmony(base) { return { complement: rotateHue(base, 180), triad: [rotateHue(base, 120), rotateHue(base, 240)], analog: [rotateHue(base, -30), rotateHue(base, 30)], split: [rotateHue(base, 150), rotateHue(base, 210)] }; }
+
+// ===================== PALETTES =====================
+// Every palette has the same keys, so a scene written for one runs on any other.
+//   paper      background of daylight shots        night     background of dark / blueprint shots
+//   paperBand  faint light bands on paper (or null) chalk     light line on night, chalkDim its quiet version
+//   ink        dark outline and text               guide     construction-line colour
+//   fills[]    3..6 flat fills for subjects        shade     hatch / dot colour laid over fills
+//   light      highlight hatch on fills            blush     second shade (warm shadow, cheeks, sunsets)
+//   accents[]  4 loud colours for scribble outlines, wakes, sparks
+//   inks[]     2..4 print inks for riso plates and dot screens (the finish's "colour separations")
+//   finish     default surface finish: 'ink' | 'riso' | 'screen' | 'pencil' | 'flat'
+const PALETTES = {
+  // the fruit-fly film: warm paper, brown inks, four riso accents
+  paperInk: {
+    paper: '#f3e6cf', paperBand: 'rgba(255,238,200,.65)', ink: '#1e1630', night: '#0b0d1f', chalk: '#e8ecff', chalkDim: '#8d97c9', guide: 'rgba(70,100,255,.55)',
+    fills: ['#e79256', '#c99a5a', '#b8864e', '#d9b078'], shade: '#3a2214', light: '#fff1d6', blush: '#c8473f',
+    accents: ['#ff2bd6', '#28f0e0', '#ffe22b', '#5cff5c'], inks: ['#1e1630', '#c8473f', '#2b5fb8'], finish: 'ink',
+  },
+  // the flipbook: cream stock, fluorescent riso inks, halftone dots, dark purple night
+  risoPop: {
+    paper: '#f0ece2', paperBand: null, ink: '#22366b', night: '#2a2050', chalk: '#f3ebb1', chalkDim: '#8f86c8', guide: 'rgba(34,54,107,.5)',
+    fills: ['#ff48b0', '#0078bf', '#ffe800', '#00a95c', '#ff6c2f', '#765ba7'], shade: '#22366b', light: '#fff9c8', blush: '#ff48b0',
+    accents: ['#ff48b0', '#0078bf', '#ffe800', '#00a95c'], inks: ['#0078bf', '#ff48b0', '#ffe800', '#22366b'], finish: 'riso',
+  },
+  // the paper boat: sea blues, cream sky, one orange desk, flat shapes under a regular dot screen
+  screenSea: {
+    paper: '#e8e6db', paperBand: null, ink: '#1f1e2d', night: '#1a1c2e', chalk: '#e8e6db', chalkDim: '#8a93a6', guide: 'rgba(10,80,131,.5)',
+    fills: ['#0a5083', '#518e9d', '#becacc', '#e4a05c', '#91906a', '#e8c84a', '#c8473f', '#051630'], shade: '#051630', light: '#f4f2e8', blush: '#e4a05c',
+    accents: ['#c8473f', '#e8c84a', '#518e9d', '#f0a0b0'], inks: ['#0a5083', '#051630', '#e8c84a'], finish: 'screen',
+  },
+  // the personal website: near-monochrome cream and charcoal, pale pink and sage sections, thin graphite lines
+  pencilMinimal: {
+    paper: '#f4efe4', paperBand: null, ink: '#201f1b', night: '#27251f', chalk: '#d9d2c2', chalkDim: '#7d786c', guide: 'rgba(32,31,27,.35)',
+    fills: ['#e8d6cc', '#e0e2d0', '#dad2c5', '#f4efe4'], shade: '#5e5a50', light: '#ffffff', blush: '#c9a9a0',
+    accents: ['#8a8a55', '#b0483a', '#7e8aa0', '#c9a15a'], inks: ['#201f1b', '#8a8a55'], finish: 'pencil',
+  },
+  // chalk on navy only: for films that live entirely in the blueprint world
+  blueprintNight: {
+    paper: '#0b0d1f', paperBand: null, ink: '#e8ecff', night: '#0b0d1f', chalk: '#e8ecff', chalkDim: '#8d97c9', guide: 'rgba(150,170,255,.7)',
+    fills: ['#1a2040', '#22306a', '#2c3a80', '#141a33'], shade: '#8d97c9', light: '#ffffff', blush: '#7fe7ff',
+    accents: ['#7fe7ff', '#ff6fd8', '#ffe22b', '#5fe08a'], inks: ['#e8ecff', '#7fe7ff'], finish: 'ink',
+  },
+};
+// makePalette: fill missing keys from a base, so a film can say makePalette({fills: [...], finish: 'riso'})
+function makePalette(part = {}, base = 'paperInk') { const b = typeof base === 'string' ? PALETTES[base] : base; return { ...b, ...part }; }
+// derivePalette: shift a whole palette (hue in degrees, saturation factor, lightness delta); paper and ink stay unless overridden
+function derivePalette(pal, { hue = 0, sat = 1, light = 0, paper, ink, finish, night } = {}) {
+  const f = c => lighten(saturate(rotateHue(c, hue), sat), light);
+  return { ...pal, paper: paper || pal.paper, ink: ink || pal.ink, night: night || pal.night, finish: finish || pal.finish,
+    fills: pal.fills.map(f), accents: pal.accents.map(f), inks: pal.inks.map(f), shade: f(pal.shade), blush: f(pal.blush), light: pal.light };
+}
+// duotone: two inks on paper, the way the flipbook goes magenta + blue for a beat
+function duotone(inkA, inkB, paper = '#f0ece2', finish = 'riso') {
+  return makePalette({ paper, ink: inkA, night: shade(inkA, .6), chalk: paper, chalkDim: mix(inkA, paper, .5), guide: alpha(inkA, .5),
+    fills: [inkA, inkB, mix(inkA, inkB, .5), tint(inkA, .5), tint(inkB, .5)], shade: inkA, light: paper, blush: inkB, accents: [inkB, inkA, tint(inkB, .4), tint(inkA, .4)], inks: [inkA, inkB], finish });
+}
+let PAL = { ...PALETTES.paperInk };
+function usePalette(p) { PAL = typeof p === 'string' ? { ...PALETTES[p] } : { ...p }; return PAL; }
+
+// ===================== RANDOM & EASING =====================
+// Everything is seeded. Math.random is banned in films: it makes textures boil.
+function rng(seed) { let a = (seed * 1000003) >>> 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const easeIO = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+const easeOut = t => 1 - Math.pow(1 - t, 3);
+const easeIn = t => t * t * t;
+const sm = (a, b, t, e = easeIO) => e(clamp((t - a) / (b - a), 0, 1));   // 0..1 between times a and b
+const flicker = (i, period = 2) => Math.floor(i / period) % 2 === 0;    // alternate two renders
+const pulse = (i, every, hold = 1) => (i % every) < hold;                 // true for `hold` drawn frames every `every`
+
+// ===================== GEOMETRY =====================
+// Fill with a Path2D, outline with a jittered polyline: the two must not coincide.
+function ellPts(cx, cy, rx, ry, rot = 0, n = 44) { const p = []; for (let i = 0; i < n; i++) { const a = i / n * TAU, x = rx * Math.cos(a), y = ry * Math.sin(a); p.push([cx + x * Math.cos(rot) - y * Math.sin(rot), cy + x * Math.sin(rot) + y * Math.cos(rot)]); } return p; }
+function ellPath(cx, cy, rx, ry, rot = 0) { const p = new Path2D(); p.ellipse(cx, cy, rx, ry, rot, 0, TAU); return p; }
+function circPath(cx, cy, r) { return ellPath(cx, cy, r, r); }
+function rectPath(x, y, w, h) { const p = new Path2D(); p.rect(x, y, w, h); return p; }
+function roundRectPath(x, y, w, h, r) { const p = new Path2D(); p.roundRect(x, y, w, h, r); return p; }
+function polyPath(pts, close = true) { const p = new Path2D(); pts.forEach((q, i) => i ? p.lineTo(q[0], q[1]) : p.moveTo(q[0], q[1])); if (close) p.closePath(); return p; }
+function pathLength(pts, close) { let L = 0; for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (close) L += Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]); return L; }
+function bez(p0, p1, p2, p3, t) { const u = 1 - t; return [u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0], u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]]; }
+function layer(w, h) { const full = w === undefined; w = w ?? W; h = h ?? H; const o = document.createElement('canvas'); o.width = Math.round(w * S); o.height = Math.round(h * S); if (full) _layers.push({ o, get w() { return W; }, get h() { return H; } }); else _layers.push({ o, w, h }); return o; }   // output pixels, logical size w x h
+function cam(c, x, y, zoom, rot = 0) { c.setTransform(S, 0, 0, S, 0, 0); c.translate(W / 2, H / 2); c.scale(zoom, zoom); c.rotate(rot); c.translate(-x, -y); }
+const resetT = c => c.setTransform(S, 0, 0, S, 0, 0);   // identity in logical units
+const blit = (c, src) => { c.save(); resetT(c); c.drawImage(src, 0, 0, W, H); c.restore(); };   // draw a layer full-frame
+
+// ===================== MARKS =====================
+// wob: polyline with seeded jitter (amp 1..3 px). Use for every visible outline.
+function wob(c, pts, amp, seed, close = false) { const r = rng(seed); c.beginPath(); pts.forEach((p, i) => { const x = p[0] + (r() - .5) * amp, y = p[1] + (r() - .5) * amp; i ? c.lineTo(x, y) : c.moveTo(x, y); }); if (close) c.closePath(); c.stroke(); }
+// crayon: a wob stroke with a grainy edge (three passes, the flipbook's ripple line)
+function crayon(c, pts, color, width, seed, close = false) { c.save(); c.strokeStyle = color; c.lineCap = 'round'; c.lineJoin = 'round'; for (let k = 0; k < 3; k++) { c.globalAlpha = k ? .35 : .85; c.lineWidth = width * (k ? .7 : 1); wob(c, pts, 2.5 + k * 1.5, seed + k * 7, close); } c.restore(); }
+// hatch: short parallel strokes clipped to `path`. box=[x,y,w,h] bounds the path in the same coords. One stroke() per layer.
+function hatch(c, path, box, o = {}) {
+  const { angle = .9, gap = 7, len = 14, jitter = 6, color = PAL.ink, alpha: al = .35, width = 1.2, seed = 1 } = o; const r = rng(seed);
+  c.save(); c.clip(path); c.strokeStyle = color; c.globalAlpha = al; c.lineWidth = width; c.lineCap = 'round';
+  const [bx, by, bw, bh] = box, cx = bx + bw / 2, cy = by + bh / 2, R = Math.hypot(bw, bh) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  c.beginPath();
+  for (let v = -R; v <= R; v += gap) for (let u = -R; u <= R; u += len * 1.7) { const uu = u + (r() - .5) * jitter * 2, L = len * (.6 + r() * .8);
+    const x0 = cx + ca * uu - sa * v + (r() - .5) * jitter * .6, y0 = cy + sa * uu + ca * v + (r() - .5) * jitter * .6; c.moveTo(x0, y0); c.lineTo(x0 + ca * L, y0 + sa * L); }
+  c.stroke(); c.restore();
+}
+// grain: n speckles clipped to path
+function grain(c, path, box, n, color, al, seed, size = 1.8) { const r = rng(seed); c.save(); c.clip(path); c.fillStyle = color; c.globalAlpha = al; for (let i = 0; i < n; i++) c.fillRect(box[0] + r() * box[2], box[1] + r() * box[3], size * (.4 + r()), size * (.4 + r())); c.restore(); }
+// scribble: the same outline in accent colours, each copy shifted, turned and scaled a little (riso misregistration). One or two parts per frame.
+function scribble(c, path, cx, cy, o = {}) { const { colors = PAL.accents, amp = 5, alpha: al = .55, width = 1.1, seed = 3 } = o; const r = rng(seed); c.save(); c.globalAlpha = al; c.lineWidth = width;
+  for (const col of colors) { c.strokeStyle = col; c.save(); c.translate(cx + (r() - .5) * amp * 2, cy + (r() - .5) * amp * 2); c.rotate((r() - .5) * .08); c.scale(1 + (r() - .5) * .08, 1 + (r() - .5) * .08); c.translate(-cx, -cy); c.stroke(path); c.restore(); } c.restore(); }
+function cross(c, x, y, s) { c.beginPath(); c.moveTo(x - s, y); c.lineTo(x + s, y); c.moveTo(x, y - s); c.lineTo(x, y + s); c.stroke(); }
+// construction: thin guide lines with ticks, a circle and a few crosses around (cx,cy)
+function construction(c, cx, cy, R, seed, color = PAL.guide, al = 1) { const r = rng(seed); c.save(); c.globalAlpha = al; c.strokeStyle = color; c.lineWidth = .9;
+  for (let i = 0; i < 3; i++) { const a = r() * Math.PI, L = R * (1.3 + r() * 1.2); c.beginPath(); c.moveTo(cx - Math.cos(a) * L, cy - Math.sin(a) * L); c.lineTo(cx + Math.cos(a) * L, cy + Math.sin(a) * L); c.stroke();
+    for (let k = -3; k <= 3; k++) { const u = k * L / 4, x = cx + Math.cos(a) * u, y = cy + Math.sin(a) * u; c.beginPath(); c.moveTo(x - Math.sin(a) * 5, y + Math.cos(a) * 5); c.lineTo(x + Math.sin(a) * 5, y - Math.cos(a) * 5); c.stroke(); } }
+  c.beginPath(); c.arc(cx, cy, R * 1.12, 0, TAU); c.stroke(); for (let i = 0; i < 5; i++) cross(c, cx + (r() - .5) * R * 3, cy + (r() - .5) * R * 3, 6); c.restore(); }
+// squiggleText: illegible handwriting as rows of little arches (letters, notes, walls of text)
+function squiggleText(c, x, y, w, lines, o = {}) { const { color = PAL.ink, seed = 1, lineH = 16, amp = 4, width = 1.3, gap = .4 } = o; const r = rng(seed); c.save(); c.strokeStyle = color; c.lineWidth = width; c.lineCap = 'round'; c.lineJoin = 'round';
+  for (let l = 0; l < lines; l++) { let px = x; const py = y + l * lineH, end = x + w * (l === lines - 1 ? .35 + r() * .5 : .9 + r() * .1);
+    while (px < end) { const wl = 14 + r() * 40, f = .6 + r() * .6; c.beginPath(); c.moveTo(px, py); for (let u = 2; u <= wl; u += 2) c.lineTo(px + u, py - Math.abs(Math.sin(u * f + r() * .3)) * amp * (.5 + r() * .8)); c.stroke(); px += wl + amp * 2 * gap + r() * 8; } }
+  c.restore(); }
+// handText: real letters in a handwriting face, two inks misregistered. Fonts differ per machine: check the render.
+function handText(c, text, x, y, o = {}) { const { size = 64, ink = PAL.ink, ink2 = PAL.accents[0], offset = 3, align = 'left' } = o; c.save(); c.font = `${size}px ${HAND_FONT}`; c.textAlign = align; c.textBaseline = 'alphabetic';
+  if (ink2) { c.fillStyle = ink2; c.globalAlpha = .85; c.fillText(text, x + offset, y + offset * .6); } c.fillStyle = ink; c.globalAlpha = 1; c.fillText(text, x, y); c.restore(); }
+
+// ===================== FINISHES =====================
+// A finish is how a flat fill gets its texture. surface() is the one call a puppet or a scene makes;
+// it reads PAL.finish unless told otherwise, so the same drawing changes finish with the palette.
+//   ink     hatching along the form plus grain           (fruit-fly film)
+//   riso    rotated halftone dot screen, a little jitter (flipbook)
+//   screen  regular dot screen, straight grid            (paper boat)
+//   pencil  sparse thin graphite lines and a few dots    (website)
+//   flat    nothing
+function surface(c, path, box, o = {}) {
+  const f = o.finish || PAL.finish, color = o.color || PAL.shade, seed = o.seed || 1, density = o.density ?? .5;
+  if (f === 'ink') { hatch(c, path, box, { angle: o.angle ?? 1.2, gap: o.gap ?? 4.5, len: o.len ?? 9, jitter: 3, color, alpha: o.alpha ?? .35, width: o.width ?? 1, seed }); grain(c, path, box, o.grain ?? 140, color, .35, seed + 1, 1.4); }
+  else if (f === 'riso') dotScreen(c, path, box, { cell: o.cell ?? 7, color, density, angle: o.angle ?? .26, jitter: .35, seed, alpha: o.alpha ?? .9 });
+  else if (f === 'screen') dotScreen(c, path, box, { cell: o.cell ?? 6, color, density, angle: o.angle ?? 0, jitter: .06, seed, alpha: o.alpha ?? .9 });
+  else if (f === 'pencil') { hatch(c, path, box, { angle: o.angle ?? 1.1, gap: o.gap ?? 9, len: o.len ?? 30, jitter: 4, color, alpha: o.alpha ?? .22, width: .7, seed }); grain(c, path, box, o.grain ?? 40, color, .3, seed + 1, 1.2); }
+}
+// dotScreen: halftone dots clipped to a path. density is 0..1 or a function (x,y)=>0..1 for gradients.
+function dotScreen(c, path, box, o = {}) {
+  const { cell = 7, color = PAL.shade, density = .5, angle = 0, jitter = 0, seed = 1, alpha: al = 1, square = false } = o; const r = rng(seed), dens = typeof density === 'function' ? density : () => density;
+  c.save(); c.clip(path); c.fillStyle = color; c.globalAlpha = al;
+  const [bx, by, bw, bh] = box, cx = bx + bw / 2, cy = by + bh / 2, R = Math.hypot(bw, bh) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  c.beginPath();
+  for (let v = -R; v <= R; v += cell) for (let u = -R; u <= R; u += cell) { const x = cx + ca * u - sa * v + (r() - .5) * jitter * cell, y = cy + sa * u + ca * v + (r() - .5) * jitter * cell;
+    const d = clamp(dens(x, y), 0, 1); if (d <= 0) continue; const rad = cell * .62 * Math.sqrt(d); if (square) c.rect(x - rad, y - rad, rad * 2, rad * 2); else { c.moveTo(x + rad, y); c.arc(x, y, rad, 0, TAU); } }
+  c.fill(); c.restore();
+}
+// plate + printPlate: real colour separations. Draw each ink's coverage in black on a white plate, then print
+// the plates in order with multiply blending. Overlaps mix like ink on paper. This is the flipbook's whole look.
+function plate() { const L = layer(); const g = L.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H); return L; }
+const _cov = document.createElement('canvas');
+function printPlate(c, src, o = {}) {
+  const { cell = 7, ink = PAL.inks[0], angle = .26, jitter = .2, seed = 1, gain = 1, maxCov = .78, blend = 'multiply', al = .95 } = o; const r = rng(seed);
+  const sw = Math.ceil(W / cell), sh = Math.ceil(H / cell); _cov.width = sw; _cov.height = sh; const g = _cov.getContext('2d'); g.drawImage(src, 0, 0, sw, sh); const d = g.getImageData(0, 0, sw, sh).data;
+  c.save(); resetT(c); c.globalCompositeOperation = blend; c.globalAlpha = al; c.fillStyle = ink; c.beginPath();
+  const R = Math.hypot(W, H) / 2, ca = Math.cos(angle), sa = Math.sin(angle);
+  for (let v = -R; v <= R; v += cell) for (let u = -R; u <= R; u += cell) { const x = W / 2 + ca * u - sa * v + (r() - .5) * jitter * cell, y = H / 2 + sa * u + ca * v + (r() - .5) * jitter * cell;
+    if (x < 0 || y < 0 || x >= W || y >= H) continue; const k = ((y / cell | 0) * sw + (x / cell | 0)) * 4; const cov = clamp((1 - (d[k] * .299 + d[k + 1] * .587 + d[k + 2] * .114) / 255) * gain, 0, maxCov);
+    if (cov < .03) continue; const rad = cell * .62 * Math.sqrt(cov); c.moveTo(x + rad, y); c.arc(x, y, rad, 0, TAU); }
+  c.fill(); c.restore();
+}
+// paper: fills the frame with paper colour, optional light bands, and stock grain. Resets the transform.
+function paper(c, base = PAL.paper, band = PAL.paperBand, seed = 5) { resetT(c); c.fillStyle = base; c.fillRect(0, 0, W, H);
+  if (band) { c.save(); c.translate(W / 2, H / 2); c.rotate(-Math.PI / 4); c.fillStyle = band; for (let i = -6; i <= 6; i++) c.fillRect(-1200, i * 160 - 40, 2400, 80); c.restore(); }
+  grain(c, rectPath(0, 0, W, H), [0, 0, W, H], 1400, shade(base, .5), .06, seed, 1.6); }
+// night: dark background with star speckle
+function night(c, base = PAL.night, seed = 5) { resetT(c); c.fillStyle = base; c.fillRect(0, 0, W, H); grain(c, rectPath(0, 0, W, H), [0, 0, W, H], 400, '#ffffff', .5, seed, 1.6); }
+
+// ===================== LATTICES & PARTICLES =====================
+function hexPath(x, y, s) { const p = new Path2D(); for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i + Math.PI / 6; i ? p.lineTo(x + s * Math.cos(a), y + s * Math.sin(a)) : p.moveTo(x + s * Math.cos(a), y + s * Math.sin(a)); } p.closePath(); return p; }
+function hexCells(box, s, fn) { const w = Math.sqrt(3) * s, h = 1.5 * s, [bx, by, bw, bh] = box; let row = 0; for (let y = by - s; y < by + bh + s; y += h, row++) { const o = (row % 2) ? w / 2 : 0; for (let x = bx - w + o; x < bx + bw + w; x += w) fn(x, y); } }
+function hexLattice(c, box, s, color, al, width = .8) { c.save(); c.strokeStyle = color; c.globalAlpha = al; c.lineWidth = width; hexCells(box, s, (x, y) => c.stroke(hexPath(x, y, s))); c.restore(); }
+// aster: a nucleus or spark with rays; g scales ray length (animate 0..1 to ignite)
+function aster(c, x, y, r, n, color, seed, g = 1, core = PAL.night, rim = PAL.chalk) { const rr = rng(seed); c.save(); c.strokeStyle = color; c.lineWidth = 1.4; c.globalAlpha = .9;
+  for (let i = 0; i < n; i++) { const a = i / n * TAU + (rr() - .5) * .3, r0 = r * 1.6, r1 = r * (2.6 + rr() * 1.6) * g; c.beginPath(); c.moveTo(x + Math.cos(a) * r0, y + Math.sin(a) * r0); c.lineTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1); c.stroke(); }
+  c.fillStyle = core; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.strokeStyle = rim; c.lineWidth = 1.6; c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.arc(x + r * .2, y - r * .2, r * .35, 0, TAU); c.fill(); c.restore(); }
+// dotBurst: fireworks made of dots on rays (the website's dark section)
+function dotBurst(c, x, y, R, rays, color, seed, g = 1) { const r = rng(seed); c.save(); c.fillStyle = color; for (let k = 0; k < rays; k++) { const a = k / rays * TAU + (r() - .5) * .2, n = 6 + (r() * 6 | 0); for (let j = 1; j <= n; j++) { const d = R * g * j / n * (.9 + r() * .2); c.globalAlpha = .9 - j / n * .6; c.beginPath(); c.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, 1.2 + r() * 1.4, 0, TAU); c.fill(); } } c.restore(); }
+function speedLines(c, x, y, dir, seed, n = 7, al = .6, color = PAL.ink) { const r = rng(seed); c.save(); c.strokeStyle = color; c.globalAlpha = al; c.lineCap = 'round';
+  for (let i = 0; i < n; i++) { const side = (r() - .5) * 70, back = 30 + r() * 40, L = 60 + r() * 120, px = -Math.sin(dir), py = Math.cos(dir), x0 = x - Math.cos(dir) * back + px * side, y0 = y - Math.sin(dir) * back + py * side;
+    c.lineWidth = .8 + r() * 1.8; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x0 - Math.cos(dir) * L, y0 - Math.sin(dir) * L); c.stroke(); } c.restore(); }
+function loops(c, x, y, dir, seed, al = .6, cols = PAL.accents) { const r = rng(seed); c.save(); c.translate(x, y); c.rotate(dir); c.globalAlpha = al; c.lineWidth = 1.2;
+  cols.forEach((col, k) => { c.strokeStyle = col; c.beginPath(); const A = 14 + r() * 16, w = .12 + r() * .1, ph = r() * TAU; for (let u = 0; u <= 220; u += 4) { const yy = Math.sin(u * w + ph) * A + (k - 2) * 6, xx = -u - Math.cos(u * w * 1.7 + ph) * 8; u ? c.lineTo(xx, yy) : c.moveTo(xx, yy); } c.stroke(); }); c.restore(); }
+
+// ===================== MOTIFS =====================
+// The recurring devices of the reference films, ready to place.
+// seedDot: the anchor dot that sits in every frame of the flipbook, two inks slightly off
+function seedDot(c, x, y, r = 9, ink = PAL.ink, ink2 = PAL.accents[0]) { c.save(); if (ink2) { c.fillStyle = ink2; c.globalAlpha = .8; c.beginPath(); c.arc(x + r * .3, y + r * .2, r, 0, TAU); c.fill(); } c.fillStyle = ink; c.globalAlpha = 1; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.restore(); }
+// ripples: concentric crayon rings; pass the radii you want (animate them outward, drop the ones past the frame)
+function ripples(c, cx, cy, radii, color, seed, width = 4) { radii.forEach((r, i) => crayon(c, ellPts(cx, cy, r, r, 0, Math.max(40, Math.round(r / 6))), color, width, seed + i, true)); }
+function dashedRing(c, cx, cy, r, color, seed, dash = [14, 10], width = 1.5) { c.save(); c.setLineDash(dash); c.lineDashOffset = rng(seed)() * 40; c.strokeStyle = color; c.lineWidth = width; wob(c, ellPts(cx, cy, r, r, 0, 90), 1.5, seed, true); c.restore(); }
+// dottedArc: the website's rings, drawn as dots along a circle
+function dottedArc(c, cx, cy, r, color, seed, step = 9, size = 1.1) { const rr = rng(seed); c.save(); c.fillStyle = color; const n = Math.round(TAU * r / step); for (let k = 0; k < n; k++) { if (rr() < .12) continue; const a = k / n * TAU; c.beginPath(); c.arc(cx + Math.cos(a) * r, cy + Math.sin(a) * r, size, 0, TAU); c.fill(); } c.restore(); }
+// plant: a pressed-flower drawing, recursive branches with leaf clusters at the tips
+function plant(c, x, y, len, depth, seed, o = {}) { const { stem = PAL.ink, leaf = PAL.accents[0], flower = PAL.accents[1], angle = -Math.PI / 2, width = 1.3 } = o; const r = rng(seed); c.save();
+  (function branch(x, y, len, a, d, w) { const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len; c.strokeStyle = stem; c.lineWidth = w; wob(c, [[x, y], [(x + x2) / 2 + (r() - .5) * len * .2, (y + y2) / 2 + (r() - .5) * len * .2], [x2, y2]], 1, seed + d * 13 + (r() * 100 | 0));
+    if (d <= 0) { c.fillStyle = leaf; c.globalAlpha = .7; for (let k = 0; k < 5; k++) { const la = a + (r() - .5) * 2.2; c.beginPath(); c.ellipse(x2 + Math.cos(la) * 6, y2 + Math.sin(la) * 6, 7, 3, la, 0, TAU); c.fill(); } c.globalAlpha = 1;
+      if (r() < .4) { c.strokeStyle = flower; c.lineWidth = .9; for (let k = 0; k < 6; k++) { const fa = k / 6 * TAU; c.beginPath(); c.moveTo(x2, y2); c.lineTo(x2 + Math.cos(fa) * 8, y2 + Math.sin(fa) * 8); c.stroke(); } } return; }
+    const n = 2 + (r() < .5 ? 1 : 0); for (let k = 0; k < n; k++) branch(x2, y2, len * (.55 + r() * .25), a + (r() - .5) * 1.4, d - 1, w * .75); })(x, y, len, angle, depth, width); c.restore(); }
+// tornEdge: a Path2D covering the frame below a torn paper line at height y
+function tornEdge(y, o = {}) { const { amp = 9, seed = 1, freq = 60 } = o; const r = rng(seed); const p = new Path2D(); p.moveTo(-10, H + 10); p.lineTo(-10, y); for (let x = -10; x <= W + 10; x += freq / 5) p.lineTo(x, y + (r() - .5) * amp * 2 + Math.sin(x / freq) * amp * .6); p.lineTo(W + 10, H + 10); p.closePath(); return p; }
+// section: a new paper colour from a torn edge downward, with a soft shadow under the tear
+function section(c, y, color, seed = 1) { resetT(c); const p = tornEdge(y, { seed }); c.save(); c.fillStyle = 'rgba(0,0,0,.10)'; c.translate(0, 3); c.fill(p); c.restore(); c.fillStyle = color; c.fill(p); grain(c, p, [0, y, W, H - y], 600, shade(color, .5), .06, seed + 1, 1.6); }
+// stickyNote: a paper square with a drawing callback inside
+function stickyNote(c, x, y, s, seed, draw) { c.save(); c.translate(x, y); c.rotate((rng(seed)() - .5) * .12); c.fillStyle = 'rgba(0,0,0,.08)'; c.fillRect(4, 5, s, s); c.fillStyle = tint(PAL.paper, .5); c.fillRect(0, 0, s, s); c.strokeStyle = alpha(PAL.ink, .25); c.lineWidth = 1; c.strokeRect(.5, .5, s - 1, s - 1); if (draw) draw(c, s); c.restore(); }
+// thread: a thin line wandering down the frame (the website's spine)
+function thread(c, x, seed, color = PAL.accents[0], width = 1.2) { const r = rng(seed); const pts = []; let px = x; for (let y = -10; y <= H + 10; y += 24) { px += (r() - .5) * 26; pts.push([px, y]); } c.save(); c.strokeStyle = color; c.lineWidth = width; c.globalAlpha = .8; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); c.restore(); }
+// signOff: the two-word signature with two ink dots, as in every reference film
+function signOff(c, a, b, o = {}) { const { x = 540, y = 540, size = 60, ink = PAL.ink, ink2 = PAL.accents[0], progressA = 1, progressB = 1 } = o; const ta = a.slice(0, Math.round(a.length * progressA)), tb = b.slice(0, Math.round(b.length * progressB));
+  handText(c, ta, x, y - 12, { size, ink, ink2, align: 'center' }); if (tb) handText(c, tb, x, y + size * 1.1, { size: size * .75, ink, ink2, align: 'center' }); seedDot(c, x - 10, y + size * .35, 6, ink, null); seedDot(c, x + 10, y + size * .35, 6, ink2, null); }
+
+// ===================== REVEALS & COMPOSITION =====================
+function selfDraw(c, pts, progress, seed, amp = 1.5, close = false) { const L = pathLength(pts, close); c.save(); c.setLineDash([L * progress, L]); wob(c, pts, amp, seed, close); c.restore(); }
+// blot: reveal `src` inside a growing ink blot (screen coords) with a bristly fringe
+function blot(c, src, cx, cy, R, seed, fringe = PAL.night) { if (R <= 0) return; const r = rng(seed), path = new Path2D(); for (let i = 0; i < 72; i++) { const a = i / 72 * TAU, rr = R * (1 + (r() - .5) * .16), x = cx + Math.cos(a) * rr, y = cy + Math.sin(a) * rr; i ? path.lineTo(x, y) : path.moveTo(x, y); } path.closePath();
+  c.save(); resetT(c); c.clip(path); c.drawImage(src, 0, 0, W, H); c.restore(); c.save(); resetT(c); c.strokeStyle = fringe; c.lineWidth = 1.6; c.globalAlpha = .9;
+  for (let i = 0; i < 420; i++) { const a = r() * TAU, rad = R * (1 + (r() - .5) * .14), L = 10 + r() * 38, x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad; c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * L, y + Math.sin(a) * L); c.stroke(); } c.restore(); }
+// iris: draw fn inside a circle, rest untouched (or filled with `outside`)
+function iris(c, cx, cy, r, fn, outside) { c.save(); resetT(c); if (outside) { c.fillStyle = outside; c.fillRect(0, 0, W, H); } c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.clip(); fn(c); c.restore(); }
+// mosaic: redraw `src` as flat hex cells of size s (compound-eye POV). Clip to an iris first if you want one.
+function mosaic(c, src, s, box = [0, 0, W, H], tintCol = 'rgba(120,160,255,.10)') { const ow = src.width, oh = src.height, img = src.getContext('2d').getImageData(0, 0, ow, oh).data; c.save(); resetT(c);
+  hexCells(box, s, (x, y) => { const xi = clamp(Math.round(x * S), 0, ow - 1), yi = clamp(Math.round(y * S), 0, oh - 1), k = (yi * ow + xi) * 4; c.fillStyle = `rgb(${img[k] * .92 | 0},${img[k + 1] * .92 | 0},${img[k + 2] * .95 | 0})`; const hp = hexPath(x, y, s); c.fill(hp); c.strokeStyle = 'rgba(20,25,60,.55)'; c.lineWidth = 1; c.stroke(hp); });
+  if (tintCol) { c.fillStyle = tintCol; c.fillRect(box[0], box[1], box[2], box[3]); } c.restore(); }
+// montage: cards[] are scene functions; shows one per `per` seconds, hard cuts. Returns the index shown.
+function montage(c, cards, tau, per = .25, i = 0) { const k = Math.min(cards.length - 1, Math.floor(tau / per)); cards[k](c, tau - k * per, i); return k; }
+// badges: every card as a round stamp on concentric dashed rings (the flipbook's gallery). Cards render once and are cached.
+const _badge = new Map();
+function badges(c, cards, o = {}) { const { cx = 540, cy = 540, r0 = 40, gap = 118, size = 52, ring = PAL.ink, seed = 1, progress = 1, count = cards.length, scale = 1 } = o;
+  cards.forEach(fn => { if (_badge.has(fn)) return; const L = layer(); fn(L.getContext('2d'), 0, 0); const s = layer(256, 256); s.getContext('2d').drawImage(L, 0, 0, 256, 256); _badge.set(fn, s); });
+  c.save(); resetT(c); c.translate(cx, cy); c.scale(scale, scale); c.translate(-cx, -cy); let placed = 0, k = 1; while (placed < count && k < 8) { const R = r0 + k * gap, n = Math.min(count - placed, Math.max(5, Math.round(TAU * R / (size * 2.5)))); dashedRing(c, cx, cy, R, ring, seed + k);
+    for (let j = 0; j < n; j++) { const a = j / n * TAU + k * .5, x = cx + Math.cos(a) * R, y = cy + Math.sin(a) * R, s = size * progress; if (s > 1) { c.save(); c.beginPath(); c.arc(x, y, s, 0, TAU); c.clip(); c.drawImage(_badge.get(cards[placed]), x - s, y - s, s * 2, s * 2); c.restore(); c.strokeStyle = ring; c.lineWidth = 3; c.beginPath(); c.arc(x, y, s, 0, TAU); c.stroke(); } placed++; } k++; }
+  c.restore(); }
+// flash: one near-white drawn frame
+function flash(c, color = tint(PAL.paper, .6)) { resetT(c); c.fillStyle = color; c.fillRect(0, 0, W, H); }
+
+// ===================== STYLE SHEETS =====================
+// styleSheet: every mark in the current palette and finish, labelled. Render it before drawing anything else.
+function styleSheet(c, tau = 0, i = 0) { paper(c); c.font = '16px ui-monospace, Menlo, monospace';
+  const cell = (col, row, label, fn) => { const x = 40 + col * 260, y = 40 + row * 260; c.save(); c.translate(x, y); fn(); c.restore(); c.fillStyle = PAL.ink; c.fillText(label, x, y + 236); };
+  const eb = [20, 20, 200, 160], ell = () => ellPath(120, 100, 100, 78);
+  cell(0, 0, 'surface: ' + PAL.finish, () => { c.fillStyle = PAL.fills[0]; c.fill(ell()); surface(c, ell(), eb, { seed: 2 }); c.strokeStyle = PAL.ink; c.lineWidth = 2.4; wob(c, ellPts(120, 100, 100, 78), 2.2, 1, true); });
+  cell(1, 0, 'ink', () => { c.fillStyle = PAL.fills[1]; c.fill(ell()); surface(c, ell(), eb, { finish: 'ink', seed: 3 }); });
+  cell(2, 0, 'riso', () => { c.fillStyle = PAL.fills[2 % PAL.fills.length]; c.fill(ell()); surface(c, ell(), eb, { finish: 'riso', seed: 4 }); });
+  cell(3, 0, 'screen / pencil', () => { const l = ellPath(70, 100, 60, 78), r = ellPath(175, 100, 60, 78); c.fillStyle = PAL.fills[0]; c.fill(l); surface(c, l, [10, 20, 120, 160], { finish: 'screen', seed: 5 }); c.fillStyle = PAL.fills[3 % PAL.fills.length]; c.fill(r); surface(c, r, [115, 20, 120, 160], { finish: 'pencil', seed: 6 }); });
+  cell(0, 1, 'scribble, construction', () => { const p = ellPath(120, 100, 80, 60); c.fillStyle = PAL.fills[1]; c.fill(p); c.strokeStyle = PAL.ink; c.lineWidth = 2; wob(c, ellPts(120, 100, 80, 60), 2, 7, true); scribble(c, p, 120, 100, { seed: 8, amp: 6 }); construction(c, 120, 100, 70, 9); });
+  cell(1, 1, 'dotScreen gradient', () => { const p = rectPath(20, 20, 200, 160); c.fillStyle = PAL.fills[0]; c.fill(p); dotScreen(c, p, eb, { cell: 7, color: PAL.shade, density: (x, y) => (x - 20) / 200, angle: .26, jitter: .3, seed: 10 }); });
+  cell(2, 1, 'ripples, seedDot', () => { ripples(c, 120, 100, [30, 60, 90], PAL.accents[0], 11, 3.5); ripples(c, 120, 100, [45, 75], PAL.accents[1], 12, 3); seedDot(c, 120, 100, 8); });
+  cell(3, 1, 'hexLattice, aster', () => { hexLattice(c, eb, 14, PAL.chalkDim, .9, 1); aster(c, 120, 100, 7, 14, PAL.accents[1], 13, 1); });
+  cell(0, 2, 'squiggleText', () => { squiggleText(c, 20, 40, 200, 7, { seed: 14, lineH: 20 }); });
+  cell(1, 2, 'plant, thread', () => { thread(c, 30, 15, PAL.accents[0]); plant(c, 130, 200, 60, 4, 16, { leaf: PAL.accents[3 % PAL.accents.length], flower: PAL.accents[1] }); });
+  cell(2, 2, 'dotBurst, dottedArc', () => { c.fillStyle = PAL.night; c.fillRect(20, 20, 200, 160); dotBurst(c, 120, 100, 70, 14, PAL.accents[2 % PAL.accents.length], 17); dottedArc(c, 120, 100, 30, PAL.chalk, 18); dottedArc(c, 120, 100, 55, PAL.chalk, 19); });
+  cell(3, 2, 'speedLines, loops', () => { speedLines(c, 180, 100, 0, 20, 9, .7); loops(c, 180, 100, 0, 21, .8); seedDot(c, 180, 100, 10, PAL.ink, null); });
+  cell(0, 3, 'selfDraw ' + sm(0, 2, tau).toFixed(2), () => { c.strokeStyle = PAL.ink; c.lineWidth = 2.5; selfDraw(c, ellPts(120, 100, 100, 78, 0, 80), sm(0, 2, tau), 22, 1.5, true); });
+  cell(1, 3, 'stickyNote, section', () => { c.save(); c.beginPath(); c.rect(20, 20, 200, 160); c.clip(); c.translate(-400, -500); c.scale(.5, .5); section(c, 1100, PAL.fills[0], 23); c.restore(); stickyNote(c, 120, 60, 70, 24, (c, s) => { c.strokeStyle = PAL.ink; c.lineWidth = 1; c.beginPath(); for (let a = 0; a < 20; a += .2) c.lineTo(s / 2 + Math.cos(a) * a * 1.4, s / 2 + Math.sin(a) * a * 1.4); c.stroke(); }); });
+  cell(2, 3, 'handText (font varies)', () => { handText(c, 'hand text', 20, 110, { size: 50 }); handText(c, 'two inks', 30, 170, { size: 38 }); });
+  cell(3, 3, 'palette', () => { const sw = [PAL.paper, PAL.ink, PAL.night, PAL.chalk, ...PAL.fills, PAL.shade, PAL.light, PAL.blush, ...PAL.accents, ...PAL.inks]; sw.forEach((col, k) => { c.fillStyle = col; c.fillRect(20 + (k % 6) * 34, 20 + Math.floor(k / 6) * 34, 30, 30); }); });
+}
+// paletteSheet: the palette with tint/shade ramps and the harmony of the first fill
+function paletteSheet(c) { paper(c); c.font = '18px ui-monospace, Menlo, monospace'; const rows = [['paper', [PAL.paper]], ['ink', [PAL.ink]], ['night', [PAL.night]], ['chalk', [PAL.chalk, PAL.chalkDim]], ['fills', PAL.fills], ['shade/light/blush', [PAL.shade, PAL.light, PAL.blush]], ['accents', PAL.accents], ['inks', PAL.inks]];
+  rows.forEach(([name, cols], r) => { c.fillStyle = PAL.ink; c.fillText(name, 40, 70 + r * 100); cols.forEach((col, k) => { ramp(col, 5).forEach((v, j) => { c.fillStyle = v; c.fillRect(260 + k * 130 + j * 22, 40 + r * 100, 20, 50); }); }); });
+  const h = harmony(PAL.fills[0]); c.fillStyle = PAL.ink; c.fillText('harmony of fills[0]: complement, triad, analog, split', 40, 900); [h.complement, ...h.triad, ...h.analog, ...h.split].forEach((col, k) => { c.fillStyle = col; c.fillRect(40 + k * 60, 920, 50, 50); }); }
+
+// ===================== TIMELINE & RUNTIME =====================
+// defineFilm({ palette, timeline, score }) wires the player, the export buttons and the render hooks.
+//   palette   name or object; optional (defaults to the current PAL)
+//   timeline  [{ name, dur, fn(c, tau, i) }]   tau = seconds into the scene, i = global drawn frame
+//   score     (ac, t0, dest) => schedules notes; optional
+let FILM = null, ctx = null, cv = null;
+//   format    { ar: '16:9', width: 1920 }; the query string ?ar=9:16&w=1080 overrides it at render time
+function defineFilm({ palette, timeline, score, format = {} }) {
+  const qs = new URLSearchParams(location.search);
+  setFormat({ ar: qs.get('ar') || format.ar || '1:1', width: +qs.get('w') || format.width || undefined });
+  if (palette) usePalette(palette);
+  cv = document.getElementById('c'); if (!cv) { cv = document.createElement('canvas'); cv.id = 'c'; document.body.prepend(cv); } cv.width = OUT_W; cv.height = OUT_H; ctx = cv.getContext('2d');
+  const DUR = timeline.reduce((a, s) => a + s.dur, 0), NDRAW = Math.round(DUR * FPS_DRAW);
+  FILM = { timeline, score, DUR, NDRAW };
+  window.__drawFrame = i => { cur = -1; show(i); }; window.__NDRAW = NDRAW; window.__FILM = FILM;
+  window.__size = { w: OUT_W, h: OUT_H, W, H, S };
+  window.__frame = i => { cur = -1; show(i); return cv.toDataURL('image/png'); };            // exact pixels, no screenshot
+  window.__grid = (n = 24, cellW = 240) => gridSheet(n, cellW).toDataURL('image/jpeg', .9);  // n evenly spaced frames
+  if (qs.has('bare')) { document.body.style.cssText = 'margin:0;padding:0;background:#000'; cv.style.cssText = `width:${OUT_W}px;height:${OUT_H}px;display:block`; document.querySelectorAll('.bar').forEach(b => b.hidden = true); }
+  else buildPlayer();
+  if (qs.has('grid')) { const img = new Image(); img.src = window.__grid(+qs.get('grid') || 24, 240); img.style.cssText = 'max-width:96vw'; cv.hidden = true; cv.after(img); }
+  else show(qs.has('frame') ? +qs.get('frame') : 0);
+  window.__ready = true;
+}
+// gridSheet: n evenly spaced drawn frames tiled 6 across, labelled with index and time. The first thing to look at.
+function gridSheet(n = 24, cellW = 240) {
+  const cols = 6, rows = Math.ceil(n / cols), cellH = Math.round(cellW * OUT_H / OUT_W), pad = 18, sheet = document.createElement('canvas');
+  sheet.width = cols * cellW; sheet.height = rows * (cellH + pad); const g = sheet.getContext('2d'); g.fillStyle = '#141414'; g.fillRect(0, 0, sheet.width, sheet.height);
+  g.font = '12px ui-monospace, Menlo, monospace'; g.fillStyle = '#e6e6e6';
+  for (let k = 0; k < n; k++) { const i = Math.round(k * (FILM.NDRAW - 1) / Math.max(1, n - 1)); cur = -1; show(i);
+    const x = (k % cols) * cellW, y = Math.floor(k / cols) * (cellH + pad); g.drawImage(cv, x, y, cellW, cellH); g.fillText(`${String(i).padStart(3, '0')}  ${(i / FPS_DRAW).toFixed(2)}s`, x + 4, y + cellH + 13); }
+  cur = -1; return sheet;
+}
+function drawFrame(i) { const { timeline } = FILM; const t = i / FPS_DRAW; let acc = 0;
+  for (let k = 0; k < timeline.length; k++) { const s = timeline[k]; if (t < acc + s.dur || k === timeline.length - 1) { resetT(ctx); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; s.fn(ctx, t - acc, i); resetT(ctx); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; return s.name; } acc += s.dur; } }
+let cur = -1, playing = false, start = 0, sound = false, ac = null, ui = {};
+function show(i) { if (i === cur) return; cur = i; const name = drawFrame(i); if (ui.scrub) { ui.scrub.value = i; ui.info.textContent = `draw ${String(i).padStart(3, '0')}/${FILM.NDRAW}  t=${(i / FPS_DRAW).toFixed(2)}s  ${name}  ${W}x${H}@${OUT_W}px`; } }
+function loop() { if (!playing) return; const t = ((performance.now() - start) / 1000) % FILM.DUR; show(Math.floor(t * FPS_DRAW)); requestAnimationFrame(loop); }
+function buildPlayer() {
+  const bar = document.createElement('div'); bar.className = 'bar'; bar.innerHTML = '<button id="play">play</button><button id="snd">sound: off</button><input id="scrub" type="range" min="0" max="0" value="0"><span id="info"></span><button id="exp">export PNG frames</button><button id="wav">export score.wav</button><span id="msg"></span>';
+  cv.after(bar); ui = { scrub: bar.querySelector('#scrub'), info: bar.querySelector('#info'), msg: bar.querySelector('#msg') }; ui.scrub.max = FILM.NDRAW - 1;
+  const play = bar.querySelector('#play'); play.onclick = () => { playing = !playing; play.textContent = playing ? 'pause' : 'play'; if (playing) { start = performance.now(); if (sound && FILM.score) { ac = ac || new AudioContext(); ac.resume(); FILM.score(ac, ac.currentTime + .05, ac.destination); } loop(); } };
+  bar.querySelector('#snd').onclick = e => { sound = !sound; e.target.textContent = 'sound: ' + (sound ? 'on' : 'off'); };
+  ui.scrub.oninput = () => { playing = false; play.textContent = 'play'; show(+ui.scrub.value); };
+  bar.querySelector('#exp').onclick = async () => { if (!window.showDirectoryPicker) { ui.msg.textContent = 'no File System Access API here: use render.mjs'; return; } const dir = await showDirectoryPicker({ mode: 'readwrite' }); playing = false;
+    for (let i = 0; i < FILM.NDRAW; i++) { cur = -1; show(i); const blob = await new Promise(res => cv.toBlob(res, 'image/png')); const fh = await dir.getFileHandle(String(i).padStart(4, '0') + '.png', { create: true }); const w = await fh.createWritable(); await w.write(blob); await w.close(); ui.msg.textContent = `exported ${i + 1}/${FILM.NDRAW}`; }
+    ui.msg.textContent = `done. ffmpeg -framerate ${FPS_DRAW} -i %04d.png -r ${FPS_OUT} -pix_fmt yuv420p -crf 18 out.mp4`; };
+  bar.querySelector('#wav').onclick = async () => { if (!FILM.score) { ui.msg.textContent = 'no score defined'; return; } const sr = 48000, oac = new OfflineAudioContext(2, Math.ceil(sr * FILM.DUR), sr); FILM.score(oac, 0, oac.destination); const buf = await oac.startRendering();
+    const n = buf.length, out = new DataView(new ArrayBuffer(44 + n * 4)), ws = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+    ws(0, 'RIFF'); out.setUint32(4, 36 + n * 4, true); ws(8, 'WAVE'); ws(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 2, true); out.setUint32(24, sr, true); out.setUint32(28, sr * 4, true); out.setUint16(32, 4, true); out.setUint16(34, 16, true); ws(36, 'data'); out.setUint32(40, n * 4, true);
+    const L = buf.getChannelData(0), R = buf.getChannelData(1); let o = 44; for (let i = 0; i < n; i++) { out.setInt16(o, clamp(L[i], -1, 1) * 32767, true); out.setInt16(o + 2, clamp(R[i], -1, 1) * 32767, true); o += 4; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([out], { type: 'audio/wav' })); a.download = 'score.wav'; a.click(); ui.msg.textContent = 'score.wav: ffmpeg -i out.mp4 -i score.wav -c:v copy -c:a aac -shortest final.mp4'; };
+}
+// note: one enveloped oscillator, the building block of every score
+function note(ac, master, f, t0, t, d, type = 'triangle', g = .25) { const o = ac.createOscillator(), e = ac.createGain(); o.type = type; o.frequency.value = f; e.gain.setValueAtTime(0, t0 + t); e.gain.linearRampToValueAtTime(g, t0 + t + .02); e.gain.exponentialRampToValueAtTime(.0008, t0 + t + d); o.connect(e); e.connect(master); o.start(t0 + t); o.stop(t0 + t + d + .05); }
+function noiseBurst(ac, master, t0, t, d, g = .3, seed = 1) { const sr = ac.sampleRate, buf = ac.createBuffer(1, Math.ceil(sr * d), sr), ch = buf.getChannelData(0), r = rng(seed); for (let i = 0; i < ch.length; i++) ch[i] = (r() * 2 - 1) * Math.pow(1 - i / ch.length, 2); const s = ac.createBufferSource(); s.buffer = buf; const e = ac.createGain(); e.gain.value = g; s.connect(e); e.connect(master); s.start(t0 + t); }
+const pentHz = (o, s, base = 220) => base * Math.pow(2, o + [0, 2, 4, 7, 9][s % 5] / 12);
+
+
+// ---- format pin (repo-owned) ----
+const __coreDefineFilm = defineFilm;
+defineFilm = (config = {}) => __coreDefineFilm({
+  ...config,
+  format: { ar: '1:1', width: 1080 }
+});
+
+
+// ---- film probe (repo-owned) ----
+const __filmUsable = () => window.__ready === true && window.__FILM && window.__FILM.DUR > 0;
+
+// ---- film (model-authored, isolated) ----
+try {
+(() => {
+// two counter-cycles run under everything: the caret blinks on a 12-frame (1 s) cycle,
+// the snail's foot-wave runs a 36-frame (3 s) cycle — 1:3, and they re-agree on the seam.
+// t      dur   scene          look        camera        what changes
+// 0.0    2.4   deckDusk       ink         push 1.12→1.28  keyboard deck at dusk, snail big on it, guides, monitor corner blinking
+// 2.4    1.2   shellMacro     ink         macro 5.2×      shell spiral, growth bands, stamped fig. mark
+// 3.6    1.2   anatomy        blueprint   1.25            ink blot opens the snail as chalk contours on night
+// 4.8    1.8   keyPress       ink         1.42            foot on the P cap, cap descends, neighbour answers
+// 6.6    0.8   impact         ink         1.6             one flash, dust burst, blush construction rings
+// 7.4    1.6   screen1        ink         1.0             monitor fills frame, P stamps in, caret steps right
+// 9.0    1.5   deskWide       ink         wide 0.92       whole desk: monitor, deck, snail, sticky note "8 h"
+// 10.5   1.6   clock          ink         push 1.06→1.18  wall clock, 8 tallies, moon arc, snail cropped below
+// 12.1   2.4   travel         ink         follow 1.36     camera tracks along the key rows, speed lines on a snail
+// 14.5   1.2   trailMacro     ink         macro 3.4×      the trail draws itself over a keycap edge, ticks
+// 15.7   1.0   pov            ink         iris + mosaic   snail's view of the screen, cells 40→13
+// 16.7   2.0   keyChorus      ink         1.4             call: cap A falls. answer: cap B rises. interrupt: cap C flickers
+// 18.7   1.6   screen2        ink         1.0             five letters, ripples off the caret
+// 20.3   1.2   blueprintWord  blueprint   1.15            six hours plotted as chalk nodes on lattice
+// 21.5   1.8   midnight       ink         push            cold deck, moon, trail long behind, snail past centre
+// 23.3   1.0   cursorMacro    blueprint   macro 3.6×      the caret alone on night, registration ticks
+// 24.3   1.2   stampGallery   ink         1.0             torn section, nine stamped keycap glyphs grow in
+// 25.5   1.4   dawn           ink         1.2             warm floods the deck, asters, shade retreats
+// 26.9   2.2   morningWide    ink         pull 1.3→1.1    screen reads PATIENCE, snail at the far edge
+// 29.1   1.6   trailWide      ink         1.15            the whole crossing as one contour, eight ticks
+// 30.7   1.8   coda           ink         1.1             snail hatched to silhouette, caret still blinking
+// 32.5   1.5   sign           ink         1.0             eight / hours
+
+usePalette('paperInk');
+
+const S = 15526184;
+const blink = i => Math.floor(i / 6) % 2 === 0;          // 1 s
+const wavePhase = i => (i % 36) / 36;                     // 3 s — 1:3 against the blink
+const rectPts = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+const WORD = ['P', 'A', 'T', 'I', 'E', 'N', 'C', 'E'];
+
+// ---------------------------------------------------------------- the anchor
+function caret(c, x, y, h, i, mode) {
+  const bp = mode === 'blueprint', line = bp ? PAL.chalk : PAL.ink;
+  if (blink(i)) { c.fillStyle = bp ? alpha(PAL.chalk, .8) : PAL.accents[0]; c.fillRect(x - h * .17, y - h * .5, h * .34, h); }
+  c.strokeStyle = line; c.lineWidth = 2; c.globalAlpha = .9;
+  wob(c, rectPts(x - h * .21, y - h * .56, h * .42, h * 1.12), 1.4, S + 2, true);
+  c.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------- the puppet
+const FOOT_PTS = [[-108, 30], [-78, 8], [-30, -4], [26, -6], [74, 4], [104, 22], [92, 44], [-84, 46]];
+const FOOT = polyPath(FOOT_PTS);
+const HEAD = ellPath(88, -10, 30, 22, -.22);
+const SHC = [-32, -56], SHR = 62;
+const SHELL = circPath(SHC[0], SHC[1], SHR);
+const SPIRAL = (() => { const p = []; for (let k = 0; k <= 108; k++) { const t = k / 108 * TAU * 3.6, r = 4 + t * 2.55; p.push([SHC[0] + Math.cos(t + .6) * r, SHC[1] + Math.sin(t + .6) * r * .92]); } return p; })();
+
+function stalk(c, mode, x0, y0, x1, y1, r, sway, seed) {
+  const ink = mode !== 'blueprint', line = ink ? PAL.ink : PAL.chalk;
+  const ex = x1 + sway * 9, ey = y1;
+  c.strokeStyle = line; c.lineWidth = ink ? 7 : 3;
+  wob(c, [[x0, y0], [(x0 + x1) / 2 + sway * 15, (y0 + y1) / 2], [ex, ey]], 1.6, seed, false);
+  const eye = ellPath(ex, ey, r, r * 1.08);
+  if (ink) { c.fillStyle = PAL.blush; c.fill(eye); }
+  c.save(); c.clip(eye);
+  hexCells([ex - r, ey - r * 1.1, r * 2, r * 2.2], r * .34, (x, y) => {
+    const l = clamp(1 - Math.hypot(x - ex + r * .35, y - ey + r * .35) / (r * 1.7), 0, 1);
+    if (ink) { c.fillStyle = mix(PAL.shade, PAL.light, l * .8); c.fill(hexPath(x, y, r * .34)); }
+    c.strokeStyle = ink ? alpha(PAL.ink, .45) : PAL.chalk; c.lineWidth = .6; c.stroke(hexPath(x, y, r * .34));
+  });
+  c.restore();
+  c.fillStyle = PAL.light; c.beginPath(); c.arc(ex - r * .32, ey - r * .36, r * .22, 0, TAU); c.fill();
+  c.strokeStyle = line; c.lineWidth = ink ? 2 : 2.2; wob(c, ellPts(ex, ey, r, r * 1.08, 0, 40), 1.4, seed + 1, true);
+}
+
+function drawSnail(c, mode, pose, seed) {
+  const ink = mode !== 'blueprint', line = ink ? PAL.ink : PAL.chalk;
+  c.save(); c.lineJoin = 'round'; c.lineCap = 'round';
+  if (ink) {                                                             // foot: three colours, then the muscle wave
+    c.fillStyle = PAL.fills[2]; c.fill(FOOT);
+    c.save(); c.clip(FOOT);
+    hatch(c, circPath(46, -22, 120), [-74, -142, 240, 240], { angle: .7, gap: 6, len: 15, jitter: 5, color: PAL.light, alpha: .55, width: 1.3, seed: seed + 1 });
+    hatch(c, circPath(-70, 42, 112), [-182, -70, 224, 224], { angle: -.65, gap: 5, len: 16, jitter: 5, color: PAL.blush, alpha: .4, seed: seed + 2 });
+    hatch(c, rectPath(-118, 24, 246, 28), [-118, 24, 246, 28], { angle: .95, gap: 6, len: 14, jitter: 4, color: PAL.shade, alpha: .34, seed: seed + 3 });
+    c.strokeStyle = alpha(PAL.shade, .7); c.lineWidth = 4;
+    for (let k = 0; k < 8; k++) { const x = -110 + ((k * 28 + pose.wave * 28) % 228); c.beginPath(); c.moveTo(x, -4); c.quadraticCurveTo(x + 9, 22, x - 5, 46); c.stroke(); }
+    c.restore();
+    grain(c, FOOT, [-112, -8, 224, 56], 1300, PAL.shade, .3, seed + 4, 1.8);
+  }
+  c.strokeStyle = line; c.lineWidth = ink ? 2.6 : 2.4; wob(c, FOOT_PTS, 2.2, seed + 5, true);
+  if (ink) { c.fillStyle = PAL.fills[2]; c.fill(HEAD); surface(c, HEAD, [58, -32, 60, 44], { seed: seed + 8 }); }
+  c.strokeStyle = line; c.lineWidth = ink ? 2.4 : 2.2; wob(c, ellPts(88, -10, 30, 22, -.22, 40), 1.8, seed + 9, true);
+  for (const s of [0, 1]) { c.strokeStyle = line; c.lineWidth = ink ? 4 : 2.2; wob(c, [[100, -2 + s * 11], [118, 6 + s * 13], [126, 20 + s * 11]], 1.3, seed + 10 + s); }
+  stalk(c, mode, 92, -24, 116, -108, 15, pose.stalk, seed + 20);
+  stalk(c, mode, 72, -26, 60, -122, 12, -pose.stalk * .7, seed + 26);
+  const box = [SHC[0] - SHR, SHC[1] - SHR, SHR * 2, SHR * 2];
+  if (ink) {
+    c.fillStyle = PAL.fills[1]; c.fill(SHELL);
+    c.save(); c.clip(SHELL);
+    hatch(c, circPath(SHC[0] + 20, SHC[1] - 26, 46), [SHC[0] - 26, SHC[1] - 72, 92, 92], { angle: .8, gap: 5, len: 14, jitter: 5, color: PAL.light, alpha: .6, width: 1.4, seed: seed + 30 });
+    hatch(c, circPath(SHC[0] - 26, SHC[1] + 24, 52), [SHC[0] - 78, SHC[1] - 28, 104, 104], { angle: -.6, gap: 5, len: 16, jitter: 5, color: PAL.blush, alpha: .4, seed: seed + 31 });
+    hatch(c, circPath(SHC[0] - 34, SHC[1] + 36, 34), [SHC[0] - 68, SHC[1] + 2, 68, 68], { angle: .95, gap: 6, len: 16, jitter: 4, color: PAL.shade, alpha: .34, seed: seed + 32 });
+    c.restore();
+    grain(c, SHELL, box, 1500, PAL.shade, .3, seed + 33, 1.8);
+  }
+  c.save(); c.clip(SHELL);
+  c.strokeStyle = alpha(line, .8); c.lineWidth = ink ? 1.8 : 1.2; wob(c, SPIRAL, 1.4, seed + 34, false);
+  c.strokeStyle = alpha(line, .45); c.lineWidth = 1;
+  for (let k = 1; k <= 5; k++) wob(c, ellPts(SHC[0], SHC[1], SHR * (k / 5.6), SHR * (k / 6.3), .5, 30), 1.2, seed + 40 + k, true);
+  c.strokeStyle = alpha(line, .7); cross(c, SHC[0] + 24, SHC[1] - 34, 7); cross(c, SHC[0] - 30, SHC[1] + 14, 6);
+  c.restore();
+  c.strokeStyle = line; c.lineWidth = ink ? 3 : 2.6; wob(c, ellPts(SHC[0], SHC[1], SHR, SHR * .96, 0, 64), 2.2, seed + 46, true);
+  if (ink) { scribble(c, SHELL, SHC[0], SHC[1], { seed: seed + 47, amp: 6, alpha: .5 }); scribble(c, FOOT, 0, 18, { seed: seed + 48, amp: 5, alpha: .42 }); }
+  c.restore();
+}
+
+// ---------------------------------------------------------------- the ground: a keyboard deck
+const KEYROWS = [
+  { y: .46, w: .185, h: .125, n: 5, off: -.07, labels: ['E', 'N', 'C', 'E', '.'] },
+  { y: .27, w: .152, h: .100, n: 6, off: .05, labels: ['P', 'A', 'T', 'I', 'E', 'N'] },
+  { y: .13, w: .124, h: .080, n: 7, off: -.02, labels: null },
+  { y: .02, w: .104, h: .064, n: 8, off: .04, labels: null }
+];
+
+function keycap(c, x, y, w, h, label, seed, mode, press) {
+  const d = h * .44 * (1 - press), ink = mode !== 'blueprint', line = ink ? PAL.ink : PAL.chalk;
+  const body = roundRectPath(x - w / 2, y - h / 2 + d * .2, w, h + d, Math.min(w, h) * .18);
+  const tx = x - w / 2 + w * .04, ty = y - h / 2 - d, tw = w * .92;
+  const top = roundRectPath(tx, ty, tw, h, Math.min(w, h) * .2);
+  if (ink) {
+    c.fillStyle = PAL.shade; c.fill(body);
+    c.fillStyle = PAL.fills[1]; c.fill(top);
+    hatch(c, top, [tx, ty, tw, h], { angle: .75, gap: 6, len: 13, jitter: 4, color: PAL.light, alpha: .5, width: 1.3, seed: seed + 1 });
+    hatch(c, top, [tx, ty + h * .55, tw, h * .45], { angle: -.6, gap: 5, len: 13, jitter: 4, color: PAL.blush, alpha: .34, seed: seed + 2 });
+    hatch(c, body, [x - w / 2, y + h * .3, w, d + h * .2], { angle: .95, gap: 6, len: 12, jitter: 4, color: PAL.shade, alpha: .45, seed: seed + 3 });
+  }
+  c.strokeStyle = line; c.lineWidth = ink ? 2.2 : 1.6;
+  wob(c, rectPts(tx, ty, tw, h), 1.6, seed + 4, true);
+  if (label) { c.fillStyle = ink ? alpha(PAL.ink, .78) : PAL.chalkDim; handText(c, label, x - w * .12, ty + h * .68, { size: h * .5 }); }
+}
+
+function drawDeck(c, seed, warm) {
+  const wall = rectPath(-W * .12, -H * .22, W * 1.24, CY + H * .3);
+  c.fillStyle = PAL.paperBand; c.fill(wall);
+  hatch(c, wall, [-W * .12, -H * .22, W * 1.24, CY + H * .3], { angle: -1.2, gap: 10, len: 26, jitter: 6, color: PAL.shade, alpha: .3 - warm * .14, seed: seed + 1 });
+  hatch(c, circPath(W * .84, H * .06, W * .46), [W * .38, -H * .4, W * .92, W * .92], { angle: .9, gap: 7, len: 20, jitter: 6, color: PAL.light, alpha: .2 + warm * .5, width: 1.4, seed: seed + 2 });
+  grain(c, wall, [-W * .12, 0, W * 1.24, CY], 2400, PAL.shade, .22, seed + 3, 2);
+  const slabPts = [[-W * .14, CY + H * .05], [W * 1.14, CY - H * .03], [W * 1.14, H * 1.16], [-W * .14, H * 1.16]];
+  const slab = polyPath(slabPts);
+  c.fillStyle = PAL.fills[0]; c.fill(slab);
+  c.save(); c.clip(slab);
+  hatch(c, circPath(W * .8, CY + H * .14, W * .48), [W * .32, CY - H * .34, W * .96, W * .96], { angle: .75, gap: 7, len: 18, jitter: 6, color: PAL.light, alpha: .26 + warm * .44, width: 1.4, seed: seed + 4 });
+  hatch(c, circPath(-W * .04, CY + H * .5, W * .58), [-W * .62, CY - H * .08, W * 1.16, W * 1.16], { angle: -.6, gap: 6, len: 20, jitter: 5, color: PAL.blush, alpha: .34, seed: seed + 5 });
+  hatch(c, rectPath(-W * .14, CY + H * .3, W * 1.28, H * .52), [-W * .14, CY + H * .3, W * 1.28, H * .52], { angle: .95, gap: 7, len: 22, jitter: 5, color: PAL.shade, alpha: .44 - warm * .2, seed: seed + 6 });
+  c.restore();
+  grain(c, slab, [-W * .14, CY, W * 1.28, H * .6], 4200, PAL.shade, .26, seed + 7, 2);
+  c.strokeStyle = PAL.ink; c.lineWidth = 3; c.globalAlpha = .85; wob(c, [slabPts[0], slabPts[1]], 2.4, seed + 8); c.globalAlpha = 1;
+  for (let r = KEYROWS.length - 1; r >= 0; r--) {
+    const row = KEYROWS[r], y = CY + H * row.y, w = W * row.w, h = H * row.h;
+    for (let k = 0; k < row.n; k++) {
+      const x = CX + W * row.off + (k - (row.n - 1) / 2) * w * 1.1;
+      keycap(c, x, y, w * .96, h, row.labels ? row.labels[k] : null, seed + 20 + r * 11 + k, 'ink', 0);
+    }
+  }
+}
+
+function deckBlueprint(c, seed) {
+  c.strokeStyle = PAL.chalkDim; c.lineWidth = 1.6;
+  wob(c, [[-W * .14, CY + H * .05], [W * 1.14, CY - H * .03]], 2, seed, false);
+  for (let r = 0; r < 3; r++) {
+    const row = KEYROWS[r], y = CY + H * row.y, w = W * row.w, h = H * row.h;
+    for (let k = 0; k < row.n; k++) { const x = CX + W * row.off + (k - (row.n - 1) / 2) * w * 1.1; keycap(c, x, y, w * .96, h, null, seed + r * 9 + k, 'blueprint', 0); }
+  }
+}
+
+// ---------------------------------------------------------------- the trail
+function trailPts(x0, x1, y, n, seed) { const r = rng(seed), p = []; for (let k = 0; k <= n; k++) { const t = k / n; p.push([lerp(x0, x1, t), y + Math.sin(t * 6.2) * H * .014 + (r() - .5) * 7]); } return p; }
+const TRAIL = trailPts(-W * .12, W * 1.04, 0, 60, S + 3);
+const trailAt = (prog, dy) => { const p = TRAIL[clamp(Math.floor(prog * TRAIL.length), 0, TRAIL.length - 1)]; return [p[0], p[1] + dy]; };
+
+function drawTrail(c, prog, dy, seed, w) {
+  const n = clamp(Math.floor(TRAIL.length * prog), 2, TRAIL.length), p = TRAIL.slice(0, n).map(([x, y]) => [x, y + dy]);
+  c.strokeStyle = alpha(PAL.light, .8); c.lineWidth = w; wob(c, p, 3, seed, false);
+  c.strokeStyle = alpha(PAL.ink, .32); c.lineWidth = 1.4; wob(c, p.map(([x, y]) => [x, y - w * .45]), 2.4, seed + 1, false);
+  c.strokeStyle = alpha(PAL.blush, .5); c.lineWidth = 1.2; wob(c, p.map(([x, y]) => [x, y + w * .5]), 2.4, seed + 2, false);
+  c.strokeStyle = alpha(PAL.ink, .55);
+  for (let k = 3; k < n; k += 8) cross(c, p[k][0], p[k][1] + w * .1, 6);
+}
+
+function dust(c, x, y, n, t, seed) {
+  const r = rng(seed);
+  for (let k = 0; k < n; k++) {
+    const a = r() * TAU, d = (40 + r() * 190) * t;
+    c.globalAlpha = clamp(1 - t * 1.1, 0, 1) * .8;
+    c.fillStyle = k % 3 ? PAL.shade : PAL.light;
+    c.beginPath(); c.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * .5 - t * 28, 2 + r() * 4, 0, TAU); c.fill();
+  }
+  c.globalAlpha = 1;
+}
+
+// ---------------------------------------------------------------- the screen
+function drawScreenFace(c, seed, night_) {
+  const sx = -W * .06, sy = CY - H * .46, sw = W * 1.12, sh = H * .9;
+  const face = roundRectPath(sx, sy, sw, sh, 26);
+  c.fillStyle = night_ ? PAL.fills[0] : PAL.fills[3]; c.fill(face);
+  c.save(); c.clip(face);
+  hatch(c, circPath(CX + W * .3, CY - H * .2, W * .42), [CX - W * .12, CY - H * .62, W * .84, W * .84], { angle: .7, gap: 7, len: 18, jitter: 5, color: PAL.light, alpha: .48, width: 1.3, seed: seed + 1 });
+  hatch(c, circPath(CX - W * .34, CY + H * .28, W * .44), [CX - W * .78, CY - H * .16, W * .88, W * .88], { angle: -.6, gap: 6, len: 18, jitter: 5, color: PAL.blush, alpha: .34, seed: seed + 2 });
+  hatch(c, rectPath(sx, CY + H * .16, sw, sh * .5), [sx, CY + H * .16, sw, sh * .5], { angle: .95, gap: 7, len: 20, jitter: 5, color: PAL.shade, alpha: .32, seed: seed + 3 });
+  c.strokeStyle = alpha(PAL.shade, .26); c.lineWidth = 1;
+  for (let k = 0; k < 24; k++) { const y = sy + 14 + k * (sh / 24); c.beginPath(); c.moveTo(sx, y); c.lineTo(sx + sw, y); c.stroke(); }
+  c.restore();
+  grain(c, face, [sx, sy, sw, sh], 3800, PAL.shade, .25, seed + 4, 2);
+  c.strokeStyle = PAL.ink; c.lineWidth = 3.4; wob(c, rectPts(sx + 8, sy + 8, sw - 16, sh - 16), 2.6, seed + 5, true);
+  c.strokeStyle = alpha(PAL.ink, .6); cross(c, sx + W * .06, sy + H * .08, 9); cross(c, sx + sw - W * .06, sy + sh - H * .08, 9);
+}
+
+function typedLine(c, count, i, seed, y) {
+  const x0 = CX - W * .35, sp = W * .088, size = H * .12;
+  for (let k = 0; k < count; k++) {
+    c.fillStyle = alpha(PAL.accents[0], .5); handText(c, WORD[k], x0 + k * sp + 4, y + 4, { size });
+    c.fillStyle = PAL.ink; handText(c, WORD[k], x0 + k * sp, y, { size });
+    c.strokeStyle = alpha(PAL.ink, .35); cross(c, x0 + k * sp + sp * .34, y + size * .28, 5);
+  }
+  caret(c, x0 + count * sp + sp * .28, y - size * .3, size * .86, i, 'ink');
+  return [x0 + count * sp + sp * .28, y - size * .3];
+}
+
+const LA = layer(), LB = layer();
+
+// ---------------------------------------------------------------- shots
+function deckShot(c, tau, dur, i, warm, prog, seed) {
+  paper(c);
+  cam(c, CX + W * .02, CY + H * .08, lerp(1.12, 1.28, sm(0, dur, tau, easeIO)));
+  drawDeck(c, seed, warm);
+  drawTrail(c, prog, CY + H * .38, seed + 60, H * .026);
+  const head = trailAt(prog, CY + H * .38);
+  c.save(); c.translate(head[0], head[1] - H * .055); c.scale(1.8, 1.8);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: Math.sin(i / 7) * .5 }, seed + 70);
+  c.restore();
+  return head;
+}
+
+function monitorCorner(c, seed, i) {
+  const x = CX + W * .16, y = -H * .3, w = W * .66, h = H * .6;
+  const p = roundRectPath(x, y, w, h, 18);
+  c.fillStyle = PAL.fills[3]; c.fill(p);
+  hatch(c, p, [x, y, w, h], { angle: .8, gap: 8, len: 18, jitter: 5, color: PAL.light, alpha: .45, width: 1.3, seed: seed + 1 });
+  hatch(c, p, [x, y + h * .55, w, h * .45], { angle: -.6, gap: 7, len: 16, jitter: 4, color: PAL.shade, alpha: .3, seed: seed + 2 });
+  c.strokeStyle = PAL.ink; c.lineWidth = 3; wob(c, rectPts(x + 5, y + 5, w - 10, h - 10), 2.4, seed + 3, true);
+  caret(c, x + w * .3, y + h * .78, H * .05, i, 'ink');
+}
+
+function sceneDeckDusk(c, tau, i) {
+  const head = deckShot(c, tau, 2.4, i, .38, .16, 100);
+  construction(c, head[0], head[1] - H * .06, W * .21, 102);
+  monitorCorner(c, 103, i);
+  c.strokeStyle = alpha(PAL.ink, .5); cross(c, CX - W * .36, CY + H * .16, 9); cross(c, CX + W * .3, CY + H * .44, 9);
+}
+
+function sceneShellMacro(c, tau, i) {
+  paper(c);
+  const row = KEYROWS[0], y = CY + H * .52;
+  c.fillStyle = PAL.fills[0]; c.fill(rectPath(-W * .1, y - H * .1, W * 1.2, H * .7));
+  hatch(c, rectPath(-W * .1, y - H * .1, W * 1.2, H * .7), [-W * .1, y - H * .1, W * 1.2, H * .7], { angle: .95, gap: 7, len: 22, jitter: 5, color: PAL.shade, alpha: .34, seed: 110 });
+  keycap(c, CX - W * .1, y + H * .24, W * .8, H * .34, null, 111, 'ink', 0);
+  const sc = 5.2;
+  c.save(); c.translate(CX - SHC[0] * sc - W * .02, CY - SHC[1] * sc - H * .1); c.scale(sc, sc);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .3 }, 112);
+  c.restore();
+  resetT(c);
+  c.strokeStyle = alpha(PAL.ink, .65); cross(c, CX - W * .38, CY - H * .34, 11); cross(c, CX + W * .36, CY + H * .3, 11);
+  c.fillStyle = alpha(PAL.ink, .7); handText(c, 'fig. 3 — one turn per season', CX - W * .4, CY + H * .43, { size: H * .034 });
+  caret(c, CX + W * .4, CY - H * .42, H * .05, i, 'ink');
+}
+
+function sceneAnatomy(c, tau, i) {
+  const lc = LB.getContext('2d'); resetT(lc);
+  night(lc);
+  cam(lc, CX, CY + H * .06, 1.25);
+  hexLattice(lc, [CX - W * .56, CY - H * .52, W * 1.12, H * 1.12], 26, PAL.chalkDim, .4, .9);
+  deckBlueprint(lc, 120);
+  const head = trailAt(.18, CY + H * .38);
+  lc.save(); lc.translate(head[0], head[1] - H * .055); lc.scale(1.8, 1.8);
+  construction(lc, 0, -30, 180, 121, PAL.guide, 1);
+  drawSnail(lc, 'blueprint', { wave: wavePhase(i), stalk: .2 }, 122);
+  lc.restore();
+  resetT(lc); caret(lc, CX + W * .36, CY - H * .34, H * .05, i, 'blueprint');
+  deckShot(c, 2.4, 2.4, i, .38, .18, 100);
+  resetT(c);
+  blot(c, LB, CX - W * .06, CY, lerp(0, W * 1.2, sm(0, .8, tau, easeOut)), 123);
+}
+
+function sceneKeyPress(c, tau, i) {
+  paper(c);
+  const t = sm(.15, 1.3, tau, easeIn), ans = sm(.9, 1.7, tau, easeOut);
+  cam(c, CX, CY + H * .12, 1.42);
+  drawDeck(c, 130, .3);
+  keycap(c, CX + W * .3, CY + H * .3, W * .34, H * .23, 'A', 131, 'ink', -ans * .22);
+  keycap(c, CX - W * .12, CY + H * .38, W * .42, H * .28, 'P', 132, 'ink', t * .9);
+  drawTrail(c, .24, CY + H * .5, 133, H * .022);
+  c.save(); c.translate(CX - W * .14, CY + H * .18 + t * H * .05); c.scale(1.7, 1.7);
+  construction(c, 0, -20, 140, 134, PAL.guide, sm(0, .5, tau));
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .6 - t * .8 }, 135);
+  c.restore();
+  if (t > .1) dust(c, CX - W * .12, CY + H * .42, 22, t, 136);
+  monitorCorner(c, 137, i);
+}
+
+function sceneImpact(c, tau, i) {
+  paper(c);
+  cam(c, CX - W * .04, CY + H * .1, 1.6);
+  drawDeck(c, 140, .3);
+  keycap(c, CX - W * .12, CY + H * .38, W * .42, H * .28, 'P', 141, 'ink', .95);
+  if (tau < .09) flash(c);
+  c.save(); c.translate(CX - W * .14, CY + H * .2); c.scale(1.7, 1.7);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: -.5 }, 142);
+  c.restore();
+  ripples(c, CX - W * .12, CY + H * .38, [W * .1 + tau * W * .2, W * .18 + tau * W * .26, W * .28 + tau * W * .3], alpha(PAL.blush, .5), 143, 2.6);
+  dust(c, CX - W * .12, CY + H * .38, 34, .3 + tau, 144);
+  construction(c, CX - W * .12, CY + H * .38, W * .22, 145, PAL.blush, .7);
+  caret(c, CX + W * .38, CY - H * .3, H * .05, i, 'ink');
+}
+
+function sceneScreen1(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY, 1.0);
+  drawScreenFace(c, 150, false);
+  c.fillStyle = alpha(PAL.shade, .5); squiggleText(c, CX - W * .36, CY - H * .24, W * .62, 3, { size: H * .022, color: alpha(PAL.shade, .5), seed: 151 });
+  const n = tau > .55 ? 1 : 0;
+  typedLine(c, n, i, 152, CY + H * .06);
+  if (tau > .55 && tau < .9) dust(c, CX - W * .33, CY + H * .04, 14, (tau - .55) * 2.4, 153);
+  c.strokeStyle = alpha(PAL.ink, .5); c.lineWidth = 1.6;
+  wob(c, [[CX - W * .38, CY + H * .18], [CX + W * .38, CY + H * .18]], 2, 154, false);
+  c.fillStyle = alpha(PAL.ink, .6); handText(c, '21:00', CX + W * .24, CY - H * .3, { size: H * .038 });
+}
+
+function sceneDeskWide(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .02, lerp(.94, 1.0, sm(0, 1.5, tau, easeIO)));
+  drawDeck(c, 160, .24);
+  const x = CX - W * .04, y = CY - H * .36, w = W * .68, h = H * .42;
+  c.fillStyle = PAL.fills[3]; c.fill(roundRectPath(x - w / 2, y - h / 2, w, h, 16));
+  hatch(c, roundRectPath(x - w / 2, y - h / 2, w, h, 16), [x - w / 2, y - h / 2, w, h], { angle: .8, gap: 7, len: 16, jitter: 5, color: PAL.light, alpha: .5, width: 1.3, seed: 161 });
+  hatch(c, roundRectPath(x - w / 2, y - h / 2, w, h, 16), [x - w / 2, y, w, h / 2], { angle: -.6, gap: 6, len: 15, jitter: 4, color: PAL.shade, alpha: .34, seed: 162 });
+  c.strokeStyle = PAL.ink; c.lineWidth = 3; wob(c, rectPts(x - w / 2, y - h / 2, w, h), 2.4, 163, true);
+  c.fillStyle = PAL.ink; handText(c, 'P', x - w * .3, y + h * .1, { size: H * .09 });
+  caret(c, x - w * .18, y + h * .04, H * .075, i, 'ink');
+  stickyNote(c, x + w * .42, y + h * .3, H * .1, 164, cc => { cc.fillStyle = PAL.ink; handText(cc, '8 h', -H * .03, H * .01, { size: H * .042 }); });
+  drawTrail(c, .3, CY + H * .38, 165, H * .02);
+  const head = trailAt(.3, CY + H * .38);
+  c.save(); c.translate(head[0], head[1] - H * .04); c.scale(1.2, 1.2); drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .4 }, 166); c.restore();
+}
+
+function sceneClock(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY - H * .02, lerp(1.06, 1.18, sm(0, 1.6, tau, easeIO)));
+  const wall = rectPath(-W * .12, -H * .12, W * 1.24, H * 1.24), wbox = [-W * .12, -H * .12, W * 1.24, H * 1.24];
+  c.fillStyle = PAL.paperBand; c.fill(wall);
+  hatch(c, circPath(W * .82, H * .12, W * .5), [W * .32, -H * .38, W, W], { angle: .8, gap: 7, len: 20, jitter: 6, color: PAL.light, alpha: .42, width: 1.4, seed: 170 });
+  hatch(c, circPath(-W * .06, H * .8, W * .6), [-W * .66, H * .2, W * 1.2, W * 1.2], { angle: -.6, gap: 6, len: 22, jitter: 5, color: PAL.blush, alpha: .3, seed: 171 });
+  hatch(c, wall, wbox, { angle: -1.2, gap: 11, len: 28, jitter: 6, color: PAL.shade, alpha: .26, seed: 172 });
+  grain(c, wall, wbox, 4000, PAL.shade, .22, 173, 2);
+  const R = W * .235, cx = CX - W * .04, cy = CY - H * .1, face = circPath(cx, cy, R), fbox = [cx - R, cy - R, R * 2, R * 2];
+  c.fillStyle = PAL.fills[1]; c.fill(face);
+  c.save(); c.clip(face);
+  hatch(c, circPath(cx + R * .4, cy - R * .4, R * .7), [cx - R * .3, cy - R * 1.1, R * 1.4, R * 1.4], { angle: .8, gap: 6, len: 16, jitter: 5, color: PAL.light, alpha: .55, width: 1.4, seed: 174 });
+  hatch(c, circPath(cx - R * .4, cy + R * .4, R * .8), [cx - R * 1.2, cy - R * .4, R * 1.6, R * 1.6], { angle: -.6, gap: 5, len: 18, jitter: 5, color: PAL.shade, alpha: .34, seed: 175 });
+  c.restore();
+  grain(c, face, fbox, 2200, PAL.shade, .26, 176, 2);
+  c.strokeStyle = PAL.ink; c.lineWidth = 3.2; wob(c, ellPts(cx, cy, R, R, 0, 90), 2.4, 177, true);
+  for (let k = 0; k < 12; k++) { const a = k / 12 * TAU - TAU / 4; c.strokeStyle = alpha(PAL.ink, .7); c.lineWidth = 2; wob(c, [[cx + Math.cos(a) * R * .82, cy + Math.sin(a) * R * .82], [cx + Math.cos(a) * R * .93, cy + Math.sin(a) * R * .93]], 1.2, 178 + k); }
+  const hh = -TAU / 4 + (Math.floor(tau * 5) / 12) * TAU;
+  c.strokeStyle = PAL.ink; c.lineWidth = 6; wob(c, [[cx, cy], [cx + Math.cos(hh) * R * .48, cy + Math.sin(hh) * R * .48]], 1.6, 190);
+  c.lineWidth = 3; wob(c, [[cx, cy], [cx + Math.cos(hh * 3.1) * R * .72, cy + Math.sin(hh * 3.1) * R * .72]], 1.6, 191);
+  c.fillStyle = PAL.ink; c.beginPath(); c.arc(cx, cy, 7, 0, TAU); c.fill();
+  const tal = clamp(Math.floor(sm(.2, 1.4, tau) * 8), 0, 8);
+  c.strokeStyle = alpha(PAL.ink, .8); c.lineWidth = 4;
+  for (let k = 0; k < tal; k++) { const x = CX - W * .16 + k * W * .04; wob(c, [[x, CY + H * .22], [x + 4, CY + H * .3]], 1.6, 200 + k); }
+  c.fillStyle = PAL.fills[0]; c.fill(rectPath(-W * .1, CY + H * .38, W * 1.2, H * .3));
+  hatch(c, rectPath(-W * .1, CY + H * .38, W * 1.2, H * .3), [-W * .1, CY + H * .38, W * 1.2, H * .3], { angle: .95, gap: 6, len: 20, jitter: 5, color: PAL.shade, alpha: .4, seed: 210 });
+  c.strokeStyle = PAL.ink; c.lineWidth = 3; wob(c, [[-W * .1, CY + H * .38], [W * 1.1, CY + H * .36]], 2.4, 211);
+  c.save(); c.translate(CX + W * .3, CY + H * .5); c.scale(1.3, 1.3); drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .5 }, 212); c.restore();
+  caret(c, CX - W * .38, CY - H * .36, H * .05, i, 'ink');
+}
+
+function sceneTravel(c, tau, i) {
+  paper(c);
+  const t = sm(0, 2.4, tau, easeIO), prog = lerp(.3, .46, t);
+  const head = trailAt(prog, CY + H * .38);
+  cam(c, head[0] + W * .12, CY + H * .12, 1.36);
+  drawDeck(c, 220, .18);
+  drawTrail(c, prog, CY + H * .38, 221, H * .026);
+  speedLines(c, head[0] - W * .18, head[1] - H * .06, 0, 230 + i * 7, 7, .32);
+  loops(c, head[0] - W * .26, head[1] - H * .12, 0, 231, .3);
+  c.save(); c.translate(head[0], head[1] - H * .055); c.scale(1.8, 1.8);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: Math.sin(i / 6) * .6 }, 232);
+  c.restore();
+  c.strokeStyle = alpha(PAL.shade, .6); c.lineWidth = 2;
+  wob(c, [[head[0] - W * .06, head[1] + H * .04], [head[0] + W * .2, head[1] + H * .07]], 3, 233);
+  caret(c, head[0] + W * .3, CY - H * .3, H * .05, i, 'ink');
+}
+
+function sceneTrailMacro(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .04, 3.4);
+  const y = CY + H * .06;
+  c.fillStyle = PAL.fills[1]; c.fill(rectPath(CX - W * .3, y - H * .2, W * .6, H * .3));
+  hatch(c, rectPath(CX - W * .3, y - H * .2, W * .6, H * .3), [CX - W * .3, y - H * .2, W * .6, H * .3], { angle: .75, gap: 5, len: 14, jitter: 4, color: PAL.light, alpha: .55, width: 1.3, seed: 240 });
+  hatch(c, rectPath(CX - W * .3, y - H * .06, W * .6, H * .16), [CX - W * .3, y - H * .06, W * .6, H * .16], { angle: -.6, gap: 5, len: 14, jitter: 4, color: PAL.blush, alpha: .4, seed: 241 });
+  c.fillStyle = PAL.shade; c.fill(rectPath(CX - W * .3, y + H * .1, W * .6, H * .3));
+  hatch(c, rectPath(CX - W * .3, y + H * .1, W * .6, H * .3), [CX - W * .3, y + H * .1, W * .6, H * .3], { angle: .95, gap: 5, len: 16, jitter: 4, color: PAL.shade, alpha: .5, seed: 242 });
+  c.strokeStyle = PAL.ink; c.lineWidth = 2.4; wob(c, [[CX - W * .3, y + H * .1], [CX + W * .3, y + H * .1]], 1.8, 243);
+  const ribbon = []; for (let k = 0; k <= 40; k++) { const u = k / 40; ribbon.push([CX - W * .3 + u * W * .6, y + Math.sin(u * 5.4) * H * .022]); }
+  c.strokeStyle = alpha(PAL.light, .85); c.lineWidth = 9; selfDraw(c, ribbon, sm(0, .9, tau, easeOut), 244, 2.4, false);
+  c.strokeStyle = alpha(PAL.ink, .4); c.lineWidth = 1.4; selfDraw(c, ribbon.map(([x, yy]) => [x, yy - 5]), sm(0, .9, tau, easeOut), 245, 2, false);
+  c.strokeStyle = alpha(PAL.ink, .7);
+  for (let k = 2; k < 40; k += 5) if (k / 40 < sm(0, .9, tau, easeOut)) cross(c, ribbon[k][0], ribbon[k][1] + 12, 5);
+  resetT(c);
+  c.fillStyle = alpha(PAL.ink, .65); handText(c, 'evidence, 1:1', CX - W * .42, CY + H * .42, { size: H * .034 });
+  caret(c, CX + W * .4, CY - H * .4, H * .05, i, 'ink');
+}
+
+function scenePov(c, tau, i) {
+  const lc = LA.getContext('2d'); resetT(lc);
+  paper(lc); drawScreenFace(lc, 250, false); typedLine(lc, 3, i, 251, CY + H * .06);
+  paper(c);
+  cam(c, CX, CY + H * .1, 1.2);
+  drawDeck(c, 252, .16);
+  resetT(c);
+  iris(c, CX, CY - H * .02, W * .44, cc => mosaic(cc, LA, lerp(40, 13, sm(0, 1.0, tau, easeOut))));
+  c.strokeStyle = PAL.ink; c.lineWidth = 3.4; c.globalAlpha = .9; wob(c, ellPts(CX, CY - H * .02, W * .44, W * .44, 0, 80), 3, 253, true); c.globalAlpha = 1;
+  c.strokeStyle = alpha(PAL.ink, .6); cross(c, CX - W * .42, CY + H * .4, 10); cross(c, CX + W * .42, CY + H * .4, 10);
+  c.fillStyle = alpha(PAL.ink, .6); handText(c, 'from the deck', CX - W * .14, CY + H * .45, { size: H * .034 });
+}
+
+function sceneKeyChorus(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .1, 1.4);
+  drawDeck(c, 260, .22);
+  const call = sm(.2, .7, tau, easeIn), answer = sm(.75, 1.25, tau, easeOut), inter = tau > 1.35;
+  keycap(c, CX - W * .3, CY + H * .36, W * .36, H * .26, 'E', 261, 'ink', call * .9);
+  keycap(c, CX + W * .04, CY + H * .3, W * .32, H * .23, 'N', 262, 'ink', -answer * .3);
+  keycap(c, CX + W * .34, CY + H * .24, W * .28, H * .2, 'C', 263, 'ink', inter && flicker(i, 4) ? .6 : 0);
+  if (call > .05) dust(c, CX - W * .3, CY + H * .4, 18, call, 264);
+  if (answer > .05) ripples(c, CX + W * .04, CY + H * .3, [W * .06 + answer * W * .1, W * .11 + answer * W * .14], alpha(PAL.blush, .5), 265, 2.2);
+  if (inter) { c.strokeStyle = alpha(PAL.ink, .8); c.lineWidth = 2.4; wob(c, [[CX + W * .34, CY + H * .06], [CX + W * .29, CY - H * .04], [CX + W * .38, CY - H * .12], [CX + W * .3, CY - H * .2]], 2, 266); aster(c, CX + W * .34, CY - H * .24, W * .05, 9, PAL.accents[0], 267, .8); }
+  drawTrail(c, .58, CY + H * .46, 268, H * .024);
+  const head = trailAt(.58, CY + H * .46);
+  c.save(); c.translate(head[0], head[1] - H * .05); c.scale(1.75, 1.75);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: inter ? -.7 : .5 }, 269);
+  c.restore();
+  monitorCorner(c, 270, i);
+}
+
+function sceneScreen2(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY, lerp(1.0, 1.08, sm(0, 1.6, tau, easeIO)));
+  drawScreenFace(c, 280, false);
+  squiggleText(c, CX - W * .36, CY - H * .26, W * .66, 4, { size: H * .022, color: alpha(PAL.shade, .5), seed: 281 });
+  const cpos = typedLine(c, 5, i, 282, CY + H * .06);
+  ripples(c, cpos[0], cpos[1], [W * .05 + tau * W * .06, W * .1 + tau * W * .07, W * .16 + tau * W * .08], alpha(PAL.accents[1], .3), 283, 2);
+  c.strokeStyle = alpha(PAL.ink, .5); c.lineWidth = 1.6; wob(c, [[CX - W * .38, CY + H * .2], [CX + W * .38, CY + H * .2]], 2, 284);
+  c.fillStyle = alpha(PAL.ink, .6); handText(c, '01:00', CX + W * .24, CY - H * .32, { size: H * .038 });
+}
+
+function sceneBlueprintWord(c, tau, i) {
+  night(c);
+  cam(c, CX, CY, 1.15);
+  hexLattice(c, [CX - W * .56, CY - H * .52, W * 1.12, H * 1.12], 24, PAL.chalkDim, .42, .9);
+  deckBlueprint(c, 290);
+  const n = clamp(Math.floor(sm(0, .9, tau) * 6) + 1, 1, 6);
+  c.strokeStyle = PAL.chalk; c.lineWidth = 2;
+  for (let k = 0; k < n; k++) {
+    const x = CX - W * .32 + k * W * .128, y = CY - H * .06 - Math.sin(k * .9) * H * .09;
+    wob(c, ellPts(x, y, W * .038, W * .038, 0, 30), 1.6, 291 + k, true);
+    c.fillStyle = PAL.chalk; handText(c, WORD[k], x - W * .015, y + H * .018, { size: H * .05 });
+    if (k) { c.strokeStyle = PAL.chalkDim; c.lineWidth = 1.4; wob(c, [[x - W * .09, CY - H * .06 - Math.sin((k - 1) * .9) * H * .09], [x - W * .04, y]], 2, 300 + k); c.strokeStyle = PAL.chalk; c.lineWidth = 2; }
+    cross(c, x, y + H * .07, 7);
+  }
+  construction(c, CX, CY - H * .04, W * .4, 310, PAL.guide, .7);
+  caret(c, CX + W * .38, CY + H * .3, H * .05, i, 'blueprint');
+  c.fillStyle = PAL.chalkDim; handText(c, 'one key / one hour', CX - W * .34, CY + H * .34, { size: H * .034 });
+}
+
+function sceneMidnight(c, tau, i) {
+  const head = deckShot(c, tau, 1.8, i, .04, .56, 320);
+  const mx = CX + W * .32, my = CY - H * .3, m = circPath(mx, my, W * .11);
+  c.fillStyle = PAL.paperBand; c.fill(m);
+  hatch(c, m, [mx - W * .11, my - W * .11, W * .22, W * .22], { angle: -.6, gap: 5, len: 12, jitter: 4, color: PAL.light, alpha: .5, width: 1.2, seed: 321 });
+  c.strokeStyle = PAL.ink; c.lineWidth = 2.6; wob(c, ellPts(mx, my, W * .11, W * .11, 0, 60), 2, 322, true);
+  construction(c, head[0], head[1] - H * .06, W * .19, 323, PAL.guide, .5);
+  c.strokeStyle = alpha(PAL.shade, .7); c.lineWidth = 2;
+  for (let k = 0; k < 5; k++) wob(c, [[CX - W * .4 + k * W * .21, CY + H * .58], [CX - W * .36 + k * W * .21, CY + H * .66]], 2, 330 + k);
+  caret(c, CX - W * .38, CY - H * .36, H * .05, i, 'ink');
+}
+
+function sceneCursorMacro(c, tau, i) {
+  night(c);
+  cam(c, CX, CY, 1.0);
+  const face = rectPath(-W * .1, -H * .1, W * 1.2, H * 1.2);
+  hatch(c, face, [-W * .1, -H * .1, W * 1.2, H * 1.2], { angle: 0, gap: 14, len: W * 1.2, jitter: 3, color: alpha(PAL.chalkDim, .5), alpha: .35, width: 1, seed: 340 });
+  hatch(c, circPath(CX + W * .3, CY - H * .24, W * .4), [CX - W * .1, CY - H * .64, W * .8, W * .8], { angle: .8, gap: 8, len: 20, jitter: 5, color: PAL.chalk, alpha: .25, seed: 341 });
+  grain(c, face, [-W * .1, -H * .1, W * 1.2, H * 1.2], 3400, PAL.chalkDim, .2, 342, 2);
+  c.fillStyle = alpha(PAL.chalk, .85); handText(c, 'E', CX - W * .44, CY + H * .1, { size: H * .34 });
+  caret(c, CX + W * .02, CY - H * .04, H * .42, i, 'blueprint');
+  c.strokeStyle = alpha(PAL.chalk, .7); cross(c, CX - W * .3, CY - H * .32, 12); cross(c, CX + W * .32, CY + H * .3, 12);
+  c.fillStyle = PAL.chalkDim; handText(c, 'waiting, at 1 Hz', CX - W * .2, CY + H * .4, { size: H * .034 });
+}
+
+function sceneStampGallery(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY, 1.0);
+  const bg = rectPath(-W * .1, -H * .1, W * 1.2, H * 1.2);
+  c.fillStyle = PAL.fills[0]; c.fill(bg);
+  hatch(c, circPath(W * .8, H * .2, W * .5), [W * .3, -H * .3, W, W], { angle: .8, gap: 7, len: 20, jitter: 6, color: PAL.light, alpha: .45, width: 1.4, seed: 350 });
+  hatch(c, bg, [-W * .1, H * .5, W * 1.2, H * .6], { angle: .95, gap: 7, len: 22, jitter: 5, color: PAL.shade, alpha: .34, seed: 351 });
+  grain(c, bg, [-W * .1, -H * .1, W * 1.2, H * 1.2], 3600, PAL.shade, .24, 352, 2);
+  section(c, CY - H * .36, PAL.paperBand, 353);
+  const p = sm(0, .7, tau, easeOut), GL = ['P', 'A', 'T', 'I', 'E', 'N', 'C', 'E', '·'];
+  for (let k = 0; k < 9; k++) {
+    const gx = CX + ((k % 3) - 1) * W * .27, gy = CY - H * .16 + Math.floor(k / 3) * H * .24;
+    const g = clamp(p * 9 - k, 0, 1), s = W * .105 * g;
+    if (g <= .02) continue;
+    const st = rectPath(gx - s, gy - s, s * 2, s * 2);
+    c.fillStyle = PAL.fills[1]; c.fill(st);
+    hatch(c, st, [gx - s, gy - s, s * 2, s * 2], { angle: .75, gap: 5, len: 12, jitter: 4, color: PAL.light, alpha: .5, width: 1.2, seed: 360 + k });
+    hatch(c, st, [gx - s, gy, s * 2, s], { angle: -.6, gap: 5, len: 12, jitter: 4, color: PAL.blush, alpha: .36, seed: 370 + k });
+    c.strokeStyle = PAL.ink; c.lineWidth = 2.4; wob(c, rectPts(gx - s, gy - s, s * 2, s * 2), 2, 380 + k, true);
+    c.fillStyle = alpha(PAL.accents[0], .5); handText(c, GL[k], gx - s * .34 + 4, gy + s * .4 + 4, { size: s * 1.1 });
+    c.fillStyle = PAL.ink; handText(c, GL[k], gx - s * .34, gy + s * .4, { size: s * 1.1 });
+    c.strokeStyle = alpha(PAL.ink, .5); cross(c, gx + s * .74, gy - s * .74, 6);
+  }
+  caret(c, CX + W * .42, CY - H * .42, H * .05, i, 'ink');
+}
+
+function sceneDawn(c, tau, i) {
+  const warm = lerp(.08, .95, sm(.1, 1.1, tau, easeOut));
+  const head = deckShot(c, tau, 1.4, i, warm, .8, 390);
+  aster(c, CX + W * .36, CY - H * .3, W * .16 * sm(.2, .9, tau, easeOut), 13, PAL.accents[0], 391, .85);
+  aster(c, CX + W * .18, CY - H * .42, W * .09 * sm(.4, 1.1, tau, easeOut), 9, PAL.accents[1], 392, .8);
+  hatch(c, rectPath(-W * .1, -H * .1, W * 1.2, H * 1.2), [-W * .1, -H * .1, W * 1.2, H * 1.2], { angle: .9, gap: 16, len: 40, jitter: 8, color: PAL.light, alpha: .18 + warm * .3, width: 1.6, seed: 393 });
+  construction(c, head[0], head[1] - H * .06, W * .2, 394, PAL.guide, .5);
+  monitorCorner(c, 395, i);
+}
+
+function sceneMorningWide(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .02, lerp(1.3, 1.1, sm(0, 2.2, tau, easeIO)));
+  drawDeck(c, 400, .9);
+  const x = CX - W * .02, y = CY - H * .3, w = W * .86, h = H * .5;
+  c.fillStyle = PAL.fills[3]; c.fill(roundRectPath(x - w / 2, y - h / 2, w, h, 18));
+  hatch(c, roundRectPath(x - w / 2, y - h / 2, w, h, 18), [x - w / 2, y - h / 2, w, h], { angle: .8, gap: 7, len: 18, jitter: 5, color: PAL.light, alpha: .55, width: 1.3, seed: 401 });
+  hatch(c, roundRectPath(x - w / 2, y - h / 2, w, h, 18), [x - w / 2, y, w, h / 2], { angle: -.6, gap: 6, len: 16, jitter: 4, color: PAL.shade, alpha: .3, seed: 402 });
+  grain(c, roundRectPath(x - w / 2, y - h / 2, w, h, 18), [x - w / 2, y - h / 2, w, h], 2600, PAL.shade, .22, 403, 2);
+  c.strokeStyle = PAL.ink; c.lineWidth = 3.2; wob(c, rectPts(x - w / 2, y - h / 2, w, h), 2.6, 404, true);
+  const sp = w * .102, x0 = x - w * .42;
+  for (let k = 0; k < 8; k++) {
+    c.fillStyle = alpha(PAL.accents[0], .45); handText(c, WORD[k], x0 + k * sp + 3, y + h * .1 + 3, { size: h * .26 });
+    c.fillStyle = PAL.ink; handText(c, WORD[k], x0 + k * sp, y + h * .1, { size: h * .26 });
+  }
+  caret(c, x0 + 8 * sp + sp * .3, y + h * .02, h * .22, i, 'ink');
+  drawTrail(c, .97, CY + H * .38, 405, H * .026);
+  const head = trailAt(.97, CY + H * .38);
+  c.save(); c.translate(head[0], head[1] - H * .05); c.scale(1.6, 1.6); drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .55 }, 406); c.restore();
+}
+
+function sceneTrailWide(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .08, 1.15);
+  drawDeck(c, 410, .78);
+  drawTrail(c, 1, CY + H * .3, 411, H * .03);
+  c.strokeStyle = alpha(PAL.ink, .75); c.lineWidth = 2;
+  for (let k = 0; k < 8; k++) { const p = TRAIL[Math.floor(k / 8 * (TRAIL.length - 1))]; cross(c, p[0], p[1] + CY + H * .3, 11); c.fillStyle = alpha(PAL.ink, .6); handText(c, String(k + 1), p[0] - 6, p[1] + CY + H * .38, { size: H * .03 }); }
+  construction(c, CX, CY + H * .3, W * .42, 412, PAL.guide, .45);
+  c.save(); c.translate(W * 1.02, CY + H * .3 - H * .05); c.scale(1.6, 1.6); drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .4 }, 413); c.restore();
+  monitorCorner(c, 414, i);
+}
+
+function sceneCoda(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY + H * .06, lerp(1.14, 1.04, sm(0, 1.8, tau, easeIO)));
+  drawDeck(c, 420, .6);
+  drawTrail(c, 1, CY + H * .34, 421, H * .028);
+  const f = 1 - sm(.4, 1.6, tau, easeIn);
+  c.save(); c.translate(CX + W * .26, CY + H * .3); c.scale(1.7, 1.7);
+  c.globalAlpha = clamp(f, 0, 1);
+  drawSnail(c, 'ink', { wave: wavePhase(i), stalk: .3 }, 422);
+  c.globalAlpha = 1;
+  c.save(); c.clip(FOOT); c.restore();
+  c.restore();
+  c.save(); c.translate(CX + W * .26, CY + H * .3); c.scale(1.7, 1.7);
+  hatch(c, SHELL, [SHC[0] - SHR, SHC[1] - SHR, SHR * 2, SHR * 2], { angle: .8, gap: 5, len: 16, jitter: 5, color: PAL.shade, alpha: .3 * (1 - f), seed: 423 });
+  c.restore();
+  caret(c, CX - W * .3, CY - H * .28, H * .06, i, 'ink');
+  c.fillStyle = alpha(PAL.ink, .55); handText(c, '05:00', CX - W * .22, CY - H * .26, { size: H * .038 });
+}
+
+function sceneSign(c, tau, i) {
+  paper(c);
+  const R = W * .62, gx = CX + W * .04, gy = CY + H * .5, g = circPath(gx, gy, R), box = [gx - R, gy - R, R * 2, R * 2];
+  c.fillStyle = PAL.fills[0]; c.fill(g);
+  c.save(); c.clip(g);
+  hatch(c, circPath(gx + R * .4, gy - R * .6, R * .6), [gx - R * .2, gy - R * 1.2, R * 1.2, R * 1.2], { angle: .8, gap: 6, len: 16, jitter: 6, color: PAL.light, alpha: .6, width: 1.4, seed: 430 });
+  hatch(c, circPath(gx - R * .4, gy + R * .2, R * .9), [gx - R * 1.3, gy - R * .7, R * 1.8, R * 1.8], { angle: -.6, gap: 5, len: 18, jitter: 5, color: PAL.blush, alpha: .36, seed: 431 });
+  hatch(c, circPath(gx - R * .45, gy + R * .3, R * .7), [gx - R * 1.15, gy - R * .4, R * 1.4, R * 1.4], { angle: .95, gap: 6, len: 20, jitter: 5, color: PAL.shade, alpha: .3, seed: 432 });
+  c.restore();
+  grain(c, g, box, 5000, PAL.shade, .28, 433, 2);
+  c.strokeStyle = PAL.ink; c.lineWidth = 3; c.globalAlpha = .85; wob(c, ellPts(gx, gy, R, R, 0, 110), 2.5, 434, true); c.globalAlpha = 1;
+  ripples(c, CX, CY + H * .04, [W * .14, W * .24, W * .36], alpha(PAL.accents[1], .3), 435, 2.4);
+  drawTrail(c, .5, CY + H * .3, 436, H * .018);
+  caret(c, CX + W * .34, CY - H * .3, H * .06, i, 'ink');
+  signOff(c, 'eight', 'hours', { progressA: sm(0, .6, tau), progressB: sm(.6, 1.2, tau) });
+}
+
+const TIMELINE = [
+  { name: 'deckDusk', dur: 2.4, fn: sceneDeckDusk },
+  { name: 'shellMacro', dur: 1.2, fn: sceneShellMacro },
+  { name: 'anatomy', dur: 1.2, fn: sceneAnatomy },
+  { name: 'keyPress', dur: 1.8, fn: sceneKeyPress },
+  { name: 'impact', dur: 0.8, fn: sceneImpact },
+  { name: 'screen1', dur: 1.6, fn: sceneScreen1 },
+  { name: 'deskWide', dur: 1.5, fn: sceneDeskWide },
+  { name: 'clock', dur: 1.6, fn: sceneClock },
+  { name: 'travel', dur: 2.4, fn: sceneTravel },
+  { name: 'trailMacro', dur: 1.2, fn: sceneTrailMacro },
+  { name: 'pov', dur: 1.0, fn: scenePov },
+  { name: 'keyChorus', dur: 2.0, fn: sceneKeyChorus },
+  { name: 'screen2', dur: 1.6, fn: sceneScreen2 },
+  { name: 'blueprintWord', dur: 1.2, fn: sceneBlueprintWord },
+  { name: 'midnight', dur: 1.8, fn: sceneMidnight },
+  { name: 'cursorMacro', dur: 1.0, fn: sceneCursorMacro },
+  { name: 'stampGallery', dur: 1.2, fn: sceneStampGallery },
+  { name: 'dawn', dur: 1.4, fn: sceneDawn },
+  { name: 'morningWide', dur: 2.2, fn: sceneMorningWide },
+  { name: 'trailWide', dur: 1.6, fn: sceneTrailWide },
+  { name: 'coda', dur: 1.8, fn: sceneCoda },
+  { name: 'sign', dur: 1.5, fn: sceneSign }
+];
+defineFilm({ timeline: TIMELINE });
+})();
+} catch (err) { console.error('✏️ hand-drawn film threw: ' + (err && err.message)); }
+// Nothing playable registered — draw the repo's own film rather than a blank video.
+if (!__filmUsable()) {
+(() => {
+
+usePalette('paperInk');
+
+function sceneOpen(c, tau) {
+  paper(c);
+  const disc = circPath(CX, CY + 40, 300);
+  c.fillStyle = PAL.fills[0];
+  c.fill(disc);
+  surface(c, disc, [CX - 300, CY - 260, 600, 600], { seed: 11 });
+  c.strokeStyle = PAL.ink;
+  c.lineWidth = 3;
+  selfDraw(c, ellPts(CX, CY + 40, 300, 300, 0, 96), sm(0, 2.4, tau), 12, 2, true);
+  construction(c, CX, CY + 40, 240, 13);
+  seedDot(c, CX, CY + 40, 11);
+}
+
+function sceneRipple(c, tau, i) {
+  paper(c);
+  cam(c, CX, CY, lerp(1, 1.12, sm(0, 3, tau)));
+  const r = lerp(60, 420, sm(0, 3, tau));
+  ripples(c, CX, CY, [r * 0.4, r * 0.7, r], PAL.accents[1], 21, 3.5);
+  dottedArc(c, CX, CY, r * 0.85, PAL.ink, 22);
+  if (pulse(i, 10, 2)) dotBurst(c, CX, CY, r * 0.5, 12, PAL.accents[0], 23);
+  seedDot(c, CX, CY, 9);
+}
+
+function sceneClose(c, tau) {
+  night(c);
+  hexLattice(c, [0, 0, W, H], 26, PAL.chalkDim, 0.35, 0.9);
+  c.strokeStyle = PAL.chalk;
+  c.lineWidth = 2;
+  wob(c, ellPts(CX, CY, 260, 260, 0, 96), 2, 31, true);
+  aster(c, CX, CY, 9, 16, PAL.accents[1], 32, 1);
+  if (tau > 1.2) signOff(c, 'the void', 'kept the page');
+}
+
+const TIMELINE = [
+  { name: 'open', dur: 4.0, fn: sceneOpen },
+  { name: 'ripple', dur: 3.0, fn: sceneRipple },
+  { name: 'close', dur: 3.0, fn: sceneClose }
+];
+defineFilm({ timeline: TIMELINE });
+
+})();
+}
+
+// ---- harness bridge (repo-owned) ----
+if (!__filmUsable()) throw new Error('hand-drawn film registered no playable timeline');
+document.querySelectorAll('.bar').forEach(el => el.remove());
+const canvas = document.getElementById('c');
+canvas.style.cssText = 'display:block;width:100%;height:100%;object-fit:contain';
+
+const __filmDuration = window.__FILM.DUR;
+let __previewStart = performance.now();
+let __previewRaf = 0;
+let __previewIndex = -1;
+const __previewStep = () => {
+  // A film that throws inside a scene must surface once, not 60 times a second.
+  // Stopping here costs only the preview; window.renderFrame still reports the
+  // throw to the renderer on the capture path.
+  try {
+    const t = ((performance.now() - __previewStart) / 1000) % __filmDuration;
+    // The film is drawn on twos (12fps). __drawFrame forces a repaint, so
+    // calling it every rAF tick would redraw the same frame five times over.
+    const i = Math.min(window.__NDRAW - 1, Math.floor(t * FPS_DRAW));
+    if (i !== __previewIndex) {
+      __previewIndex = i;
+      window.__drawFrame(i);
+    }
+  } catch (err) {
+    __previewRaf = 0;
+    throw err;
+  }
+  __previewRaf = requestAnimationFrame(__previewStep);
+};
+__previewRaf = requestAnimationFrame(__previewStep);
+
+// The renderer drives the clock; a film shorter than the post loops instead of
+// freezing on its last drawn frame.
+window.renderFrame = (time) => {
+  if (__previewRaf) { cancelAnimationFrame(__previewRaf); __previewRaf = 0; }
+  const seconds = Number(time);
+  const wrapped = Number.isFinite(seconds)
+    ? ((seconds % __filmDuration) + __filmDuration) % __filmDuration
+    : 0;
+  return window.__frame(Math.min(window.__NDRAW - 1, Math.floor(wrapped * FPS_DRAW)));
+};
+window.ready = true;
+
+
+
+
+document.body.appendChild(canvas);
+
+
+window.audioDuration = 34;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 120\\n// DURATION: 34\\n// FORM: A 0–3.5 | A' 3.5–7 | B 7–10.5 | A'' 10.5–14 | A-loop 14–17 (17 cycles @ 2s/cycle = 34s)\\n// TONAL CENTER: C Dorian (C D Eb F G A Bb)\\n// MOTIF: C4 D4 Eb4 G4 A4 — one cycle, ~70% rest: note on beat 1, rest, note on the \\\"&\\\" of 2, rest, two notes on beat 4 and its \\\"&\\\" leaning into the next downbeat\\n// HARMONIC PLAN: A = Cm9 open pedal (no low third) | A' = Cm9 1.5cy then F9/C from cy5 | B = Abmaj7 (bVI) 2cy then Bb6/9 (bVII) 1.5cy — only bass departure | A'' = F9/C 1.5cy then Cm11 from cy12 (brightest, A natural on top) | A-loop = Cm9 pedal, identical voicing/register to A\\n// PHRASE RULE: cursor blink = dry CR78 rim on every half cycle, never rests; halftime 808 kick on cycle downbeats only (snail weight). At every seam hold the blink through the bar line and carry C and G as common tones; at Bb→C (cy10.5) the bass moves by step, not leap. Pad reverb tails bleed across every boundary.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// ---- voice 1: rhythmic engine — cursor blink (half-cycle tick) + snail weight (downbeat kick)\\n$: stack(\\n  s(\\\"rim*2\\\").bank(\\\"RolandCR78\\\")\\n    .gain(\\\"\u003c0.3 0.3 0.28 0.3 0.3 0.3 0.26 0.24 0.24 0.26 0.3 0.3 0.32 0.32 0.3 0.28 0.26>\\\")\\n    .lpf(3400).hpf(400).room(0.32).size(0.6).pan(0.42),\\n  s(\\\"\u003cbd bd bd bd bd bd bd ~ ~ ~ ~ bd bd bd bd bd bd>\\\")\\n    .bank(\\\"RolandTR808\\\")\\n    .gain(0.3).lpf(150).room(0.24).pan(0.5),\\n  s(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ [~ ~ cp ~] [~ ~ cp ~] [~ ~ cp ~] ~ ~ ~>\\\")\\n    .bank(\\\"RolandTR808\\\").gain(0.16).lpf(2600).room(0.5).size(0.8).pan(0.6)\\n).orbit(0)\\n\\n// ---- voice 2: sub-bass foundation — root/fifth only, one articulation per cycle\\n$: note(\\\"\u003cc1 c1 c1 c1 c1 c1 c1 ab0 ab0 ~ bb0 c1 c1 c1 c1 c1 c1>\\\")\\n  .s(\\\"sine\\\").add(note(\\\"\u003c0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0>\\\"))\\n  .attack(0.3).decay(0.4).sustain(0.6).release(2.5)\\n  .lpf(180).gain(0.22).room(0.25).size(0.7).orbit(1)\\n\\n// ---- voice 3: harmonic body — the room, the night, the waiting (C and G held as common tones)\\n$: note(\\\"\u003c[c3,g3,d4,eb4] [c3,g3,d4,eb4] [c3,g3,d4,eb4] [c3,g3,d4,eb4] [c3,g3,d4,eb4] [c3,g3,d4,eb4,a4] [c3,g3,d4,eb4,a4] [c3,g3,eb4,ab4] [c3,g3,eb4,ab4] [c3,g3,eb4,ab4] [c3,g3,d4,bb4] [c3,g3,d4,a4] [c3,g3,d4,a4] [c3,g3,d4,f4,a4] [c3,g3,d4,f4,a4] [c3,g3,d4,eb4] [c3,g3,d4,eb4]>\\\")\\n  .s(\\\"sawtooth\\\")\\n  .detune(\\\"\u003c-5 4 -4 5>/8\\\")\\n  .attack(0.6).decay(0.8).sustain(0.7).release(3.5)\\n  .lpf(\\\"\u003c900 900 950 950 1000 1200 1250 800 780 760 1000 1500 1700 1800 1750 1100 900>\\\")\\n  .lpq(6)\\n  .gain(\\\"\u003c0.07 0.09 0.1 0.1 0.11 0.12 0.12 0.11 0.1 0.09 0.1 0.12 0.13 0.13 0.12 0.1 0.08>\\\")\\n  .room(0.8).size(0.9).pan(0.5).orbit(2)\\n\\n// ---- voice 4: motif lead — the crawl and the reach (same timbre, delay and rests throughout)\\n$: note(\\\"\u003c[c4 ~ d4 ~ ~ ~ eb4 ~] ~ [c4 ~ d4 ~ ~ ~ eb4 ~] ~ [c4 ~ d4 ~ ~ ~ [eb4 ~] [g4 a4]] ~ [c4 ~ d4 ~ ~ ~ [eb4 ~] [g4 a4]] [g3 ~ ~ ~ f3 ~ ~ ~] [eb3 ~ ~ ~ c3 ~ ~ ~] [bb2 ~ ~ ~ ~ ~ ~ ~] ~ [[c4,c5] ~ [d4,d5] ~ ~ ~ [eb4,eb5] ~] [~ ~ ~ ~ [g4,g5] ~ [a4,a5] ~] [a4 ~ ~ ~ ~ ~ ~ ~] ~ [c4 ~ d4 ~ ~ ~ eb4 ~] ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(0.08).decay(0.5).sustain(0.35)\\n  .release(\\\"\u003c1.2 1.2 1.2 1.2 1.2 1.2 1.2 1.6 1.6 2 1.2 1.2 1.2 2.6 1.2 1.2 1.2>\\\")\\n  .lpf(\\\"\u003c1400 1400 1450 1450 1500 1700 1750 1100 1050 1000 1400 1900 2100 2400 1600 1500 1400>\\\")\\n  .gain(0.16).delay(0.32).delaytime(0.75).delayfeedback(0.28)\\n  .room(0.55).size(0.85).pan(0.38).orbit(3)\\n\\n// ---- voice 5: keystroke voice — letters appearing as distant bells (absent in A, enters in A')\\n$: note(\\\"\u003c~ ~ ~ ~ [~ ~ ~ ~ ~ ~ g5 ~] [~ ~ ~ ~ ~ ~ ~ a5] [~ ~ ~ ~ ~ ~ g5 a5] [~ ~ ~ ~ ~ ~ ~ eb5] ~ [~ ~ ~ ~ ~ ~ ~ c5] ~ [~ ~ ~ ~ ~ ~ g5 ~] [~ ~ ~ ~ ~ ~ ~ a5] [~ ~ g5 ~ ~ ~ a5 ~] [~ ~ ~ ~ [g5,g6] ~ [a5,a6] ~] [~ ~ ~ ~ ~ ~ ~ eb5] ~ ~>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(0.03).decay(0.6).sustain(0.2).release(1.8)\\n  .lpf(2600).gain(0.11)\\n  .delay(0.25).delaytime(0.5).delayfeedback(0.2)\\n  .room(0.85).size(0.95).pan(0.68).orbit(4)\",\"bpm\":120,\"durationSec\":34,\"renderDurationSec\":37,\"cps\":0.5,\"cycles\":17,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

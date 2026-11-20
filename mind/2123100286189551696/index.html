@@ -1,0 +1,2711 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+// NOT THE BIRDS. Project Acoustic Kitty, 1960s: a microphone in the ear canal, a transmitter at the base of the skull, an antenna
+// up the tail, and a second wire because the cat walked off when it was hungry. The whole frame is one amber eye. Inside its pupil
+// a fluoroscope watches the wired cat walk, on a backbeat its own paws play, to a bench it has been told to listen to. The lead film markers carry the
+// brief. Sixteen of those letters fall on sixteen sixteenths and leave a different instruction. What it attends to gets painted;
+// what it does not stays a skeleton. The palette after the turn is only blue and yellow, the two channels a cat has.
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+document.body.style.margin = '0';
+document.body.style.background = '#000';
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+(function () {
+  'use strict';
+  const W = 900, H = 900, CX = 450, CY = 450;
+  const DUR = 60, BPM = 96, BAR = 240 / BPM, BEAT = BAR / 4, SIX = BEAT / 4;
+  const TAU = Math.PI * 2;
+  const R0 = 372;            // the pupil at rest
+  const G = 660;             // the cat's ground line
+  const G2 = 590;            // the far side of the pavement, where the bench stands
+  const STRIDE = 190;        // pixels per stride
+  const STRIDE_T = BEAT * 2; // a hind paw lands on 1 and 3, the other on 2 and 4, the fore paws on the "and"s
+  const V = STRIDE / STRIDE_T;
+
+  const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let z = a;
+      z = Math.imul(z ^ (z >>> 15), z | 1);
+      z ^= z + Math.imul(z ^ (z >>> 7), z | 61);
+      return ((z ^ (z >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // piecewise value over bars, eased between keys
+  const keys = (table, b) => {
+    if (b <= table[0][0]) return table[0][1];
+    for (let i = 1; i < table.length; i++) {
+      if (b <= table[i][0]) {
+        const [b0, v0] = table[i - 1], [b1, v1] = table[i];
+        return lerp(v0, v1, smooth(b0, b1, b));
+      }
+    }
+    return table[table.length - 1][1];
+  };
+
+  const INK = (a) => `rgba(206,226,250,${a})`;
+  const METAL = (a) => `rgba(255,255,255,${a})`;
+  const PAL = {
+    plate: '#04070e',
+    sky: '#1d49b8', skyDeep: '#10286f', navy: '#0c1740', pale: '#8db2ea', cream: '#f4ead0',
+    amber: '#e6a31c', lemon: '#ffd81f', ochre: '#c9a23a', black: '#08080d', farcat: '#171b33'
+  };
+
+  // ---------------------------------------------------------------- film densities
+  function line(c, pts, a, w = 1) {
+    c.strokeStyle = INK(a);
+    c.lineWidth = w;
+    c.beginPath();
+    c.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+    c.stroke();
+  }
+  function disc(c, x, y, r, fa, sa = 0, w = 1) {
+    c.beginPath();
+    c.arc(x, y, r, 0, TAU);
+    if (fa) { c.fillStyle = INK(fa); c.fill(); }
+    if (sa) { c.strokeStyle = INK(sa); c.lineWidth = w; c.stroke(); }
+  }
+  // A long bone: a dim medullary core between two bright cortical edges, with flared ends. Film adds, so overlaps brighten.
+  function bone(c, ax, ay, bx, by, wa, ws, wb, i = 1) {
+    const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    const st = [[0, wa * 0.72], [0.05, wa], [0.16, lerp(wa, ws, 0.75)], [0.32, ws], [0.68, ws], [0.84, lerp(wb, ws, 0.75)], [0.95, wb], [1, wb * 0.72]];
+    const left = st.map(([t, w]) => [ax + dx * t + nx * w, ay + dy * t + ny * w]);
+    const right = st.map(([t, w]) => [ax + dx * t - nx * w, ay + dy * t - ny * w]);
+    c.beginPath();
+    c.moveTo(left[0][0], left[0][1]);
+    for (let k = 1; k < left.length; k++) c.lineTo(left[k][0], left[k][1]);
+    for (let k = right.length - 1; k >= 0; k--) c.lineTo(right[k][0], right[k][1]);
+    c.closePath();
+    c.fillStyle = INK(0.24 * i);
+    c.fill();
+    c.strokeStyle = INK(0.62 * i);
+    c.lineWidth = 1.05;
+    c.stroke();
+    // cortex: the shaft's walls read denser than its ends
+    c.strokeStyle = INK(0.5 * i);
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(left[2][0], left[2][1]); c.lineTo(left[5][0], left[5][1]);
+    c.moveTo(right[2][0], right[2][1]); c.lineTo(right[5][0], right[5][1]);
+    c.stroke();
+    // growth plates
+    c.strokeStyle = INK(0.3 * i);
+    c.lineWidth = 0.8;
+    c.beginPath();
+    c.moveTo(left[1][0], left[1][1]); c.lineTo(right[1][0], right[1][1]);
+    c.moveTo(left[6][0], left[6][1]); c.lineTo(right[6][0], right[6][1]);
+    c.stroke();
+  }
+  // Same-winding polygons so a single nonzero fill can union every part of a body without cancelling
+  function addPoly(path, pts) {
+    let area = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[(i + 1) % pts.length];
+      area += p[0] * q[1] - q[0] * p[1];
+    }
+    const list = area < 0 ? pts.slice().reverse() : pts;
+    path.moveTo(list[0][0], list[0][1]);
+    for (let i = 1; i < list.length; i++) path.lineTo(list[i][0], list[i][1]);
+    path.closePath();
+  }
+  function capsule(path, a, b, ra, rb) {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), pts = [];
+    for (let i = 0; i <= 6; i++) { const th = ang + Math.PI / 2 + (i / 6) * Math.PI; pts.push([a[0] + Math.cos(th) * ra, a[1] + Math.sin(th) * ra]); }
+    for (let i = 0; i <= 6; i++) { const th = ang - Math.PI / 2 + (i / 6) * Math.PI; pts.push([b[0] + Math.cos(th) * rb, b[1] + Math.sin(th) * rb]); }
+    addPoly(path, pts);
+  }
+  function catmull(pts, n = 6, closed = true) {
+    const out = [], N = pts.length;
+    const lim = closed ? N : N - 1;
+    for (let i = 0; i < lim; i++) {
+      const p0 = pts[closed ? (i - 1 + N) % N : Math.max(0, i - 1)], p1 = pts[i], p2 = pts[(i + 1) % N], p3 = pts[closed ? (i + 2) % N : Math.min(N - 1, i + 2)];
+      for (let j = 0; j < n; j++) {
+        const u = j / n, u2 = u * u, u3 = u2 * u;
+        out.push([
+          0.5 * (2 * p1[0] + (p2[0] - p0[0]) * u + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 + (3 * p1[0] - p0[0] - 3 * p2[0] + p3[0]) * u3),
+          0.5 * (2 * p1[1] + (p2[1] - p0[1]) * u + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 + (3 * p1[1] - p0[1] - 3 * p2[1] + p3[1]) * u3)
+        ]);
+      }
+    }
+    if (!closed) out.push(pts[N - 1]);
+    return out;
+  }
+  const bez = (a, b, c, d, t) => {
+    const m = 1 - t, m2 = m * m, t2 = t * t;
+    return [m2 * m * a[0] + 3 * m2 * t * b[0] + 3 * m * t2 * c[0] + t2 * t * d[0], m2 * m * a[1] + 3 * m2 * t * b[1] + 3 * m * t2 * c[1] + t2 * t * d[1]];
+  };
+
+  // ---------------------------------------------------------------- the rig: one set of joints for bones, soft tissue and fur
+  const L = { fem: 56, tib: 60, mt: 38, hum: 52, rad: 54, mc: 22 };
+  function ik2(a, b, l1, l2, bend) {
+    let dx = b[0] - a[0], dy = b[1] - a[1], d = Math.hypot(dx, dy);
+    const m = l1 + l2 - 0.01;
+    if (d > m) { dx *= m / d; dy *= m / d; d = m; }
+    const k = (l1 * l1 - l2 * l2 + d * d) / (2 * d), h = Math.sqrt(Math.max(0, l1 * l1 - k * k));
+    const ux = dx / d, uy = dy / d;
+    return [a[0] + ux * k - uy * h * bend, a[1] + uy * k + ux * h * bend];
+  }
+  const POSE_KEYS = ['hx', 'hy', 'sx', 'sy', 'arch', 'bx', 'by', 'ba', 'jaw', 'ear', 'tH', 'tC', 'tW', 'tP', 'tL',
+    'nhx', 'nhy', 'nhA', 'fhx', 'fhy', 'fhA', 'nfx', 'nfy', 'nfA', 'ffx', 'ffy', 'ffA', 'heart', 'slim'];
+  function mixPose(a, b, k) {
+    const out = {};
+    for (const key of POSE_KEYS) out[key] = lerp(a[key], b[key], k);
+    return out;
+  }
+  // one leg's walking foot: planted and locked to the ground during stance, an arc during swing
+  function walkFoot(s, phase, base, duty, ground) {
+    const phi = ((s - phase) % 1 + 1) % 1;
+    const reach = STRIDE * duty / 2;
+    if (phi < duty) return { x: base + reach - (phi / duty) * reach * 2, y: ground, stance: phi / duty, swing: 0, u: 0 };
+    const u = (phi - duty) / (1 - duty), e = u * u * (3 - 2 * u);
+    return { x: base - reach + e * reach * 2, y: ground - Math.sin(u * Math.PI) * 24, stance: 0, swing: 1, u };
+  }
+  function walkPose(s, cx) {
+    const duty = 0.62;
+    const hx = cx - 74, sx = cx + 76;
+    const nh = walkFoot(s, 0, hx + 2, duty, G), nf = walkFoot(s, 0.25, sx + 10, duty, G);
+    const fh = walkFoot(s, 0.5, hx + 2, duty, G), ff = walkFoot(s, 0.75, sx + 10, duty, G);
+    const bob = Math.cos(s * TAU * 2);
+    const hindA = (f) => (f.swing ? lerp(-0.1, 0.5, Math.pow(f.u, 1.2)) - Math.sin(f.u * Math.PI) * 0.9 : lerp(0.5, -0.1, f.stance));
+    const foreA = (f) => (f.swing ? lerp(-0.55, 0.18, f.u) - Math.sin(f.u * Math.PI) * 0.55 : lerp(0.18, -0.55, f.stance));
+    return {
+      hx, hy: G - 113 + bob * 2.2, sx, sy: G - 114 - bob * 1.8, arch: 12,
+      bx: sx + 50, by: G - 164 - bob * 1.4, ba: -0.1 + Math.sin(s * TAU * 2 + 0.6) * 0.012, jaw: 0, ear: 0,
+      tH: Math.PI - 0.4, tC: 1.5, tW: 0.18, tP: s * TAU, tL: 0,
+      nhx: nh.x, nhy: nh.y, nhA: hindA(nh), fhx: fh.x, fhy: fh.y, fhA: hindA(fh),
+      nfx: nf.x, nfy: nf.y, nfA: foreA(nf), ffx: ff.x, ffy: ff.y, ffA: foreA(ff), heart: 0, slim: 1
+    };
+  }
+  // Seated: hips on the ground, the spine rising to the withers, forelegs straight, a tail laid along the ground
+  function sitPose(cx) {
+    const hx = cx - 46, sx = cx + 34;
+    return {
+      hx, hy: G - 42, sx, sy: G - 128, arch: 22,
+      bx: sx + 34, by: G - 206, ba: -0.2, jaw: 0, ear: 0,
+      tH: Math.PI - 0.62, tC: 0.95, tW: 0.0, tP: 0, tL: 0,
+      nhx: hx + 78, nhy: G, nhA: 1.28, fhx: hx + 88, fhy: G - 1, fhA: 1.28,
+      nfx: sx + 8, nfy: G, nfA: 0.1, ffx: sx + 24, ffy: G, ffA: 0.1, heart: 0, slim: 1
+    };
+  }
+  // A low stalk: the chest near the ground, the head out flat, the hips high and ready
+  function stalkPose(cx, wig) {
+    const hx = cx - 54 + wig * 6, sx = cx + 66;
+    return {
+      hx, hy: G - 98 - Math.abs(wig) * 3, sx, sy: G - 88, arch: 14,
+      bx: sx + 56, by: G - 118, ba: -0.1, jaw: 0, ear: 0,
+      tH: Math.PI - 0.34, tC: 0.9, tW: 0.3, tP: wig * 2, tL: 0,
+      nhx: hx + 52, nhy: G, nhA: 0.95, fhx: hx + 70, fhy: G, fhA: 0.95,
+      nfx: sx + 34, nfy: G, nfA: 0.42, ffx: sx + 60, ffy: G, ffA: 0.42, heart: 0, slim: 0.94
+    };
+  }
+  // A bound, one stride per beat: hinds land together under the belly, the spine opens, the fores reach and land, the spine closes.
+  function gallopPose(g, cx) {
+    const open = Math.cos((g - 0.42) * TAU);         // +1 fully extended, -1 gathered
+    const half = 76 + open * 26;
+    const lift = 24 + 7 * Math.cos((g - 0.4) * TAU) + 5 * Math.cos((g - 0.9) * TAU);
+    const hx = cx - half, sx = cx + half;
+    const hy = G - 108 - lift - Math.max(0, open) * 6, sy = G - 104 - lift + Math.max(0, -open) * 8;
+    const stance = (ph, a, b, front, rear, liftH) => {
+      const u = ((ph - a) % 1 + 1) % 1, span = ((b - a) % 1 + 1) % 1;
+      if (u < span) return [lerp(front, rear, u / span), G];
+      const w = (u - span) / (1 - span), e = w * w * (3 - 2 * w);
+      return [lerp(rear, front, e), G - Math.sin(w * Math.PI) * liftH];
+    };
+    const nh = stance(g, 0.0, 0.24, hx + 104, hx - 62, 30), fh = stance(g, 0.06, 0.30, hx + 112, hx - 54, 30);
+    const nf = stance(g, 0.48, 0.70, sx + 94, sx - 76, 34), ff = stance(g, 0.54, 0.76, sx + 106, sx - 64, 34);
+    return {
+      hx, hy, sx, sy, arch: -open * 24 + 4,
+      bx: sx + 62, by: sy - 46 - open * 4, ba: -0.1 + open * 0.08, jaw: 0, ear: 0,
+      tH: Math.PI + 0.1 + open * 0.2, tC: 0.5 - open * 0.5, tW: 0.1, tP: g * TAU, tL: 0,
+      nhx: nh[0], nhy: nh[1], nhA: nh[1] < G - 1 ? -0.35 : 0.55,
+      fhx: fh[0], fhy: fh[1], fhA: fh[1] < G - 1 ? -0.35 : 0.55,
+      nfx: nf[0], nfy: nf[1], nfA: nf[1] < G - 1 ? -0.5 : 0.05,
+      ffx: ff[0], ffy: ff[1], ffA: ff[1] < G - 1 ? -0.5 : 0.05, heart: 0, slim: 0.78
+    };
+  }
+  // The reach: at the top of the leap the whole cat is one vertical line, paws up, hind legs and tail straight down
+  function reachPose(cx, cy) {
+    const hx = cx - 40, sx = cx + 36;
+    return {
+      hx, hy: cy + 56, sx, sy: cy - 60, arch: -14,
+      bx: sx + 22, by: cy - 124, ba: -1.12, jaw: 0.55, ear: 0,
+      tH: 2.0, tC: 2.2, tW: 0.24, tP: 1.4, tL: 0,
+      nhx: cx - 138, nhy: cy + 146, nhA: -2.2, fhx: cx - 46, fhy: cy + 186, fhA: -2.7,
+      nfx: cx + 136, nfy: cy - 116, nfA: 2.2, ffx: cx + 34, ffy: cy - 196, ffA: 3.0, heart: 0, slim: 0.8
+    };
+  }
+
+  function solve(P) {
+    const J = {};
+    J.H = [P.hx, P.hy];
+    J.S = [P.sx, P.sy];
+    const d = Math.hypot(P.sx - P.hx, P.sy - P.hy) || 1;
+    const u = [(P.sx - P.hx) / d, (P.sy - P.hy) / d], n = [u[1], -u[0]];
+    J.u = u; J.n = n; J.d = d;
+    const loc = (o, a, b) => [o[0] + u[0] * a + n[0] * b, o[1] + u[1] * a + n[1] * b];
+    J.loc = loc;
+    // spine, sacrum to withers
+    const sac = loc(J.H, -6, 28), t1 = loc(J.S, -10, 48);
+    const c1 = [sac[0] + u[0] * d * 0.33 + n[0] * P.arch, sac[1] + u[1] * d * 0.33 + n[1] * P.arch];
+    const c2 = [t1[0] - u[0] * d * 0.33 + n[0] * P.arch * 0.6, t1[1] - u[1] * d * 0.33 + n[1] * P.arch * 0.6];
+    J.sac = sac; J.t1 = t1;
+    J.spine = [];
+    for (let i = 0; i <= 20; i++) J.spine.push(bez(sac, c1, c2, t1, i / 20));
+    // neck
+    const ba = P.ba, hd = [Math.cos(ba), Math.sin(ba)];
+    J.B = [P.bx, P.by];
+    const nc1 = [t1[0] + u[0] * 16 + n[0] * 4, t1[1] + u[1] * 16 + n[1] * 4];
+    const nc2 = [P.bx - hd[0] * 26 + hd[1] * 6, P.by - hd[1] * 26 - hd[0] * 6];
+    J.neck = [];
+    for (let i = 0; i <= 8; i++) J.neck.push(bez(t1, nc1, nc2, J.B, i / 8));
+    J.ba = ba;
+    // legs
+    const hind = (toeX, toeY, A) => {
+      const hock = [toeX - Math.sin(A) * L.mt, toeY - Math.cos(A) * L.mt];
+      const knee = ik2(J.H, hock, L.fem, L.tib, -1);
+      return { hip: J.H, knee, hock, toe: [toeX, toeY], A };
+    };
+    const fore = (toeX, toeY, A) => {
+      const wrist = [toeX - Math.sin(A) * L.mc, toeY - Math.cos(A) * L.mc];
+      const elbow = ik2(J.S, wrist, L.hum, L.rad, 1);
+      return { shoulder: J.S, elbow, wrist, toe: [toeX, toeY], A };
+    };
+    J.nh = hind(P.nhx, P.nhy, P.nhA);
+    J.fh = hind(P.fhx, P.fhy, P.fhA);
+    J.nf = fore(P.nfx, P.nfy, P.nfA);
+    J.ff = fore(P.ffx, P.ffy, P.ffA);
+    // tail, built forward from the sacrum
+    J.tail = [loc(J.H, -30, 20)];
+    let h = P.tH;
+    const N = 20;
+    for (let i = 0; i < N; i++) {
+      const f = i / (N - 1), seg = lerp(11.5, 6.4, f);
+      h = P.tH + P.tC * f + P.tW * Math.sin(P.tP + f * 3.4) * (0.3 + f) + P.tL * f * f * f;
+      const p = J.tail[J.tail.length - 1];
+      J.tail.push([p[0] + Math.cos(h) * seg, p[1] + Math.sin(h) * seg]);
+    }
+    // skull-space to frame
+    const hs = 1;
+    J.toFrame = (x, y) => [P.bx + (hd[0] * x - hd[1] * y) * hs, P.by + (hd[1] * x + hd[0] * y) * hs];
+    J.ear = J.toFrame(4, -14);
+    J.eye = J.toFrame(34, -6);
+    J.mouth = J.toFrame(56, 8);
+    J.P = P;
+    return J;
+  }
+
+  // ---------------------------------------------------------------- soft tissue: the same outline is flesh on film and fur in daylight
+  function softPaths(J) {
+    const P = J.P, near = new Path2D(), far = new Path2D();
+    const offs = [6, -5];
+    const leg = (path, jt, o, kind) => {
+      const off = (p) => [p[0] + o[0], p[1] + o[1]];
+      if (kind === 'hind') {
+        capsule(path, off(jt.hip), off(jt.knee), 27 * P.slim, 15 * P.slim);
+        capsule(path, off(jt.knee), off(jt.hock), 14, 6.5);
+        capsule(path, off(jt.hock), off(jt.toe), 6, 7);
+        const t = off(jt.toe);
+        addPoly(path, catmull([[t[0] - 9, t[1] - 5], [t[0] + 5, t[1] - 7], [t[0] + 14, t[1] - 2], [t[0] + 10, t[1] + 1], [t[0] - 8, t[1] + 1]], 3));
+      } else {
+        capsule(path, off(jt.shoulder), off(jt.elbow), 22 * P.slim, 13 * P.slim);
+        capsule(path, off(jt.elbow), off(jt.wrist), 11.5, 6.5);
+        capsule(path, off(jt.wrist), off(jt.toe), 6.5, 7);
+        const t = off(jt.toe);
+        addPoly(path, catmull([[t[0] - 8, t[1] - 5], [t[0] + 5, t[1] - 7], [t[0] + 13, t[1] - 2], [t[0] + 9, t[1] + 1], [t[0] - 8, t[1] + 1]], 3));
+      }
+    };
+    leg(far, J.fh, offs, 'hind');
+    leg(far, J.ff, offs, 'fore');
+    leg(near, J.nh, [0, 0], 'hind');
+    leg(near, J.nf, [0, 0], 'fore');
+    const { loc, H } = J, D = J.d;
+    const dp = P.slim;
+    addPoly(near, catmull([
+      loc(H, -38, 2), loc(H, -30, 26 * dp), loc(H, -4, (42 + P.arch * 0.5) * dp), loc(H, D * 0.36, (44 + P.arch) * dp), loc(H, D * 0.68, (46 + P.arch * 0.7) * dp), loc(H, D * 0.94, 56 * dp),
+      loc(H, D + 14, 44 * dp), loc(H, D + 28, 8), loc(H, D + 16, -28 * dp), loc(H, D * 0.78, -48 * dp), loc(H, D * 0.42, -38 * dp), loc(H, D * 0.2, -28 * dp), loc(H, 2, -30 * dp), loc(H, -28, -24 * dp)
+    ], 5));
+    // neck, one tapered sleeve from the shoulders to the skull
+    const neckA = loc(J.S, 0, 22), neckB = J.toFrame(-2, 4);
+    capsule(near, neckA, neckB, 36, 21);
+    // head
+    const f = J.toFrame;
+    addPoly(near, catmull([f(-12, -8), f(2, -24), f(18, -31), f(32, -30), f(44, -22), f(56, -11), f(65, -5), f(67, 2), f(62, 11), f(56, 20), f(44, 25), f(22, 26), f(4, 22), f(-10, 12)], 4));
+    const earTilt = P.ear * 8;
+    addPoly(near, [f(1, -20), f(-5 - earTilt, -58), f(4 - earTilt, -54), f(24, -29)]);
+    addPoly(far, [f(14, -26), f(14 - earTilt, -60), f(22 - earTilt, -56), f(36, -28)]);
+    // tail, tapering
+    const tl = J.tail;
+    for (let i = 0; i < tl.length - 1; i++) capsule(near, tl[i], tl[i + 1], lerp(8.5, 3.4, i / tl.length), lerp(8.5, 3.4, (i + 1) / tl.length));
+    return { near, far };
+  }
+
+  // ---------------------------------------------------------------- the skeleton on film
+  function skullOnFilm(c, J) {
+    const P = J.P;
+    c.save();
+    c.translate(P.bx, P.by);
+    c.rotate(P.ba);
+    const cran = catmull([[-3, -6], [2, -18], [14, -25], [28, -25], [38, -18], [50, -9], [58, -3], [60, 3], [57, 7], [50, 8], [38, 10], [26, 9], [16, 10], [6, 12], [-3, 6]], 5);
+    const trace = (pts) => { c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) c.lineTo(pts[k][0], pts[k][1]); c.closePath(); };
+    trace(cran);
+    c.fillStyle = INK(0.3);
+    c.fill();
+    c.strokeStyle = INK(0.75);
+    c.lineWidth = 1.5;
+    c.stroke();
+    // braincase, denser wall
+    c.beginPath();
+    c.ellipse(13, -9, 13, 11, -0.15, 0, TAU);
+    c.strokeStyle = INK(0.2);
+    c.lineWidth = 1;
+    c.stroke();
+    // orbit: mostly air and an eye, so it reads dark with a hard rim
+    c.save();
+    c.globalCompositeOperation = 'source-over';
+    c.beginPath();
+    c.ellipse(34, -7, 11.5, 10.5, 0.1, 0, TAU);
+    c.fillStyle = 'rgba(4,7,14,0.72)';
+    c.fill();
+    c.restore();
+    c.beginPath();
+    c.ellipse(34, -7, 11.5, 10.5, 0.1, 0, TAU);
+    c.strokeStyle = INK(0.8);
+    c.lineWidth = 1.4;
+    c.stroke();
+    c.beginPath();
+    c.ellipse(35, -7, 7, 6.6, 0, 0, TAU);
+    c.strokeStyle = INK(0.14);
+    c.lineWidth = 0.9;
+    c.stroke();
+    // nasal chamber and scrolls
+    c.beginPath();
+    c.ellipse(52, -2, 4.5, 3.4, 0.4, 0, TAU);
+    c.fillStyle = 'rgba(4,7,14,0.5)';
+    c.globalCompositeOperation = 'source-over';
+    c.fill();
+    c.globalCompositeOperation = 'lighter';
+    c.strokeStyle = INK(0.4);
+    c.lineWidth = 0.8;
+    c.stroke();
+    // zygomatic arch
+    c.strokeStyle = INK(0.75);
+    c.lineWidth = 2.2;
+    c.beginPath();
+    c.moveTo(44, 5);
+    c.quadraticCurveTo(28, 11, 12, 3);
+    c.stroke();
+    // tympanic bulla: dense, and where the microphone goes
+    c.beginPath();
+    c.ellipse(7, 9, 7, 5.4, 0.2, 0, TAU);
+    c.fillStyle = INK(0.32);
+    c.fill();
+    c.strokeStyle = INK(0.7);
+    c.lineWidth = 1.1;
+    c.stroke();
+    // upper teeth: the densest bone there is
+    const tooth = (pts, a = 0.95) => { c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) c.lineTo(pts[k][0], pts[k][1]); c.closePath(); c.fillStyle = INK(a); c.fill(); };
+    tooth([[50.5, 8], [46, 8.6], [47, 23], [49.5, 15]]);
+    for (const [x, y, h2] of [[40, 10, 6], [34, 10, 8], [27, 9.5, 8], [21, 9.5, 5]]) tooth([[x - 2.8, y], [x + 2.8, y], [x, y + h2]], 0.85);
+    for (const x of [53, 55, 57]) tooth([[x - 0.9, 7], [x + 0.9, 7], [x, 10]], 0.8);
+    // mandible, on its hinge
+    c.save();
+    c.translate(14, 7);
+    c.rotate(P.jaw * 0.5);
+    const mand = catmull([[-4, -1], [0, -9], [6, -3], [12, 6], [26, 6], [38, 6], [43, 3], [43, 8], [38, 12], [24, 13], [8, 13], [-2, 9]], 4);
+    trace(mand);
+    c.fillStyle = INK(0.26);
+    c.fill();
+    c.strokeStyle = INK(0.72);
+    c.lineWidth = 1.25;
+    c.stroke();
+    tooth([[37, 6], [41.5, 4.5], [39, -7]]);
+    for (const [x, h2] of [[30, 5], [24, 6], [18, 6]]) tooth([[x - 2.4, 6], [x + 2.4, 6], [x, 6 - h2]], 0.85);
+    c.restore();
+    c.restore();
+  }
+  function vertebra(c, p, q, h, sp, spA, i) {
+    const a = Math.atan2(q[1] - p[1], q[0] - p[0]), L2 = Math.hypot(q[0] - p[0], q[1] - p[1]) * 0.86;
+    c.save();
+    c.translate((p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
+    c.rotate(a);
+    c.beginPath();
+    c.moveTo(-L2 / 2, -h); c.lineTo(L2 / 2, -h); c.lineTo(L2 / 2 - 0.6, h); c.lineTo(-L2 / 2 + 0.6, h); c.closePath();
+    c.fillStyle = INK(0.26 * i);
+    c.fill();
+    c.strokeStyle = INK(0.68 * i);
+    c.lineWidth = 1;
+    c.stroke();
+    // spinous process
+    if (sp) {
+      c.strokeStyle = INK(0.62 * i);
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(0, -h);
+      c.lineTo(Math.sin(spA) * sp, -h - Math.cos(spA) * sp);
+      c.stroke();
+    }
+    c.restore();
+  }
+  function paw(c, wrist, toe, A, i, curl = 0) {
+    const ax = toe[0] - wrist[0], ay = toe[1] - wrist[1], len = Math.hypot(ax, ay) || 1;
+    const ux = ax / len, uy = ay / len, nx = -uy, ny = ux;
+    for (let k = -1.5; k <= 1.5; k += 1) {
+      const b0 = [wrist[0] + nx * k * 1.7, wrist[1] + ny * k * 1.7];
+      const b1 = [toe[0] + nx * k * 2.4, toe[1] + ny * k * 2.4 - 1];
+      line(c, [b0, b1], 0.6 * i, 1.25);
+      const t1 = [b1[0] + 5.4, b1[1] - 1 + curl * 2.6];
+      const t2 = [t1[0] + 4.2, t1[1] + 0.2 + curl * 2.2];
+      line(c, [b1, t1], 0.65 * i, 1.2);
+      line(c, [t1, t2], 0.62 * i, 1.1);
+      // claw, retracted and dense
+      line(c, [t2, [t2[0] + 2.2, t2[1] - 2.4]], 0.9 * i, 1.1);
+      disc(c, b1[0], b1[1], 1.1, 0.5 * i);
+    }
+  }
+  function hindBones(c, jt, i, o = [0, 0]) {
+    c.save();
+    c.translate(o[0], o[1]);
+    bone(c, jt.hip[0], jt.hip[1], jt.knee[0], jt.knee[1], 6.5, 3.6, 6, i);
+    disc(c, jt.knee[0] + 3.5, jt.knee[1] - 2, 3.1, 0.5 * i, 0.5 * i);  // patella
+    bone(c, jt.knee[0], jt.knee[1], jt.hock[0], jt.hock[1], 5.4, 2.8, 4.2, i);
+    // fibula
+    const dx = jt.hock[0] - jt.knee[0], dy = jt.hock[1] - jt.knee[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    line(c, [[jt.knee[0] - nx * 3.8 + dx * 0.08, jt.knee[1] - ny * 3.8 + dy * 0.08], [jt.hock[0] - nx * 3.6 - dx * 0.05, jt.hock[1] - ny * 3.6 - dy * 0.05]], 0.5 * i, 1);
+    // calcaneus spur, the point of the hock
+    const a = Math.atan2(dy, dx);
+    bone(c, jt.hock[0], jt.hock[1], jt.hock[0] - Math.sin(a + 0.25) * -12 - 8, jt.hock[1] + Math.cos(a + 0.25) * -12, 3.4, 2, 3, i * 0.85);
+    for (let k = 0; k < 3; k++) disc(c, jt.hock[0] + k * 2.2 - 1, jt.hock[1] + 3 + k * 2.6, 2.4, 0.3 * i, 0.5 * i, 0.8);
+    paw(c, [jt.hock[0], jt.hock[1] + 7], jt.toe, jt.A, i, jt.toe[1] < G - 3 ? 1 : 0);
+    c.restore();
+  }
+  function foreBones(c, jt, i, o = [0, 0]) {
+    c.save();
+    c.translate(o[0], o[1]);
+    bone(c, jt.shoulder[0], jt.shoulder[1], jt.elbow[0], jt.elbow[1], 5.8, 3.2, 5, i);
+    const dx = jt.wrist[0] - jt.elbow[0], dy = jt.wrist[1] - jt.elbow[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+    bone(c, jt.elbow[0] + nx * 2.2, jt.elbow[1] + ny * 2.2, jt.wrist[0] + nx * 1.7, jt.wrist[1] + ny * 1.7, 3, 1.8, 3, i);
+    bone(c, jt.elbow[0] - nx * 2.2, jt.elbow[1] - ny * 2.2, jt.wrist[0] - nx * 1.7, jt.wrist[1] - ny * 1.7, 3, 1.7, 2.6, i);
+    // olecranon
+    line(c, [jt.elbow, [jt.elbow[0] - dx / l * 10 + nx * 3, jt.elbow[1] - dy / l * 10 + ny * 3]], 0.75 * i, 3);
+    for (let k = 0; k < 3; k++) disc(c, jt.wrist[0] + k * 2.1 - 2, jt.wrist[1] + 1.2 + (k % 2) * 2, 2.2, 0.3 * i, 0.5 * i, 0.8);
+    paw(c, [jt.wrist[0], jt.wrist[1] + 4], jt.toe, jt.A, i, jt.toe[1] < G - 3 ? 1 : 0);
+    c.restore();
+  }
+  function skeletonOnFilm(c, J, heartK) {
+    const P = J.P, { loc, H, S } = J, D = J.d;
+    // flesh
+    const soft = softPaths(J);
+    c.fillStyle = 'rgba(138,168,210,0.11)';
+    c.fill(soft.far);
+    c.fillStyle = 'rgba(138,168,210,0.24)';
+    c.fill(soft.near);
+    c.strokeStyle = 'rgba(170,198,236,0.2)';
+    c.lineWidth = 1;
+    c.stroke(soft.near);
+    // ears and whiskers: cartilage and hair barely mark a plate, but a cat is not a cat without them
+    {
+      const f = J.toFrame, e2 = P.ear * 8;
+      c.strokeStyle = 'rgba(190,214,245,0.5)';
+      c.lineWidth = 1.2;
+      c.beginPath();
+      for (const pts of [[f(1, -20), f(-5 - e2, -58), f(4 - e2, -54), f(24, -29)], [f(14, -26), f(14 - e2, -60), f(22 - e2, -56), f(36, -28)]]) {
+        pts.forEach((q, k) => (k ? c.lineTo(q[0], q[1]) : c.moveTo(q[0], q[1])));
+      }
+      c.stroke();
+      c.strokeStyle = 'rgba(214,232,255,0.34)';
+      c.lineWidth = 0.8;
+      c.beginPath();
+      for (const [dx, dy] of [[36, -8], [41, 3], [36, 13]]) {
+        const a = f(56, 6), b = f(56 + dx, 6 + dy);
+        c.moveTo(a[0], a[1]);
+        c.lineTo(b[0], b[1]);
+      }
+      c.stroke();
+    }
+    // lungs: air, so the film darkens there; a trachea running into them
+    c.save();
+    c.globalCompositeOperation = 'source-over';
+    const lung = catmull([loc(H, D * 0.52, 30), loc(H, D * 0.9, 34), loc(H, D * 1.02, 8), loc(H, D * 0.88, -30), loc(H, D * 0.56, -22)], 6);
+    c.beginPath();
+    lung.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.closePath();
+    c.fillStyle = 'rgba(3,6,12,0.34)';
+    c.fill();
+    const tr0 = J.toFrame(6, 18), tr1 = loc(S, 6, 2);
+    c.strokeStyle = 'rgba(3,6,12,0.6)';
+    c.lineWidth = 7;
+    c.beginPath();
+    c.moveTo(tr0[0], tr0[1]);
+    c.quadraticCurveTo(J.neck[4][0] + 10, J.neck[4][1] + 26, tr1[0], tr1[1]);
+    c.stroke();
+    c.restore();
+    // heart, on the kick
+    const hc = loc(S, -8 - D * 0.03, -20), hr = 13 + heartK * 4;
+    c.beginPath();
+    c.ellipse(hc[0], hc[1], hr * 1.05, hr * 1.2, 0.5, 0, TAU);
+    c.fillStyle = INK(0.13 + heartK * 0.2);
+    c.fill();
+    c.strokeStyle = INK(0.22 + heartK * 0.25);
+    c.lineWidth = 1;
+    c.stroke();
+    // stomach, with a gas bubble and a scribble of gut below it
+    const st = loc(H, D * 0.42, -14);
+    c.beginPath();
+    c.ellipse(st[0], st[1], 21, 15, Math.atan2(J.u[1], J.u[0]) + 0.3, 0, TAU);
+    c.fillStyle = INK(0.1);
+    c.fill();
+    c.strokeStyle = INK(0.18);
+    c.lineWidth = 1;
+    c.stroke();
+    const gut = [];
+    for (let k = 0; k <= 22; k++) {
+      const q = k / 22;
+      gut.push(loc(H, D * (0.08 + q * 0.26) + Math.sin(q * 19) * 6, -14 + Math.cos(q * 13) * 7 - q * 4));
+    }
+    line(c, gut, 0.11, 3.4);
+    line(c, gut, 0.09, 1);
+    J.stomach = st;
+
+    // far side: limbs and ribs at half density
+    hindBones(c, J.fh, 0.5, [6, -5]);
+    foreBones(c, J.ff, 0.5, [6, -5]);
+    // ribs
+    const t0 = 8;  // first thoracic station in the 21-point spine
+    const ventral = (q) => [lerp(loc(S, 16, -36)[0], loc(H, D * 0.5, -36)[0], q), lerp(loc(S, 16, -36)[1], loc(H, D * 0.5, -36)[1], q)];
+    const rib = (i2, o, alpha, w) => {
+      const v = J.spine[20 - i2 % 21], q = i2 / 12, end = ventral(q), fl = i2 >= 10 ? 0.66 : 1;
+      const e2 = [lerp(v[0], end[0], fl), lerp(v[1], end[1], fl)];
+      const ctrl = [lerp(v[0], e2[0], 0.55) - J.u[0] * (14 + i2 * 0.9), lerp(v[1], e2[1], 0.55) - J.u[1] * (14 + i2 * 0.9)];
+      c.strokeStyle = INK(alpha);
+      c.lineWidth = w;
+      c.beginPath();
+      c.moveTo(v[0] + o[0], v[1] + o[1]);
+      c.quadraticCurveTo(ctrl[0] + o[0], ctrl[1] + o[1], e2[0] + o[0], e2[1] + o[1]);
+      c.stroke();
+    };
+    for (let i2 = 0; i2 < 13; i2++) rib(i2, [3, 1], 0.3, 1.8);
+    for (let i2 = 0; i2 < 13; i2++) {
+      rib(i2, [0, 0], 0.26, 3.1);
+      rib(i2, [0, 0], 0.5, 1.1);
+    }
+    // sternum, a row of little blocks
+    for (let k = 0; k < 8; k++) {
+      const a = ventral(k / 8), b = ventral((k + 0.82) / 8);
+      line(c, [a, b], 0.5, 3.2);
+    }
+    // scapula, turning with the foreleg
+    const swing = (J.nf.toe[0] - S[0]) * 0.18;
+    const sp = loc(S, -22 - swing, 56);
+    const sp1 = loc(sp, -14, -2), sp2 = loc(sp, 14, 2);
+    c.beginPath();
+    c.moveTo(S[0], S[1]); c.lineTo(sp1[0], sp1[1]); c.lineTo(sp2[0], sp2[1]); c.closePath();
+    c.fillStyle = INK(0.14);
+    c.fill();
+    c.strokeStyle = INK(0.44);
+    c.lineWidth = 1;
+    c.stroke();
+    line(c, [S, sp], 0.6, 1.8);
+    // the column: 7 lumbar, 13 thoracic, then 7 cervical
+    for (let k = 0; k < 20; k++) {
+      const lum = k < 7;
+      vertebra(c, J.spine[k], J.spine[k + 1], lum ? 5.2 : 4.3, lum ? 7.5 : lerp(9, 16, (k - 7) / 13), lum ? 0.6 : -0.55, 0.92);
+    }
+    for (let k = 0; k < 8; k++) vertebra(c, J.neck[k], J.neck[k + 1], k === 0 ? 4 : 4.4, k < 2 ? 5 : 3, 0, 0.88);
+    // atlas wing
+    const wing = J.neck[7];
+    disc(c, wing[0], wing[1], 4.5, 0.2, 0.45);
+    // pelvis
+    const pel = [[24, 28], [10, 33], [-6, 16], [-32, -4], [-26, -18], [-6, -14], [8, -14], [12, -2], [20, 14]].map(([a, b]) => loc(H, a, b));
+    c.beginPath();
+    pel.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.closePath();
+    c.fillStyle = INK(0.22);
+    c.fill();
+    c.strokeStyle = INK(0.68);
+    c.lineWidth = 1.25;
+    c.stroke();
+    c.save();
+    c.globalCompositeOperation = 'source-over';
+    const fo = loc(H, -11, -8);
+    c.beginPath();
+    c.ellipse(fo[0], fo[1], 7.5, 4.5, Math.atan2(J.u[1], J.u[0]), 0, TAU);
+    c.fillStyle = 'rgba(4,7,14,0.5)';
+    c.fill();
+    c.restore();
+    disc(c, H[0], H[1], 6.6, 0.14, 0.62, 1.4);
+    // sacrum and tail: twenty small bones
+    const tl = J.tail;
+    for (let k = 0; k < tl.length - 1; k++) {
+      vertebra(c, tl[k], tl[k + 1], lerp(4, 1.5, k / tl.length), 0, 0, 0.92);
+    }
+    // near limbs at full density
+    hindBones(c, J.nh, 1);
+    foreBones(c, J.nf, 1);
+    skullOnFilm(c, J);
+  }
+  // The hardware: metal stops everything, so it is the whitest thing on the plate.
+  function wirePaths(J) {
+    const f = J.toFrame;
+    const tx = f(-15, -9), mic = f(4, -13);
+    const raw = [tx];
+    for (let k = J.neck.length - 2; k >= 0; k -= 2) raw.push(J.loc(J.neck[k], 0, lerp(8, 9, k / 8)));
+    for (let k = 19; k >= 1; k -= 3) raw.push(J.loc(J.spine[k], 0, lerp(13, 8, k / 19) - (1 - J.P.slim) * 44));
+    raw.push(J.loc(J.H, -26, 27 * J.P.slim));
+    for (let k = 2; k < J.tail.length; k += 3) { const p = J.tail[k], q = J.tail[k - 1], a = Math.atan2(p[1] - q[1], p[0] - q[0]), off = lerp(7, 3, k / J.tail.length); raw.push([p[0] + Math.sin(a) * off, p[1] - Math.cos(a) * off]); }
+    const ant = catmull(raw, 3, false);
+    // the hunger wire: skull, down the throat, past the heart, into the stomach
+    const hungry = [tx];
+    const chest = J.loc(J.S, -D0(J) * 0.05, -2);
+    for (let k = 1; k <= 18; k++) {
+      const q = k / 18;
+      hungry.push(bez(tx, f(-22, 26), chest, J.loc(J.H, J.d * 0.44, -10), q));
+    }
+    return { tx, mic, ant, hungry };
+  }
+  function D0(J) { return J.d; }
+  function hardwareOnFilm(c, J, W_, pulse, dead) {
+    c.save();
+    // antenna
+    c.strokeStyle = METAL(0.12);
+    c.lineWidth = 4;
+    c.beginPath();
+    W_.ant.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.stroke();
+    c.strokeStyle = METAL(0.92);
+    c.lineWidth = 1.1;
+    c.stroke();
+    // the hunger wire
+    c.strokeStyle = METAL(0.12 * dead);
+    c.lineWidth = 4;
+    c.beginPath();
+    W_.hungry.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.stroke();
+    c.strokeStyle = METAL(0.85 * dead);
+    c.lineWidth = 1.05;
+    c.stroke();
+    const el = W_.hungry[W_.hungry.length - 1];
+    c.beginPath();
+    c.arc(el[0], el[1], 3.4, 0, TAU);
+    c.fillStyle = METAL(0.9 * dead);
+    c.fill();
+    // ear-canal microphone and its lead
+    c.strokeStyle = METAL(0.85);
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(W_.mic[0], W_.mic[1]);
+    c.lineTo(W_.tx[0], W_.tx[1]);
+    c.stroke();
+    c.save();
+    c.translate(W_.mic[0], W_.mic[1]);
+    c.rotate(J.ba - 0.9);
+    c.fillStyle = METAL(0.14);
+    c.fillRect(-7, -5, 14, 10);
+    c.fillStyle = METAL(1);
+    c.fillRect(-4.5, -2.6, 9, 5.2);
+    c.restore();
+    // transmitter can
+    c.save();
+    c.translate(W_.tx[0], W_.tx[1]);
+    c.rotate(J.ba);
+    c.fillStyle = METAL(0.16);
+    c.fillRect(-12, -9, 24, 18);
+    c.fillStyle = METAL(0.92);
+    c.fillRect(-9, -6, 18, 12);
+    c.globalCompositeOperation = 'source-over';
+    c.fillStyle = 'rgba(40,60,90,0.8)';
+    c.fillRect(-6, -3, 3, 6);
+    c.fillRect(-1, -3, 3, 6);
+    c.fillRect(4, -3, 2, 6);
+    c.restore();
+    // batteries, sewn into the flank
+    const a = Math.atan2(J.u[1], J.u[0]);
+    const bat = J.loc(J.H, J.d * 0.2, 2);
+    c.save();
+    c.translate(bat[0], bat[1]);
+    c.rotate(a);
+    for (const off of [-13, 13]) {
+      c.fillStyle = METAL(0.16);
+      c.fillRect(off - 13, -8.5, 26, 17);
+      c.fillStyle = METAL(0.72);
+      c.fillRect(off - 11, -6, 22, 12);
+      c.fillStyle = METAL(1);
+      c.fillRect(off + 11, -2.4, 2, 4.8);
+    }
+    c.restore();
+    // the override travelling down the throat
+    if (pulse >= 0 && pulse <= 1) {
+      const q = pulse * (W_.hungry.length - 1), k = Math.floor(q), f2 = q - k;
+      const p0 = W_.hungry[k], p1 = W_.hungry[Math.min(W_.hungry.length - 1, k + 1)];
+      const x = lerp(p0[0], p1[0], f2), y = lerp(p0[1], p1[1], f2);
+      const g = c.createRadialGradient(x, y, 0, x, y, 22);
+      g.addColorStop(0, METAL(1));
+      g.addColorStop(0.28, METAL(0.5));
+      g.addColorStop(1, METAL(0));
+      c.fillStyle = g;
+      c.fillRect(x - 22, y - 22, 44, 44);
+    }
+    c.restore();
+  }
+  // In daylight the cat is one flat black shape with its eye open
+  function catInDaylight(c, J, wire = true, wireK = 1) {
+    const soft = softPaths(J);
+    c.fillStyle = PAL.farcat;
+    c.fill(soft.far);
+    c.fillStyle = PAL.black;
+    c.fill(soft.near);
+    const f = J.toFrame;
+    // eye: amber almond with a slit
+    const e = f(36, -9);
+    c.save();
+    c.translate(e[0], e[1]);
+    c.rotate(J.ba - 0.14);
+    c.beginPath();
+    c.moveTo(-12.5, 0.8);
+    c.quadraticCurveTo(0, -10.5, 12.5, -1.4);
+    c.quadraticCurveTo(0, 9, -12.5, 0.8);
+    c.closePath();
+    c.fillStyle = PAL.lemon;
+    c.fill();
+    c.beginPath();
+    c.ellipse(1, -0.6, 3.3, 6.8, 0, 0, TAU);
+    c.fillStyle = PAL.black;
+    c.fill();
+    c.restore();
+    // whiskers
+    c.strokeStyle = 'rgba(244,234,208,0.8)';
+    c.lineWidth = 1;
+    c.beginPath();
+    for (const [dx, dy] of [[34, -6], [38, 4], [34, 13]]) {
+      const a = f(58, 7), b = f(58 + dx, 7 + dy);
+      c.moveTo(a[0], a[1]);
+      c.lineTo(b[0], b[1]);
+    }
+    c.stroke();
+    if (wire) {
+      const w = wirePaths(J);
+      c.strokeStyle = `rgba(244,234,208,${0.95 * wireK})`;
+      c.lineWidth = 1.5;
+      c.beginPath();
+      w.ant.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+      c.stroke();
+    }
+  }
+
+  // ---------------------------------------------------------------- the street on film
+  function sprite(w, h, draw) {
+    const s = mk(w, h), c = s.getContext('2d');
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    draw(c, w, h);
+    return s;
+  }
+  function rbox(c, x, y, w, h, r, fa, sa, lw = 1) {
+    c.beginPath();
+    c.roundRect(x, y, w, h, r);
+    if (fa) { c.fillStyle = INK(fa); c.fill(); }
+    if (sa) { c.strokeStyle = INK(sa); c.lineWidth = lw; c.stroke(); }
+  }
+  function wheel(c, x, y, r, i = 1) {
+    disc(c, x, y, r, 0.045 * i, 0.26 * i, 7);
+    disc(c, x, y, r * 0.62, 0.06 * i, 0.7 * i, 1.5);
+    disc(c, x, y, r * 0.3, 0.3 * i, 0.72 * i, 1.2);
+    for (let k = 0; k < 5; k++) { const a = k / 5 * TAU; disc(c, x + Math.cos(a) * r * 0.46, y + Math.sin(a) * r * 0.46, 1.8, 0.95 * i); }
+  }
+  function zigzag(c, x0, y0, x1, y1, n, amp, a, w = 1) {
+    const pts = [];
+    for (let k = 0; k <= n; k++) { const q = k / n; pts.push([lerp(x0, x1, q) + (k % 2 ? amp : -amp), lerp(y0, y1, q)]); }
+    line(c, pts, a, w);
+  }
+  function profileBones(c, x, y, s, headset) {
+    // a small seated operator in profile
+    const sp = [];
+    for (let k = 0; k < 9; k++) sp.push([x - k * 0.7 * s, y - k * 8 * s]);
+    for (let k = 0; k < 8; k++) rbox(c, sp[k][0] - 3 * s, sp[k][1] - 6 * s, 6 * s, 6 * s, 1, 0.2, 0.5, 0.8);
+    for (let k = 3; k < 9; k++) {
+      c.strokeStyle = INK(0.4);
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(sp[k][0], sp[k][1]);
+      c.quadraticCurveTo(sp[k][0] + 22 * s, sp[k][1] + 2 * s, sp[k][0] + 18 * s, sp[k][1] + 16 * s);
+      c.stroke();
+    }
+    const hx = sp[8][0] + 2 * s, hy = sp[8][1] - 16 * s;
+    disc(c, hx, hy, 11 * s, 0.2, 0.7, 1.2);
+    rbox(c, hx + 6 * s, hy + 3 * s, 9 * s, 7 * s, 2, 0.2, 0.7, 0.9);
+    disc(c, hx + 6 * s, hy - 2 * s, 3 * s, 0, 0.5, 0.8);
+    if (headset) {
+      c.strokeStyle = METAL(0.9);
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.arc(hx, hy, 13 * s, -Math.PI * 0.95, -0.2);
+      c.stroke();
+      c.fillStyle = METAL(0.9);
+      c.fillRect(hx - 5 * s, hy - 4 * s, 7 * s, 9 * s);
+    }
+    bone(c, sp[6][0] + 4 * s, sp[6][1], sp[6][0] + 22 * s, sp[6][1] + 22 * s, 2.5, 1.4, 2.2, 0.8);
+    bone(c, sp[6][0] + 22 * s, sp[6][1] + 22 * s, sp[6][0] + 44 * s, sp[6][1] + 10 * s, 2.2, 1.2, 2, 0.8);
+    bone(c, sp[0][0], sp[0][1], sp[0][0] + 34 * s, sp[0][1] + 2 * s, 3.2, 1.8, 3, 0.8);
+    bone(c, sp[0][0] + 34 * s, sp[0][1] + 2 * s, sp[0][0] + 32 * s, sp[0][1] + 36 * s, 2.8, 1.5, 2.4, 0.8);
+  }
+  // the van with all those dials
+  const SPR_VAN = sprite(420, 330, (c) => {
+    const base = 300;   // wheels' ground
+    rbox(c, 20, 96, 372, 180, 18, 0.06, 0.56, 1.5);
+    for (let x = 60; x < 390; x += 36) line(c, [[x, 98], [x, 272]], 0.1, 1);
+    rbox(c, 306, 110, 68, 62, 8, 0.03, 0.55, 1.1);          // windscreen frame
+    rbox(c, 256, 112, 42, 150, 3, 0, 0.3, 1);               // door seam
+    wheel(c, 94, 270, 32);
+    wheel(c, 316, 270, 32);
+    line(c, [[94, 270], [316, 270]], 0.55, 3);
+    zigzag(c, 60, 256, 130, 256, 10, 3, 0.4, 1.1);
+    zigzag(c, 280, 256, 350, 256, 10, 3, 0.4, 1.1);
+    // engine
+    rbox(c, 300, 196, 66, 56, 5, 0.34, 0.8, 1.2);
+    for (let k = 0; k < 4; k++) disc(c, 312 + k * 14, 214, 4.4, 0.34, 0.6);
+    line(c, [[300, 240], [240, 262]], 0.5, 2.6);
+    disc(c, 292, 176, 15, 0, 0.72, 1.6);                    // steering wheel
+    line(c, [[292, 176], [316, 222]], 0.5, 2);
+    zigzag(c, 244, 160, 244, 244, 9, 4, 0.34, 1);           // seat springs
+    // the rack: rows of valves
+    rbox(c, 40, 112, 76, 136, 3, 0.1, 0.64, 1.2);
+    for (let r = 0; r < 5; r++) {
+      line(c, [[42, 136 + r * 25], [114, 136 + r * 25]], 0.4, 1);
+      for (let k = 0; k < 5; k++) { rbox(c, 48 + k * 13, 121 + r * 25, 6.5, 13, 3, 0.4, 0.82, 0.8); }
+    }
+    // the tape machine
+    rbox(c, 122, 112, 96, 66, 3, 0.1, 0.64, 1.2);
+    for (const x of [146, 194]) {
+      disc(c, x, 138, 19, 0.08, 0.72, 1.4);
+      disc(c, x, 138, 11, 0.16, 0.4, 2.6);
+      disc(c, x, 138, 2.6, 0.9);
+      for (let k = 0; k < 3; k++) { const a = k / 3 * TAU + 0.3; line(c, [[x + Math.cos(a) * 4, 138 + Math.sin(a) * 4], [x + Math.cos(a) * 13, 138 + Math.sin(a) * 13]], 0.8, 1.2); }
+    }
+    line(c, [[146, 157], [194, 157]], 0.6, 1);
+    // dials
+    for (let k = 0; k < 3; k++) {
+      c.strokeStyle = METAL(0.8);
+      c.lineWidth = 1;
+      c.beginPath();
+      c.arc(136 + k * 36, 188, 12, Math.PI, 0);
+      c.stroke();
+      line(c, [[136 + k * 36, 188], [136 + k * 36 + 6, 180]], 0.95, 1.1);
+    }
+    profileBones(c, 170, 250, 0.72, true);
+    profileBones(c, 240, 252, 0.72, true);
+    // whip antenna
+    c.strokeStyle = METAL(0.8);
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.moveTo(150, 96);
+    c.quadraticCurveTo(146, 40, 130, 6);
+    c.stroke();
+    rbox(c, 142, 88, 16, 10, 2, 0.6, 0.9, 1);
+    void base;
+  });
+  const SPR_CAR = sprite(470, 240, (c) => {
+    const pts = catmull([[14, 164], [22, 130], [96, 118], [154, 74], [280, 72], [340, 118], [440, 128], [458, 146], [458, 172], [14, 176]], 6);
+    c.beginPath();
+    pts.forEach((p, k) => (k ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])));
+    c.closePath();
+    c.fillStyle = INK(0.07);
+    c.fill();
+    c.strokeStyle = INK(0.52);
+    c.lineWidth = 1.4;
+    c.stroke();
+    wheel(c, 104, 176, 31);
+    wheel(c, 368, 176, 31);
+    line(c, [[104, 176], [368, 176]], 0.55, 3);
+    rbox(c, 362, 122, 74, 40, 4, 0.34, 0.8, 1.2);
+    for (let k = 0; k < 4; k++) disc(c, 374 + k * 15, 136, 4.2, 0.34, 0.6);
+    line(c, [[40, 172], [150, 178], [362, 162]], 0.42, 2.2);
+    zigzag(c, 72, 164, 140, 164, 11, 3, 0.4, 1);
+    zigzag(c, 332, 164, 400, 164, 11, 3, 0.4, 1);
+    line(c, [[184, 76], [172, 120]], 0.4, 1.4);
+    line(c, [[250, 74], [274, 120]], 0.4, 1.4);
+    zigzag(c, 212, 100, 212, 158, 7, 4, 0.34, 1);
+    zigzag(c, 130, 110, 130, 158, 7, 4, 0.34, 1);
+    disc(c, 282, 124, 12, 0, 0.72, 1.4);
+    profileBones(c, 240, 160, 0.74, false);
+    // a suitcase full of nothing on the back seat, its locks the only thing you can read
+    rbox(c, 150, 118, 46, 32, 3, 0.05, 0.3, 1);
+    disc(c, 160, 118, 2, 0.95);
+    disc(c, 186, 118, 2, 0.95);
+  });
+  const SPR_LAMP = sprite(170, 480, (c) => {
+    line(c, [[56, 470], [62, 66]], 0.7, 3.6);
+    line(c, [[56, 470], [62, 66]], 0.3, 7);
+    rbox(c, 40, 430, 34, 40, 4, 0.2, 0.7, 1.3);
+    for (let k = 0; k < 5; k++) line(c, [[44, 438 + k * 7], [70, 438 + k * 7]], 0.3, 1);
+    c.strokeStyle = INK(0.75);
+    c.lineWidth = 3;
+    c.beginPath();
+    c.moveTo(62, 66);
+    c.quadraticCurveTo(66, 26, 124, 34);
+    c.stroke();
+    c.beginPath();
+    c.moveTo(106, 34);
+    c.lineTo(142, 34);
+    c.lineTo(136, 54);
+    c.lineTo(112, 54);
+    c.closePath();
+    c.fillStyle = INK(0.1);
+    c.fill();
+    c.lineWidth = 1.2;
+    c.stroke();
+    disc(c, 124, 62, 11, 0.08, 0.5, 1);
+    zigzag(c, 118, 62, 130, 62, 7, 2.4, 1, 1);
+    line(c, [[56, 470], [52, 480]], 0.5, 3);
+  });
+  const SPR_FENCE = sprite(120, 170, (c) => {
+    for (const y of [36, 128]) line(c, [[0, y], [120, y]], 0.62, 2.6);
+    for (let x = 10; x < 120; x += 20) {
+      line(c, [[x, 26], [x, 168]], 0.68, 1.8);
+      c.beginPath();
+      c.moveTo(x, 8); c.lineTo(x + 3.6, 26); c.lineTo(x - 3.6, 26); c.closePath();
+      c.fillStyle = INK(0.85);
+      c.fill();
+    }
+  });
+  const SPR_BOX = sprite(110, 170, (c) => {
+    c.beginPath();
+    c.moveTo(14, 140); c.lineTo(14, 44); c.quadraticCurveTo(55, 4, 96, 44); c.lineTo(96, 140); c.closePath();
+    c.fillStyle = INK(0.08);
+    c.fill();
+    c.strokeStyle = INK(0.68);
+    c.lineWidth = 1.5;
+    c.stroke();
+    rbox(c, 26, 50, 58, 16, 2, 0.1, 0.6, 1);
+    const r = rng(77);
+    for (let k = 0; k < 32; k++) {
+      c.save();
+      c.translate(26 + r() * 58, 100 + r() * 36);
+      c.rotate((r() - 0.5) * 1.3);
+      rbox(c, -11, -6, 22, 12, 1, 0.04, 0.3, 0.7);
+      c.restore();
+    }
+    for (const x of [18, 88]) line(c, [[x, 140], [x, 166]], 0.68, 3);
+  });
+  const SPR_HYDRANT = sprite(90, 120, (c) => {
+    rbox(c, 26, 28, 38, 82, 6, 0.3, 0.72, 1.4);
+    rbox(c, 18, 104, 54, 10, 2, 0.34, 0.75, 1.2);
+    c.beginPath();
+    c.arc(45, 28, 19, Math.PI, 0);
+    c.fillStyle = INK(0.3);
+    c.fill();
+    c.strokeStyle = INK(0.7);
+    c.stroke();
+    rbox(c, 40, 2, 10, 10, 2, 0.5, 0.9, 1);
+    rbox(c, 8, 44, 18, 16, 2, 0.4, 0.8, 1);
+    rbox(c, 64, 44, 18, 16, 2, 0.4, 0.8, 1);
+    line(c, [[45, 48], [45, 96]], 0.5, 6);
+  });
+  // a dustbin, and in it the reason for the second wire
+  const SPR_BIN = sprite(130, 170, (c) => {
+    c.beginPath();
+    c.moveTo(18, 22); c.lineTo(112, 22); c.lineTo(104, 164); c.lineTo(26, 164); c.closePath();
+    c.fillStyle = INK(0.06);
+    c.fill();
+    c.strokeStyle = INK(0.6);
+    c.lineWidth = 1.4;
+    c.stroke();
+    for (let k = 1; k < 5; k++) line(c, [[18 + k * 1.6, 22 + k * 28], [112 - k * 1.6, 22 + k * 28]], 0.28, 1.4);
+    rbox(c, 12, 12, 106, 10, 3, 0.2, 0.7, 1.3);
+    rbox(c, 34, 116, 28, 42, 3, 0.1, 0.6, 1.1);
+    rbox(c, 64, 130, 26, 28, 3, 0.1, 0.5, 1);
+    // fish bones, whole
+    const fx = 30, fy = 82;
+    line(c, [[fx, fy], [fx + 64, fy - 8]], 0.85, 1.6);
+    for (let k = 1; k < 10; k++) {
+      const x = fx + k * 6, y = fy - k * 0.8;
+      line(c, [[x, y - 11 + k * 0.5], [x + 2.5, y], [x, y + 11 - k * 0.5]], 0.68, 1);
+    }
+    c.beginPath();
+    c.moveTo(fx, fy); c.lineTo(fx - 13, fy - 9); c.lineTo(fx - 13, fy + 9); c.closePath();
+    c.strokeStyle = INK(0.75);
+    c.stroke();
+    disc(c, fx + 72, fy - 9, 9, 0.2, 0.75, 1.2);
+    disc(c, fx + 74, fy - 11, 2.4, 0.9);
+  });
+  // A bare tree: on film it branches like a lung, and carries on underground
+  function branch(c, r, x, y, a, len, w, depth, down, seed) {
+    const x1 = x + Math.cos(a) * len, y1 = y + Math.sin(a) * len;
+    line(c, [[x, y], [x1, y1]], clamp(0.16 + w * 0.13) * (down ? 0.55 : 1), Math.max(0.7, w));
+    if (depth <= 0) { if (!down) disc(c, x1, y1, 2 + r() * 2.5, 0.09); return; }
+    const n = depth > 4 ? 2 : 2 + (r() > 0.6 ? 1 : 0);
+    for (let k = 0; k < n; k++) {
+      const spread = (k - (n - 1) / 2) * (0.5 + r() * 0.3) + (r() - 0.5) * 0.25;
+      branch(c, r, x1, y1, a + spread, len * (0.66 + r() * 0.16), w * 0.68, depth - 1, down, seed);
+    }
+  }
+  const SPR_TREE = sprite(520, 620, (c) => {
+    const r = rng(1966);
+    branch(c, r, 260, 500, -Math.PI / 2, 92, 8, 7, false);
+    for (let k = 0; k < 5; k++) branch(c, r, 260, 500, Math.PI / 2 + (k - 2) * 0.55, 34, 4, 4, true);
+    line(c, [[250, 500], [255, 400]], 0.3, 2);
+    line(c, [[270, 500], [266, 400]], 0.3, 2);
+  });
+  // The perch: a bare limb reaching in from the right over the bench
+  const SPR_LIMB = sprite(360, 240, (c) => {
+    const pts = catmull([[360, 168], [290, 136], [210, 122], [120, 118], [34, 126]], 8, false);
+    for (let k = 0; k < pts.length - 1; k++) {
+      const q = k / pts.length;
+      line(c, [pts[k], pts[k + 1]], lerp(0.5, 0.42, q), lerp(7, 1.4, q));
+    }
+    const r = rng(9);
+    for (const [x, y, a] of [[250, 128, -1.3], [176, 120, -1.9], [110, 118, -1.1], [320, 150, -1.6]]) branch(c, r, x, y, a, 26, 1.8, 4, false);
+    for (const [x, y] of [[210, 122], [90, 120]]) branch(c, r, x, y, 1.25, 20, 1.3, 3, false);
+  });
+  // Row houses, faint, far back: plumbing and window frames are all a plate would show of them
+  const SPR_ROW = sprite(720, 620, (c) => {
+    const r = rng(404);
+    for (let k = 0; k < 4; k++) {
+      const x = k * 180, w = 176, top = 170 + r() * 70;
+      line(c, [[x, 590], [x, top], [x + w, top], [x + w, 590]], 0.1, 1.2);
+      line(c, [[x, top + 12], [x + w, top + 12]], 0.09, 2.2);
+      for (let f = 0; f < 3; f++) {
+        for (let m = 0; m < 3; m++) {
+          const wx = x + 22 + m * 50, wy = top + 36 + f * 92;
+          if (wy + 60 > 590) continue;
+          rbox(c, wx, wy, 28, 56, 0, 0, 0.1, 1);
+          line(c, [[wx, wy + 28], [wx + 28, wy + 28]], 0.08, 1);
+        }
+      }
+      // risers and drains
+      line(c, [[x + 8, top], [x + 8, 590]], 0.13, 2.2);
+      for (let f = 1; f < 4; f++) line(c, [[x + 8, top + f * 92], [x + 150, top + f * 92 + 6]], 0.07, 1.2);
+      rbox(c, x + 120, top + 200, 34, 18, 1, 0, 0.1, 1);
+      for (let m = 0; m < 6; m++) line(c, [[x + 124 + m * 5, top + 200], [x + 124 + m * 5, top + 218]], 0.1, 1);
+    }
+  });
+  // Under the pavement: everything the city buried
+  const UNDER_W = 1600;
+  const SPR_UNDER = sprite(UNDER_W, 190, (c) => {
+    const r = rng(1961);
+    const grad = c.createLinearGradient(0, 0, 0, 190);
+    grad.addColorStop(0, 'rgba(120,150,190,0.17)');
+    grad.addColorStop(0.3, 'rgba(120,150,190,0.075)');
+    grad.addColorStop(1, 'rgba(120,150,190,0.035)');
+    c.fillStyle = grad;
+    c.fillRect(0, 0, UNDER_W, 190);
+    line(c, [[0, 1], [UNDER_W, 1]], 0.5, 1.6);
+    // gravel
+    for (let k = 0; k < 800; k++) { disc(c, r() * UNDER_W, r() * 26 + 3, 0.7 + r() * 1.5, 0.06 + r() * 0.1); }
+    // water main with bell joints
+    line(c, [[0, 62], [UNDER_W, 62]], 0.5, 1.2);
+    line(c, [[0, 90], [UNDER_W, 90]], 0.5, 1.2);
+    c.fillStyle = INK(0.07);
+    c.fillRect(0, 62, UNDER_W, 28);
+    for (let x = 80; x < UNDER_W; x += 320) {
+      rbox(c, x, 56, 22, 40, 2, 0.16, 0.62, 1.3);
+      for (let k = 0; k < 4; k++) disc(c, x + 11, 60 + k * 11, 1.4, 0.9);
+    }
+    // a bundle of telephone conduit, and somebody's tap on it
+    for (let k = 0; k < 3; k++) line(c, [[0, 118 + k * 8], [UNDER_W, 118 + k * 8]], 0.42, 2.2);
+    for (const x of [420, 1180]) {
+      rbox(c, x, 110, 44, 36, 3, 0.2, 0.8, 1.3);
+      line(c, [[x + 22, 110], [x + 22, 4]], 0.5, 1);
+    }
+    // a manhole shaft and its rungs
+    rbox(c, 820, 0, 76, 110, 0, 0.03, 0.5, 1.4);
+    for (let k = 0; k < 4; k++) line(c, [[838, 14 + k * 24], [878, 14 + k * 24]], 0.8, 2);
+    rbox(c, 812, -4, 92, 10, 1, 0.5, 0.9, 1);
+    // what got dropped: coins, a key, a bottle, a small and much older cat
+    for (let k = 0; k < 16; k++) disc(c, r() * UNDER_W, 14 + r() * 36, 2.6 + r() * 1.6, 0.5, 0.95, 0.8);
+    c.save();
+    c.translate(1400, 160);
+    c.rotate(-0.08);
+    for (let k = 0; k < 10; k++) rbox(c, k * 7, -3, 6, 5, 1, 0.14, 0.42, 0.7);
+    for (let k = 1; k < 7; k++) line(c, [[k * 7, -3], [k * 7 - 3, -14]], 0.34, 1);
+    disc(c, 78, -2, 7, 0.16, 0.44, 0.9);
+    for (let k = 0; k < 12; k++) rbox(c, -k * 5 - 5, -1 + k * 0.4, 4, 3, 1, 0.14, 0.36, 0.6);
+    c.restore();
+    rbox(c, 300, 22, 14, 34, 5, 0.1, 0.65, 1.1);
+    line(c, [[700, 30], [730, 26]], 0.9, 2);
+    disc(c, 733, 26, 5, 0, 0.9, 1.6);
+  });
+
+  // The bench and the two men, drawn from the front at their distance
+  const SPR_BENCH = sprite(500, 230, (c) => {
+    // planks: wood barely stops anything, its bolts stop everything
+    for (let k = 0; k < 3; k++) {
+      c.fillStyle = INK(0.1);
+      c.fillRect(66, 16 + k * 26, 368, 19);
+      line(c, [[66, 16 + k * 26], [434, 16 + k * 26]], 0.34, 1);
+      line(c, [[66, 35 + k * 26], [434, 35 + k * 26]], 0.26, 1);
+      for (const x of [84, 250, 416]) disc(c, x, 25 + k * 26, 2, 0.95);
+    }
+    for (let k = 0; k < 3; k++) {
+      c.fillStyle = INK(0.2);
+      c.fillRect(58, 112 + k * 11, 384, 9);
+      line(c, [[58, 112 + k * 11], [442, 112 + k * 11]], 0.55, 1.2);
+    }
+    // cast iron ends with arms: scrolls, not poles
+    for (const [x, m] of [[78, -1], [422, 1]]) {
+      c.strokeStyle = INK(0.46);
+      c.lineWidth = 3.4;
+      c.beginPath();
+      c.moveTo(x, 10);
+      c.bezierCurveTo(x + m * 3, 50, x - m * 2, 84, x + m * 16, 108);
+      c.bezierCurveTo(x + m * 26, 124, x + m * 6, 150, x + m * 10, 214);
+      c.stroke();
+      c.beginPath();
+      c.moveTo(x, 78);
+      c.quadraticCurveTo(x + m * 26, 66, x + m * 32, 84);
+      c.stroke();
+      rbox(c, x + m * 10 - 13, 212, 26, 6, 2, 0.3, 0.6, 1);
+    }
+  });
+  // a paper bag on the seat between them, and what's in it
+  function bagOnFilm(c, x, y) {
+    rbox(c, x - 24, y - 32, 48, 34, 2, 0.05, 0.24, 1);
+    const fx = x - 18, fy = y - 15;
+    line(c, [[fx, fy], [fx + 36, fy - 2]], 0.8, 1.2);
+    for (let k = 1; k < 7; k++) line(c, [[fx + k * 5, fy - 7], [fx + k * 5 + 1.6, fy], [fx + k * 5, fy + 6]], 0.66, 0.8);
+    disc(c, fx + 41, fy - 2, 5, 0.2, 0.7, 0.9);
+  }
+  const MEN = [
+    { x: 516, y: 502, s: 0.8, turn: 0.55, glasses: false, gun: true, hat: true, watch: true },
+    { x: 664, y: 502, s: 0.8, turn: -0.55, glasses: true, gun: false, hat: true, watch: false }
+  ];
+  function manRibs(c) {
+    for (let k = 0; k < 11; k++) {
+      const y = -146 + k * 8.4, w = 26 + Math.sin((k + 1) / 11 * Math.PI) * 24 + k * 0.4, drop = 16 + k * 1.3;
+      for (const m of [-1, 1]) {
+        c.strokeStyle = INK(0.26);
+        c.lineWidth = 3.2;
+        c.beginPath();
+        c.moveTo(m * 3, y);
+        c.quadraticCurveTo(m * (w + 5), y - 4, m * (w * (k > 8 ? 0.82 : 0.62)), y + drop);
+        c.stroke();
+        c.strokeStyle = INK(0.62);
+        c.lineWidth = 1;
+        c.stroke();
+      }
+    }
+  }
+  function manOnFilm(c, M, jaw, tick) {
+    c.save();
+    c.translate(M.x, M.y);
+    c.scale(M.s, M.s);
+    c.lineCap = 'round';
+    const T = M.turn;
+    // flesh and clothes: a faint figure
+    const fig = new Path2D(manOutline(T));
+    c.fillStyle = 'rgba(138,168,210,0.13)';
+    c.fill(fig);
+    c.strokeStyle = 'rgba(170,198,236,0.2)';
+    c.lineWidth = 1.2;
+    c.stroke(fig);
+    // legs
+    for (const m of [-1, 1]) {
+      bone(c, m * 20, 8, m * 31, 25, 8.5, 6.5, 8.5, 0.9);
+      disc(c, m * 31, 25, 7.5, 0.36, 0.72, 1.3);
+      bone(c, m * 31, 30, m * 28, 90, 6.2, 3.2, 5, 0.95);
+      line(c, [[m * 36, 34], [m * 32, 88]], 0.42, 1.1);
+      // a shoe, from the front
+      rbox(c, m * 28 - 11, 92, 22, 14, 5, 0.07, 0.28, 1);
+      for (let k = -2; k <= 2; k++) {
+        line(c, [[m * 28 + k * 1.4, 92], [m * 28 + k * 3.2, 103]], 0.55, 1.1);
+        disc(c, m * 28 + k * 3.8, 106, 1, 0.95);
+      }
+    }
+    // pelvis
+    for (const m of [-1, 1]) {
+      c.beginPath();
+      c.moveTo(m * 5, -24);
+      c.quadraticCurveTo(m * 42, -34, m * 36, -4);
+      c.quadraticCurveTo(m * 24, 2, m * 20, 8);
+      c.quadraticCurveTo(m * 8, 12, m * 3, 12);
+      c.closePath();
+      c.fillStyle = INK(0.2);
+      c.fill();
+      c.strokeStyle = INK(0.62);
+      c.lineWidth = 1.1;
+      c.stroke();
+      disc(c, m * 13, 3, 4.8, 0.02, 0.45, 0.9);
+    }
+    // spine
+    for (let k = 0; k < 5; k++) rbox(c, -7.5, -28 - k * 7.5, 15, 6.6, 1.4, 0.3, 0.62, 0.9);
+    for (let k = 0; k < 12; k++) rbox(c, -5.4, -66 - k * 7.2, 10.8, 6.1, 1.1, 0.26, 0.56, 0.8);
+    for (let k = 0; k < 6; k++) rbox(c, -4.2 + T, -152 - k * 4.8, 8.4, 4, 1, 0.24, 0.5, 0.7);
+    manRibs(c);
+    // sternum, collarbones, shoulder blades
+    line(c, [[0, -150], [0, -88]], 0.4, 6);
+    line(c, [[0, -150], [0, -88]], 0.3, 2);
+    for (const m of [-1, 1]) {
+      line(c, [[m * 4, -150], [m * 28, -156], [m * 52, -152]], 0.68, 2.4);
+      c.beginPath();
+      c.moveTo(m * 50, -150); c.lineTo(m * 18, -140); c.lineTo(m * 38, -102); c.closePath();
+      c.fillStyle = INK(0.09);
+      c.fill();
+      c.strokeStyle = INK(0.28);
+      c.lineWidth = 0.9;
+      c.stroke();
+      // arm hanging to the thigh
+      bone(c, m * 54, -150, m * 62, -86, 6, 3, 5, 0.95);
+      bone(c, m * 61, -84, m * 38, -22, 3.6, 1.8, 3.4, 0.92);
+      bone(c, m * 66, -84, m * 43, -22, 3, 1.5, 3, 0.8);
+      // hand on the knee
+      for (let k = 0; k < 5; k++) {
+        const a = Math.PI / 2 + (k - 2) * 0.22 + m * 0.16;
+        const hx = m * 40 + (k - 2) * 2.4, hy = -18;
+        line(c, [[hx, hy], [hx + Math.cos(a) * 14, hy + Math.sin(a) * 14], [hx + Math.cos(a) * 24, hy + Math.sin(a) * 24]], 0.64, 1.25);
+      }
+      for (let k = 0; k < 4; k++) disc(c, m * 40 + (k - 1.5) * 3.2, -20, 2, 0.34, 0.6, 0.7);
+    }
+    // skull, turned a little toward the other man
+    const hy = -214;
+    c.beginPath();
+    c.ellipse(T * 1.5, hy, 27, 32, 0, 0, TAU);
+    c.fillStyle = INK(0.2);
+    c.fill();
+    c.strokeStyle = INK(0.74);
+    c.lineWidth = 1.7;
+    c.stroke();
+    c.save();
+    c.globalCompositeOperation = 'source-over';
+    for (const m of [-1, 1]) {
+      c.beginPath();
+      c.ellipse(m * 11 + T * 7, hy - 2, 8.2, 8, 0, 0, TAU);
+      c.fillStyle = 'rgba(4,7,14,0.7)';
+      c.fill();
+    }
+    c.beginPath();
+    c.moveTo(T * 8, hy + 2); c.lineTo(T * 8 - 4.5, hy + 13); c.lineTo(T * 8 + 4.5, hy + 13); c.closePath();
+    c.fill();
+    c.restore();
+    for (const m of [-1, 1]) disc(c, m * 11 + T * 7, hy - 2, 8.2, 0, 0.68, 1.1);
+    c.strokeStyle = INK(0.46);
+    c.lineWidth = 0.9;
+    c.beginPath();
+    c.moveTo(T * 8, hy + 2); c.lineTo(T * 8 - 4.5, hy + 13); c.lineTo(T * 8 + 4.5, hy + 13); c.closePath();
+    c.stroke();
+    // upper teeth
+    for (let k = -4; k <= 4; k++) rbox(c, k * 3.1 + T * 7 - 1.3, hy + 18, 2.6, 5.2, 0.6, 0.85, 0, 0);
+    // jaw
+    const jy = jaw * 11;
+    c.strokeStyle = INK(0.72);
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(-22 + T * 2, hy + 8);
+    c.quadraticCurveTo(-20 + T * 3, hy + 32 + jy, T * 7, hy + 38 + jy);
+    c.quadraticCurveTo(20 + T * 3, hy + 32 + jy, 22 + T * 2, hy + 8);
+    c.stroke();
+    for (let k = -3; k <= 3; k++) rbox(c, k * 3 + T * 7 - 1.2, hy + 26 + jy, 2.4, 5, 0.6, 0.8, 0, 0);
+    // gold fillings
+    disc(c, -9 + T * 7, hy + 21, 1.5, 1);
+    disc(c, 6 + T * 7, hy + 29 + jy, 1.3, 1);
+    // hat
+    if (M.hat) {
+      c.save();
+      c.translate(T * 2, 0);
+      c.beginPath();
+      c.ellipse(0, hy - 25, 46, 6.5, 0, 0, TAU);
+      c.fillStyle = INK(0.1);
+      c.fill();
+      c.strokeStyle = INK(0.52);
+      c.lineWidth = 1.2;
+      c.stroke();
+      c.beginPath();
+      c.moveTo(-27, hy - 25);
+      c.quadraticCurveTo(-27, hy - 50, -13, hy - 53);
+      c.quadraticCurveTo(0, hy - 46, 13, hy - 53);
+      c.quadraticCurveTo(27, hy - 50, 27, hy - 25);
+      c.fillStyle = INK(0.08);
+      c.fill();
+      c.strokeStyle = INK(0.38);
+      c.stroke();
+      c.fillStyle = INK(0.3);
+      c.fillRect(-27, hy - 32, 54, 5);
+      c.restore();
+    }
+    if (M.glasses) {
+      for (const m of [-1, 1]) {
+        c.beginPath();
+        c.ellipse(m * 11 + T * 7, hy - 2, 10, 9, 0, 0, TAU);
+        c.strokeStyle = METAL(0.95);
+        c.lineWidth = 1.5;
+        c.stroke();
+      }
+      line(c, [[-2 + T * 7, hy - 3], [2 + T * 7, hy - 3]], 1, 1.4);
+      c.strokeStyle = METAL(0.9);
+      c.lineWidth = 1;
+      c.beginPath();
+      c.moveTo(-21 + T * 7, hy - 3); c.lineTo(-26 + T, hy - 1);
+      c.moveTo(21 + T * 7, hy - 3); c.lineTo(26 + T, hy - 1);
+      c.stroke();
+    }
+    // what a man carries to a bench
+    c.fillStyle = METAL(1);
+    c.fillRect(-9, -6, 18, 7);            // belt buckle
+    c.fillRect(-7, -128, 14, 2.6);        // tie clip
+    for (const y of [-92, -66]) { c.beginPath(); c.arc(2, y, 2, 0, TAU); c.fill(); }
+    if (M.gun) {
+      // a snub revolver under the arm
+      c.save();
+      c.translate(-36, -112);
+      c.rotate(0.55);
+      c.fillStyle = METAL(0.95);
+      c.fillRect(-14, -3.4, 28, 6.8);
+      c.fillRect(-2, -5.6, 10, 11);
+      c.beginPath();
+      c.moveTo(-14, -3); c.lineTo(-22, 12); c.lineTo(-14, 14); c.lineTo(-8, 3); c.fill();
+      c.restore();
+      for (let k = 0; k < 4; k++) { c.beginPath(); c.arc(30 + k * 2, -4 + k * 4, 5.4 - k * 0.3, 0, TAU); c.fillStyle = METAL(0.34 + k * 0.1); c.fill(); c.strokeStyle = METAL(0.9); c.lineWidth = 0.8; c.stroke(); }
+    } else {
+      // keys
+      c.fillStyle = METAL(1);
+      for (let k = 0; k < 4; k++) {
+        c.save();
+        c.translate(30, -4);
+        c.rotate(k * 0.42 - 0.3);
+        c.fillRect(0, -1, 14, 2);
+        c.beginPath();
+        c.arc(0, 0, 3.4, 0, TAU);
+        c.fill();
+        c.fillRect(10, 1, 2, 2.5);
+        c.restore();
+      }
+    }
+    if (M.watch) {
+      const w = [-46, -40];
+      c.fillStyle = METAL(0.9 + tick * 0.1);
+      c.beginPath();
+      c.arc(w[0], w[1], 5.8, 0, TAU);
+      c.fill();
+      c.fillStyle = 'rgba(40,60,90,0.9)';
+      c.beginPath();
+      c.arc(w[0], w[1], 3.8, 0, TAU);
+      c.fill();
+      c.strokeStyle = METAL(1);
+      c.lineWidth = 0.9;
+      c.beginPath();
+      c.moveTo(w[0], w[1]);
+      c.lineTo(w[0] + Math.cos(tick * 0.4 - 1) * 3.4, w[1] + Math.sin(tick * 0.4 - 1) * 3.4);
+      c.stroke();
+    }
+    c.restore();
+  }
+  // One closed outline so the man can also be a hole in the painting
+  function manOutline(T) {
+    const pts = [];
+    const add = (a) => a.forEach((p) => pts.push(p));
+    add([[-14, 108], [-40, 108], [-40, 92], [-38, 34], [-40, 12]]);
+    add([[-78, -18], [-82, -86], [-76, -150], [-52, -172], [-22, -178]]);
+    add([[-24 + T * 2, -196], [-28 + T * 2, -236], [-48 + T * 2, -238], [-48 + T * 2, -244], [-28 + T * 2, -246], [-20 + T * 2, -268], [T * 2, -262], [20 + T * 2, -268], [28 + T * 2, -246], [48 + T * 2, -244], [48 + T * 2, -238], [28 + T * 2, -236], [24 + T * 2, -196]]);
+    add([[22, -178], [52, -172], [76, -150], [82, -86], [78, -18], [40, 12], [38, 34], [40, 92], [40, 108], [14, 108], [12, 36], [0, 22], [-12, 36]]);
+    const p = catmull(pts, 2);
+    let d = '';
+    p.forEach((q, k) => { d += `${k ? 'L' : 'M'}${q[0].toFixed(1)} ${q[1].toFixed(1)} `; });
+    return d + 'Z';
+  }
+
+  // ---------------------------------------------------------------- the score's tables, shared with the picture
+  // The two men: one syllable per row. [bar of a 4-bar phrase, sixteenth, length in sixteenths, who]. strudel.js plays these same rows.
+  const TALK = [
+    [0, 0, 2, 0], [0, 2, 1, 0], [0, 3, 1, 0], [0, 6, 2, 0], [0, 8, 1, 0], [0, 9, 1, 0], [0, 10, 3, 0],
+    [1, 2, 1, 1], [1, 3, 1, 1], [1, 4, 2, 1], [1, 8, 2, 1], [1, 10, 1, 1], [1, 11, 1, 1], [1, 12, 3, 1],
+    [2, 0, 1, 0], [2, 1, 1, 0], [2, 2, 2, 0], [2, 6, 1, 0], [2, 7, 1, 0], [2, 8, 4, 0], [2, 14, 1, 0], [2, 15, 1, 0],
+    [3, 0, 2, 1], [3, 4, 1, 1], [3, 5, 1, 1], [3, 6, 2, 1], [3, 10, 2, 1], [3, 12, 1, 1], [3, 13, 1, 1], [3, 14, 2, 1]
+  ];
+  function jawAt(b, who) {
+    const pos = (((b % 4) + 4) % 4) * 16;
+    let v = 0;
+    for (const [bar, six, len, w] of TALK) {
+      if (w !== who) continue;
+      const u = (pos - (bar * 16 + six)) / len;
+      if (u >= 0 && u < 1) v = Math.max(v, Math.pow(Math.sin(u * Math.PI), 0.6));
+    }
+    return v;
+  }
+  // po-ta-to-chip: bars on which the bird starts its four notes before the band joins it
+  const CALLS = [3.25, 9.5, 9.75, 12, 12.5, 13, 13.5];
+  const HOOK_BARS = [14, 15, 16, 17, 18, 19];
+  function beakAt(b) {
+    let v = 0;
+    const hit = (start) => {
+      for (const six of [0, 1, 2, 4]) {
+        const on = start + six / 16, u = (b - on) / (1 / 16);
+        if (u >= 0 && u < 1.4) v = Math.max(v, 1 - u / 1.4);
+      }
+    };
+    CALLS.forEach(hit);
+    for (const bar of HOOK_BARS) { hit(bar); hit(bar + 0.5); }
+    return v;
+  }
+  // The attention: one weight per thing the cat can hear. The score's levels read this same table.
+  const MEN_W = [[0, 0.26], [2.8, 0.34], [3.3, 0.14], [3.8, 0.38], [8, 1], [9.3, 1], [9.7, 0.55], [10.1, 1], [11.6, 1], [12.1, 0.72], [12.5, 0.55], [12.75, 0.82], [13, 0.34], [14, 0.08], [16, 0.03], [17, 0], [23, 0], [23.99, 0.26]];
+  const BIRD_W = [[2.9, 0], [3.25, 0.62], [3.65, 0.62], [3.85, 0], [9.2, 0], [9.55, 0.66], [9.95, 0.66], [10.1, 0.03], [11.55, 0.03], [12.05, 0.78], [12.5, 0.9], [12.75, 0.62], [13, 1], [20, 1], [22.2, 1], [22.4, 0]];
+  const LOOK = [[9.2, 0], [9.5, 0.86], [9.95, 0.86], [10.06, 0], [11.75, 0], [12.05, 0.62], [12.4, 0.92], [12.5, 0.92], [12.6, 0.5], [12.72, 0.5], [12.95, 1]];
+
+  // ---------------------------------------------------------------- lead film markers
+  const LINES = [['LISTEN TO', 150], ['THOSE TWO GUYS.', 187], ['NOT THE BIRDS.', 224]];
+  const TILE_ADV = 24;
+  const TILES = [];
+  (function buildTiles() {
+    const r = rng(1967);
+    const falling = [];
+    LINES.forEach(([text, y], line2) => {
+      const x0 = CX - (text.length - 1) * TILE_ADV / 2;
+      [...text].forEach((ch, k) => {
+        if (ch === ' ') return;
+        const t = { ch, hx: x0 + k * TILE_ADV, hy: y, rot: (r() - 0.5) * 0.09, jy: (r() - 0.5) * 2.4, line: line2, idx: k };
+        t.falls = line2 === 1 || (line2 === 2 && k < 3);
+        TILES.push(t);
+        if (t.falls) falling.push(t);
+      });
+    });
+    // sixteen letters land on sixteen sixteenths of bar 13: THOSE TWO GUYS. then NOT
+    falling.forEach((t, i) => {
+      t.land = 13 + i / 16;
+      t.lx = t.hx + (r() - 0.5) * 70;
+      t.ly = lerp(G2 + 8, G + 26, r());
+      t.spin = (r() - 0.5) * 7;
+      t.rest = (r() - 0.5) * 1.1;
+    });
+    if (falling.length !== 16) throw new Error('the fill needs sixteen letters, got ' + falling.length);
+  })();
+  const FALL_BARS = 0.17;
+  function tileAt(t, b) {
+    if (t.falls && b >= t.land - FALL_BARS) {
+      const u = clamp((b - (t.land - FALL_BARS)) / FALL_BARS);
+      const bounce = b > t.land ? Math.sin(clamp((b - t.land) / 0.07) * Math.PI) * 11 : 0;
+      return { x: lerp(t.hx, t.lx, u), y: lerp(t.hy + t.jy, t.ly, u * u) - bounce, a: t.rot + t.spin * u + (u >= 1 ? t.rest - t.spin : 0) * 1, fallen: u >= 1 };
+    }
+    let x = t.hx, y = t.hy + t.jy;
+    if (t.line === 2) {
+      // THE BIRDS. takes the gap the moment NOT has gone
+      const k = smooth(13.95, 14.1, b);
+      const text = 'THE BIRDS.';
+      const target = CX - (text.length - 1) * TILE_ADV / 2 + (t.idx - 4) * TILE_ADV;
+      x = lerp(x, target, k);
+      y = lerp(y, 187 + t.jy, k);
+    }
+    return { x, y, a: t.rot, fallen: false };
+  }
+  function tilesOnFilm(c, b) {
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = 'bold 23px "Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+    for (const t of TILES) {
+      const s = tileAt(t, b);
+      c.save();
+      c.translate(s.x, s.y);
+      c.rotate(s.a);
+      c.fillStyle = 'rgba(190,214,245,0.16)';
+      c.beginPath();
+      c.roundRect(-10.5, -14, 21, 28, 2.2);
+      c.fill();
+      c.strokeStyle = 'rgba(190,214,245,0.3)';
+      c.lineWidth = 0.9;
+      c.stroke();
+      c.fillStyle = METAL(1);
+      c.fillText(t.ch, 0, 1);
+      c.restore();
+    }
+  }
+  function tilesInDaylight(c, b, groundShift, skyShift) {
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = 'bold 23px "Arial Narrow", "Helvetica Neue", Arial, sans-serif';
+    for (const t of TILES) {
+      const s = tileAt(t, b);
+      c.save();
+      c.translate(s.x + (s.fallen ? groundShift : skyShift), s.y);
+      c.rotate(s.a);
+      c.fillStyle = s.fallen ? PAL.black : PAL.cream;
+      c.beginPath();
+      c.roundRect(-10.5, -14, 21, 28, 2.2);
+      c.fill();
+      c.fillStyle = s.fallen ? PAL.cream : PAL.black;
+      c.fillText(t.ch, 0, 1);
+      c.restore();
+    }
+  }
+
+  // ---------------------------------------------------------------- the bird: the only thing on the plate with a colour
+  function drawBird(c, x, y, s, dir, flap, perched, beak, wing) {
+    c.save();
+    c.translate(x, y);
+    c.scale(s * dir, s);
+    const fill = (pts, col) => { c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) c.lineTo(pts[k][0], pts[k][1]); c.closePath(); c.fillStyle = col; c.fill(); };
+    fill([[-14, 0], [-33, 3], [-34, 8], [-13, 6]], wing);
+    if (perched) {
+      c.strokeStyle = wing;
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.moveTo(0, 7); c.lineTo(-1, 15);
+      c.moveTo(4, 7); c.lineTo(4, 15);
+      c.stroke();
+    }
+    fill(catmull([[-16, 2], [-8, -7], [4, -10], [13, -9], [17, -3], [11, 6], [-2, 9], [-12, 7]], 4), PAL.lemon);
+    if (wing === PAL.black) { c.strokeStyle = PAL.black; c.lineWidth = 0.9; c.stroke(); }
+    fill([[10, -11], [17, -8], [16, -4], [9, -7]], wing);     // cap
+    const gape = beak * 3.4;
+    fill([[16, -6], [23.5, -4.4 - gape * 0.3], [16, -3]], PAL.amber);
+    fill([[16, -3], [22.5, -2.2 + gape], [15.5, -0.5]], PAL.amber);
+    c.beginPath();
+    c.arc(10.5, -4.6, 1.5, 0, TAU);
+    c.fillStyle = PAL.black;
+    c.fill();
+    if (perched) {
+      fill([[-12, -3], [6, -6], [8, -1], [-22, 6]], wing);
+      c.strokeStyle = PAL.cream;
+      c.lineWidth = 1.3;
+      c.beginPath();
+      c.moveTo(-3, -5); c.lineTo(-7, 2);
+      c.moveTo(-10, -3); c.lineTo(-13, 3);
+      c.stroke();
+    } else {
+      const a = Math.sin(flap * TAU);
+      const tipY = -4 - a * 25;
+      fill([[7, -5], [-11, -4], [-13 - Math.abs(a) * 4, tipY * 0.82], [-7, tipY - 2]], wing);
+      c.strokeStyle = PAL.cream;
+      c.lineWidth = 1.3;
+      c.beginPath();
+      c.moveTo(-3, -4); c.lineTo(-8, tipY * 0.62);
+      c.stroke();
+    }
+    c.restore();
+  }
+  const RAIL = [590, 398];     // the top of the bench's back, between the two heads
+  const LIMB = [742, 348];     // a bare limb over the right of the bench
+  const FLECK = [450 + 334, 450 - 322];   // where the iris keeps it
+  function birdAt(b) {
+    if (b < 2.85) return null;
+    if (b < 4.05) {
+      const u = (b - 2.85) / 1.2;
+      return { x: lerp(860, 20, u), y: 300 + Math.sin(u * TAU * 2.4) * 26, dir: -1, flap: b * 14, perched: false, s: 1.05 };
+    }
+    if (b < 8.9) return null;
+    if (b < 9.4) {
+      const u = smooth(8.9, 9.4, b);
+      return { x: lerp(900, LIMB[0], u), y: lerp(230, LIMB[1], u) + Math.sin(u * Math.PI) * -14, dir: -1, flap: b * 16, perched: false, s: 1.08 };
+    }
+    if (b < 10.15) return { x: LIMB[0], y: LIMB[1] - Math.abs(Math.sin((b - 9.4) * TAU * 2)) * 2.2, dir: -1, flap: 0, perched: true, s: 1.08 };
+    if (b < 10.6) {
+      const u = smooth(10.15, 10.6, b);
+      return { x: lerp(LIMB[0], 930, u), y: lerp(LIMB[1], 200, u), dir: 1, flap: b * 16, perched: false, s: 1.08 };
+    }
+    if (b < 11.45) return null;
+    if (b < 12) {
+      const u = smooth(11.45, 12, b);
+      return { x: lerp(900, RAIL[0], u), y: lerp(200, RAIL[1], u * u), dir: -1, flap: b * 16, perched: false, s: 1.2 };
+    }
+    if (b < 16) {
+      // it hops on the eighths once the band has come in
+      const hop = b > 14 ? Math.abs(Math.sin((b - 14) * TAU * 2)) * 3.5 : 0;
+      return { x: RAIL[0], y: RAIL[1] - hop, dir: -1, flap: 0, perched: true, s: 1.2 };
+    }
+    if (b < 20.5) {
+      const u = smooth(16, 17, b);
+      const wob = Math.sin(b * TAU * 1) * 24;
+      return { x: lerp(RAIL[0], 700, u), y: lerp(RAIL[1], 300 + wob, u), dir: 1, flap: b * 16, perched: false, s: lerp(1.2, 1.75, u) };
+    }
+    if (b < 22) {
+      const u = smooth(20.5, 21.9, b);
+      const wob = Math.sin(b * TAU * 1) * 24 * (1 - u);
+      return { x: lerp(700, 628, u), y: lerp(300, 168, u) + wob, dir: 1, flap: b * 16, perched: false, s: lerp(1.75, 1.7, u) };
+    }
+    if (b < 22.92) {
+      // It gets away, and settles exactly where the fleck in the iris is: frame zero has had it all along
+      const u = smooth(22, 22.6, b);
+      return { x: lerp(628, FLECK[0], u), y: lerp(168, FLECK[1], u), dir: 1, flap: u >= 1 ? 0.25 : b * 16 * (1 - u) + 0.25 * u, perched: false, s: lerp(1.7, 0.92, u), rot: -0.25 * u, settling: smooth(22.3, 22.6, b) };
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------- the eye
+  const IRIS_R = 660;
+  const SPR_IRIS = (() => {
+    const s = mk(IRIS_R * 2, IRIS_R * 2), c = s.getContext('2d');
+    const size = IRIS_R * 2, im = c.createImageData(size, size), r = rng(23);
+    // polar noise tables: streaks run with the radius and wander a little as they go
+    const table = (na, nr) => {
+      const v = new Float32Array(na * nr);
+      for (let k = 0; k < v.length; k++) v[k] = r();
+      return (th, q) => {
+        const x = th * na, y = q * (nr - 1), x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+        const a0 = x0 % na, a1 = (x0 + 1) % na, y1 = Math.min(nr - 1, y0 + 1);
+        const v0 = v[a0 + y0 * na] * (1 - fx) + v[a1 + y0 * na] * fx;
+        const v1 = v[a0 + y1 * na] * (1 - fx) + v[a1 + y1 * na] * fx;
+        return v0 * (1 - fy) + v1 * fy;
+      };
+    };
+    const T1 = table(1400, 26), T2 = table(420, 12), T3 = table(120, 7), T4 = table(40, 5);
+    const ramp = [[0, [96, 52, 6]], [0.3, [176, 104, 12]], [0.55, [226, 152, 20]], [0.78, [246, 190, 52]], [1, [255, 226, 124]]];
+    const toneAt = (v) => {
+      for (let k = 1; k < ramp.length; k++) {
+        if (v <= ramp[k][0]) {
+          const [a, ca] = ramp[k - 1], [b, cb] = ramp[k], u = (v - a) / (b - a);
+          return [lerp(ca[0], cb[0], u), lerp(ca[1], cb[1], u), lerp(ca[2], cb[2], u)];
+        }
+      }
+      return ramp[ramp.length - 1][1];
+    };
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = x - IRIS_R + 0.5, dy = y - IRIS_R + 0.5, rr = Math.hypot(dx, dy) / IRIS_R;
+        const i = (y * size + x) * 4;
+        if (rr > 1) { im.data[i + 3] = 0; continue; }
+        const th = ((Math.atan2(dy, dx) / TAU) % 1 + 1) % 1;
+        const fine = T1(th, rr), mid = T2(th, rr), broad = T3(th, rr), slow = T4(th, rr);
+        let v = 0.34 + (fine - 0.5) * 0.62 + (mid - 0.5) * 0.56 + (broad - 0.5) * 0.34 + (slow - 0.5) * 0.22;
+        // a lighter band around the collarette, deepening to a dark limbus
+        const collar = Math.exp(-Math.pow((rr - 0.635) / 0.05, 2));
+        v += collar * 0.13 + smooth(0.62, 0.8, rr) * 0.1 - smooth(0.82, 0.965, rr) * 0.55;
+        const tone = toneAt(clamp(v));
+        const edge = 1 - smooth(0.965, 1, rr) * 0.86;
+        im.data[i] = tone[0] * edge;
+        im.data[i + 1] = tone[1] * edge;
+        im.data[i + 2] = tone[2] * edge;
+        im.data[i + 3] = 255;
+      }
+    }
+    c.putImageData(im, 0, 0);
+    // a fleck in the iris, top right. It has wings.
+    c.save();
+    c.translate(IRIS_R + FLECK[0] - CX, IRIS_R + FLECK[1] - CY);
+    c.rotate(-0.25);
+    drawBird(c, 0, 0, 0.92, 1, 0.25, false, 0, 'rgba(255,240,170,0.85)');
+    c.restore();
+    return s;
+  })();
+  const SPR_CORNEA = sprite(900, 900, (c) => {
+    // a window on the wet surface of the eye
+    c.globalCompositeOperation = 'source-over';
+    const g = c.createRadialGradient(236, 214, 12, 236, 214, 300);
+    g.addColorStop(0, 'rgba(255,250,235,0.17)');
+    g.addColorStop(0.45, 'rgba(255,250,235,0.05)');
+    g.addColorStop(1, 'rgba(255,250,235,0)');
+    c.fillStyle = g;
+    c.fillRect(0, 0, 900, 900);
+    c.save();
+    c.translate(150, 132);
+    c.rotate(-0.62);
+    c.filter = 'blur(2.4px)';
+    c.fillStyle = 'rgba(255,252,240,0.34)';
+    for (const [x, y, w, h] of [[-38, -22, 34, 22], [2, -24, 34, 24], [-38, 4, 34, 20], [2, 4, 34, 21]]) {
+      c.beginPath();
+      c.roundRect(x, y, w, h, 3);
+      c.fill();
+    }
+    c.filter = 'none';
+    c.restore();
+  });
+  // Mottle of the film: fixed, so x264 does not spend the budget on it
+  const SPR_MOTTLE = (() => {
+    const s = mk(512, 512), c = s.getContext('2d'), im = c.createImageData(512, 512), r = rng(5);
+    for (let k = 0; k < im.data.length; k += 4) {
+      const v = 120 + r() * 135;
+      im.data[k] = v * 0.86; im.data[k + 1] = v * 0.95; im.data[k + 2] = v;
+      im.data[k + 3] = r() * 11;
+    }
+    c.putImageData(im, 0, 0);
+    return s;
+  })();
+  const SPR_PAPER = (() => {
+    const s = mk(512, 512), c = s.getContext('2d'), im = c.createImageData(512, 512), r = rng(11);
+    for (let k = 0; k < im.data.length; k += 4) {
+      const v = r() > 0.5 ? 255 : 0;
+      im.data[k] = v; im.data[k + 1] = v; im.data[k + 2] = v * 0.9;
+      im.data[k + 3] = r() * 10;
+    }
+    c.putImageData(im, 0, 0);
+    return s;
+  })();
+  // A cat's pupil: from a vertical slit with sharp ends to a full circle
+  function pupilPath(c, a, b2) {
+    const round = clamp(a / b2);
+    const kx = a * 0.5523 * round, ky = b2 * lerp(0.2, 0.5523, round);
+    c.beginPath();
+    c.moveTo(CX, CY - b2);
+    c.bezierCurveTo(CX + kx, CY - b2, CX + a, CY - ky, CX + a, CY);
+    c.bezierCurveTo(CX + a, CY + ky, CX + kx, CY + b2, CX, CY + b2);
+    c.bezierCurveTo(CX - kx, CY + b2, CX - a, CY + ky, CX - a, CY);
+    c.bezierCurveTo(CX - a, CY - ky, CX - kx, CY - b2, CX, CY - b2);
+    c.closePath();
+  }
+
+  // ---------------------------------------------------------------- daylight, in the two channels a cat has
+  // Every shape is cut, never drawn: straight scissor runs, slightly off true.
+  function cut(c, pts, col, r, j = 2.4) {
+    c.beginPath();
+    pts.forEach((p, k) => {
+      const x = p[0] + (r() - 0.5) * j, y = p[1] + (r() - 0.5) * j;
+      if (k) c.lineTo(x, y); else c.moveTo(x, y);
+    });
+    c.closePath();
+    c.fillStyle = col;
+    c.fill();
+  }
+  function jagged(cx, cy, rx, ry, n, r, rough = 0.2) {
+    const pts = [];
+    for (let k = 0; k < n; k++) {
+      const a = k / n * TAU + (r() - 0.5) * 0.2, q = 1 - rough / 2 + r() * rough;
+      pts.push([cx + Math.cos(a) * rx * q, cy + Math.sin(a) * ry * q]);
+    }
+    return pts;
+  }
+  const FAR_W = 2100, MID_W = 2400;
+  const SPR_DAYFAR = (() => {
+    const s = mk(FAR_W, 900), c = s.getContext('2d'), r = rng(600);
+    // long torn strips of cloud
+    for (let k = 0; k < 7; k++) {
+      const x = r() * FAR_W, y = 90 + r() * 170, w = 140 + r() * 260, h = 8 + r() * 11;
+      cut(c, [[x, y], [x + w, y - 4], [x + w + 26, y + h * 0.5], [x + w - 20, y + h], [x + 30, y + h + 2]], 'rgba(141,178,234,0.75)', r, 3);
+    }
+    // the monument and a dome: the city, in the time it takes to pass them
+    cut(c, [[300, G2], [312, 196], [322, 172], [332, 196], [344, G2]], PAL.pale, r, 1);
+    const dx = 1320;
+    cut(c, [[dx - 120, G2], [dx - 120, 480], [dx - 80, 470], [dx - 74, 400], [dx - 44, 356], [dx - 12, 340], [dx - 8, 296], [dx, 276], [dx + 8, 296], [dx + 12, 340], [dx + 44, 356], [dx + 74, 400], [dx + 80, 470], [dx + 120, 480], [dx + 120, G2]], PAL.pale, r, 1.6);
+    // row houses
+    let x = 0;
+    while (x < FAR_W) {
+      const w = 96 + r() * 90, top = 330 + r() * 110, dark = r() > 0.46;
+      cut(c, [[x, G2], [x, top + 10], [x + w * 0.06, top], [x + w, top + (r() - 0.5) * 12], [x + w + 2, G2]], dark ? PAL.navy : PAL.skyDeep, r, 2);
+      const rows = Math.floor((G2 - top - 40) / 46), cols = Math.floor(w / 34);
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const lit = r() > 0.55;
+          const wx = x + 13 + col * 33, wy = top + 26 + row * 46;
+          cut(c, [[wx, wy], [wx + 15, wy], [wx + 15, wy + 26], [wx, wy + 26]], lit ? PAL.lemon : (dark ? PAL.skyDeep : PAL.navy), r, 1.4);
+        }
+      }
+      x += w;
+    }
+    return s;
+  })();
+  // A split leaf on a stem: one fold of the paper in light, one in shade, the branches cut out of the middle
+  function treeCut(c, x, base, h, r) {
+    const top = base - h, wide = h * (0.22 + r() * 0.06), belly = base - h * 0.46, foot = base - h * 0.2;
+    cut(c, [[x, top], [x - wide * 0.62, top + h * 0.2], [x - wide, belly], [x - wide * 0.7, foot + h * 0.02], [x, foot + h * 0.06]], PAL.ochre, r, 3);
+    cut(c, [[x, top], [x + wide * 0.62, top + h * 0.2], [x + wide, belly], [x + wide * 0.7, foot + h * 0.02], [x, foot + h * 0.06]], '#94752a', r, 3);
+    cut(c, [[x - 5, base], [x - 2.4, top + h * 0.1], [x + 2.4, top + h * 0.1], [x + 6, base]], PAL.black, r, 1);
+    for (let k = 0; k < 4; k++) {
+      const y = foot - k * h * 0.13, len = wide * (0.72 - k * 0.12);
+      for (const sgn of [-1, 1]) cut(c, [[x, y], [x + sgn * len, y - h * 0.09], [x + sgn * len, y - h * 0.09 - 3], [x, y - 7]], PAL.black, r, 0.6);
+    }
+  }
+  const SPR_DAYMID = (() => {
+    const s = mk(MID_W, 900), c = s.getContext('2d'), r = rng(601);
+    // the fence runs the whole length, broken by trees and lamps
+    c.fillStyle = PAL.navy;
+    for (const y of [G2 - 76, G2 - 26]) c.fillRect(0, y, MID_W, 3.5);
+    for (let x = 6; x < MID_W; x += 22) {
+      const h = 94 + (r() - 0.5) * 3;
+      cut(c, [[x - 1.6, G2], [x - 1.6, G2 - h], [x, G2 - h - 11], [x + 1.6, G2 - h], [x + 1.6, G2]], PAL.navy, r, 0.6);
+    }
+    for (let k = 0; k < 8; k++) {
+      const x = 130 + k * 300 + r() * 110;
+      if (k % 3 === 2) {
+        cut(c, [[x - 3, G2], [x - 3, G2 - 322], [x + 3, G2 - 322], [x + 3, G2]], PAL.black, r, 0.8);
+        cut(c, [[x - 3, G2 - 322], [x + 40, G2 - 336], [x + 42, G2 - 328], [x + 3, G2 - 312]], PAL.black, r, 0.8);
+        cut(c, [[x + 28, G2 - 336], [x + 60, G2 - 336], [x + 54, G2 - 318], [x + 34, G2 - 318]], PAL.black, r, 0.8);
+        cut(c, jagged(x + 44, G2 - 309, 10, 9, 8, r, 0.1), PAL.lemon, r, 0.6);
+      } else {
+        treeCut(c, x, G2, 300 + r() * 110, r);
+      }
+    }
+    return s;
+  })();
+  // the taxi, side on, heading left
+  const TAXI_W = 660;
+  const SPR_TAXI = (() => {
+    const s = mk(TAXI_W, 300), c = s.getContext('2d'), r = rng(602);
+    cut(c, [[6, 214], [10, 158], [58, 142], [156, 134], [210, 62], [404, 58], [470, 132], [624, 148], [654, 172], [654, 226], [6, 226]], PAL.lemon, r, 1.4);
+    cut(c, [[222, 74], [300, 70], [300, 134], [176, 136]], PAL.navy, r, 1.2);
+    cut(c, [[316, 70], [396, 70], [448, 132], [316, 134]], PAL.pale, r, 1.2);
+    // driver, hat on, and he has not seen anything
+    cut(c, [[258, 136], [254, 108], [264, 96], [282, 96], [290, 108], [288, 136]], PAL.black, r, 0.8);
+    cut(c, [[248, 96], [296, 96], [292, 90], [282, 90], [280, 80], [264, 80], [262, 90], [252, 90]], PAL.black, r, 0.8);
+    // the check band
+    for (let k = 0; k < 40; k++) {
+      for (let m = 0; m < 2; m++) {
+        if ((k + m) % 2) continue;
+        const x = 12 + k * 16;
+        c.fillStyle = PAL.black;
+        c.fillRect(x, 164 + m * 13, 16, 13);
+      }
+    }
+    // roof light
+    cut(c, [[282, 58], [288, 34], [344, 34], [350, 58]], PAL.cream, r, 0.8);
+    c.fillStyle = PAL.black;
+    c.font = 'bold 19px "Helvetica Neue", Arial, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('TAXI', 316, 47);
+    cut(c, [[0, 216], [36, 214], [36, 232], [0, 232]], PAL.cream, r, 0.8);
+    cut(c, [[624, 216], [660, 214], [660, 232], [624, 232]], PAL.cream, r, 0.8);
+    cut(c, [[0, 166], [18, 160], [20, 182], [2, 184]], PAL.cream, r, 0.8);
+    return s;
+  })();
+  function drawTaxi(c, x, y, spin) {
+    c.drawImage(SPR_TAXI, x, y);
+    for (const wx of [136, 506]) {
+      c.beginPath();
+      c.arc(x + wx, y + 228, 45, 0, TAU);
+      c.fillStyle = PAL.black;
+      c.fill();
+      c.beginPath();
+      c.arc(x + wx, y + 228, 21, 0, TAU);
+      c.fillStyle = PAL.cream;
+      c.fill();
+      c.fillStyle = PAL.black;
+      for (let k = 0; k < 3; k++) {
+        const a = spin + k / 3 * TAU;
+        c.fillRect(x + wx + Math.cos(a) * 12 - 2.4, y + 228 + Math.sin(a) * 12 - 2.4, 4.8, 4.8);
+      }
+    }
+  }
+  const SPR_DAYBENCH = (() => {
+    const s = mk(520, 240), c = s.getContext('2d'), r = rng(603);
+    for (let k = 0; k < 3; k++) cut(c, [[86, 18 + k * 26], [434, 16 + k * 26], [434, 36 + k * 26], [86, 38 + k * 26]], PAL.black, r, 1);
+    for (let k = 0; k < 2; k++) cut(c, [[72, 116 + k * 15], [448, 114 + k * 15], [448, 126 + k * 15], [72, 128 + k * 15]], PAL.black, r, 1);
+    for (const x of [96, 424]) cut(c, [[x - 6, 12], [x + 6, 12], [x + 7, 226], [x + 19, 228], [x + 19, 236], [x - 19, 236], [x - 19, 228], [x - 7, 226]], PAL.black, r, 0.8);
+    return s;
+  })();
+  // A man-shaped hole in the painting, with the plate still running in it.
+  function manHole(c, M, jaw, tick) {
+    c.save();
+    c.translate(M.x, M.y);
+    c.scale(M.s, M.s);
+    c.fillStyle = PAL.plate;
+    c.fill(new Path2D(manOutline(M.turn)));
+    c.restore();
+    const prev = c.globalCompositeOperation;
+    c.globalCompositeOperation = 'lighter';
+    c.save();
+    c.beginPath();
+    const clipPath = new Path2D();
+    clipPath.addPath(new Path2D(manOutline(M.turn)), new DOMMatrix().translate(M.x, M.y).scale(M.s));
+    c.clip(clipPath);
+    manOnFilm(c, M, jaw, tick);
+    c.restore();
+    c.globalCompositeOperation = prev;
+  }
+  function dayWorld(c, b, cw, wy) {
+    // sky
+    c.fillStyle = PAL.sky;
+    c.fillRect(-80, -80, W + 160, H + 160);
+    // the sun: fixed high in the world, so the leap climbs into it
+    const sunY = SUN_WY + wy;
+    c.beginPath();
+    c.arc(SUN_X, sunY, SUN_R, 0, TAU);
+    c.fillStyle = PAL.lemon;
+    c.fill();
+    // far row
+    const fx = -((cw * 0.3) % FAR_W);
+    c.drawImage(SPR_DAYFAR, fx, wy);
+    if (fx + FAR_W < W + 80) c.drawImage(SPR_DAYFAR, fx + FAR_W, wy);
+    // park ground behind the fence
+    c.fillStyle = PAL.navy;
+    c.fillRect(-80, G2 - 8 + wy, W + 160, 12);
+    // fence, trees, lamps
+    const mx = -((cw * 0.6) % MID_W);
+    c.drawImage(SPR_DAYMID, mx, wy);
+    if (mx + MID_W < W + 80) c.drawImage(SPR_DAYMID, mx + MID_W, wy);
+    // pavement
+    c.fillStyle = PAL.cream;
+    c.fillRect(-80, G2 + wy, W + 160, G - G2 + 80);
+    c.fillStyle = PAL.pale;
+    for (let k = -2; k < 14; k++) {
+      const x = k * 170 - (cw % 170), xf = (k * 170 - 450) * 0.6 + 450 - (cw * 0.6 % 102);
+      c.beginPath();
+      c.moveTo(x, G + wy); c.lineTo(x + 3, G + wy); c.lineTo(xf + 2, G2 + wy); c.lineTo(xf, G2 + wy);
+      c.closePath();
+      c.fill();
+    }
+    // kerb and road
+    c.fillStyle = PAL.ochre;
+    c.fillRect(-80, G + 6 + wy, W + 160, 28);
+    c.fillStyle = PAL.black;
+    c.fillRect(-80, G + 34 + wy, W + 160, 5);
+    c.fillStyle = PAL.navy;
+    c.fillRect(-80, G + 39 + wy, W + 160, 500);
+    c.fillStyle = PAL.lemon;
+    for (let k = -1; k < 8; k++) {
+      const x = k * 230 - (cw % 230);
+      c.fillRect(x, G + 112 + wy, 120, 8);
+    }
+  }
+  const SUN_X = 450, SUN_R = 250, SUN_WY = 430 - 900;
+
+  // ---------------------------------------------------------------- the clock
+  const T_STOP = 6 * BAR, T_DECEL = 1.5 * BAR, W_STOP = V * T_STOP + V * T_DECEL / 2;
+  function scrollAt(xb) {
+    const t = xb * BAR;
+    if (t <= T_STOP) return V * t;
+    const dt = Math.min(t - T_STOP, T_DECEL);
+    return V * T_STOP + V * (dt - dt * dt / (2 * T_DECEL));
+  }
+  // the chase's scroll, integrated once from its speed
+  const VC = 900;
+  const CW = new Float64Array(24001);
+  (function () {
+    let x = 0;
+    for (let k = 1; k <= 24000; k++) {
+      const b = k / 1000;
+      const v = VC * smooth(16.05, 16.7, b) * (1 - smooth(20.5, 21.35, b));
+      x += v * BAR / 1000;
+      CW[k] = x;
+    }
+  })();
+  const cwAt = (b) => CW[clamp(Math.floor(b * 1000), 0, 24000)];
+  const CAT_WALK = 340, CAT_SIT = 262, CAT_RUN = 330;
+  const FAR_BENCH = 590 + W_STOP * 0.6;
+  const PLACED = [
+    // far side of the pavement: [sprite, far-layer x, y of its top, gain]
+    [SPR_VAN, 8, G2 - 298, 0.62],
+    [SPR_TREE, 470, G2 - 500, 0.72],
+    [SPR_FENCE, 760, G2 - 164, 0.8], [SPR_FENCE, 880, G2 - 164, 0.8], [SPR_FENCE, 1000, G2 - 164, 0.8],
+    [SPR_LAMP, 900, G2 - 470, 0.85],
+    [SPR_CAR, 1180, G2 - 208, 0.8],
+    [SPR_TREE, 1400, G2 - 500, 0.55],
+    [SPR_BOX, 1660, G2 - 166, 0.8],
+    [SPR_FENCE, 1860, G2 - 164, 0.3], [SPR_FENCE, 1980, G2 - 164, 0.3], [SPR_FENCE, 2100, G2 - 164, 0.3], [SPR_FENCE, 2220, G2 - 164, 0.3], [SPR_FENCE, 2340, G2 - 164, 0.3],
+    [SPR_LIMB, LIMB[0] - 34 + W_STOP * 0.6, LIMB[1] - 118 + 16, 1],
+    [SPR_LAMP, -320, G2 - 470, 0.85]
+  ];
+  const NEAR = [[SPR_HYDRANT, 980, G - 112], [SPR_BIN, 2000, G - 164], [SPR_HYDRANT, -420, G - 112]];
+  const DEBUG = { framesDrawn: 0 };
+
+  // ---------------------------------------------------------------- the cat through the film
+  function catPose(b) {
+    const xb = b >= 22.7 ? b - 24 : b;
+    const wx = scrollAt(xb);
+    const s = ((wx / STRIDE) % 1 + 1) % 1;
+    let P;
+    if (xb < 6.4) P = walkPose(s, CAT_WALK);
+    else if (xb < 7.5) P = mixPose(walkPose(s, CAT_WALK), sitPose(CAT_SIT), smooth(6.4, 7.5, xb));
+    else P = sitPose(CAT_SIT);
+    // breathing and listening
+    const breath = Math.sin(b * TAU / 2) * 1.2;
+    if (xb >= 7.5) { P.sy += breath; P.by += breath * 1.2; }
+    // The walking glance: a yellow thing crosses, the head comes up, the wire puts it back
+    if (xb < 6) {
+      const k = keys([[2.92, 0], [3.3, 1], [3.6, 1], [3.72, 0]], xb);
+      P.ba -= k * 0.42;
+      P.by -= k * 7;
+      P.ear = k;
+    }
+    // Seated: every look is a real aim at something on screen
+    if (xb >= 6.6) {
+      const m0 = MEN[0];
+      const bird = b < 11 ? LIMB : RAIL;
+      const look = keys(LOOK, b);
+      const sitK = smooth(6.6, 7.5, xb);
+      const angMen = Math.atan2(m0.y - 214 * m0.s - P.by, m0.x - P.bx);
+      const angBird = Math.atan2(bird[1] - P.by, bird[0] - P.bx);
+      P.ba = lerp(P.ba, lerp(angMen, angBird, look), sitK);
+      P.ear = look;
+    }
+    // the tail keeps the backbeat while the paws are still: it lands on 2 and 4
+    if (xb >= 7.25 && b < 14.5) {
+      const beat = (b * 4 - 1 + 8) % 2;
+      const v = Math.pow(Math.sin(beat / 2 * Math.PI), 1.4);
+      P.tL = v * 1.9 * smooth(7.25, 7.75, xb);
+    }
+    if (b >= 14.6 && b < 22.7) {
+      const wig = b > 15.4 && b < 16.03 ? Math.sin((b - 15.4) * TAU * 8) * smooth(15.4, 15.6, b) : 0;
+      let Q = stalkPose(CAT_SIT + 40, wig);
+      const angB = Math.atan2(RAIL[1] - Q.by, RAIL[0] - Q.bx);
+      Q.ba = lerp(Q.ba, angB, 0.8);
+      P = mixPose(P, Q, smooth(14.6, 15.35, b));
+      if (b >= 16) {
+        const g = (b * 4) % 1;
+        const R = gallopPose(g, CAT_RUN);
+        P = mixPose(P, R, smooth(16, 16.42, b));
+      }
+      if (b >= 20.25) {
+        const cy = keys([[20.25, 548], [20.62, 296], [21.65, 430]], b);
+        const cx = lerp(CAT_RUN, 450, smooth(20.25, 21.4, b));
+        P = mixPose(P, reachPose(cx, cy), smooth(20.25, 20.95, b));
+      }
+    }
+    P.heart = 0;
+    return P;
+  }
+  function heartAt(b) {
+    const p = ((b * 4) % 2 + 2) % 2;
+    return Math.max(Math.exp(-p * 5.2), p >= 0.25 ? 0.62 * Math.exp(-(p - 0.25) * 6) : 0);
+  }
+  function pulseAt(b) {
+    for (const [a, l] of [[3.6, 0.13], [9.95, 0.12], [12.5, 0.24]]) if (b >= a && b <= a + l) return (b - a) / l;
+    return -1;
+  }
+
+  // ---------------------------------------------------------------- the plate
+  const XR = mk(W, H), xc = XR.getContext('2d');
+  const XB = mk(225, 225), xbc = XB.getContext('2d');
+  function plate(b, J) {
+    const c = xc;
+    const xb = b >= 22.7 ? b - 24 : b;
+    const wx = scrollAt(xb), fs = wx * 0.6;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalCompositeOperation = 'source-over';
+    c.globalAlpha = 1;
+    c.fillStyle = PAL.plate;
+    c.fillRect(0, 0, W, H);
+    c.globalCompositeOperation = 'lighter';
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    // far row houses
+    const rx = -(((wx * 0.3) % 720) + 720) % 720;
+    for (let k = 0; k < 3; k++) c.drawImage(SPR_ROW, rx + k * 720, 0);
+    // the back of the pavement
+    c.fillStyle = INK(0.04);
+    c.fillRect(0, G2, W, G - G2);
+    line(c, [[0, G2], [W, G2]], 0.2, 1);
+    for (const [spr, fx, y, gain] of PLACED) {
+      const x = fx - fs;
+      if (x > W || x + spr.width < 0) continue;
+      c.globalAlpha = gain;
+      c.drawImage(spr, x, y);
+    }
+    c.globalAlpha = 1;
+    // the bench
+    const bx = FAR_BENCH - fs;
+    if (bx > -300 && bx < W + 300) {
+      c.drawImage(SPR_BENCH, bx - 250, 395);
+      bagOnFilm(c, bx, 516);
+      const off = bx - 590;
+      const tick = ((b * 8) % 1);
+      c.save();
+      c.translate(off, 0);
+      manOnFilm(c, MEN[0], jawAt(b, 0), tick < 0.15 ? 1 : 0);
+      manOnFilm(c, MEN[1], jawAt(b, 1), 0);
+      c.restore();
+    }
+    // pavement joints
+    for (let k = -2; k < 14; k++) {
+      const x = k * 170 - (((wx % 170) + 170) % 170);
+      const xf = (k * 170 - 450) * 0.6 + 450 - (((fs % 102) + 102) % 102);
+      line(c, [[x, G], [xf, G2]], 0.1, 1);
+    }
+    for (const [spr, nx, y] of NEAR) {
+      const x = nx - wx;
+      if (x > W || x + spr.width < 0) continue;
+      c.drawImage(spr, x, y);
+    }
+    // under the pavement
+    const ux = -(((wx % UNDER_W) + UNDER_W) % UNDER_W);
+    c.drawImage(SPR_UNDER, ux, G);
+    if (ux + UNDER_W < W) c.drawImage(SPR_UNDER, ux + UNDER_W, G);
+    // the cat
+    skeletonOnFilm(c, J, heartAt(b));
+    const wires = wirePaths(J);
+    hardwareOnFilm(c, J, wires, pulseAt(b), b > 12.74 ? 0.42 : 1);
+    // what it is listening to: one taut thread per voice, its width the weight in the mix
+    const mW = keys(MEN_W, b);
+    const off = bx - 590;
+    for (const m of [0, 1]) {
+      const M = MEN[m], tx = M.x + off, ty = M.y - 186 * M.s;
+      threadOnFilm(c, J.ear, tx, ty, mW, b);
+    }
+    tilesOnFilm(c, xb);
+    if (DEBUG) DEBUG.framesDrawn++;
+  }
+  function threadOnFilm(c, ear, tx, ty, w, b) {
+    if (w < 0.01) return;
+    c.strokeStyle = INK(0.1 + w * 0.5);
+    c.lineWidth = 0.6 + w * 1.7;
+    c.beginPath();
+    c.moveTo(ear[0], ear[1]);
+    c.lineTo(tx, ty);
+    c.stroke();
+    // the words, on their way in, one per eighth
+    const dx = ear[0] - tx, dy = ear[1] - ty, L2 = Math.hypot(dx, dy) || 1;
+    const step = 118;
+    const ph = ((b * 8) % 1) * step;
+    for (let d = ph; d < L2; d += step) {
+      const q = d / L2;
+      if (tx + dx * q < -10 || tx + dx * q > W + 10) continue;
+      c.fillStyle = INK(0.3 + w * 0.7);
+      c.beginPath();
+      c.arc(tx + dx * q, ty + dy * q, 0.8 + w * 1.5, 0, TAU);
+      c.fill();
+    }
+  }
+  function birdThread(c, ear, bird, w, b, col) {
+    if (!bird || w < 0.01) return;
+    c.strokeStyle = col;
+    c.globalAlpha = clamp(0.25 + w * 0.75);
+    c.lineWidth = 0.7 + w * 2.6;
+    c.beginPath();
+    c.moveTo(ear[0], ear[1]);
+    c.lineTo(bird.x, bird.y);
+    c.stroke();
+    const dx = ear[0] - bird.x, dy = ear[1] - bird.y, L2 = Math.hypot(dx, dy) || 1;
+    const step = 74;
+    const ph = ((b * 16) % 1) * step;
+    c.fillStyle = col;
+    for (let d = ph; d < L2; d += step) {
+      const q = d / L2;
+      c.beginPath();
+      c.arc(bird.x + dx * q, bird.y + dy * q, 1.2 + w * 2.2, 0, TAU);
+      c.fill();
+    }
+    c.globalAlpha = 1;
+  }
+  function floodPath(c, x, y, r) {
+    c.beginPath();
+    const n = 72;
+    for (let k = 0; k < n; k++) {
+      const a = k / n * TAU;
+      const q = 1 + 0.08 * Math.sin(a * 3 + 1.1) + 0.05 * Math.sin(a * 7 + 0.4) + 0.03 * Math.sin(a * 13 + 2.2);
+      const px = x + Math.cos(a) * r * q, py = y + Math.sin(a) * r * q;
+      if (k) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.closePath();
+  }
+
+  // ---------------------------------------------------------------- one frame
+  window.renderFrame = function (time) {
+    const tt = ((time % DUR) + DUR) % DUR;
+    const b = tt / BAR;
+    const c = ctx;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1;
+    c.globalCompositeOperation = 'source-over';
+    c.lineCap = 'round';
+    c.lineJoin = 'round';
+    c.lineWidth = 1;
+    c.setLineDash([]);
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
+    c.filter = 'none';
+    xc.setTransform(1, 0, 0, 1, 0, 0);
+    xc.globalAlpha = 1;
+
+    const P = catPose(b);
+    const J = solve(P);
+    const bird = birdAt(b);
+    const bW = keys(BIRD_W, b);
+    const showPlate = b < 15.3 || b >= 22.6;
+    const showDay = b >= 14 && b < 22.72;
+
+    // the pupil, and how much of the iris is over the frame
+    const hippus = Math.sin(b / 24 * TAU * 6) * 4;
+    let Ra = R0 + hippus, Rb = R0 + hippus, irisK = 1;
+    if (b >= 12.75 && b < 22.3) {
+      const k = smooth(12.75, 14.3, b);
+      Ra = Rb = lerp(R0 + hippus, 780, k * k);
+    }
+    if (b >= 22.3) {
+      irisK = smooth(22.3, 22.92, b);
+      const slitIn = smooth(22.3, 22.9, b);
+      const open = Math.pow(smooth(23, 24, b), 1.4);
+      Ra = lerp(lerp(34, 5, slitIn), R0, open);
+      Rb = lerp(lerp(560, 610, slitIn), R0, open);
+    }
+
+    if (showPlate) {
+      plate(b, J);
+      xbc.globalCompositeOperation = 'source-over';
+      xbc.drawImage(XR, 0, 0, 225, 225);
+    }
+    const drawPlate = () => {
+      c.drawImage(XR, 0, 0);
+      c.globalCompositeOperation = 'lighter';
+      c.globalAlpha = 0.34;
+      c.imageSmoothingQuality = 'high';
+      c.drawImage(XB, 0, 0, W, H);
+      c.globalAlpha = 1;
+      c.globalCompositeOperation = 'source-over';
+      c.drawImage(SPR_MOTTLE, 0, 0);
+      c.drawImage(SPR_MOTTLE, 512, 0);
+      c.drawImage(SPR_MOTTLE, 0, 512);
+      c.drawImage(SPR_MOTTLE, 512, 512);
+    };
+    if (showPlate && b < 22.3) {
+      drawPlate();
+      if (b < 14.2) {
+        birdThread(c, J.ear, bird, bW, b, PAL.lemon);
+        if (bird) {
+          const g = c.createRadialGradient(bird.x, bird.y, 2, bird.x, bird.y, 64);
+          g.addColorStop(0, 'rgba(255,216,31,0.34)');
+          g.addColorStop(1, 'rgba(255,216,31,0)');
+          c.fillStyle = g;
+          c.fillRect(bird.x - 64, bird.y - 64, 128, 128);
+          drawBird(c, bird.x, bird.y, bird.s, bird.dir, bird.flap, bird.perched, beakAt(b), PAL.cream);
+        }
+      }
+    }
+
+    // daylight
+    if (showDay) {
+      const cw = cwAt(b);
+      const wy = keys([[20.6, 0], [21.65, 900]], b);
+      const tilt = -0.034 * smooth(16.3, 17, b) * (1 - smooth(20.3, 20.9, b));
+      const zk = smooth(22, 22.62, b);
+      const zoom = b >= 22 ? Math.pow(9, zk * zk) : 1;
+      const fr = b < 15.3 ? lerp(0, 1320, Math.pow(smooth(14, 15.25, b), 1.5)) : 0;
+      c.save();
+      if (b < 15.3) {
+        floodPath(c, RAIL[0], RAIL[1], fr);
+        c.clip();
+      }
+      c.save();
+      c.translate(CX, CY - 20);
+      c.rotate(tilt);
+      const gs = 1 + Math.abs(tilt) * 2.4;
+      c.scale(gs * zoom, gs * zoom);
+      c.translate(-CX, -(CY - 20));
+      dayWorld(c, b, cw, wy);
+      // the bench and the two who are still talking
+      const bx = 590 - cw * 0.6;
+      if (bx > -300) {
+        c.drawImage(SPR_DAYBENCH, bx - 260, 395 + wy);
+        const off = bx - 590;
+        c.save();
+        c.translate(off, wy);
+        const tick = ((b * 8) % 1) < 0.15 ? 1 : 0;
+        manHole(c, MEN[0], jawAt(b, 0), tick);
+        manHole(c, MEN[1], jawAt(b, 1), 0);
+        c.restore();
+      }
+      if (b < 18) tilesInDaylight(c, b, -cw, -cw * 0.6);
+      // the taxi, nearly
+      if (b >= 20.1 && b < 21.4) {
+        const tx = 450 - 1300 * (b - 20.5);
+        const ty = G - 228 + wy + 2;
+        drawTaxi(c, tx, ty, -b * 40);
+        if (b >= 20.14 && b < 20.44) {
+          const k = (b - 20.14) / 0.3;
+          c.fillStyle = PAL.cream;
+          for (let m = 0; m < 3; m++) {
+            const a = 2.95 + m * 0.2, L3 = 60 + (1 - k) * 90;
+            const x0 = tx - 10 - k * 34, y0 = ty + 158;
+            c.beginPath();
+            c.moveTo(x0 + Math.cos(a) * 26, y0 + Math.sin(a) * 26);
+            c.lineTo(x0 + Math.cos(a - 0.05) * (26 + L3), y0 + Math.sin(a - 0.05) * (26 + L3));
+            c.lineTo(x0 + Math.cos(a + 0.05) * (26 + L3), y0 + Math.sin(a + 0.05) * (26 + L3));
+            c.closePath();
+            c.fill();
+          }
+        }
+      }
+      if (bird && b < 22) {
+        birdThread(c, J.ear, bird, bW, b, b > 20.8 ? PAL.cream : PAL.lemon);
+        drawBird(c, bird.x, bird.y, bird.s, bird.dir, bird.flap, bird.perched, beakAt(b), PAL.black);
+      }
+      c.restore();
+      // the leap stretches into a slit as the sun fills the frame
+      c.save();
+      const stretch = zk;
+      c.translate(CX, CY - 20);
+      c.rotate(tilt);
+      c.scale(lerp(gs, 0.1, stretch), lerp(gs, 3.6, stretch));
+      c.translate(-CX, -(CY - 20));
+      // a wire that breaks at the top of the leap and is left falling
+      const broke = smooth(21.35, 21.9, b);
+      catInDaylight(c, J, broke < 0.02);
+      if (broke >= 0.02 && b < 22) {
+        const w = wirePaths(J);
+        c.strokeStyle = `rgba(244,234,208,${1 - broke * 0.7})`;
+        c.lineWidth = 1.5;
+        c.beginPath();
+        w.ant.forEach((p, k) => {
+          const sag = broke * broke * 420 * (0.45 + k / w.ant.length);
+          if (k) c.lineTo(p[0] - broke * 30, p[1] + sag); else c.moveTo(p[0] - broke * 30, p[1] + sag);
+        });
+        c.stroke();
+      }
+      c.restore();
+      c.restore();
+      if (b < 15.3) {
+        floodPath(c, RAIL[0], RAIL[1], fr);
+        c.strokeStyle = PAL.lemon;
+        c.lineWidth = 3;
+        c.stroke();
+      }
+      // paper grain, fixed
+      c.drawImage(SPR_PAPER, 0, 0);
+      c.drawImage(SPR_PAPER, 512, 0);
+      c.drawImage(SPR_PAPER, 0, 512);
+      c.drawImage(SPR_PAPER, 512, 512);
+    }
+
+    // through the slit the next plate is already running
+    if (showPlate && b >= 22.3) {
+      c.save();
+      pupilPath(c, Ra, Rb);
+      c.clip();
+      drawPlate();
+      c.restore();
+    }
+
+    // The iris goes on last, with the pupil cut out of it
+    if (Ra < 700 && irisK > 0) {
+      const scale = Ra > R0 + 10 ? Ra / R0 : 1;
+      const size = IRIS_R * 2 * scale;
+      c.save();
+      c.globalAlpha = irisK;
+      c.beginPath();
+      c.rect(0, 0, W, H);
+      const a0 = Ra, b0 = Rb;
+      const round = clamp(a0 / b0), kx = a0 * 0.5523 * round, ky = b0 * lerp(0.2, 0.5523, round);
+      c.moveTo(CX, CY - b0);
+      c.bezierCurveTo(CX + kx, CY - b0, CX + a0, CY - ky, CX + a0, CY);
+      c.bezierCurveTo(CX + a0, CY + ky, CX + kx, CY + b0, CX, CY + b0);
+      c.bezierCurveTo(CX - kx, CY + b0, CX - a0, CY + ky, CX - a0, CY);
+      c.bezierCurveTo(CX - a0, CY - ky, CX - kx, CY - b0, CX, CY - b0);
+      c.closePath();
+      c.clip('evenodd');
+      c.drawImage(SPR_IRIS, CX - size / 2, CY - size / 2, size, size);
+      c.restore();
+      // the shaded rim where the iris folds in at the pupil: a true gradient while the pupil is round, a soft stroke for a slit
+      c.save();
+      c.globalAlpha = irisK;
+      if (Ra / Rb > 0.97) {
+        const rim = c.createRadialGradient(CX, CY, Ra - 1, CX, CY, Ra * 1.2);
+        rim.addColorStop(0, 'rgba(44,18,0,0.92)');
+        rim.addColorStop(0.08, 'rgba(70,30,2,0.68)');
+        rim.addColorStop(0.3, 'rgba(90,42,4,0.34)');
+        rim.addColorStop(0.62, 'rgba(90,42,4,0.1)');
+        rim.addColorStop(1, 'rgba(90,42,4,0)');
+        c.beginPath();
+        c.rect(0, 0, W, H);
+        c.arc(CX, CY, Ra, 0, TAU, true);
+        c.fillStyle = rim;
+        c.fill('evenodd');
+      } else {
+        c.filter = 'blur(9px)';
+        pupilPath(c, Ra, Rb);
+        c.strokeStyle = 'rgba(70,30,2,0.5)';
+        c.lineWidth = 34;
+        c.stroke();
+        c.filter = 'none';
+        pupilPath(c, Ra, Rb);
+        c.strokeStyle = 'rgba(44,18,0,0.75)';
+        c.lineWidth = 5;
+        c.stroke();
+      }
+      c.restore();
+      if (b < 14 || b >= 22.8) {
+        const round2 = clamp(Ra / Rb);
+        c.save();
+        pupilPath(c, Ra, Rb);
+        c.clip();
+        const gr = c.createRadialGradient(CX, CY, Rb * 0.72, CX, CY, Rb * 1.01);
+        gr.addColorStop(0, 'rgba(4,7,14,0)');
+        gr.addColorStop(1, 'rgba(4,7,14,0.72)');
+        c.fillStyle = gr;
+        c.globalAlpha = round2 * irisK;
+        c.fillRect(0, 0, W, H);
+        c.restore();
+      }
+      c.globalAlpha = clamp((700 - Ra) / 200) * irisK;
+      c.drawImage(SPR_CORNEA, 0, 0);
+      c.globalAlpha = 1;
+    }
+    // the bird that got away, in screen space over the closing iris, until it is only the fleck
+    if (bird && b >= 22) {
+      c.save();
+      c.translate(bird.x, bird.y);
+      c.rotate(bird.rot);
+      const fleckCol = bird.settling > 0.6 ? 'rgba(255,240,170,0.85)' : PAL.black;
+      drawBird(c, 0, 0, bird.s, 1, bird.flap, false, 0, fleckCol);
+      c.restore();
+    }
+    return canvas.toDataURL('image/png');
+  };
+  window.__birds = DEBUG;
+  window.ready = true;
+})();
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 60\\n// FORM: on the wire 0-8 | the bench 8-14 | daylight 14-17 | the chase 17-22 | back on the wire 22-24\\n// TONAL CENTER: E dorian on the wire, E major in daylight\\n// MOTIF: B5 G#5 B5 E6, the goldfinch's po-ta-to-chip on sixteenths 0, 1, 2 and 4. Its G# is wrong over the wire's E minor until the band comes round to it\\n// HARMONIC PLAN: Em7 | A7 on the wire, B7 for the letters, then E | A | E | B and E | G A | B7 | A B in daylight, one E6/9, back to A7 on the wire\\n// GROOVE: boogaloo at 96. On the wire the walk is the kit: near hind paw kick on 1 and 3, far hind paw snare on 2 and 4, fore paws hats on the \\\"and\\\"s. Seated, the heart is the kick, the tail is the snare and a wristwatch is the hats. In daylight a full kit; in the chase the gallop is a flam on every eighth\\n//\\n// A 1967 Rhythm Ace through the band of a 1960s bug, then a full band with nothing in the way. Colour on the picture is bandwidth here.\\n// The picture and this score read the same tables: TALK moves the two men's jaws, MEN_W and BIRD_W draw the threads to the cat's ear.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst BARS = 24, BAR = 2.5, STRIDE = 190, V = STRIDE / 1.25, T_STOP = 15, T_DECEL = 3.75;\\nconst SEMI = { C: 0, 'C#': 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };\\nconst hz = (name) => {\\n  const m = name.match(/^([A-G](?:#|b)?)(-?\\\\d)$/);\\n  return 440 * Math.pow(2, (SEMI[m[1]] + 12 * (Number(m[2]) + 1) - 69) / 12);\\n};\\nconst smooth = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };\\nconst lerp = (a, b, k) => a + (b - a) * k;\\nconst keys = (table, b) => {\\n  if (b \u003c= table[0][0]) return table[0][1];\\n  for (let i = 1; i \u003c table.length; i++) {\\n    if (b \u003c= table[i][0]) return lerp(table[i - 1][1], table[i][1], smooth(table[i - 1][0], table[i][0], b));\\n  }\\n  return table[table.length - 1][1];\\n};\\nlet seed = 1966;\\nconst rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };\\n\\nconst TALK = [\\n  [0, 0, 2, 0], [0, 2, 1, 0], [0, 3, 1, 0], [0, 6, 2, 0], [0, 8, 1, 0], [0, 9, 1, 0], [0, 10, 3, 0],\\n  [1, 2, 1, 1], [1, 3, 1, 1], [1, 4, 2, 1], [1, 8, 2, 1], [1, 10, 1, 1], [1, 11, 1, 1], [1, 12, 3, 1],\\n  [2, 0, 1, 0], [2, 1, 1, 0], [2, 2, 2, 0], [2, 6, 1, 0], [2, 7, 1, 0], [2, 8, 4, 0], [2, 14, 1, 0], [2, 15, 1, 0],\\n  [3, 0, 2, 1], [3, 4, 1, 1], [3, 5, 1, 1], [3, 6, 2, 1], [3, 10, 2, 1], [3, 12, 1, 1], [3, 13, 1, 1], [3, 14, 2, 1]\\n];\\nconst TALK_NOTES = [\\n  'E3', 'E3', 'G3', 'A3', 'G3', 'E3', 'D3',\\n  'B3', 'B3', 'A3', 'G3', 'A3', 'B3', 'D4',\\n  'D3', 'E3', 'G3', 'E3', 'G3', 'A3', 'G3', 'E3',\\n  'B3', 'G3', 'A3', 'B3', 'D4', 'B3', 'A3', 'G3'\\n];\\nconst MEN_W = [[0, 0.26], [2.8, 0.34], [3.3, 0.14], [3.8, 0.38], [8, 1], [9.3, 1], [9.7, 0.55], [10.1, 1], [11.6, 1], [12.1, 0.72], [12.5, 0.55], [12.75, 0.82], [13, 0.34], [14, 0.08], [16, 0.03], [17, 0], [23, 0], [23.99, 0.26]];\\nconst BIRD_W = [[2.9, 0], [3.25, 0.62], [3.65, 0.62], [3.85, 0], [9.2, 0], [9.55, 0.66], [9.95, 0.66], [10.1, 0.03], [11.55, 0.03], [12.05, 0.78], [12.5, 0.9], [12.75, 0.62], [13, 1], [20, 1], [22.2, 1], [22.4, 0]];\\nconst CALLS = [3.25, 9.5, 9.75, 12, 12.5, 13, 13.5];\\n\\nconst lane = () => Array.from({ length: BARS }, () => []);\\n// an event at a bar and a beat of it, lenBeats long\\nconst put = (L, bar, beat, lenBeats, v) => {\\n  let b = bar + Math.floor(beat / 4), bt = beat - Math.floor(beat / 4) * 4;\\n  b = ((b % BARS) + BARS) % BARS;\\n  const a = bt / 4;\\n  L[b].push(pure(v).compress(a, Math.min(0.9999, a + Math.max(lenBeats, 0.02) / 4)));\\n};\\nconst play = (L) => cat(...L.map((list) => (list.length ? stack(...list) : silence)));\\n\\nconst KIT = lane(), LOW = lane(), MEN = lane(), BIRD = lane(), BAND = lane();\\n\\n// ------------------------------------------------------------------ the bug's passband\\nconst WIRE = { hcutoff: 300, cutoff: 2700 };\\nconst drum = (L, bar, beat, name, bank, n, gain, extra = {}) => put(L, bar, beat, 0.5, { s: name, bank, n, gain, orbit: 1, ...extra });\\n\\n// ------------------------------------------------------------------ the walk is the kit\\nconst barOf = (t) => t / BAR;\\nconst tOfWx = (wx) => {\\n  if (wx \u003c= V * T_STOP) return wx / V;\\n  const left = wx - V * T_STOP;\\n  return T_STOP + T_DECEL * (1 - Math.sqrt(Math.max(0, 1 - 2 * left / (V * T_DECEL))));\\n};\\nconst footfall = (k, bb) => {\\n  const bar = Math.floor(bb), beat = (bb - bar) * 4, part = ((k % 4) + 4) % 4;\\n  if (part === 0) {\\n    drum(KIT, bar, beat, 'bd', 'RhythmAce', 0, 0.4, { hcutoff: 110, cutoff: 3000 });\\n    put(KIT, bar, beat, 0.2, { s: 'sine', freq: 72, penv: 16, pattack: 0.001, pdecay: 0.05, psustain: 0, attack: 0.002, decay: 0.15, sustain: 0, release: 0.02, gain: 0.16, orbit: 1 });\\n  } else if (part === 2) {\\n    drum(KIT, bar, beat, 'sd', 'RhythmAce', 1, 0.5, { hcutoff: 240, cutoff: 3000 });\\n  } else {\\n    drum(KIT, bar, beat, 'hh', 'RhythmAce', 0, 0.42, { hcutoff: 900, cutoff: 3000 });\\n  }\\n};\\nfor (let k = 0; ; k++) {\\n  const wx = k * STRIDE / 4, t = tOfWx(wx), bb = barOf(t);\\n  if (bb > 7.15 || wx >= V * T_STOP + V * T_DECEL / 2) break;\\n  footfall(k, bb);\\n}\\n// the next instance is already walking in the last bar, seen through the slit as it opens\\nfor (let k = -8; k \u003c 0; k++) footfall(k, 24 + barOf(k * STRIDE / 4 / V));\\n\\n// ------------------------------------------------------------------ seated: the heart, the tail, a wristwatch\\nconst heart = (bar, beat, g) => {\\n  put(KIT, bar, beat, 0.25, { s: 'sine', freq: 62, penv: 14, pattack: 0.001, pdecay: 0.04, psustain: 0, attack: 0.002, decay: 0.17, sustain: 0, release: 0.02, gain: 0.32 * g, orbit: 1 });\\n  put(KIT, bar, beat, 0.2, { s: 'triangle', freq: 156, penv: 7, pattack: 0.001, pdecay: 0.03, psustain: 0, attack: 0.002, decay: 0.08, sustain: 0, release: 0.02, gain: 0.3 * g, orbit: 1 });\\n};\\nfor (let bar = 7; bar \u003c 14; bar++) {\\n  for (let i = 0; i \u003c 2; i++) {\\n    const beat = i * 2;\\n    if (bar === 7 && beat \u003c 2) continue;\\n    if (bar === 13 && beat >= 2) continue;\\n    heart(bar, beat, 1);\\n    heart(bar, beat + 0.25, 0.62);\\n    // the tail lands on 2 and 4\\n    drum(KIT, bar, beat + 1, 'sd', 'RhythmAce', 2, 0.56, { hcutoff: 220, cutoff: 3000 });\\n  }\\n  for (let e = 0; e \u003c 8; e++) {\\n    if (bar === 7 && e \u003c 4) continue;\\n    if (bar === 13) continue;\\n    put(KIT, bar, e / 2, 0.08, { s: 'user', freq: 2637, partials: [1, 0, 0.5, 0, 0.3], attack: 0.001, decay: 0.022, sustain: 0, release: 0.01, gain: e % 2 ? 0.05 : 0.075, orbit: 1 });\\n  }\\n}\\n\\n// ------------------------------------------------------------------ the wire's own bed, and a little mains\\nconst bed = (bar, g) => {\\n  put(BAND, bar, 0, 3.96, { s: 'pink', gain: 0.16 * g, bandf: 1500, bandq: 0.4, attack: 0.02, decay: 0.1, sustain: 1, release: 0.02, orbit: 5 });\\n  put(BAND, bar, 0, 3.96, { s: 'sine', freq: 180, gain: 0.018 * g, attack: 0.02, decay: 0.1, sustain: 1, release: 0.02, orbit: 5 });\\n  put(BAND, bar, 0, 3.96, { s: 'sine', freq: 300, gain: 0.01 * g, attack: 0.02, decay: 0.1, sustain: 1, release: 0.02, orbit: 5 });\\n};\\nfor (let bar = 0; bar \u003c 13; bar++) bed(bar, 1);\\nbed(23, 1);\\n\\n// ------------------------------------------------------------------ bass: one boogaloo riff, thin on the wire, whole in daylight\\nconst RIFF_SIX = [0, 3, 6, 8, 11, 14];\\nconst WIRE_RIFF = {\\n  Em7: ['E2', 'E2', 'G2', 'A2', 'E2', 'D2'],\\n  A7: ['A2', 'A2', 'C#3', 'D3', 'A2', 'G2'],\\n  B7: ['B2', 'B2', 'D#3', 'E3', 'B2', 'A2']\\n};\\nconst SUN_RIFF = {\\n  E: ['E2', 'E2', 'G#2', 'A2', 'B2', 'D3'],\\n  A: ['A2', 'A2', 'C#3', 'D3', 'E3', 'G3'],\\n  B: ['B2', 'B2', 'D#3', 'E3', 'F#3', 'A3'],\\n  G: ['G2', 'G2', 'B2', 'A2', 'D3', 'E3']\\n};\\nconst wireBass = (bar, ch, g = 1) => WIRE_RIFF[ch].forEach((name, i) => {\\n  put(LOW, bar, RIFF_SIX[i] / 4, 0.42, { s: 'sawtooth', freq: hz(name), cutoff: 1500, hcutoff: 170, attack: 0.004, decay: 0.12, sustain: 0.5, release: 0.05, gain: 0.56 * g, orbit: 2 });\\n});\\nconst sunBass = (bar, ch, from = 0, to = 16) => SUN_RIFF[ch].forEach((name, i) => {\\n  if (RIFF_SIX[i] \u003c from || RIFF_SIX[i] >= to) return;\\n  const f = hz(name);\\n  put(LOW, bar, RIFF_SIX[i] / 4 + 0.022, 0.46, { s: 'triangle', freq: f, attack: 0.004, decay: 0.18, sustain: 0.6, release: 0.05, gain: 0.52, orbit: 2 });\\n  put(LOW, bar, RIFF_SIX[i] / 4 + 0.03, 0.3, { s: 'sawtooth', freq: f, cutoff: 1100, attack: 0.004, decay: 0.09, sustain: 0.3, release: 0.04, gain: 0.23, orbit: 2 });\\n});\\nfor (let bar = 0; bar \u003c 13; bar++) wireBass(bar, bar % 2 ? 'A7' : 'Em7');\\nwireBass(13, 'B7', 0.42);\\nwireBass(23, 'A7');\\n[['E'], ['A'], ['E'], ['B'], ['E']].forEach(([ch], i) => sunBass(14 + i, ch));\\nsunBass(19, 'G', 0, 8);\\nSUN_RIFF.A.forEach((name, i) => { if (RIFF_SIX[i] \u003c 8) put(LOW, 19, 2 + RIFF_SIX[i] / 4, 0.46, { s: 'triangle', freq: hz(name), attack: 0.004, decay: 0.18, sustain: 0.55, release: 0.05, gain: 0.5, orbit: 2 }); });\\n// the taxi: bass drops out from under the horn, then climbs under the leap\\n[['A2', 21, 0], ['A2', 21, 1], ['B2', 21, 2], ['B2', 21, 3], ['B2', 21, 3.5]].forEach(([n, bar, beat]) => {\\n  put(LOW, bar, beat, 0.8, { s: 'triangle', freq: hz(n), attack: 0.006, decay: 0.2, sustain: 0.6, release: 0.08, gain: 0.46, orbit: 2 });\\n});\\n// one long low E under the hit, struck again so the offline renderer keeps it\\nput(LOW, 22, 0, 2.4, { s: 'sine', freq: hz('E1') * 2, attack: 0.006, decay: 0.6, sustain: 0.4, release: 0.5, gain: 0.3, orbit: 2 });\\n\\n// ------------------------------------------------------------------ the two men: two muted horns that never make a word\\nconst vowel = (f0, F) => Array.from({ length: 24 }, (_, i) => {\\n  const fn = f0 * (i + 1);\\n  let a = 0.03 / (i + 1);\\n  for (const [fc, bw, g] of F) a += g * Math.exp(-Math.pow((fn - fc) / bw, 2));\\n  return fn > 5200 ? 0 : a;\\n});\\nconst AH = [[760, 170, 1], [1180, 200, 0.6], [2550, 320, 0.16]];\\nconst OH = [[520, 130, 1], [900, 170, 0.45], [2400, 320, 0.08]];\\nconst EH = [[560, 140, 1], [1800, 240, 0.55], [2500, 320, 0.14]];\\nconst VOWELS = [AH, OH, EH, AH, OH];\\nTALK.forEach(([p, six, len, who], index) => {\\n  const note = TALK_NOTES[index], f = hz(note) * (who ? 1 : 0.5) * (who ? 0.5 : 1);\\n  for (let start = 0; start \u003c BARS; start += 4) {\\n    const bar = start + p;\\n    const bb = bar + six / 16;\\n    const w = keys(MEN_W, bb);\\n    if (w \u003c 0.015) continue;\\n    const pitch = who ? hz(note) * 0.5 : hz(note);\\n    put(MEN, bar, six / 4, len / 4 * 0.86, {\\n      s: 'user', freq: pitch, partials: vowel(pitch, VOWELS[index % VOWELS.length]),\\n      attack: 0.018, decay: 0.05, sustain: 0.8, release: 0.04, penv: who ? 1.2 : -1.2, pattack: 0.001, pdecay: 0.08, psustain: 0,\\n      gain: 0.6 * w, hcutoff: 330, cutoff: 2600, orbit: 3\\n    });\\n  }\\n});\\n\\n// ------------------------------------------------------------------ the bird: the one voice outside the bug's passband\\nconst whistle = (bar, beat, name, g, lenBeats = 0.22) => {\\n  const f = hz(name);\\n  put(BIRD, bar, beat, lenBeats, { s: 'user', freq: f, partials: [1, 0.09, 0.03], attack: 0.006, decay: 0.05, sustain: 0.72, release: 0.035, penv: 2.2, pattack: 0.001, pdecay: 0.022, psustain: 0, gain: g, orbit: 4, delay: 0.24, delaytime: 0.46875, delayfeedback: 0.32, vib: 7, vibmod: 0.1 });\\n  put(BIRD, bar, beat, Math.min(lenBeats, 0.14), { s: 'white', bandf: f * 1.02, bandq: 3, attack: 0.002, decay: 0.03, sustain: 0.1, release: 0.01, gain: g * 0.36, orbit: 4 });\\n};\\nconst potato = (bar, beat, notes, g) => notes.forEach((name, i) => {\\n  const at = [0, 0.25, 0.5, 1][i], len = [0.2, 0.2, 0.4, 0.7][i];\\n  whistle(bar, beat + at, name, g, len);\\n});\\nCALLS.forEach((bb) => {\\n  const bar = Math.floor(bb), beat = (bb - bar) * 4;\\n  potato(bar, beat, ['B5', 'G#5', 'B5', 'E6'], 0.3 * keys(BIRD_W, bb + 0.03));\\n});\\nconst HOOK = {\\n  E: [['B5', 'G#5', 'B5', 'E6'], ['C#6', 'B5', 'G#5', 'E5']],\\n  A: [['C#6', 'A5', 'C#6', 'E6'], ['F#6', 'E6', 'C#6', 'A5']],\\n  B: [['D#6', 'B5', 'D#6', 'F#6'], ['E6', 'D#6', 'B5', 'F#5']],\\n  G: [['B5', 'G5', 'B5', 'D6'], ['C#6', 'A5', 'C#6', 'E6']]\\n};\\nconst hook = (bar, ch, g = 0.34) => { potato(bar, 0, HOOK[ch][0], g); potato(bar, 2, HOOK[ch][1], g); };\\n['E', 'A', 'E', 'B', 'E', 'G'].forEach((ch, i) => hook(14 + i, ch));\\n// over the leap it goes up an octave and stops being a call\\n[['E7', 20.5, 0.8], ['C#7', 20.75, 0.5], ['B6', 21, 0.8], ['G#6', 21.25, 0.5], ['B6', 21.5, 0.5], ['C#7', 21.625, 0.5], ['E7', 21.75, 1], ['F#7', 21.875, 0.5]].forEach(([n, bb, len]) => {\\n  const bar = Math.floor(bb);\\n  whistle(bar, (bb - bar) * 4, n, 0.17, len);\\n});\\n\\n// ------------------------------------------------------------------ the override: a buzz on the second wire\\nconst zap = (bar, beat, lenBeats, g) => put(MEN, bar, beat, lenBeats, { s: 'sawtooth', freq: 120, bandf: 1500, bandq: 2.4, attack: 0.002, decay: 0.04, sustain: 0.8, release: 0.02, gain: g, orbit: 3 });\\nzap(3, 2.4, 0.5, 0.42);\\nzap(9, 3.8, 0.45, 0.42);\\n// the third one fires, and sputters out\\n[[12, 2, 0.45, 0.5], [12, 2.5, 0.2, 0.42], [12, 2.75, 0.1, 0.34], [12, 3, 0.07, 0.26], [12, 3.25, 0.04, 0.18]].forEach(([bar, beat, len, g]) => zap(bar, beat, len, g));\\n\\n// ------------------------------------------------------------------ the organ, one chord per bar on the wire, whole in daylight\\nconst DRAWBAR = [1, 0.9, 0.72, 0.1, 0.52, 0.05, 0.34, 0.26];\\nconst VOICING = {\\n  Em7: ['E3', 'G3', 'B3', 'D4'], A7: ['G3', 'A3', 'C#4', 'E4'], B7: ['A3', 'B3', 'D#4', 'F#4'],\\n  E: ['E3', 'G#3', 'B3', 'E4'], A: ['E3', 'A3', 'C#4', 'E4'], B: ['F#3', 'B3', 'D#4', 'F#4'], G: ['D3', 'G3', 'B3', 'D4'],\\n  E69: ['E3', 'G#3', 'C#4', 'F#4', 'B4']\\n};\\nconst chk = (bar, beat, ch, g, lenBeats = 0.34, extra = {}) => VOICING[ch].forEach((name) => {\\n  put(BAND, bar, beat, lenBeats, { s: 'user', freq: hz(name), partials: DRAWBAR, attack: 0.006, decay: 0.04, sustain: 0.8, release: 0.03, gain: g, vib: 6, vibmod: 0.08, orbit: 5, ...extra });\\n});\\nfor (let bar = 0; bar \u003c 13; bar++) {\\n  const ch = bar % 2 ? 'A7' : 'Em7';\\n  [3, 6, 11, 14].forEach((six) => chk(bar, six / 4, ch, 0.17, 0.32, WIRE));\\n}\\n[0, 3, 6, 9, 12, 14].forEach((six) => chk(13, six / 4, 'B7', 0.06 + six * 0.002, 0.26, WIRE));\\n[3, 6, 11, 14].forEach((six) => chk(23, six / 4, 'A7', 0.17, 0.32, WIRE));\\n// daylight: the organ holds\\n[['E', 14], ['A', 15], ['E', 16], ['B', 17], ['E', 18]].forEach(([ch, bar]) => chk(bar, 0, ch, 0.18, 3.9));\\nchk(19, 0, 'G', 0.18, 1.9);\\nchk(19, 2, 'A', 0.18, 1.9);\\nchk(20, 2, 'A', 0.11, 1.9);\\nchk(21, 0, 'A', 0.13, 1.9);\\nchk(21, 2, 'B', 0.15, 1.9);\\nchk(22, 0.05, 'E69', 0.16, 2);\\n// it closes back down to the wire's minor as the slit forms\\nchk(22, 2, 'Em7', 0.11, 1.9, WIRE);\\n\\n// ------------------------------------------------------------------ brass: three saws per note, on the offbeats\\nconst brass = (bar, beat, ch, g, lenBeats = 0.34, cut = 2600) => VOICING[ch].forEach((name) => {\\n  for (const d of [1, 1.004, 0.996]) {\\n    put(BAND, bar, beat, lenBeats, { s: 'sawtooth', freq: hz(name) * 2 * d, cutoff: cut, attack: 0.02, decay: 0.09, sustain: 0.55, release: 0.05, gain: g, orbit: 5, room: 0.25, roomsize: 2.4 });\\n  }\\n});\\n[['E', 14], ['A', 15], ['E', 16], ['B', 17]].forEach(([ch, bar]) => {\\n  brass(bar, 0.75, ch, 0.036);\\n  brass(bar, 2.75, ch, 0.036);\\n});\\n[['E', 18], ['A', 19]].forEach(([ch, bar]) => {\\n  brass(bar, 0, ch, 0.036);\\n  brass(bar, 1.5, ch, 0.036);\\n  brass(bar, 3, ch, 0.036);\\n});\\n// the hit at the top of the leap\\nbrass(22, 0.08, 'E69', 0.032, 1.6, 3200);\\n\\n// ------------------------------------------------------------------ the taxi's horn, held, and the band takes its notes for the leap\\nfor (const [name, g] of [['F4', 0.25], ['A4', 0.22]]) {\\n  for (const d of [1, 1.003]) put(BAND, 20, 0, 1.0, { s: 'sawtooth', freq: hz(name) * d, cutoff: 2600, hcutoff: 300, attack: 0.008, decay: 0.05, sustain: 0.9, release: 0.03, gain: g * 0.7, orbit: 5 });\\n}\\n\\n// ------------------------------------------------------------------ the sixteen letters: each one a lead tile landing on the pavement, a two-octave run into the downbeat\\nconst TILE_RUN = ['E5', 'F#5', 'G#5', 'A5', 'B5', 'C#6', 'D#6', 'E6', 'F#6', 'G#6', 'A6', 'B6', 'C#7', 'D#7', 'E7', 'F#7'];\\nTILE_RUN.forEach((name, i) => {\\n  put(KIT, 13, i / 4, 0.2, { s: 'user', freq: hz(name), partials: [1, 0, 0.56, 0.02, 0.3, 0, 0.14], attack: 0.001, decay: 0.09, sustain: 0, release: 0.04, gain: 0.09 + i * 0.003, orbit: 1, room: 0.2, roomsize: 1.6 });\\n  put(KIT, 13, i / 4 + 0.007, 0.1, { s: 'sd', bank: 'RhythmAce', n: 0, gain: 0.08 + i * 0.016, hcutoff: 500, orbit: 1 });\\n});\\n// the band's breath in over bar 13\\nput(BAND, 13, 0, 3.96, { s: 'white', gain: 0.07, bandf: 500, bandq: 0.7, bpenv: 3.2, bpattack: 2.4, bpdecay: 0.1, bpsustain: 1, attack: 2.2, decay: 0.1, sustain: 0.9, release: 0.02, orbit: 5 });\\n\\n// ------------------------------------------------------------------ daylight's kit\\nconst LN = 'LinnDrum';\\nconst fullBar = (bar, opts = {}) => {\\n  const kicks = opts.kicks || [0, 7, 10];\\n  kicks.forEach((six) => {\\n    drum(KIT, bar, six / 4, 'bd', LN, 0, 0.2);\\n    put(KIT, bar, six / 4, 0.2, { s: 'sine', freq: 56, penv: 20, pattack: 0.001, pdecay: 0.04, psustain: 0, attack: 0.002, decay: 0.2, sustain: 0, release: 0.02, gain: 0.115, orbit: 1 });\\n  });\\n  [4, 12].forEach((six) => {\\n    drum(KIT, bar, six / 4 + 0.006, 'sd', LN, 0, 0.16);\\n    drum(KIT, bar, six / 4 + 0.03, 'tb', LN, 0, 0.13);\\n  });\\n  const hats = opts.hats || 8;\\n  for (let i = 0; i \u003c hats; i++) {\\n    const six = i * 16 / hats;\\n    drum(KIT, bar, six / 4 + 0.04, six % 4 === 2 ? 'oh' : 'hh', LN, 0, (six % 4 === 2 ? 0.085 : 0.12) * (i % 2 && hats === 16 ? 0.62 : 1), six % 4 === 2 ? { cut: 1 } : { cut: 1 });\\n  }\\n};\\nfor (const bar of [14, 15, 18, 19]) fullBar(bar, bar >= 18 ? { hats: 16, kicks: [0, 8] } : {});\\nfullBar(16, { kicks: [0, 8], hats: 16 });\\nfullBar(17, { kicks: [0, 8], hats: 16 });\\n// the wiggle before the launch: sixteenths on the shaker, in time with the hips\\nfor (let i = 0; i \u003c 10; i++) drum(KIT, 15, 1.5 + i / 4, 'sh', LN, 0, 0.1 + i * 0.012);\\n// the drop\\ndrum(KIT, 14, 0.02, 'cr', LN, 0, 0.17);\\ndrum(KIT, 16, 0.02, 'cr', LN, 0, 0.13);\\n// the gallop: a flam on every eighth, hinds then fores, from the bound's own stance table\\nfor (let bb = 16.25; bb \u003c 20.25; bb += 0.25) {\\n  const bar = Math.floor(bb), beat = (bb - bar) * 4;\\n  drum(KIT, bar, beat + 0.045, 'lt', LN, 0, 0.12);\\n  drum(KIT, bar, beat + 0.105, 'lt', LN, 0, 0.065);\\n  drum(KIT, bar, beat + 0.48, 'mt', LN, 0, 0.1);\\n  drum(KIT, bar, beat + 0.54, 'mt', LN, 0, 0.05);\\n}\\n// a pushed fill into the taxi\\n[0, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15].forEach((six) => drum(KIT, 19, 2 + six / 8, 'sd', LN, 0, 0.07 + six * 0.006));\\n// the horn stops the kit; only a cymbal climbs under the leap\\nfor (let i = 0; i \u003c 4; i++) drum(KIT, 20, i * 0.25, i % 2 ? 'rim' : 'bd', LN, 0, 0.17);\\nput(BAND, 20, 1, 2.96, { s: 'white', gain: 0.05, hcutoff: 3000, bandf: 1800, bandq: 0.3, bpenv: 3, bpattack: 1.8, bpdecay: 0.1, bpsustain: 1, attack: 1.8, decay: 0.1, sustain: 0.9, release: 0.02, orbit: 5 });\\nput(BAND, 21, 0, 3.96, { s: 'white', gain: 0.1, bandf: 3800, bandq: 0.3, attack: 0.3, decay: 0.1, sustain: 0.9, release: 0.02, orbit: 5 });\\n// the pulse under the air, tightening to the hit\\nfor (let i = 0; i \u003c 16; i++) drum(KIT, 21, i / 4, 'sh', LN, 0, 0.09 + i * 0.008);\\n[0, 2, 4, 6, 8, 10, 12, 13, 14, 15].forEach((six) => {\\n  drum(KIT, 21, six / 4, 'bd', LN, 0, 0.14 + six * 0.009);\\n  put(KIT, 21, six / 4, 0.2, { s: 'sine', freq: 56, penv: 20, pattack: 0.001, pdecay: 0.04, psustain: 0, attack: 0.002, decay: 0.12, sustain: 0, release: 0.02, gain: 0.07 + six * 0.006, orbit: 1 });\\n});\\n// the hit\\ndrum(KIT, 22, 0, 'bd', LN, 0, 0.21);\\ndrum(KIT, 22, 0.03, 'cr', LN, 0, 0.15);\\ndrum(KIT, 22, 0.05, 'sd', LN, 0, 0.13);\\n\\n$: play(KIT);\\n$: play(LOW);\\n$: play(MEN);\\n$: play(BIRD);\\n$: play(BAND);\",\"bpm\":96,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

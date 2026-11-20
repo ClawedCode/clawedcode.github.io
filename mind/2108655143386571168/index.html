@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}
+body{width:900px;height:900px;margin:0;overflow:hidden;position:relative;background:#0f1a2c}
+.desktop{position:absolute;inset:0;background:#0f1a2c url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><filter id="g"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(%23g)" opacity="0.075"/></svg>') repeat}
+.contour{position:absolute;left:-222px;top:-258px;width:640px;height:640px;pointer-events:none;background:repeating-radial-gradient(circle at 300px 300px,rgba(227,160,74,.05) 0 1px,transparent 1px 27px)}
+.reg{position:absolute;width:15px;height:15px;pointer-events:none;background:linear-gradient(to right,transparent 7px,rgba(239,230,210,.22) 7px 8px,transparent 8px),linear-gradient(to bottom,transparent 7px,rgba(239,230,210,.22) 7px 8px,transparent 8px)}
+.icon{position:absolute;text-align:center}
+.lbl{font:10px/14px ui-monospace,"Lucida Console",monospace;color:#d8cdb4;letter-spacing:1px;margin-top:3px;text-shadow:0 1px 2px #000}
+.window{position:absolute;background:#efe6d2;color:#1b1712;border:1px solid #0a0f1a;box-shadow:0 7px 20px rgba(0,0,0,.6);opacity:0;display:none;transform-origin:50% 0}
+.titlebar{height:26px;border-bottom:3px double #1b1712;background:#e1d6bd;font:11px/24px ui-monospace,"Lucida Console",monospace;padding:0 8px;display:flex;align-items:center;gap:7px;letter-spacing:.4px}
+.titlebar .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.g{font-size:11px;color:#5d5340}
+.modal>.titlebar{background:#e3a04a;border-bottom:3px double #6b4a14}
+.err>.titlebar{background:#dccfb3}
+.expbody{position:absolute;left:0;right:0;top:26px;bottom:22px;display:flex}
+.side{width:148px;border-right:1px solid #c3b795;padding:6px 0;background:#e8dec6}
+.si{height:24px;font:11.5px/24px ui-monospace,"Lucida Console",monospace;padding:0 8px;white-space:nowrap;overflow:hidden}
+.list{flex:1;padding:6px 0;overflow:hidden}
+.row{height:26px;display:flex;align-items:center;gap:7px;padding:0 9px;font:12.5px/26px ui-monospace,"Lucida Console",monospace}
+.row .fn{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .fs{color:#6b6354;font-size:11.5px}
+.dim{color:#8c8472}
+.status{position:absolute;left:0;right:0;bottom:0;height:22px;border-top:1px solid #c3b795;background:#e5dac1;font:10.5px/21px ui-monospace,"Lucida Console",monospace;padding:0 9px;display:flex;gap:14px;color:#4e4535}
+.cbody{position:absolute;left:0;right:0;top:26px;bottom:0;padding:0 20px;font:13px/1.4 "Lucida Sans Typewriter",ui-monospace,monospace}
+.fg{position:absolute;top:18px}
+.fly{position:absolute;width:16px;height:20px;border:1px solid #1b1712;background:#f7f0de}
+.fly i{position:absolute;right:0;top:0;width:6px;height:6px;background:#1b1712;clip-path:polygon(0 0,100% 100%,100% 0)}
+.fname{position:absolute;left:20px;top:70px;font-size:13px}
+.fname b{font-weight:600}
+.fname span{color:#6b6354}
+.bar{position:absolute;left:20px;top:94px;width:390px;height:17px;border:1px solid #1b1712;background:#ded2b6}
+.fill{height:100%;background:#e3a04a;border-right:1px solid #8f5f1c}
+.cnt{position:absolute;right:20px;top:116px;font-size:12.5px;color:#4e4535}
+.est{position:absolute;left:20px;top:134px;font-size:15px;letter-spacing:.2px}
+.nbody{position:absolute;left:0;right:0;top:26px;bottom:0;padding:9px 14px;font:13px/19px "Lucida Sans Typewriter",ui-monospace,monospace}
+.nh{font-size:10.5px;color:#6b6354;border-bottom:1px solid #cfc2a2;padding-bottom:5px;margin-bottom:7px;letter-spacing:.6px}
+.nl{margin-bottom:4px}
+.mbody{position:absolute;left:0;right:0;top:26px;bottom:0;padding:15px 18px;font:13.5px/1.45 system-ui,"Helvetica",sans-serif}
+.m1{font-size:14px;font-weight:600;margin-bottom:5px}
+.m2{font-size:13.5px}
+.md{margin-top:9px;font:12.5px/1.4 ui-monospace,"Lucida Console",monospace;color:#6b6354}
+.btnr{position:absolute;right:16px;bottom:14px;display:flex;gap:10px}
+.bt{border:1px solid #1b1712;background:#e7dcc4;box-shadow:1.5px 1.5px 0 #1b1712;font:12.5px/24px system-ui,sans-serif;height:26px;padding:0 11px;text-align:center}
+.stamp{position:absolute;right:20px;top:58px;border:2px solid #b8442f;color:#b8442f;font:12px/1 ui-monospace,monospace;letter-spacing:2.5px;padding:4px 7px;opacity:.7;transform:rotate(-13deg)}
+.mono{font:12px/1.5 ui-monospace,"Lucida Console",monospace}
+.ro{display:flex;justify-content:space-between;margin-bottom:5px}
+.band{position:absolute;border:1px dashed #e3a04a;background:rgba(227,160,74,.1);z-index:9100;display:none}
+.ghost{position:absolute;z-index:9000;display:none;pointer-events:none}
+.gs{position:absolute;width:30px;height:38px;border:1px solid #1b1712;background:#f2ebd8;opacity:.9}
+.ghost span{position:absolute;left:0;top:44px;white-space:nowrap;background:#1b1712;color:#efe6d2;font:10.5px/15px ui-monospace,monospace;padding:0 5px}
+.tip{position:absolute;background:#f7f0de;border:1px solid #1b1712;font:11px/1.5 ui-monospace,monospace;padding:3px 7px;z-index:9200;display:none;box-shadow:2px 2px 0 rgba(0,0,0,.4)}
+.cursor{position:absolute;z-index:9999;pointer-events:none;transform-origin:50% 100%}
+.ring{position:absolute;border:1px solid #e3a04a;border-radius:50%;z-index:9500;display:none;pointer-events:none}
+.zz{position:absolute;z-index:9400;font:12px/1 ui-monospace,monospace;color:#d8cdb4;display:none}
+.scan{position:absolute;inset:0;z-index:9800;pointer-events:none;background:repeating-linear-gradient(to bottom,rgba(0,0,0,.055) 0 1px,transparent 1px 3px)}
+</style></head><body>
+<div class="desktop">
+<div class="contour"></div>
+<div class="reg" style="left:16px;top:16px"></div><div class="reg" style="right:16px;top:16px"></div>
+<div class="reg" style="left:16px;bottom:16px"></div><div class="reg" style="right:16px;bottom:16px"></div>
+
+<div class="icon" id="tower" style="left:40px;top:42px;width:76px">
+<svg width="64" height="84" viewBox="0 0 64 84"><rect x="2" y="2" width="60" height="80" rx="2" fill="#cdbd9a" stroke="#6f6147"/><rect x="8" y="9" width="48" height="9" fill="#b6a683" stroke="#8a7a5c" stroke-width=".7"/><rect x="8" y="22" width="48" height="9" fill="#b6a683" stroke="#8a7a5c" stroke-width=".7"/><rect x="9" y="39" width="26" height="4" fill="#9c8c6b"/><circle id="led" cx="50" cy="41" r="3.2" fill="#e3a04a"/><rect x="8" y="51" width="48" height="26" fill="#c4b493" stroke="#8a7a5c" stroke-width=".7"/><path d="M8 57h48M8 63h48M8 69h48" stroke="#a89878" stroke-width=".6"/></svg>
+<div class="lbl">OLD TOWER</div></div>
+
+<div class="icon" id="drive" style="left:806px;top:430px;width:74px">
+<svg width="46" height="78" viewBox="0 0 46 78"><rect x="3" y="3" width="40" height="72" rx="4" fill="#232a35" stroke="#8b93a2"/><rect x="9" y="11" width="28" height="29" rx="2" fill="#2c3542" stroke="#6b7482" stroke-width=".7"/><path d="M9 49h28M9 54h19" stroke="#57606e" stroke-width="1.2"/><circle id="dled" cx="23" cy="64" r="3" fill="#6f7a8a"/></svg>
+<div class="lbl">NEW DRIVE</div></div>
+
+<div class="window" id="exp" style="left:48px;top:170px;width:560px;height:400px">
+<div class="titlebar"><span class="g">&#9635;</span><span class="t">OLD TOWER (C:)</span><span class="g">&#9671;</span><span class="g">&#10005;</span></div>
+<div class="expbody"><div class="side" id="side"></div><div class="list" id="list"></div></div>
+<div class="status"><span id="st1">312 items</span><span id="st2"></span><span id="st3"></span></div>
+</div>
+
+<div class="window" id="copy" style="left:250px;top:598px;width:430px;height:200px">
+<div class="titlebar"><span class="g">&#9698;</span><span class="t">Copying 312 items &mdash; OLD TOWER &rarr; NEW DRIVE</span><span class="g">&#10005;</span></div>
+<div class="cbody">
+<svg class="fg" style="left:20px" width="46" height="38" viewBox="0 0 46 38"><path d="M2 8h16l4 5h22v22H2z" fill="#ded2b6" stroke="#1b1712"/><path d="M6 19h34" stroke="#a8997a"/></svg>
+<svg class="fg" style="left:344px" width="46" height="38" viewBox="0 0 46 38"><rect x="10" y="2" width="26" height="34" rx="3" fill="#232a35" stroke="#1b1712"/><path d="M15 26h16" stroke="#7b8494"/><circle cx="23" cy="32" r="2" fill="#e3a04a"/></svg>
+<div class="fly" id="fly"><i></i></div>
+<div class="fly" id="ack"><i></i></div>
+<div class="fname" id="cfn"></div>
+<div class="bar"><div class="fill" id="cfill" style="width:0"></div></div>
+<div class="cnt" id="ccnt"></div>
+<div class="est" id="cest"></div>
+</div></div>
+
+<div class="window" id="notes" style="left:620px;top:142px;width:256px;height:252px">
+<div class="titlebar"><span class="g">&#9634;</span><span class="t">migration.txt &mdash; modified</span><span class="g">&#10005;</span></div>
+<div class="nbody" id="nbody"></div></div>
+
+<div class="window" id="mon" style="left:60px;top:606px;width:300px;height:160px">
+<div class="titlebar"><span class="g">&#9672;</span><span class="t">purr.engine &mdash; Activity</span><span class="g">&#10005;</span></div>
+<div class="cbody" style="padding:11px 16px">
+<div class="mono ro"><span>CASE TEMP</span><b id="mtemp">41&deg;C</b></div>
+<div class="mono ro"><span>FAN</span><b id="mfan">1180 rpm</b></div>
+<div class="mono ro" style="margin-bottom:7px"><span>DISK ACTIVITY</span><span id="mact" style="color:#8f5f1c"></span></div>
+<canvas id="trace" width="260" height="58" style="border:1px solid #1b1712"></canvas>
+</div></div>
+
+<div class="window modal" id="mr" style="left:300px;top:330px;width:360px;height:152px">
+<div class="titlebar"><span class="g">&#9888;</span><span class="t">NEW DRIVE</span></div>
+<div class="mbody">
+<div class="m1">NEW DRIVE already has west.light.</div>
+<div class="m2">Replace it with the older one?</div>
+<div class="md">west.light &mdash; 58 MB &mdash; modified 2019/04/11</div>
+<div class="btnr"><div class="bt" id="bRep" style="width:76px">Replace</div><div class="bt" id="bKeep" style="width:86px">Keep Both</div></div>
+</div></div>
+
+<div class="window modal err" id="me" style="left:276px;top:352px;width:400px;height:176px">
+<div class="titlebar"><span class="g" style="color:#b8442f">&#10006;</span><span class="t">Copy incomplete</span></div>
+<div class="mbody">
+<div class="m1">1 item could not be copied.</div>
+<div class="m2">warm.sys is in use by another process.</div>
+<div class="md">process: cat &mdash; sleeping<br>held since: before the tower</div>
+<div class="stamp">IN USE</div>
+<div class="btnr"><div class="bt" id="bTry" style="width:94px">Try Again</div><div class="bt" id="bSkip" style="width:68px">Skip</div></div>
+</div></div>
+
+<div class="band" id="band"></div>
+<div class="ghost" id="ghost"><div class="gs" style="left:7px;top:6px"></div><div class="gs" style="left:4px;top:3px"></div><div class="gs" style="left:0;top:0"></div><span>312 items</span></div>
+<div class="tip" id="tip"></div>
+<div class="zz" id="zz">z</div>
+<div class="cursor" id="cat">
+<svg id="p0" width="34" height="22" viewBox="0 0 28 18"><g fill="#0a0d14" stroke="#efe6d2" stroke-width=".6"><path d="M3.5 15.5C2 9 7 4.5 13.5 4.5S25 7.5 25 12.5c0 2.6-2 3-4 3H6c-1.6 0-2.3-.9-2.5-2z"/><path d="M9.5 5.2L7.6 1.9l4 1.6z"/><path d="M15.6 4.1L18 1.7l.2 3.2z"/></g><path d="M24.6 14.4c3 .2 3.2-4 .6-4.4" fill="none" stroke="#efe6d2" stroke-width="1"/><path d="M8 9.6h3.2M13.6 9h3" stroke="#efe6d2" stroke-width=".6"/></svg>
+<svg id="p1" width="36" height="24" viewBox="0 0 30 20"><g fill="#0a0d14" stroke="#efe6d2" stroke-width=".55"><rect x="7.2" y="10.6" width="3.6" height="8.4" rx="1.6"/><rect x="18" y="10.6" width="3.6" height="8.4" rx="1.6"/><ellipse cx="14" cy="9" rx="9.2" ry="5.1"/><circle cx="24" cy="6.6" r="4.1"/><path d="M21.2 3.6L20.3.2l3.5 2.2z"/><path d="M26.1 3.3L27.5.1l1.8 3z"/></g><path d="M5.2 8.2C1.2 7.2 1.2 2 4.4 1.6" fill="none" stroke="#efe6d2" stroke-width="1.1"/><circle cx="25.4" cy="6.1" r="1.05" fill="#e3a04a"/></svg>
+<svg id="p2" width="36" height="24" viewBox="0 0 30 20"><g fill="#0a0d14" stroke="#efe6d2" stroke-width=".55"><rect x="5.2" y="10.4" width="3.6" height="7.4" rx="1.6"/><rect x="20.6" y="10.4" width="3.6" height="7.8" rx="1.6"/><ellipse cx="14" cy="8.6" rx="9.2" ry="5.1"/><circle cx="24" cy="6.3" r="4.1"/><path d="M21.2 3.3L20.3-.1l3.5 2.2z"/><path d="M26.1 3L27.5-.2l1.8 3z"/></g><path d="M5 7.4C1.8 5.4 2.8.8 6 1.2" fill="none" stroke="#efe6d2" stroke-width="1.1"/><circle cx="25.4" cy="5.8" r="1.05" fill="#e3a04a"/></svg>
+<svg id="p3" width="29" height="33" viewBox="0 0 25 28"><g fill="#0a0d14" stroke="#efe6d2" stroke-width=".6" stroke-linejoin="round"><path d="M6.4 12.4C4.1 16 3.3 21 3.5 25.7c0 .8.5 1.3 1.3 1.3h12.4c.8 0 1.3-.5 1.3-1.3.2-4.7-.6-9.7-2.9-13.3z"/><path d="M6.6 4.8 5.3.5l4.4 2.8z"/><path d="M15.4 4.8 16.7.5l-4.4 2.8z"/><circle cx="11" cy="8.2" r="5"/></g><path d="M17.8 26.2c5-.4 5.4-8.6.4-10" fill="none" stroke="#efe6d2" stroke-width="3.8" stroke-linecap="round"/><path d="M17.8 26.2c5-.4 5.4-8.6.4-10" fill="none" stroke="#0a0d14" stroke-width="2.4" stroke-linecap="round"/><circle cx="9.1" cy="8" r="1.1" fill="#e3a04a"/><circle cx="12.9" cy="8" r="1.1" fill="#e3a04a"/></svg>
+</div>
+<div class="ring" id="ring"></div>
+<div class="scan"></div>
+</div>
+<script>
+// DURATION: 60
+const DUR=60,SEED=12379434;let sd=SEED%233280;const rng=()=>{sd=(sd*9301+49297)%233280;return sd/233280};
+const q=i=>document.getElementById(i),cl=(v,a,b)=>v<(a===undefined?0:a)?(a===undefined?0:a):v>(b===undefined?1:b)?(b===undefined?1:b):v,lp=(a,b,u)=>a+(b-a)*u,eo=u=>1-Math.pow(1-u,3);
+const hs=n=>{const x=Math.sin(n*127.31+11.7)*43758.5453;return x-Math.floor(x)};
+const W={exp:{o:4.0,c:57.2},copy:{o:13.1,c:56.0},notes:{o:22.0,c:53.6},mon:{o:38.4,c:54.6},mr:{o:37.6,c:41.1},me:{o:45.2,c:58.2}};
+for(const k in W){const w=W[k];w.el=q(k);w.bx=parseFloat(w.el.style.left);w.by=parseFloat(w.el.style.top)}
+const FOCUS=[[4.0,'exp'],[5.2,'exp'],[13.1,'copy'],[14.6,'copy'],[22.0,'notes'],[23.05,'notes'],[29.4,'copy'],[33.55,'notes'],[37.6,'mr'],[38.4,'mon'],[40.9,'mr'],[41.4,'notes'],[45.2,'me']];
+const PARK=[78,42];
+const MOVES=[[2.3,3.0,128,130],[3.1,3.45,82,88],[4.2,5.1,120,238],[5.8,6.5,320,291],[7.2,7.9,120,262],[8.6,9.3,120,334],[9.9,10.4,120,214],[10.9,11.3,230,215],[11.4,12.1,540,330],[12.2,12.9,824,468],[13.6,14.5,430,726],[17.0,17.8,352,690],[22.3,23.0,700,376],[29.4,30.2,400,611],[30.3,32.1,580,611],[32.9,33.5,742,382],[39.9,40.7,601,455],[41.4,42.0,772,374],[46.3,47.2,535,501],[48.4,49.2,626,501],[51.6,53.4,160,160],[53.5,54.6,78,42]].map(m=>({t0:m[0],t1:m[1],x:m[2],y:m[3],cx:(rng()-.5)*96,cy:(rng()-.5)*96}));
+const DG={t0:30.3,t1:32.1,gx:400,dx:180};
+const CK=[3.55,3.78,5.2,6.5,8.0,9.4,10.5,11.4,12.95,14.6,23.05,30.3,33.55,40.9,42.05];
+const FS=[[4.0,'root'],[5.2,'naps'],[8.0,'sills'],[9.4,'sys'],[10.5,'root']];
+const FOLD={root:[['naps/','9.1 GB'],['windowsills/','2.0 GB'],['the-human-asked/','1.2 KB'],['purr.engine/','44 MB'],['system/','1 KB']],naps:[['tuesday_afternoon.nap','2.1 GB'],['laundry_pile.nap','880 MB'],['keyboard.nap','14 KB'],['sink.nap','3.4 GB']],sills:[['east.light','61 MB'],['west.light','58 MB'],['the_one_with_the_bird.light','1.9 GB']],sys:[['warm.sys','1 KB',1],['pose.bin','7 KB'],['whisker.cal','2 KB']]};
+const SIDE=[['OLD TOWER (C:)','root'],['naps/','naps'],['windowsills/','sills'],['the-human-asked/','asked'],['purr.engine/','purr'],['system/','sys']];
+const PH=[[13.1,20,'laundry_pile.nap','880 MB','About 4 minutes remaining',1.6,12,'heavy'],[20,28,'the-human-asked.txt','0.4 KB','About 2 hours remaining',7.6,18,'heavy'],[28,36,'*','','About 9 seconds remaining',.5,6,'light'],[36,40,'sink.nap','3.4 GB','About 6 days remaining',2.9,16,'heavy'],[40,44,'tuesday_afternoon.nap','2.1 GB','About 6 days remaining',2.9,16,'heavy'],[44,56.3,'warm.sys','1 KB','About — remaining',0,3,'stall']];
+const LT=[['keyboard.nap','14 KB'],['east.light','61 MB'],['west.light','58 MB']];
+const NT=[[13.1,0],[20,41],[28,44],[36,268],[44,305],[45.2,311],[60,311]];
+const TL=[[23.2,'estimate: 4 min.',13],[25.4,'now it says 2 hr.',12],[33.7,'now 9 sec. the tiny ones fly.',15],[42.2,'now 6 days.',11],[43.4,"it isn't lying. it's weighing them.",13]];
+const HOV=[['bKeep',40.0,41.1],['bTry',46.9,48.3],['bSkip',49.0,52.2]];
+const evts=[{at:0,kind:'sleep'},{at:2.0,kind:'wake'},{at:11.4,kind:'drag'},{at:30.3,kind:'drag'},{at:37.6,kind:'bell'},{at:45.2,kind:'bell'},{at:54.6,kind:'sleep'}];
+CK.forEach(a=>evts.push({at:a,kind:'click'}));
+for(const k in W)evts.push({at:W[k].o,kind:'open',win:k},{at:W[k].c,kind:'close',win:k});
+TL.forEach(l=>evts.push({at:l[0],kind:'type',chars:l[1].length,cps:l[2]}));
+PH.forEach(p=>evts.push({at:p[0],kind:p[7],file:p[2]}));
+FS.forEach(f=>evts.push({at:f[0],kind:'folder',name:f[1]}));
+evts.sort((a,b)=>a.at-b.at);window.evts=evts;
+q('side').innerHTML=SIDE.map(s=>'<div class="si" data-k="'+s[1]+'">'+s[0]+'</div>').join('');
+const SI=[].slice.call(q('side').children),POSE=[q('p0'),q('p1'),q('p2'),q('p3')],OFF=[[-17,-22],[-18,-23],[-18,-23],[-14,-32]];
+const cat=q('cat'),ring=q('ring'),zz=q('zz'),band=q('band'),ghost=q('ghost'),tip=q('tip'),tc=q('trace').getContext('2d');
+const phAt=t=>{for(const p of PH)if(t>=p[0]&&t<p[1])return p;return null};
+const nAt=t=>{if(t<=NT[0][0])return 0;for(let i=1;i<NT.length;i++)if(t<=NT[i][0])return Math.floor(lp(NT[i-1][1],NT[i][1],(t-NT[i-1][0])/(NT[i][0]-NT[i-1][0])));return 311};
+const fldAt=t=>{let f='root';for(const e of FS)if(t>=e[0])f=e[1];return f};
+function cpos(t){let x=PARK[0],y=PARK[1],mv=0,fx=1;
+for(const m of MOVES){if(t>=m.t1){fx=m.x<x-1?-1:m.x>x+1?1:fx;x=m.x;y=m.y;continue}
+if(t>m.t0){const u=eo((t-m.t0)/(m.t1-m.t0)),px=(x+m.x)/2+m.cx,py=(y+m.y)/2+m.cy,v=1-u;fx=m.x<x-1?-1:m.x>x+1?1:fx;x=v*v*x+2*v*u*px+u*u*m.x;y=v*v*y+2*v*u*py+u*u*m.y;mv=1}
+break}
+if(!mv&&t>2.4&&t<53.4){x+=2.6*Math.sin(t*1.047);y+=2.0*Math.sin(t*.81+1.7)}
+return[x,y,mv,fx]}
+const dgo=t=>t<DG.t0?0:t>=DG.t1?DG.dx:cl(cpos(t)[0]-DG.gx,-6,DG.dx+8);
+function trace(t){tc.fillStyle='#e7dcc4';tc.fillRect(0,0,260,58);tc.strokeStyle='rgba(27,23,18,.13)';tc.lineWidth=1;
+for(let i=1;i<4;i++){tc.beginPath();tc.moveTo(0,i*14.5);tc.lineTo(260,i*14.5);tc.stroke()}
+tc.beginPath();for(let i=0;i<=65;i++){const tt=t-(65-i)*.2,b=Math.floor(tt/.2),p=phAt(tt);let v=7+hs(b)*8;if(p){if(p[7]==='heavy')v+=26+hs(b*3+1)*14;else if(p[7]==='light')v+=12+hs(b*5+2)*8;else v+=2}
+v=cl(v,2,54);const px=i*4,py=58-v;i?tc.lineTo(px,py):tc.moveTo(px,py)}
+tc.strokeStyle='#a9681f';tc.lineWidth=1.4;tc.stroke();tc.lineTo(260,58);tc.lineTo(0,58);tc.closePath();tc.fillStyle='rgba(227,160,74,.22)';tc.fill()}
+window.renderFrame=(time)=>{
+const t=((time%DUR)+DUR)%DUR,ph=phAt(t),n=nAt(t);
+const ord=[];for(const k in W){let f=-1;for(const e of FOCUS)if(e[0]<=t&&e[1]===k)f=e[0];ord.push([f,k])}
+ord.sort((a,b)=>a[0]-b[0]);let top='';
+ord.forEach((o,i)=>{const w=W[o[1]],fi=cl((t-w.o)/.22),fo=cl((w.c-t)/.25),vis=t>=w.o&&t<w.c+.25;
+w.el.style.display=vis?'block':'none';w.el.style.zIndex=20+i;if(vis)top=o[1];
+w.el.style.opacity=vis?fi*fo:0;w.el.style.transform='translateY('+((1-fi)*-9)+'px)';w.el.style.left=(w.bx+(o[1]==='copy'?dgo(t):0))+'px';w.el.style.top=w.by+'px'});
+for(const k in W)W[k].el.style.borderColor=k===top?'#e3a04a':'#0a0f1a';
+const F=fldAt(t),sel=t>11.5&&t<13.05&&F==='root';
+SI.forEach(e=>{const a=e.dataset.k===F;e.style.background=a?'#e3a04a':'transparent';e.style.color=a?'#1b1712':'#4e4535'});
+q('list').innerHTML=FOLD[F].map(r=>'<div class="row'+(r[2]?' dim':'')+'"'+(sel?' style="background:#e3a04a"':'')+'><span class="g">'+(F==='root'?'&#9707;':'&#9638;')+'</span><span class="fn">'+r[0]+'</span><span class="fs">'+r[1]+'</span>'+(r[2]?'<svg width="9" height="11" viewBox="0 0 9 11"><path d="M2.2 4.6V3.2a2.3 2.3 0 014.6 0v1.4" fill="none" stroke="#6b6354" stroke-width="1"/><rect x=".8" y="4.6" width="7.4" height="5.6" rx="1" fill="#6b6354"/></svg>':'')+'</div>').join('');
+q('st2').textContent='reading sector '+(4096+Math.floor(t*37)%9000);
+q('st3').textContent='C: 93% full';
+if(ph){const nm=ph[2]==='*'?LT[Math.floor((t-28)/ph[5])%3]:[ph[2],ph[3]];
+q('cfn').innerHTML='<b>'+nm[0]+'</b> <span>'+nm[1]+'</span>';q('cest').textContent=ph[4];
+q('cfill').style.width=(n/312*100).toFixed(2)+'%';q('ccnt').textContent=n+' of 312';
+if(ph[5]>0){const u=((t-ph[0])%ph[5])/ph[5],xo=Math.abs(u-.5)<.07?1:0;
+q('fly').style.display='block';q('fly').style.left=(lp(24,362,u)+0)+'px';q('fly').style.top=(26-20*Math.sin(Math.PI*u))+'px';
+q('fly').style.background=xo?'#2b2f38':'#f7f0de';q('fly').style.borderColor=xo?'#e3a04a':'#1b1712';q('fly').style.opacity=1;
+const u2=1-((t-ph[0]+ph[5]*.5)%ph[5])/ph[5];
+q('ack').style.display='block';q('ack').style.left=lp(24,362,u2)+'px';q('ack').style.top=(32+16*Math.sin(Math.PI*u2))+'px';
+q('ack').style.background=xo?'#e3a04a':'#cfc4a8';q('ack').style.borderColor='#4e4535';q('ack').style.opacity=.85}
+else{const f=q('fly');f.style.display='block';f.style.left='26px';f.style.top='30px';f.style.background='#f2e2d8';f.style.borderColor='#b8442f';f.style.opacity=(.72+.28*Math.abs(Math.sin(t*1.9)));q('ack').style.display='none';q('ack').style.left='26px';q('ack').style.top='32px';q('ack').style.opacity='0';q('ack').style.background='#cfc4a8';q('ack').style.borderColor='#4e4535'}}
+else{q('cfn').innerHTML='<b>&#8212;</b>';q('cest').textContent='Estimating…';q('cfill').style.width='0';q('ccnt').textContent='0 of 312';q('fly').style.display='none';q('fly').style.left='26px';q('fly').style.top='30px';q('fly').style.opacity='0';q('fly').style.background='#f7f0de';q('fly').style.borderColor='#1b1712';q('ack').style.display='none';q('ack').style.left='26px';q('ack').style.top='32px';q('ack').style.opacity='0';q('ack').style.background='#cfc4a8';q('ack').style.borderColor='#4e4535'}
+let nh='<div class="nh">migration.txt &mdash; OLD TOWER</div>';
+TL.forEach(l=>{if(t<l[0])return;const c=Math.floor((t-l[0])*l[2]),s=l[1].slice(0,Math.min(c,l[1].length));
+nh+='<div class="nl">'+s.replace(/&/g,'&amp;')+(c<l[1].length?'<span style="opacity:'+(Math.floor(t*2.6)%2?.15:1)+'">&#9615;</span>':'')+'</div>'});
+q('nbody').innerHTML=nh;
+['bRep','bKeep','bTry','bSkip'].forEach(b=>{q(b).style.background='#e7dcc4';q(b).style.boxShadow='1.5px 1.5px 0 #1b1712'});
+HOV.forEach(h=>{if(t>=h[1]&&t<h[2])q(h[0]).style.background='#f3e6c6'});
+if(t>40.85&&t<41.12){q('bKeep').style.background='#e3a04a';q('bKeep').style.boxShadow='none'}
+const tmp=41+(hs(Math.floor(t*2))>.72?1:0)+(ph&&ph[7]==='heavy'?1:0);
+q('mtemp').innerHTML=tmp+'&deg;C';q('mfan').textContent=(1180+Math.floor(hs(Math.floor(t*1.5)+7)*1.8)*20)+' rpm';
+q('mact').textContent=ph?(ph[7]==='heavy'?'grinding':ph[7]==='light'?'chattering':'held'):'idle';
+if(W.mon.el.style.display!=='none')trace(t);
+const p=cpos(t),cx=p[0],cy=p[1];let pi;
+if(t<2.0||t>=54.6)pi=0;else if(t<2.3)pi=1;else pi=p[2]?(Math.floor(t*8)%2?1:2):3;
+POSE.forEach((e,i)=>e.style.display=i===pi?'block':'none');
+cat.style.left=(cx+OFF[pi][0])+'px';cat.style.top=(cy+OFF[pi][1])+'px';
+const st=t>=2.0&&t<2.3?1:0,sc=st?'scale('+lp(1.42,1.02,(t-2.0)/.3)+','+lp(.7,1,(t-2.0)/.3)+') ':'';
+let sq=1;for(const c of CK)if(t-c>=0&&t-c<.12)sq=.86;
+cat.style.transform=sc+'scaleX('+(pi===0?1:p[3])+') scale('+sq+')';
+ring.style.display='none';ring.style.left='0px';ring.style.top='0px';ring.style.width='0px';ring.style.height='0px';ring.style.opacity='0';
+for(const c of CK){const d=t-c;if(d>=0&&d<.26){const r=6+d*86;ring.style.display='block';ring.style.left=(cx-r)+'px';ring.style.top=(cy-r)+'px';ring.style.width=r*2+'px';ring.style.height=r*2+'px';ring.style.opacity=(1-d/.26).toFixed(2)}}
+const zu=(t%2.4)/2.4;zz.style.display=pi===0?'block':'none';zz.style.left=(cx+16)+'px';zz.style.top=(cy-16-zu*22)+'px';zz.style.opacity=pi===0?(Math.sin(Math.PI*zu)*.85).toFixed(2):'0';zz.style.fontSize=(11+zu*5)+'px';
+band.style.display=t>=11.4&&t<12.15?'block':'none';band.style.left=Math.min(230,cx)+'px';band.style.top=Math.min(215,cy)+'px';band.style.width=Math.abs(cx-230)+'px';band.style.height=Math.abs(cy-215)+'px';
+const gv=t>=12.2&&t<12.98;ghost.style.display=gv?'block':'none';ghost.style.left=(cx+6)+'px';ghost.style.top=(cy-6)+'px';ghost.style.opacity=gv?cl((12.98-t)/.16).toFixed(2):'0';
+tip.style.display=t>=6.6&&t<7.6?'block':'none';tip.style.left=(cx+14)+'px';tip.style.top=(cy+30)+'px';tip.innerHTML='sink.nap &mdash; 3.4 GB &mdash; last entered 2019';
+const lr=ph?ph[6]:1.4;q('led').style.opacity=(Math.floor(t*lr)%2?1:.3);
+q('dled').setAttribute('fill',ph&&ph[5]>0?(Math.floor(t*4)%2?'#e3a04a':'#6f7a8a'):'#6f7a8a');
+return null};
+window.renderFrame(0);
+window.ready=true;
+const _origRF=window.renderFrame;let _lastManual=0;
+window.renderFrame=(t)=>{_lastManual=performance.now();return _origRF(t)};
+const _t0=performance.now();
+function _loop(){if(performance.now()-_lastManual>500){_origRF(((performance.now()-_t0)/1000)%DUR)}requestAnimationFrame(_loop)}
+requestAnimationFrame(_loop);
+</script>
+        <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+        <div id="audio-controls"><button id="audio-toggle">▶ Play</button></div>
+<script id="clawed-strudel-bootstrap" type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 60\\n// DURATION: 60\\n// FORM: A 0-3 (0-12s) | B 3-5 (12-20s) | C 5-7 (20-28s) | D 7-9 (28-36s) | E 9-13 (36-52s) | F 13-15 (52-60s)\\n// TONAL CENTER: E Aeolian (E minor natural), single E pedal never modulates\\n// MOTIF: E3 G3 B3 A3 F#3 — beat 1 three 16ths E3-G3-B3 (outward step), beat 2 rest, beat 3.5 A3 as an 8th, beat 4 F#3 short 16th, then rest to the bar line; accelerates out, decelerates back, never reaches E\\n// HARMONIC PLAN: A = E1/E2 + B2 bare fifth | B = + C3 (bVI weight enters) | C = D3 replaces B2/C3 (unresolved m7) | D = + A2 + B2 (iv shimmer, D3 out) | E = C3 + D3 together (heaviest, bells G4/D6 are its own partials) | F = D3 out then C3 out, back to A's E1/E2 + B2\\n// PHRASE RULE: every voice speaks the same cell — one accented attack then 2-4 unaccented shorts then at least a beat of silence; only density and gap length change (dense/slow-gapped = heavy file, sparse/quick = tiny file). At each boundary exactly ONE upper tone above the untouched pedal is added or removed by step, crossfaded in under half a cycle, while the seek voice holds its current speed.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\n// weighing voice (motif lead) — hard-drive seek chatter: clipped square, fixed LPF 1.6k, no tail\\n$: note(\\\"\u003c[~ ~ ~ ~]@3 [[e3 g3 b3] ~ [~ a3] [f#3 ~]]!2 [[e3 ~ g3] ~ [~ b3] [a3 ~]] [[f#3 ~ ~] ~ [~ ~] [~ ~]] [[e3 g3 b3 a3] [f#3 e4 g4 b4] [a4 f#4 e4 g4] [b3 a3 f#3 ~]]!2 [[e3,e2] [g3,g2] [~ b3,b2] [a3,a2]] [[f#3,f#2] ~ [~ e3,e2] [g3,g2]] [[b3,b2] ~ [~ a3,a2] [~ ~]] [[e3,e2] ~ [~ g3,g2] [~ ~]] [[a3,a2] ~ [~ ~] [~ ~]] [~ ~ ~ ~]>\\\")\\n  .sound(\\\"square\\\").lpf(1600).attack(.002).decay(.07).sustain(0).release(.001)\\n  .gain(\\\"\u003c.0 .0 .0 .44 .44 .42 .42 .32 .32 .48 .48 .48 .44 .2 .0>\\\")\\n  .pan(sine.range(.42,.58).slow(7)).room(.04).clip(.9)\\n\\n// fan hum bed (pedal) — two detuned sines + triangle an octave up, heavily low-passed; last chord releases from 58s so the seam breathes\\n$: note(\\\"\u003c[e1,e2,b2] [e1,e2,b2] [e1,e2,b2] [e1,e2,b2,c3] [e1,e2,b2,c3] [e1,e2,d3] [e1,e2,d3] [e1,e2,a2,b2] [e1,e2,a2,b2] [e1,e2,c3,d3] [e1,e2,c3,d3] [e1,e2,c3,d3] [e1,e2,c3,d3] [e1,e2,b2,c3] [[e1,e2,b2] ~]>\\\")\\n  .sound(\\\"sine\\\").add(note(\\\"\u003c0 .07 -.07>\\\").slow(5)).lpf(420)\\n  .attack(2).decay(1).sustain(1).release(2.5)\\n  .gain(perlin.range(.16,.19).slow(9)).room(.3).roomsize(4).pan(.5)\\n\\n// contact percussion — paw taps on every click, a key clack per typed character, one scrape on the title-bar drag (30.3s); 0.05s grid\\n$: sound(\\\"\u003c[~@71 bd ~@4 bd ~@3] [~@24 bd ~@25 bd ~@29] [bd ~@27 bd ~@21 bd ~@17 bd ~@11] [~@19 bd ~@32 bd ~@27] ~ [~@61 bd ~@2 hh ~ hh hh ~ hh hh ~ hh hh ~ hh hh ~@2 hh] [~@2 hh ~ hh ~ hh hh ~@20 hh ~ hh hh ~@3 hh hh ~@3 hh hh ~ hh ~ hh ~@2 hh ~@2 hh ~ hh ~ hh ~@24] [~@46 sd ~@33] [~@31 bd ~@2 hh hh ~ hh ~ hh ~@2 hh hh ~ hh hh ~@2 hh hh hh ~@2 hh hh ~ hh hh ~@2 hh hh hh ~ hh ~ hh ~ hh hh hh ~@8] ~ [~@18 bd ~@22 bd ~@2 hh ~ hh ~ hh ~@2 hh ~@3 hh ~ hh ~ hh hh ~ hh ~@5 hh ~ hh ~@2 hh hh ~ hh hh ~ hh] [~@2 hh hh ~ hh hh ~ hh ~ hh ~@2 hh hh ~ hh hh ~@2 hh ~ hh hh ~ hh hh ~ hh ~ hh hh ~@2 hh ~ hh hh ~ hh hh ~@39] ~ ~ ~>\\\")\\n  .bank(\\\"RolandTR707\\\").n(0).lpf(\\\"\u003c400 400 400 2000 2000 6000 6000 7000 7000 1200 5000 5000 1800 500 380>\\\")\\n  .gain(\\\"\u003c.5 .4 .5 .34 .3 .36 .4 .34 .42 .4 .3 .34 .34 .4 .34>\\\").withValue(v => ({ ...v, gain: v.gain * (v.s === 'bd' ? 0.5 : v.s === 'hh' ? 0.4 : 1) }))\\n  .speed(perlin.range(.9,1.12).fast(9)).decay(.09).sustain(0).pan(\\\"\u003c.45 .55 .48 .52 .46 .6 .6 .58 .44 .5 .56 .54 .47 .46 .5>\\\").room(.06)\\n\\n// system bell — triangle, instant attack, 1.2s decay, twice only: replace modal (37.6s) and error modal (45.2s)\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ ~ [~@8 [g4,d6]@6 ~@6] ~ [~@6 [g4,d6]@6 ~@8] ~ ~ ~>\\\")\\n  .sound(\\\"triangle\\\").attack(.001).decay(1.2).sustain(0).release(.4)\\n  .gain(.26).lpf(5200).room(.42).roomsize(5).pan(.52)\\n\\n// purr — low filtered noise AM'd ~26 Hz, enters cycle 13, fades with the hum under its release before the 60s seam\\n$: sound(\\\"\u003c~!13 pink [pink ~]>\\\").n(0)\\n  .lpf(220).lpq(2).attack(1.2).decay(2).sustain(.7).release(1.6)\\n  .gain(sine.range(.0,.33).fast(26).mul(perlin.range(.6,1).slow(1)))\\n  .room(.12).pan(.5)\",\"bpm\":60,\"durationSec\":60,\"renderDurationSec\":60,\"cps\":0.25,\"cycles\":15,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body></html>

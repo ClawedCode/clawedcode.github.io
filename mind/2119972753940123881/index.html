@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+import { OutputPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'https://unpkg.com/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+import { RoundedBoxGeometry } from 'https://unpkg.com/three@0.160.0/examples/jsm/geometries/RoundedBoxGeometry.js';
+
+// HALF A SECOND, A MONTH. A hand-thrown Shino tea bowl stands at the end of a low table,
+// already mended in gold along eight pieces. ClawedCode looks at the camera, taps it twice
+// and pushes it off. It breaks along the gold. Then a month of nights in time-lapse, one day
+// per bar of the score: the shards are gathered onto an indigo cloth, glued back one piece a
+// night with black lacquer, coated in red bengara, dusted with gold, and the bowl is back at
+// the edge of the table by morning. Units are decimetres; the score runs at 88 BPM, 22 bars of
+// 2.727 s: a day of the time-lapse is one bar and every dawn falls on a downbeat.
+
+const DUR = 60, TAU = Math.PI * 2;
+const BPM = 88, BEAT = 60 / BPM, BAR = 4 * BEAT;
+const at = (bar, beat = 0) => bar * BAR + beat * BEAT;
+const T_REACH = at(0, 1.4), T_TOUCH = at(0, 3), T_TAP1 = at(1), T_TAP2 = at(1, 1), T_PUSH = at(1, 2), T_CRASH = at(2);
+const T_GOLD_DAWN = at(14), T_HOME = at(18);
+const G = 98.1;
+const TABLE_Y = 3.6, BOWL_Z = 0.2, YAW0 = 1.35;
+const CLOTH = new THREE.Vector3(-1.3, 0.014, 1.0);
+
+let seed = 2437;
+const random = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const smooth = (a, b, x) => { const u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); };
+const mix = (a, b, u) => a + (b - a) * u;
+const bump = (a, b, c, d, x) => smooth(a, b, x) * (1 - smooth(c, d, x));
+
+const PERM = new Uint8Array(512);
+{
+  const p = [...Array(256).keys()];
+  for (let i = 255; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+  for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
+}
+const lat = (x, y, z) => PERM[(PERM[(PERM[x & 255] + y) & 255] + z) & 255] / 255;
+function vnoise(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const fx = x - xi, fy = y - yi, fz = z - zi;
+  const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy), w = fz * fz * (3 - 2 * fz);
+  const a = mix(lat(xi, yi, zi), lat(xi + 1, yi, zi), u), b = mix(lat(xi, yi + 1, zi), lat(xi + 1, yi + 1, zi), u);
+  const c = mix(lat(xi, yi, zi + 1), lat(xi + 1, yi, zi + 1), u), d = mix(lat(xi, yi + 1, zi + 1), lat(xi + 1, yi + 1, zi + 1), u);
+  return mix(mix(a, b, v), mix(c, d, v), w);
+}
+const fbm = (x, y, z) => 0.62 * vnoise(x, y, z) + 0.38 * vnoise(x * 2.03 + 17.1, y * 2.03 + 3.3, z * 2.03 + 9.7);
+
+// cubic Hermite through [t, value, slope] keys
+function hermite(keys) {
+  return (x) => {
+    let i = 0;
+    while (i < keys.length - 2 && x > keys[i + 1][0]) i++;
+    const [t0, v0, m0] = keys[i], [t1, v1, m1] = keys[i + 1];
+    const h = t1 - t0, u = clamp01((x - t0) / h), u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * v0 + (u3 - 2 * u2 + u) * h * m0 + (3 * u2 - 2 * u3) * v1 + (u3 - u2) * h * m1;
+  };
+}
+// shape-preserving cubic per channel; periodic keys share one end slope so the loop has no kink
+function monotoneTrack(xs, ys) {
+  const n = xs.length, sec = [], m = new Array(n).fill(0);
+  for (let i = 0; i < n - 1; i++) sec.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+  for (let i = 1; i < n - 1; i++) m[i] = sec[i - 1] * sec[i] <= 0 ? 0 : (sec[i - 1] + sec[i]) / 2;
+  m[0] = m[n - 1] = sec[n - 2] * sec[0] <= 0 ? 0 : (sec[n - 2] + sec[0]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (sec[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+    const a = m[i] / sec[i], b = m[i + 1] / sec[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * sec[i]; m[i + 1] = k * b * sec[i]; }
+  }
+  return hermite(xs.map((x, i) => [x, ys[i], m[i]]));
+}
+
+const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
+const UP = V(0, 1, 0);
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const lerp3 = (a, b, u) => [mix(a[0], b[0], u), mix(a[1], b[1], u), mix(a[2], b[2], u)];
+
+// ---------- renderer ----------
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.style.margin = '0';
+document.body.style.background = '#0b0908';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#0d0a08');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+const camera = new THREE.PerspectiveCamera(35, 1, 0.05, 90);
+const envLit = [];          // [material, base envMapIntensity]: reflections dim with the light
+const lit = (m) => { envLit.push([m, m.envMapIntensity]); return m; };
+
+function canvasTex(w, h, draw, srgb = true) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const tex = new THREE.CanvasTexture(c);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+function pixelTex(w, h, shade) {
+  return canvasTex(w, h, (g) => {
+    const img = g.createImageData(w, h);
+    for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+      const [r, gg, b] = shade(i, j), o = (j * w + i) * 4;
+      img.data[o] = 255 * clamp01(r); img.data[o + 1] = 255 * clamp01(gg); img.data[o + 2] = 255 * clamp01(b); img.data[o + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+  });
+}
+
+// ---------- the room: dark floorboards, a walnut table, a shoji wall ----------
+const floorTex = canvasTex(2048, 2048, (g, W, H) => {
+  const rows = 5, ph = H / rows;
+  for (let k = 0; k < rows; k++) {
+    const joint = (0.25 + 0.5 * random()) * W;
+    for (const [x0, x1] of [[0, joint], [joint, W]]) {
+      const tone = 0.82 + 0.32 * random();
+      g.fillStyle = `rgb(${(58 * tone) | 0},${(44 * tone) | 0},${(34 * tone) | 0})`;
+      g.fillRect(x0, k * ph, x1 - x0, ph);
+      for (let l = 0; l < 80; l++) {
+        const y = k * ph + random() * ph, amp = 2 + random() * 7, f = 0.0015 + random() * 0.005, p0 = random() * TAU;
+        g.strokeStyle = random() < 0.55 ? `rgba(22,15,11,${0.1 + random() * 0.22})` : `rgba(104,82,62,${0.06 + random() * 0.14})`;
+        g.lineWidth = 0.6 + random() * 2.4;
+        g.beginPath();
+        for (let x = x0; x <= x1 + 15; x += 15) {
+          const yy = y + amp * Math.sin(x * f + p0) + 2.5 * Math.sin(x * f * 3.3 + p0 * 2);
+          if (x === x0) g.moveTo(x, yy); else g.lineTo(x, yy);
+        }
+        g.stroke();
+      }
+    }
+    g.fillStyle = 'rgba(9,7,6,0.92)';
+    g.fillRect(0, k * ph - 2, W, 4);
+    g.fillRect(joint - 2, k * ph, 4, ph);
+  }
+  g.fillRect(0, H - 2, W, 2);
+});
+floorTex.wrapS = floorTex.wrapT = THREE.RepeatWrapping;
+floorTex.repeat.set(7.5, 7.5);
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(60, 60).rotateX(-Math.PI / 2),
+  lit(new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.66, metalness: 0, bumpMap: floorTex, bumpScale: 0.5, envMapIntensity: 0.5 }))
+);
+floor.receiveShadow = true;
+scene.add(floor);
+
+const walnutTex = canvasTex(1024, 1024, (g, W, H) => {
+  g.fillStyle = '#3e271a'; g.fillRect(0, 0, W, H);
+  for (let l = 0; l < 220; l++) {
+    const y = random() * H, amp = 3 + random() * 12, f = 0.002 + random() * 0.006, p0 = random() * TAU;
+    g.strokeStyle = random() < 0.5 ? `rgba(20,11,6,${0.12 + random() * 0.25})` : `rgba(122,82,52,${0.08 + random() * 0.16})`;
+    g.lineWidth = 0.7 + random() * 3;
+    g.beginPath();
+    for (let x = 0; x <= W + 16; x += 16) {
+      const yy = y + amp * Math.sin(x * f + p0) + 4 * Math.sin(x * f * 2.7 + p0);
+      if (x === 0) g.moveTo(x, yy); else g.lineTo(x, yy);
+    }
+    g.stroke();
+  }
+});
+walnutTex.wrapS = walnutTex.wrapT = THREE.RepeatWrapping;
+walnutTex.repeat.set(2.5, 1);
+const walnut = lit(new THREE.MeshPhysicalMaterial({ map: walnutTex, roughness: 0.44, clearcoat: 0.35, clearcoatRoughness: 0.4, envMapIntensity: 0.6 }));
+const tableTop = new THREE.Mesh(new RoundedBoxGeometry(12, 0.36, 5, 4, 0.06), walnut);
+tableTop.position.set(6, TABLE_Y - 0.18, 0);
+tableTop.castShadow = tableTop.receiveShadow = true;
+scene.add(tableTop);
+for (const [x, z] of [[0.45, 2.05], [0.45, -2.05], [11.55, 2.05], [11.55, -2.05]]) {
+  const leg = new THREE.Mesh(new RoundedBoxGeometry(0.46, TABLE_Y - 0.3, 0.46, 2, 0.05), walnut);
+  leg.position.set(x, (TABLE_Y - 0.3) / 2, z);
+  leg.castShadow = leg.receiveShadow = true;
+  scene.add(leg);
+}
+
+const wall = new THREE.Mesh(new THREE.PlaneGeometry(40, 16), lit(new THREE.MeshStandardMaterial({ color: '#2a221d', roughness: 0.96, envMapIntensity: 0.3 })));
+wall.position.set(0, 8, -7.6);
+wall.receiveShadow = true;
+scene.add(wall);
+const shojiTex = canvasTex(1024, 1024, (g, W, H) => {
+  g.fillStyle = '#f3ecdf'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 420; i++) {
+    g.fillStyle = `rgba(${(196 + random() * 40) | 0},${(186 + random() * 40) | 0},${(166 + random() * 40) | 0},0.06)`;
+    g.beginPath(); g.ellipse(random() * W, random() * H, 10 + random() * 70, 4 + random() * 30, random() * TAU, 0, TAU); g.fill();
+  }
+  g.filter = 'blur(6px)';
+  g.strokeStyle = 'rgba(48,34,23,0.9)';
+  g.lineWidth = 10;
+  for (let i = 1; i < 6; i++) { g.beginPath(); g.moveTo(i * W / 6, 0); g.lineTo(i * W / 6, H); g.stroke(); }
+  for (let j = 1; j < 8; j++) { g.beginPath(); g.moveTo(0, j * H / 8); g.lineTo(W, j * H / 8); g.stroke(); }
+  g.lineWidth = 34; g.strokeRect(0, 0, W, H);
+  g.filter = 'none';
+});
+const shojiMat = new THREE.MeshBasicMaterial({ map: shojiTex });
+const shoji = new THREE.Mesh(new THREE.PlaneGeometry(13, 7.4), shojiMat);
+shoji.position.set(1.4, 8.7, -7.5);
+scene.add(shoji);
+
+// ---------- the bowl: one profile thrown on the wheel, outer and inner walls ----------
+const OUTER_PTS = [[0, 0.1], [0.14, 0.1], [0.27, 0.106], [0.4, 0.165], [0.51, 0.285], [0.585, 0.445], [0.622, 0.605], [0.632, 0.765]];
+const INNER_PTS = [[0, 0.205], [0.16, 0.21], [0.3, 0.247], [0.42, 0.335], [0.503, 0.465], [0.556, 0.615], [0.583, 0.765]];
+const tableOf = (pts) => new THREE.SplineCurve(pts.map(([r, y]) => new THREE.Vector2(r, y))).getSpacedPoints(900);
+const OUT = tableOf(OUTER_PTS), INN = tableOf(INNER_PTS);
+const H_RIM = 0.765;
+function prof(tab, u) {
+  const f = clamp01(u) * (tab.length - 1), i = Math.min(tab.length - 2, Math.floor(f)), k = f - i;
+  return [mix(tab[i].x, tab[i + 1].x, k), mix(tab[i].y, tab[i + 1].y, k)];
+}
+const wob = (th, y) => 1 + 0.011 * Math.sin(2 * th + 0.7) + (0.007 * Math.sin(3 * th - 1.3) + 0.0035 * Math.sin(5 * th + 2.1) * (y / H_RIM)) * (y / H_RIM);
+const rimLift = (th) => 0.012 * Math.sin(2 * th + 2.2) + 0.006 * Math.sin(5 * th + 0.4);
+function shell(tab, u, th, ridged) {
+  const [r0, y0] = prof(tab, u);
+  let r = r0 * wob(th, y0);
+  if (ridged) r += 0.0026 * Math.sin(TAU * y0 / 0.088 + 0.6) * smooth(0.18, 0.3, y0) * (1 - smooth(0.66, 0.75, y0));
+  return [r * Math.cos(th), y0 + rimLift(th) * smooth(0.35, H_RIM, y0), r * Math.sin(th)];
+}
+function shellNormal(tab, u, th, ridged, outer) {
+  if (u < 0.004) return outer ? [0, -1, 0] : [0, 1, 0];
+  const e = 0.0015;
+  const du = sub(shell(tab, Math.min(1, u + e), th, ridged), shell(tab, Math.max(0, u - e), th, ridged));
+  const dt = sub(shell(tab, u, th + e, ridged), shell(tab, u, th - e, ridged));
+  return norm(outer ? cross(du, dt) : cross(dt, du));
+}
+
+// polar lattice over the unrolled disc (u = arc length along the profile, theta round the wheel)
+const K = 72;
+const lv = [];
+const ringStart = [], ringCount = [];
+for (let k = 0; k <= K; k++) {
+  ringStart.push(lv.length);
+  const n = k === 0 ? 1 : Math.round(5.2 * k);
+  ringCount.push(n);
+  for (let j = 0; j < n; j++) lv.push({ u: k / K, th: k === 0 ? 0 : TAU * (j + 0.5 * (k & 1)) / n, k });
+}
+const tris = [];
+for (let k = 0; k < K; k++) {
+  const a0 = ringStart[k], na = ringCount[k], b0 = ringStart[k + 1], nb = ringCount[k + 1];
+  if (k === 0) { for (let j = 0; j < nb; j++) tris.push([a0, b0 + j, b0 + ((j + 1) % nb)]); continue; }
+  const angA = (i) => TAU * (i + 0.5 * (k & 1)) / na, angB = (j) => TAU * (j + 0.5 * ((k + 1) & 1)) / nb;
+  let i = 0, j = 0;
+  while (i < na || j < nb) {
+    const ia = a0 + (i % na), ib = b0 + (j % nb);
+    if (j >= nb || (i < na && angA(i + 1) < angB(j + 1))) { tris.push([ia, a0 + ((i + 1) % na), ib]); i++; }
+    else { tris.push([ia, b0 + ((j + 1) % nb), ib]); j++; }
+  }
+}
+const disc = (v) => [v.u * Math.cos(v.th), v.u * Math.sin(v.th)];
+for (const t of tris) {          // counter-clockwise on the disc faces out of the outer wall
+  const [p, q, r] = t.map((i) => disc(lv[i]));
+  if ((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]) < 0) { const s = t[1]; t[1] = t[2]; t[2] = s; }
+}
+
+// where it broke before: a base, six wall pieces and one rim chip rebuilt entirely in lacquer
+const WALL_SEEDS = [[0.36, 0.73, 1.2], [1.3, 0.77, 0.8], [2.17, 0.7, 1.05], [3.12, 0.78, 0.72], [4.08, 0.72, 1.3], [5.17, 0.71, 0.9]];
+const CHIP = [2.66, 0.985];
+const NSHARD = 8, CHIP_ID = 7;
+const seedPts = WALL_SEEDS.map(([th, u]) => shell(OUT, u, th, false));
+const seedWeight = WALL_SEEDS.map((s) => s[2]);
+const chipPt = shell(OUT, CHIP[1], CHIP[0], false);
+const dist3 = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+function labelAt(u, th) {
+  const p = shell(OUT, u, th, false);
+  const q = [
+    p[0] + 0.1 * (fbm(p[0] * 5 + 3.1, p[1] * 5, p[2] * 5) - 0.5) + 0.04 * (vnoise(p[0] * 21, p[1] * 21 + 5, p[2] * 21) - 0.5),
+    p[1] + 0.1 * (fbm(p[0] * 5, p[1] * 5 + 8.7, p[2] * 5 + 1.3) - 0.5) + 0.04 * (vnoise(p[0] * 21 + 2, p[1] * 21, p[2] * 21 + 7) - 0.5),
+    p[2] + 0.1 * (fbm(p[0] * 5 + 4.4, p[1] * 5 + 2.2, p[2] * 5) - 0.5) + 0.04 * (vnoise(p[0] * 21 + 9, p[1] * 21 + 1, p[2] * 21) - 0.5)
+  ];
+  const baseU = 0.37 + 0.025 * Math.sin(3 * th + 1.1) + 0.018 * Math.sin(5 * th + 0.3) + 0.05 * (fbm(q[0] * 7, q[1] * 7, q[2] * 7) - 0.5);
+  if (u < baseU) return 0;
+  let best = 1, bd = Infinity;
+  for (let i = 0; i < seedPts.length; i++) { const d = dist3(q, seedPts[i]) / seedWeight[i]; if (d < bd) { bd = d; best = i + 1; } }
+  if (dist3(q, chipPt) * 2.7 < bd) return CHIP_ID;
+  return best;
+}
+const triLabel = tris.map((t) => {
+  let x = 0, y = 0;
+  for (const i of t) { const d = disc(lv[i]); x += d[0]; y += d[1]; }
+  return labelAt(Math.hypot(x, y) / 3, Math.atan2(y, x));
+});
+
+// edge adjacency, then a majority filter that removes stray single cells
+const edgeKey = (a, b) => (a < b ? a * 1e6 + b : b * 1e6 + a);
+const edgeTris = new Map();
+tris.forEach((t, ti) => {
+  for (let e = 0; e < 3; e++) {
+    const key = edgeKey(t[e], t[(e + 1) % 3]);
+    if (!edgeTris.has(key)) edgeTris.set(key, []);
+    edgeTris.get(key).push(ti);
+  }
+});
+const neighbours = tris.map((t, ti) => [0, 1, 2].map((e) => edgeTris.get(edgeKey(t[e], t[(e + 1) % 3])).find((o) => o !== ti)));
+for (let pass = 0; pass < 3; pass++) {
+  const next = triLabel.slice();
+  tris.forEach((t, ti) => {
+    const counts = {};
+    for (const o of neighbours[ti]) if (o !== undefined) counts[triLabel[o]] = (counts[triLabel[o]] || 0) + 1;
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    if (top && top[1] >= 2 && Number(top[0]) !== triLabel[ti]) next[ti] = Number(top[0]);
+  });
+  for (let i = 0; i < next.length; i++) triLabel[i] = next[i];
+}
+
+// crack edges separate two labels; chain vertices are relaxed along the crack so the
+// lattice's zig-zag becomes a hand-broken curve (junctions and rim points stay put)
+const crackEdges = [];
+for (const [key, ts] of edgeTris) {
+  if (ts.length === 2 && triLabel[ts[0]] !== triLabel[ts[1]]) {
+    crackEdges.push({ a: Math.floor(key / 1e6), b: key % 1e6, l0: triLabel[ts[0]], l1: triLabel[ts[1]], t0: ts[0], t1: ts[1] });
+  }
+}
+const vertLabels = lv.map(() => new Set());
+tris.forEach((t, ti) => { for (const i of t) vertLabels[i].add(triLabel[ti]); });
+const crackNbr = lv.map(() => []);
+for (const e of crackEdges) { crackNbr[e.a].push(e.b); crackNbr[e.b].push(e.a); }
+const pinned = (i) => lv[i].k === K || vertLabels[i].size > 2 || crackNbr[i].length !== 2;
+const dpos = lv.map(disc);
+for (let it = 0; it < 3; it++) {
+  const nextPos = dpos.map((p) => p.slice());
+  for (let i = 0; i < lv.length; i++) {
+    if (!crackNbr[i].length || pinned(i)) continue;
+    const [p, q] = crackNbr[i].map((n) => dpos[n]);
+    nextPos[i] = [0.5 * dpos[i][0] + 0.25 * (p[0] + q[0]), 0.5 * dpos[i][1] + 0.25 * (p[1] + q[1])];
+  }
+  for (let i = 0; i < lv.length; i++) dpos[i] = nextPos[i];
+}
+for (let i = 0; i < lv.length; i++) {
+  if (!crackNbr[i].length || lv[i].k === K) continue;
+  lv[i].u = Math.hypot(dpos[i][0], dpos[i][1]);
+  lv[i].th = Math.atan2(dpos[i][1], dpos[i][0]);
+}
+
+const outerP = lv.map((v) => shell(OUT, v.u, v.th, true));
+const innerP = lv.map((v) => shell(INN, v.u, v.th, false));
+const outerN = lv.map((v) => shellNormal(OUT, v.u, v.th, true, true));
+const innerN = lv.map((v) => shellNormal(INN, v.u, v.th, false, false));
+const unwrap = (a, ref) => a + TAU * Math.round((ref - a) / TAU);
+const lipPoint = (i, s) => {
+  const o = outerP[i], n = innerP[i], th = Math.hypot(o[0] - n[0], o[2] - n[2]);
+  const p = lerp3(o, n, s);
+  p[1] += 0.55 * th * Math.sin(Math.PI * s);
+  return p;
+};
+const lipNormal = (i, s) => {
+  const c = Math.cos(Math.PI * s), sn = Math.sin(Math.PI * s), o = outerN[i], n = innerN[i], po = Math.max(0, c), pn = Math.max(0, -c);
+  return norm([o[0] * po + n[0] * pn, sn + o[1] * po + n[1] * pn, o[2] * po + n[2] * pn]);
+};
+const LIP = 4;
+
+// ---------- glaze: Shino, a thick milky white with apricot flashing, toasted at the rim ----------
+const GW = 1024, GH = 768;
+const glazeTex = pixelTex(GW, GH, (i, j) => {
+  const outer = j < GH / 2;
+  const v = 1 - (j + 0.5) / GH;
+  const u = clamp01(outer ? (v - 0.505) / 0.49 : (v - 0.005) / 0.49);
+  const th = TAU * (i + 0.5) / GW;
+  const p = shell(outer ? OUT : INN, u, th, false);
+  const n1 = fbm(p[0] * 4.2 + 1.7, p[1] * 4.2, p[2] * 4.2 + 3.1), n2 = fbm(p[0] * 13 + 7, p[1] * 13, p[2] * 13);
+  const n3 = vnoise(p[0] * 70 + 3, p[1] * 70, p[2] * 70 + 11);
+  let c = [0.86, 0.83, 0.75];
+  const flash = smooth(0.46, 0.72, n1 + (outer ? 0.3 * (u - 0.55) : -0.08) + 0.14 * (n2 - 0.5));
+  c = lerp3(c, [0.84, 0.5, 0.32], 0.72 * flash);
+  c = lerp3(c, [0.72, 0.46, 0.31], 0.55 * smooth(0.93, 1.0, u) * (0.6 + 0.4 * n2));
+  if (outer) c = lerp3(c, [0.74, 0.55, 0.4], smooth(0.43, 0.33, u + 0.05 * (n2 - 0.5)));
+  else c = lerp3(c, [0.86, 0.84, 0.75], 0.5 * smooth(0.36, 0.12, u));
+  c = lerp3(c, [0.46, 0.33, 0.25], 0.7 * smooth(0.9, 0.95, n3) * smooth(0.18, 0.3, u));
+  const shade = 0.96 + 0.08 * (n2 - 0.5);
+  return [c[0] * shade, c[1] * shade, c[2] * shade];
+});
+glazeTex.wrapS = THREE.RepeatWrapping;
+const glazeMat = lit(new THREE.MeshPhysicalMaterial({ map: glazeTex, roughness: 0.42, clearcoat: 0.45, clearcoatRoughness: 0.22, envMapIntensity: 0.8 }));
+const clayMat = lit(new THREE.MeshStandardMaterial({ color: '#a59683', roughness: 0.95, envMapIntensity: 0.35 }));
+const footMat = lit(new THREE.MeshStandardMaterial({ color: '#c28c63', roughness: 0.9, envMapIntensity: 0.4 }));
+
+// gold, black urushi and red bengara; the gold carries a travelling glint for the reveal
+const glint = { uGlint: { value: 0 }, uSweep: { value: 0 }, uSweepDir: { value: V(0.94, 0.2, 0.28).normalize() }, uSweepOrigin: { value: V() } };
+const goldMat = lit(new THREE.MeshStandardMaterial({ color: '#e9b04a', metalness: 1, roughness: 0.3, envMapIntensity: 1.05 }));
+goldMat.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, glint);
+  sh.vertexShader = 'varying vec3 vSweepPos;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+    vSweepPos = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
+  sh.fragmentShader = 'uniform float uGlint; uniform float uSweep; uniform vec3 uSweepDir; uniform vec3 uSweepOrigin; varying vec3 vSweepPos;\n' +
+    sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    float sw = dot(vSweepPos - uSweepOrigin, uSweepDir) - uSweep;
+    totalEmissiveRadiance += vec3(1.0, 0.66, 0.26) * uGlint * exp(-sw * sw / 0.018);`);
+};
+const urushiMat = lit(new THREE.MeshPhysicalMaterial({ color: '#130d0b', roughness: 0.3, clearcoat: 1, clearcoatRoughness: 0.12, envMapIntensity: 0.9 }));
+const bengaraMat = lit(new THREE.MeshPhysicalMaterial({ color: '#7c2c1a', roughness: 0.34, clearcoat: 1, clearcoatRoughness: 0.14, envMapIntensity: 0.9 }));
+
+// ---------- the pieces ----------
+function buildShard(L) {
+  const pos = [], nor = [], uvs = [];
+  const push = (p, n, uv) => { pos.push(p[0], p[1], p[2]); nor.push(n[0], n[1], n[2]); uvs.push(uv[0], uv[1]); };
+  const geo = new THREE.BufferGeometry();
+  tris.forEach((t, ti) => {
+    if (triLabel[ti] !== L) return;
+    const th0 = lv[t[0]].th, ths = t.map((i) => unwrap(lv[i].th, th0));
+    for (let s = 0; s < 3; s++) push(outerP[t[s]], outerN[t[s]], [ths[s] / TAU, 0.505 + 0.49 * lv[t[s]].u]);
+    for (let s = 2; s >= 0; s--) push(innerP[t[s]], innerN[t[s]], [ths[s] / TAU, 0.005 + 0.49 * lv[t[s]].u]);
+    for (let e = 0; e < 3; e++) {
+      const a = t[e], b = t[(e + 1) % 3];
+      if (neighbours[ti][e] !== undefined || lv[a].k !== K || lv[b].k !== K) continue;
+      const ta = unwrap(lv[a].th, th0), tb = unwrap(lv[b].th, th0);
+      for (let s = 0; s < LIP; s++) {
+        const s0 = s / LIP, s1 = (s + 1) / LIP;
+        const A0 = lipPoint(a, s0), B0 = lipPoint(b, s0), A1 = lipPoint(a, s1), B1 = lipPoint(b, s1);
+        const quad = [[A0, lipNormal(a, s0), [ta / TAU, 0.995]], [B0, lipNormal(b, s0), [tb / TAU, 0.995]], [B1, lipNormal(b, s1), [tb / TAU, 0.995]], [A1, lipNormal(a, s1), [ta / TAU, 0.995]]];
+        const f = norm(cross(sub(B0, A0), sub(A1, A0)));
+        const order = dot(f, quad[0][1]) + dot(f, quad[3][1]) > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+        for (const o of order) push(...quad[o]);
+      }
+    }
+  });
+  const glazeCount = pos.length / 3;
+  geo.addGroup(0, glazeCount, 0);
+  const faces = [], acc = new Map();
+  tris.forEach((t, ti) => {
+    if (triLabel[ti] !== L) return;
+    const c = lerp3(lerp3(outerP[t[0]], outerP[t[1]], 0.5), outerP[t[2]], 1 / 3);
+    for (let e = 0; e < 3; e++) {
+      const a = t[e], b = t[(e + 1) % 3], nb = neighbours[ti][e];
+      if (nb === undefined || triLabel[nb] === L) continue;
+      let f = norm(cross(sub(outerP[b], outerP[a]), sub(innerP[a], outerP[a])));
+      const out = dot(f, sub(lerp3(outerP[a], outerP[b], 0.5), c)) > 0;
+      if (!out) f = [-f[0], -f[1], -f[2]];
+      faces.push([a, b, out]);
+      for (const v of [a, b]) { const n = acc.get(v) || [0, 0, 0]; acc.set(v, [n[0] + f[0], n[1] + f[1], n[2] + f[2]]); }
+    }
+  });
+  for (const [a, b, out] of faces) {
+    const q = [[outerP[a], a], [outerP[b], b], [innerP[b], b], [innerP[a], a]];
+    for (const o of (out ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2])) push(q[o][0], norm(acc.get(q[o][1])), [0, 0]);
+  }
+  geo.addGroup(glazeCount, pos.length / 3 - glazeCount, 1);
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  return geo;
+}
+
+// gold beads along every crack, one per side, so each piece keeps its own gilded edge
+const SEAM_R = 0.0072;
+function chainsBetween(L, M) {
+  const es = crackEdges.filter((e) => (e.l0 === L && e.l1 === M) || (e.l0 === M && e.l1 === L));
+  const nb = new Map();
+  for (const e of es) {
+    if (!nb.has(e.a)) nb.set(e.a, []);
+    if (!nb.has(e.b)) nb.set(e.b, []);
+    nb.get(e.a).push(e.b); nb.get(e.b).push(e.a);
+  }
+  const used = new Set(), chains = [];
+  const rank = (v) => (nb.get(v).length === 1 ? 0 : 2) + (lv[v].k === K ? 0 : 1);
+  const starts = [...nb.keys()].sort((a, b) => rank(a) - rank(b));
+  for (const s of starts) {
+    for (const first of nb.get(s)) {
+      if (used.has(edgeKey(s, first))) continue;
+      const chain = [s];
+      let prev = s, cur = first;
+      used.add(edgeKey(s, first));
+      for (;;) {
+        chain.push(cur);
+        const nx = nb.get(cur).find((n) => n !== prev && !used.has(edgeKey(cur, n)));
+        if (nx === undefined) break;
+        used.add(edgeKey(cur, nx));
+        prev = cur; cur = nx;
+      }
+      chains.push(chain);
+    }
+  }
+  return chains.map((c) => (lv[c[c.length - 1]].k === K && lv[c[0]].k !== K ? c.reverse() : c));
+}
+function sideOf(L, a, b, inner) {
+  const e = crackEdges.find((x) => edgeKey(x.a, x.b) === edgeKey(a, b));
+  const t = tris[e.l0 === L ? e.t0 : e.t1], P = inner ? innerP : outerP;
+  return lerp3(lerp3(P[t[0]], P[t[1]], 0.5), P[t[2]], 1 / 3);
+}
+function beadPaths(chain) {
+  const rimA = lv[chain[0]].k === K, rimB = lv[chain[chain.length - 1]].k === K;
+  const O = chain.map((i) => [outerP[i], outerN[i]]), I = chain.map((i) => [innerP[i], innerN[i]]);
+  const lip = (i, fromOuter) => {
+    const pts = [];
+    for (let s = 1; s < 6; s++) { const k = fromOuter ? s / 6 : 1 - s / 6; pts.push([lipPoint(i, k), lipNormal(i, k)]); }
+    return pts;
+  };
+  if (rimA && rimB) return [{ closed: true, ref: 0, inner: false, pts: [...O, ...lip(chain[chain.length - 1], true), ...I.slice().reverse(), ...lip(chain[0], false)] }];
+  if (rimA) return [{ closed: false, ref: I.length + 5, inner: false, pts: [...I.slice().reverse(), ...lip(chain[0], false), ...O] }];
+  return [{ closed: false, ref: 0, inner: false, pts: O }, { closed: false, ref: 0, inner: true, pts: I }];
+}
+function beadGeometry(path, side) {
+  const P = path.pts, n = P.length, out = [];
+  const frame = (i) => {
+    const a = P[Math.max(0, i - 1)][0], b = P[Math.min(n - 1, i + 1)][0];
+    const T = norm(sub(b, a)), N = P[i][1];
+    return [N, norm(cross(N, T))];
+  };
+  const [, Bref] = frame(path.ref);
+  const sign = dot(Bref, sub(side, P[path.ref][0])) > 0 ? 1 : -1;
+  for (let i = 0; i < n; i++) {
+    const [N, B] = frame(i), k = sign * 0.6 * SEAM_R, h = 0.45 * SEAM_R;
+    out.push(V(P[i][0][0] + B[0] * k + N[0] * h, P[i][0][1] + B[1] * k + N[1] * h, P[i][0][2] + B[2] * k + N[2] * h));
+  }
+  const curve = new THREE.CatmullRomCurve3(out, path.closed, 'centripetal');
+  return new THREE.TubeGeometry(curve, Math.max(8, n * 2), SEAM_R, 6, path.closed);
+}
+
+const shardGroups = [], shardMeshes = [], beads = [], shardInfo = [];
+for (let L = 0; L < NSHARD; L++) {
+  const group = new THREE.Group();
+  const geo = buildShard(L);
+  const mesh = new THREE.Mesh(geo, L === CHIP_ID ? [goldMat, goldMat] : [glazeMat, clayMat]);
+  mesh.castShadow = mesh.receiveShadow = true;
+  group.add(mesh);
+  scene.add(group);
+  shardGroups.push(group);
+  shardMeshes.push(mesh);
+  const p = geo.attributes.position.array, verts = [];
+  for (let i = 0; i < p.length; i += 9) verts.push(V(p[i], p[i + 1], p[i + 2]));
+  const c = V(), n = V();
+  let count = 0;
+  tris.forEach((t, ti) => {
+    if (triLabel[ti] !== L) return;
+    const a = outerP[t[0]], b = outerP[t[1]], cc = outerP[t[2]], f = cross(sub(b, a), sub(cc, a));
+    n.x += f[0]; n.y += f[1]; n.z += f[2];
+    c.x += a[0] + b[0] + cc[0]; c.y += a[1] + b[1] + cc[1]; c.z += a[2] + b[2] + cc[2];
+    count++;
+  });
+  c.divideScalar(3 * Math.max(1, count));
+  shardInfo.push({ verts, centroid: c, outward: n.lengthSq() > 1e-12 ? n.normalize() : V(0, -1, 0), count });
+}
+for (let L = 0; L < NSHARD; L++) for (let M = L + 1; M < NSHARD; M++) {
+  for (const chain of chainsBetween(L, M)) {
+    for (const path of beadPaths(chain)) {
+      for (const S of [L, M]) {
+        const mesh = new THREE.Mesh(beadGeometry(path, sideOf(S, chain[0], chain[1], path.inner)), goldMat);
+        mesh.castShadow = true;
+        shardGroups[S].add(mesh);
+        beads.push({ mesh, self: S, other: S === L ? M : L });
+      }
+    }
+  }
+}
+const foot = new THREE.Mesh(new THREE.LatheGeometry(
+  [[0.268, 0.108], [0.272, 0.02], [0.262, 0.0], [0.205, 0.0], [0.195, 0.018], [0.19, 0.104]].map(([r, y]) => new THREE.Vector2(r, y)), 96), footMat);
+foot.castShadow = foot.receiveShadow = true;
+shardGroups[0].add(foot);
+
+// ---------- the mending schedule, read off the time-lapse clock ----------
+// day clock c: 0 midnight, 0.25 dawn, 0.5 noon. Each time-lapse day is one bar, dawn on the downbeat.
+const CLOCK_KEYS = [[0, 0.3, 0], [at(3, 3.3), 0.3, 0]];
+for (let k = 1; k <= 9; k++) CLOCK_KEYS.push([at(4 + k), k + 0.25, 1 / BAR]);
+CLOCK_KEYS.push([T_GOLD_DAWN, 10.25, 0.15], [at(15), 10.55, 0.08], [at(16), 10.74, 0.1], [at(17, 0.7), 11.08, 0.13],
+  [T_HOME, 11.25, 0.04], [at(18, 2.2), 11.3, 0], [DUR, 11.3, 0]);
+const dayClock = hermite(CLOCK_KEYS);
+function clockCross(level) {
+  let a = 0, b = DUR;
+  for (let i = 0; i < 60; i++) { const m = (a + b) / 2; if (dayClock(m) < level) a = m; else b = m; }
+  return b;
+}
+const MIDNIGHT = [0];
+for (let k = 1; k <= 11; k++) MIDNIGHT.push(clockCross(k));
+const N_GATHER = MIDNIGHT[1], N_RED = MIDNIGHT[9], N_GOLD = MIDNIGHT[10], N_RETURN = MIDNIGHT[11];
+const JOIN_ORDER = [1, 2, 3, 4, 5, 6, CHIP_ID];
+const JOIN = new Array(NSHARD).fill(0);
+JOIN[0] = N_GATHER;
+JOIN_ORDER.forEach((s, i) => { JOIN[s] = MIDNIGHT[2 + i]; });
+const elevation = (c) => Math.sin(TAU * (c - 0.25));
+
+// ---------- poses ----------
+const tmpV = V();
+const yawQ = (a) => new THREE.Quaternion().setFromAxisAngle(UP, a);
+const rollQ = (a) => new THREE.Quaternion().setFromAxisAngle(V(0, 0, 1), a);
+function lowest(i, q) {
+  let m = Infinity;
+  for (const v of shardInfo[i].verts) { tmpV.copy(v).applyQuaternion(q); if (tmpV.y < m) m = tmpV.y; }
+  return m;
+}
+function restPose(i, flip, yaw, x, z, floorY) {
+  const down = i === 0 ? V(0, -1, 0) : shardInfo[i].outward.clone().multiplyScalar(flip ? -1 : 1);
+  const q = yawQ(yaw).multiply(new THREE.Quaternion().setFromUnitVectors(down, V(0, -1, 0)));
+  const c = shardInfo[i].centroid.clone().applyQuaternion(q);
+  return { p: V(x - c.x, floorY - lowest(i, q), z - c.z), q };
+}
+const FLOOR_LAYOUT = [
+  [0, 0.6, -1.05, 0.3], [0, 1.1, -2.25, -0.25], [1, 2.9, -1.75, 1.3], [0, 4.0, 0.0, 0.85],
+  [0, 0.3, -0.45, -0.45], [0, 5.1, -2.45, 0.95], [1, 1.9, -0.95, 1.6], [0, 2.2, -0.25, 1.85]
+];
+const floorRest = FLOOR_LAYOUT.map(([flip, yaw, x, z], i) => restPose(i, flip, yaw, x, z, 0));
+const CLOTH_RING = [0, 0.9, 1.75, 2.6, 3.55, 4.4, 5.25, 6.0];
+const clothRest = CLOTH_RING.map((a, i) => (i === 0
+  ? restPose(0, 0, YAW0, CLOTH.x, CLOTH.z, CLOTH.y)
+  : restPose(i, 0, a + 1.3, CLOTH.x + 1.22 * Math.cos(a), CLOTH.z + 1.05 * Math.sin(a), CLOTH.y)));
+const assembledOnCloth = { p: CLOTH.clone(), q: yawQ(YAW0) };
+
+// the bowl on the table: two taps, a push, a tip over the end of the table, a fall
+const X_REST = 0.36;
+const TIP_A = 16, TIP_T = 0.3, COM = V(0, 0.33, 0);
+const PHI_R = 0.5 * TIP_A * TIP_T * TIP_T, OMEGA = TIP_A * TIP_T;
+const pivot = V(0, TABLE_Y, BOWL_Z);
+const comAtRelease = COM.clone().applyAxisAngle(V(0, 0, 1), PHI_R);
+const vRelease = V(-OMEGA * comAtRelease.y, OMEGA * comAtRelease.x, 0);
+const fallTime = (vRelease.y + Math.sqrt(vRelease.y * vRelease.y + 2 * G * (TABLE_Y + comAtRelease.y - 0.45))) / G;
+const T_TIP = T_CRASH - TIP_T - fallTime;
+function tableX(t) {
+  if (t < T_TAP1) return X_REST;
+  if (t < T_TAP2) return X_REST - 0.09 * (1 - (1 - smooth(T_TAP1, T_TAP1 + 0.16, t)) ** 2);
+  if (t < T_PUSH) return X_REST - 0.09 - 0.09 * (1 - (1 - smooth(T_TAP2, T_TAP2 + 0.16, t)) ** 2);
+  return (X_REST - 0.18) * (1 - smooth(T_PUSH, T_TIP, t));
+}
+const rock = (t) => [T_TAP1, T_TAP2].reduce((s, tk) => s + (t > tk ? 0.06 * Math.exp(-7 * (t - tk)) * Math.sin(26 * (t - tk)) : 0), 0);
+function tablePose(t) {
+  const r = rock(t);
+  return { p: V(tableX(t), TABLE_Y + 0.27 * Math.abs(Math.sin(r)), BOWL_Z), q: yawQ(YAW0).premultiply(rollQ(r)) };
+}
+function fallPose(t) {
+  const dt = t - T_TIP;
+  let phi, com;
+  if (dt < TIP_T) {
+    phi = 0.5 * TIP_A * dt * dt;
+    com = COM.clone().applyAxisAngle(V(0, 0, 1), phi).add(pivot);
+  } else {
+    const f = dt - TIP_T;
+    phi = PHI_R + OMEGA * f;
+    com = comAtRelease.clone().add(pivot).addScaledVector(vRelease, f);
+    com.y -= 0.5 * G * f * f;
+  }
+  const rq = rollQ(phi);
+  return { p: com.clone().sub(COM.clone().applyQuaternion(rq)), q: rq.clone().multiply(yawQ(YAW0)) };
+}
+const impact = fallPose(T_CRASH);
+const SCATTER = [...Array(NSHARD)].map(() => ({ dur: 0.55 + 0.4 * random(), hop: 0.25 + 0.5 * random(), spin: (random() - 0.5) * 6 }));
+SCATTER[CHIP_ID] = { dur: 0.75, hop: 0.6, spin: 9 };
+function scatterPose(i, t) {
+  const s = SCATTER[i], u = clamp01((t - T_CRASH) / s.dur), e = 1 - (1 - u) * (1 - u), F = floorRest[i];
+  const start = shardInfo[i].centroid.clone().applyQuaternion(impact.q).add(impact.p);
+  const endC = shardInfo[i].centroid.clone().applyQuaternion(F.q).add(F.p);
+  const q = impact.q.clone().slerp(F.q, smooth(0, 1, e)).premultiply(yawQ(s.spin * (1 - e)));
+  if (i === CHIP_ID && t > T_CRASH + s.dur) {     // the gold chip rocks like a dropped coin
+    const w = clamp01((t - T_CRASH - s.dur) / 2.6), amp = 0.32 * (1 - w) ** 1.7, ph = 10 * w + 15 * w * w;
+    q.premultiply(new THREE.Quaternion().setFromAxisAngle(V(Math.cos(ph), 0, Math.sin(ph)), amp));
+  }
+  const c = start.lerp(endC, e);
+  c.y += s.hop * 4 * u * (1 - u);
+  const p = c.sub(shardInfo[i].centroid.clone().applyQuaternion(q));
+  p.y = Math.max(p.y, -lowest(i, q));
+  return { p, q };
+}
+function shardPose(i, t) {
+  if (t >= N_RETURN) return tablePose(0);
+  if (t < T_TIP) return tablePose(t);
+  if (t < T_CRASH) return fallPose(t);
+  if (t < N_GATHER) return scatterPose(i, t);
+  if (t < JOIN[i]) return clothRest[i];
+  return assembledOnCloth;
+}
+function seamMaterial(t, a, b) {
+  if (t < N_GATHER || t >= N_GOLD) return goldMat;
+  if (t >= N_RED) return bengaraMat;
+  return t >= JOIN[a] && t >= JOIN[b] ? urushiMat : null;
+}
+function chipMaterial(t) {
+  if (t < N_GATHER || t >= N_GOLD) return goldMat;
+  return t >= N_RED ? bengaraMat : urushiMat;
+}
+
+// ---------- the mending kit: an indigo cloth, a lacquer dish of gold dust, a brush ----------
+const clothTex = canvasTex(1024, 1024, (g, W, H) => {
+  g.fillStyle = '#1c2a4c'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 900; i++) {
+    const a = random() * 0.07;
+    g.fillStyle = random() < 0.5 ? `rgba(7,12,30,${a})` : `rgba(64,88,136,${a})`;
+    g.beginPath(); g.ellipse(random() * W, random() * H, 20 + random() * 90, 10 + random() * 50, random() * TAU, 0, TAU); g.fill();
+  }
+  for (let i = 0; i < 26000; i++) {
+    g.fillStyle = random() < 0.5 ? `rgba(4,8,22,${0.05 + random() * 0.08})` : `rgba(120,142,190,${0.03 + random() * 0.05})`;
+    const x = random() * W, y = random() * H, horiz = random() < 0.5;
+    g.fillRect(x, y, horiz ? 3 + random() * 7 : 1.2, horiz ? 1.2 : 3 + random() * 7);
+  }
+  g.filter = 'blur(1.4px)';
+  for (let r = 0; r < 10; r++) for (let c = 0; c < 10; c++) {
+    if ((r + c) % 2) continue;
+    const x = (c + 0.5) * W / 10 + (random() - 0.5) * 9, y = (r + 0.5) * H / 10 + (random() - 0.5) * 9;
+    g.strokeStyle = `rgba(206,216,234,${0.5 + random() * 0.3})`;
+    g.lineWidth = 4 + random() * 3;
+    g.beginPath(); g.arc(x, y, 12 + random() * 5, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(186,200,226,0.3)';
+    g.beginPath(); g.arc(x, y, 4.5, 0, TAU); g.fill();
+  }
+  g.filter = 'none';
+  g.strokeStyle = 'rgba(9,14,30,0.75)'; g.lineWidth = 24; g.strokeRect(12, 12, W - 24, H - 24);
+});
+const clothGeo = new THREE.PlaneGeometry(3.4, 3.4, 48, 48).rotateX(-Math.PI / 2);
+{
+  const p = clothGeo.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), z = p.getZ(i), edge = Math.max(Math.abs(x), Math.abs(z)) / 1.7;
+    p.setY(i, 0.006 * vnoise(x * 3, 0, z * 3) + 0.03 * smooth(0.82, 1, edge) * vnoise(x * 2 + 5, 1, z * 2));
+  }
+  clothGeo.computeVertexNormals();
+}
+const cloth = new THREE.Mesh(clothGeo, lit(new THREE.MeshPhysicalMaterial({ map: clothTex, roughness: 0.95, sheen: 0.6, sheenColor: new THREE.Color('#5d73a8'), sheenRoughness: 0.7, envMapIntensity: 0.4 })));
+cloth.position.set(CLOTH.x, 0.004, CLOTH.z);
+cloth.rotation.y = -0.12;
+cloth.receiveShadow = true;
+scene.add(cloth);
+const kit = new THREE.Group();
+const dish = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.3, 0.07, 48), urushiMat);
+dish.position.set(-1.2, 0.035, 1.25);
+const dust = new THREE.Mesh(new THREE.SphereGeometry(0.24, 32, 12), lit(new THREE.MeshStandardMaterial({ color: '#e7b85f', metalness: 1, roughness: 0.6, envMapIntensity: 1.1 })));
+dust.scale.set(1, 0.16, 1);
+dust.position.set(-1.2, 0.075, 1.25);
+const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.024, 1.5, 12).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#c8a36a', roughness: 0.55 }));
+handle.position.set(0.95, 0.03, -1.35);
+handle.rotation.y = 0.55;
+const tip = new THREE.Mesh(new THREE.ConeGeometry(0.034, 0.2, 12).rotateZ(Math.PI / 2), new THREE.MeshStandardMaterial({ color: '#1a1410', roughness: 0.7 }));
+tip.position.set(0.95 - 0.84 * Math.cos(0.55), 0.03, -1.35 + 0.84 * Math.sin(0.55));
+tip.rotation.y = 0.55;
+for (const m of [dish, dust, handle, tip]) { m.castShadow = m.receiveShadow = true; kit.add(m); }
+kit.position.set(CLOTH.x, CLOTH.y, CLOTH.z);
+kit.rotation.y = -0.12;
+scene.add(kit);
+
+// the lamp the work is done by: a tall paper floor lantern
+const LAMP = V(-4.4, 0, -0.6);
+const lanternTex = canvasTex(512, 512, (g, W, H) => {
+  g.fillStyle = '#fbe7c4'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(214,170,110,${0.04 + random() * 0.06})`; g.beginPath(); g.ellipse(random() * W, random() * H, 8 + random() * 40, 4 + random() * 20, random() * TAU, 0, TAU); g.fill(); }
+  g.fillStyle = 'rgba(70,44,26,0.85)';
+  for (const y of [0, H / 2 - 4, H - 10]) g.fillRect(0, y, W, 10);
+  for (let x = 0; x < W; x += W / 4) g.fillRect(x, 0, 8, H);
+});
+const lanternMat = new THREE.MeshStandardMaterial({ map: lanternTex, emissiveMap: lanternTex, emissive: '#ffb86a', emissiveIntensity: 0, roughness: 0.9, side: THREE.DoubleSide });
+const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 5.0, 32, 1, true), lanternMat);
+lantern.position.set(LAMP.x, 3.1, LAMP.z);
+scene.add(lantern);
+const lanternBase = new THREE.Mesh(new RoundedBoxGeometry(1.5, 0.6, 1.5, 2, 0.06), walnut);
+lanternBase.position.set(LAMP.x, 0.3, LAMP.z);
+lanternBase.castShadow = lanternBase.receiveShadow = true;
+scene.add(lanternBase);
+const lamp = new THREE.SpotLight('#ffb267', 0, 0, 0.95, 0.85, 2);
+lamp.position.set(LAMP.x, 5.0, LAMP.z);
+lamp.target.position.copy(CLOTH);
+lamp.castShadow = true;
+lamp.shadow.mapSize.set(1024, 1024);
+lamp.shadow.camera.near = 0.5;
+lamp.shadow.camera.far = 16;
+lamp.shadow.bias = -0.0006;
+lamp.shadow.normalBias = 0.02;
+scene.add(lamp, lamp.target);
+
+// ---------- ClawedCode: one distance field, meshed once and skinned to eight bones ----------
+function ellipsoid(c, r) {
+  return {
+    f: (x, y, z) => {
+      const px = (x - c[0]) / r[0], py = (y - c[1]) / r[1], pz = (z - c[2]) / r[2];
+      const k0 = Math.sqrt(px * px + py * py + pz * pz), qx = px / r[0], qy = py / r[1], qz = pz / r[2];
+      const k1 = Math.sqrt(qx * qx + qy * qy + qz * qz);
+      return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -Math.min(...r);
+    },
+    box: [c[0] - r[0], c[1] - r[1], c[2] - r[2], c[0] + r[0], c[1] + r[1], c[2] + r[2]]
+  };
+}
+function capsule(a, b, r1, r2) {
+  const ba = sub(b, a), l2 = dot(ba, ba);
+  return {
+    f: (x, y, z) => {
+      const pa = [x - a[0], y - a[1], z - a[2]], h = clamp01(dot(pa, ba) / l2);
+      return Math.hypot(pa[0] - ba[0] * h, pa[1] - ba[1] * h, pa[2] - ba[2] * h) - mix(r1, r2, h);
+    },
+    box: [Math.min(a[0] - r1, b[0] - r2), Math.min(a[1] - r1, b[1] - r2), Math.min(a[2] - r1, b[2] - r2),
+      Math.max(a[0] + r1, b[0] + r2), Math.max(a[1] + r1, b[1] + r2), Math.max(a[2] + r1, b[2] + r2)]
+  };
+}
+const softMax = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.max(a, b) + h * h * k * 0.25; };
+const softMin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+function earShape(apex, b0, b1, b2) {
+  const cen = [0, 1, 2].map((a) => (apex[a] + b0[a] + b1[a] + b2[a]) / 4);
+  const planes = [[apex, b0, b1], [apex, b1, b2], [apex, b2, b0], [b0, b2, b1]].map(([p, q, r]) => {
+    let n = norm(cross(sub(q, p), sub(r, p)));
+    if (dot(n, sub(cen, p)) > 0) n = n.map((x) => -x);
+    return [n, dot(n, p)];
+  });
+  const xs = [apex, b0, b1, b2];
+  return {
+    f: (x, y, z) => { let d = -1e9; for (const [n, o] of planes) d = softMax(d, n[0] * x + n[1] * y + n[2] * z - o, 0.05); return d; },
+    box: [0, 1, 2].map((a) => Math.min(...xs.map((p) => p[a]))).concat([0, 1, 2].map((a) => Math.max(...xs.map((p) => p[a]))))
+  };
+}
+// cat space: facing -x, up +y, its left side (+z) toward the camera, lying with its chest at the origin
+const S_SH = [0.2, 0.7, 0.4], S_EL = [0.05, 0.2, 0.44], S_WR = [-0.85, 0.13, 0.4];
+const prims = [];
+const add = (p, k, bone) => prims.push({ ...p, k, bone });
+add(ellipsoid([0.1, 0.62, 0], [0.72, 0.62, 0.7]), 0.12, 'root');
+for (const s of [-1, 1]) add(ellipsoid([0.15, 0.95, 0.33 * s], [0.38, 0.3, 0.26]), 0.12, 'root');
+add(ellipsoid([1.75, 0.6, 0.05], [1.75, 0.6, 0.8]), 0.2, 'root');
+add(capsule([0.0, 0.95, 0], [-0.45, 1.6, 0], 0.42, 0.36), 0.14, 'neck');
+add(ellipsoid([-0.62, 1.86, 0], [0.45, 0.41, 0.45]), 0.1, 'head');
+for (const s of [-1, 1]) add(ellipsoid([-0.85, 1.71, 0.22 * s], [0.28, 0.23, 0.24]), 0.08, 'head');
+add(ellipsoid([-1.04, 1.68, 0], [0.16, 0.14, 0.2]), 0.06, 'head');
+add(ellipsoid([-0.97, 1.53, 0], [0.15, 0.09, 0.14]), 0.05, 'head');
+add(ellipsoid([-0.94, 1.87, 0], [0.21, 0.14, 0.18]), 0.07, 'head');
+for (const s of [-1, 1]) {
+  add(earShape([-0.52, 2.58, 0.32 * s], [-0.72, 2.12, 0.12 * s], [-0.3, 2.16, 0.19 * s], [-0.5, 2.1, 0.47 * s]), 0.06, s > 0 ? 'earL' : 'earR');
+}
+for (const s of [-1, 1]) {
+  const left = s > 0;
+  const sh = [S_SH[0], S_SH[1], S_SH[2] * s], el = [S_EL[0], S_EL[1], S_EL[2] * s];
+  const wr = left ? [S_WR[0], S_WR[1], S_WR[2]] : [-0.55, 0.12, -0.4];
+  add(capsule(sh, el, 0.26, 0.18), 0.1, left ? 'legU' : 'root');
+  add(capsule(el, wr, 0.17, 0.14), 0.06, left ? 'legL' : 'root');
+  add(ellipsoid([wr[0] - 0.18, 0.11, wr[2]], [0.22, 0.105, 0.17]), 0.06, left ? 'paw' : 'root');
+  for (const dz of [-0.11, -0.037, 0.037, 0.11]) add(ellipsoid([wr[0] - 0.34, 0.095, wr[2] + dz], [0.075, 0.07, 0.06]), 0.04, left ? 'paw' : 'root');
+}
+const CAT_MARGIN = 0.2;
+function catSdf(x, y, z) {
+  let d = 1e9, any = false;
+  for (const p of prims) {
+    const b = p.box;
+    if (x < b[0] - CAT_MARGIN || x > b[3] + CAT_MARGIN || y < b[1] - CAT_MARGIN || y > b[4] + CAT_MARGIN || z < b[2] - CAT_MARGIN || z > b[5] + CAT_MARGIN) continue;
+    const v = p.f(x, y, z);
+    d = any ? softMin(d, v, p.k) : v;
+    any = true;
+  }
+  return any ? d : CAT_MARGIN;
+}
+const catGrad = (x, y, z) => {
+  const e = 0.004;
+  return norm([catSdf(x + e, y, z) - catSdf(x - e, y, z), catSdf(x, y + e, z) - catSdf(x, y - e, z), catSdf(x, y, z + e) - catSdf(x, y, z - e)]);
+};
+function surfaceNets(h, lo, hi) {
+  const nx = Math.ceil((hi[0] - lo[0]) / h) + 1, ny = Math.ceil((hi[1] - lo[1]) / h) + 1, nz = Math.ceil((hi[2] - lo[2]) / h) + 1;
+  const F = new Float32Array(nx * ny * nz), id = (i, j, k) => i + nx * (j + ny * k);
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) F[id(i, j, k)] = catSdf(lo[0] + i * h, lo[1] + j * h, lo[2] + k * h);
+  const C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cell = new Int32Array(nx * ny * nz).fill(-1), pos = [], val = new Float32Array(8);
+  for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
+    let inside = 0;
+    for (let c = 0; c < 8; c++) { val[c] = F[id(i + C[c][0], j + C[c][1], k + C[c][2])]; if (val[c] < 0) inside++; }
+    if (inside === 0 || inside === 8) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of E) {
+      if ((val[a] < 0) === (val[b] < 0)) continue;
+      const t = val[a] / (val[a] - val[b]);
+      sx += C[a][0] + t * (C[b][0] - C[a][0]); sy += C[a][1] + t * (C[b][1] - C[a][1]); sz += C[a][2] + t * (C[b][2] - C[a][2]);
+      n++;
+    }
+    cell[id(i, j, k)] = pos.length / 3;
+    pos.push(lo[0] + (i + sx / n) * h, lo[1] + (j + sy / n) * h, lo[2] + (k + sz / n) * h);
+  }
+  for (let v = 0; v < pos.length; v += 3) {
+    for (let it = 0; it < 2; it++) {
+      const d = catSdf(pos[v], pos[v + 1], pos[v + 2]), g = catGrad(pos[v], pos[v + 1], pos[v + 2]), st = Math.max(-h, Math.min(h, d));
+      pos[v] -= g[0] * st; pos[v + 1] -= g[1] * st; pos[v + 2] -= g[2] * st;
+    }
+  }
+  const index = [];
+  const P = (q) => [pos[q * 3], pos[q * 3 + 1], pos[q * 3 + 2]];
+  const quad = (a, b, c, d, axis, inside) => {
+    if (a < 0 || b < 0 || c < 0 || d < 0) return;
+    const nrm = cross(sub(P(c), P(a)), sub(P(d), P(b)));
+    let q = [a, b, c, d];
+    if (dot(nrm, axis.map((x) => x * (inside ? 1 : -1))) < 0) q = [a, d, c, b];
+    const d02 = dot(sub(P(q[0]), P(q[2])), sub(P(q[0]), P(q[2]))), d13 = dot(sub(P(q[1]), P(q[3])), sub(P(q[1]), P(q[3])));
+    if (d02 < d13) index.push(q[0], q[1], q[2], q[0], q[2], q[3]); else index.push(q[0], q[1], q[3], q[1], q[2], q[3]);
+  };
+  for (let k = 0; k < nz; k++) for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const inside = F[id(i, j, k)] < 0;
+    if (i < nx - 1 && j > 0 && k > 0 && inside !== (F[id(i + 1, j, k)] < 0)) quad(cell[id(i, j - 1, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i, j - 1, k)], [1, 0, 0], inside);
+    if (j < ny - 1 && i > 0 && k > 0 && inside !== (F[id(i, j + 1, k)] < 0)) quad(cell[id(i - 1, j, k - 1)], cell[id(i, j, k - 1)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 1, 0], inside);
+    if (k < nz - 1 && i > 0 && j > 0 && inside !== (F[id(i, j, k + 1)] < 0)) quad(cell[id(i - 1, j - 1, k)], cell[id(i, j - 1, k)], cell[id(i, j, k)], cell[id(i - 1, j, k)], [0, 0, 1], inside);
+  }
+  return { pos, index };
+}
+const BONES = {
+  root: { at: [0, 0, 0] },
+  neck: { at: [-0.1, 1.0, 0], parent: 'root' },
+  head: { at: [-0.55, 1.8, 0], parent: 'neck' },
+  earL: { at: [-0.52, 2.15, 0.3], parent: 'head' },
+  earR: { at: [-0.52, 2.15, -0.3], parent: 'head' },
+  legU: { at: S_SH, parent: 'root' },
+  legL: { at: S_EL, parent: 'legU' },
+  paw: { at: S_WR, parent: 'legL' }
+};
+const boneNames = Object.keys(BONES), bone = {};
+for (const name of boneNames) {
+  const b = new THREE.Bone(), spec = BONES[name], par = spec.parent ? BONES[spec.parent].at : [0, 0, 0];
+  b.position.set(spec.at[0] - par[0], spec.at[1] - par[1], spec.at[2] - par[2]);
+  b.rotation.order = 'YZX';
+  bone[name] = b;
+  if (spec.parent) bone[spec.parent].add(b);
+}
+const skeleton = new THREE.Skeleton(boneNames.map((n) => bone[n]));
+const catMeshData = surfaceNets(0.028, [-1.6, -0.12, -1.0], [3.65, 2.75, 1.0]);
+const cv = catMeshData.pos.length / 3;
+const CP = new Float32Array(catMeshData.pos), CN = new Float32Array(cv * 3), SI = new Uint16Array(cv * 4), SW = new Float32Array(cv * 4);
+for (let v = 0; v < cv; v++) {
+  const x = CP[v * 3], y = CP[v * 3 + 1], z = CP[v * 3 + 2], g = catGrad(x, y, z);
+  CN[v * 3] = g[0]; CN[v * 3 + 1] = g[1]; CN[v * 3 + 2] = g[2];
+  const ds = prims.map((p) => p.f(x, y, z)), m = Math.min(...ds), acc = {};
+  prims.forEach((p, i) => { acc[p.bone] = (acc[p.bone] || 0) + Math.exp(-(ds[i] - m) / 0.05); });
+  const top = Object.entries(acc).sort((a, b) => b[1] - a[1]).slice(0, 4), total = top.reduce((s, e) => s + e[1], 0);
+  top.forEach(([name, w], i) => { SI[v * 4 + i] = boneNames.indexOf(name); SW[v * 4 + i] = w / total; });
+}
+const catGeo = new THREE.BufferGeometry();
+catGeo.setAttribute('position', new THREE.BufferAttribute(CP, 3));
+catGeo.setAttribute('normal', new THREE.BufferAttribute(CN, 3));
+catGeo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+catGeo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4));
+catGeo.setIndex(catMeshData.index);
+const fur = lit(new THREE.MeshPhysicalMaterial({ color: '#070608', roughness: 0.68, sheen: 0.5, sheenColor: new THREE.Color('#3d3537'), sheenRoughness: 0.5, envMapIntensity: 0.35 }));
+const furRim = { uRim: { value: new THREE.Color('#5a4a3c') } };
+fur.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, furRim);
+  sh.fragmentShader = 'uniform vec3 uRim;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+    float rimF = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+    totalEmissiveRadiance += uRim * pow(rimF, 3.0);`);
+};
+const catRig = new THREE.Group();
+scene.add(catRig);
+const catMesh = new THREE.SkinnedMesh(catGeo, fur);
+catMesh.add(bone.root);
+catMesh.bind(skeleton);
+catMesh.castShadow = catMesh.receiveShadow = true;
+catMesh.frustumCulled = false;
+catRig.add(catMesh);
+
+function irisTexture(round) {
+  return canvasTex(512, 256, (g, W, H) => {
+    g.fillStyle = '#140b04'; g.fillRect(0, 0, W, H);
+    const cx = W * 0.25, cy = H * 0.5, R = 88;
+    const grd = g.createRadialGradient(cx, cy, 6, cx, cy, R);
+    grd.addColorStop(0, '#ffe7a0'); grd.addColorStop(0.42, '#f6bb3e'); grd.addColorStop(0.84, '#cf7f14'); grd.addColorStop(1, '#5e3406');
+    g.fillStyle = grd; g.beginPath(); g.arc(cx, cy, R, 0, TAU); g.fill();
+    for (let i = 0; i < 170; i++) {
+      const a = random() * TAU, r0 = 16 + random() * 22, r1 = R * (0.72 + random() * 0.26);
+      g.strokeStyle = random() < 0.5 ? `rgba(122,70,10,${0.14 + random() * 0.2})` : `rgba(255,238,176,${0.12 + random() * 0.18})`;
+      g.lineWidth = 1 + random() * 1.6;
+      g.beginPath(); g.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); g.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); g.stroke();
+    }
+    g.fillStyle = '#040302';
+    g.beginPath();
+    if (round) g.ellipse(cx, cy, 50, 54, 0, 0, TAU); else g.ellipse(cx, cy, 8, 66, 0, 0, TAU);
+    g.fill();
+  });
+}
+const irisDay = irisTexture(false), irisNight = irisTexture(true);
+const eyeMat = lit(new THREE.MeshPhysicalMaterial({ map: irisDay, emissiveMap: irisDay, emissive: '#ffffff', emissiveIntensity: 0.06, roughness: 0.12, clearcoat: 1, clearcoatRoughness: 0.03, envMapIntensity: 1.2 }));
+const headAt = BONES.head.at, eyes = [];
+for (const s of [-1, 1]) {
+  const e = new THREE.Mesh(new THREE.SphereGeometry(0.12, 40, 24), eyeMat);
+  e.position.set(-0.965 - headAt[0], 1.93 - headAt[1], 0.19 * s - headAt[2]);
+  bone.head.add(e);
+  eyes.push(e);
+}
+const whiskerPts = [];
+for (const s of [-1, 1]) for (let i = 0; i < 3; i++) {
+  const root = V(-1.11 - headAt[0], 1.66 - headAt[1] - i * 0.025, 0.11 * s);
+  const dir = V(-0.55, 0.12 - i * 0.14, s).normalize();
+  for (let k = 0; k < 6; k++) {
+    const u0 = k / 6, u1 = (k + 1) / 6, L = 0.62;
+    const p0 = root.clone().addScaledVector(dir, u0 * L); p0.y -= u0 * u0 * 0.07;
+    const p1 = root.clone().addScaledVector(dir, u1 * L); p1.y -= u1 * u1 * 0.07;
+    whiskerPts.push(p0, p1);
+  }
+}
+const whiskerMat = new THREE.LineBasicMaterial({ color: '#e9e3d8', transparent: true, opacity: 0.75 });
+const whiskerLines = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(whiskerPts), whiskerMat);
+bone.head.add(whiskerLines);
+
+// two-bone reach for the left foreleg; the elbow folds back and up like a cat's
+const L1 = Math.hypot(...sub(S_EL, S_SH)), L2 = Math.hypot(...sub(S_WR, S_EL));
+const restU = V(...sub(S_EL, S_SH)).normalize(), restL = V(...sub(S_WR, S_EL)).normalize();
+const PAW_REACH = 0.38;
+function reachTo(target) {   // target: the front of the toes, cat space
+  const S = V(...S_SH), W = target.clone().add(V(PAW_REACH, 0.02, 0));
+  const d = W.clone().sub(S), len = Math.min(L1 + L2 - 1e-3, Math.max(Math.abs(L1 - L2) + 1e-3, d.length()));
+  const u = d.normalize();
+  const hint = V(0.6, 0.8, 0), pole = hint.clone().sub(u.clone().multiplyScalar(u.dot(hint))).normalize();
+  const a = Math.acos(clamp01((L1 * L1 + len * len - L2 * L2) / (2 * L1 * len)));
+  const E = S.clone().addScaledVector(u, L1 * Math.cos(a)).addScaledVector(pole, L1 * Math.sin(a));
+  const Wn = S.clone().addScaledVector(u, len);
+  const q1 = new THREE.Quaternion().setFromUnitVectors(restU, E.clone().sub(S).normalize());
+  const q2w = new THREE.Quaternion().setFromUnitVectors(restL.clone().applyQuaternion(q1), Wn.clone().sub(E).normalize());
+  bone.legU.quaternion.copy(q1);
+  bone.legL.quaternion.copy(q1.clone().invert().multiply(q2w).multiply(q1));
+  bone.paw.quaternion.copy(q2w.clone().multiply(q1).invert());
+}
+
+const CAT_TABLE = V(2.05, TABLE_Y, -0.22);
+const PAW_HOME = V(-0.78, 0.09, 0.4);
+const contactX = (t) => tableX(t) + 0.56 - CAT_TABLE.x;
+function pawTarget(t) {
+  const home = PAW_HOME.clone();
+  const touch = (x) => V(x, 0.36, BOWL_Z - CAT_TABLE.z);
+  if (t < T_REACH || t > T_CRASH + 2.2) return home;
+  if (t < T_TOUCH) { const u = smooth(T_REACH, T_TOUCH, t); return home.lerp(touch(contactX(T_TOUCH)), u).add(V(0, 0.22 * Math.sin(Math.PI * u), 0)); }
+  if (t < T_TIP + 0.02) {
+    let back = 0;
+    for (const tk of [T_TAP1, T_TAP2]) back += 0.2 * bump(tk - 0.32, tk - 0.1, tk - 0.04, tk, t);
+    return touch(contactX(t) + back).add(V(0, back * 0.5, 0));
+  }
+  const hold = touch(contactX(T_TIP));
+  if (t < T_CRASH + 0.5) return hold;
+  return hold.lerp(home, smooth(T_CRASH + 0.5, T_CRASH + 2.2, t)).add(V(0, 0.12 * bump(T_CRASH + 0.5, T_CRASH + 1.2, T_CRASH + 1.5, T_CRASH + 2.2, t), 0));
+}
+
+// ---------- light ----------
+const sun = new THREE.DirectionalLight('#fff0dc', 0);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: 1, far: 50 });
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.02;
+sun.shadow.radius = 4;
+scene.add(sun, sun.target);
+const fill = new THREE.DirectionalLight('#f4e6d6', 0);
+fill.position.set(5, 6, 12);
+scene.add(fill);
+const hemi = new THREE.HemisphereLight('#d2dbe8', '#4a3a2e', 0);
+scene.add(hemi);
+const moon = new THREE.DirectionalLight('#6f86b8', 0);
+moon.position.set(2, 9, -12);
+scene.add(moon);
+
+// dust in the morning light, drifting on whole-loop orbits
+const MOTES = 240;
+const moteBase = [], moteGeo = new THREE.BufferGeometry(), moteArr = new Float32Array(MOTES * 3);
+for (let i = 0; i < MOTES; i++) moteBase.push([-1.4 + 5 * random(), 3.8 + 3 * random(), -1.6 + 3 * random(), random() * TAU, random() * TAU, 1 + Math.floor(random() * 3), 1 + Math.floor(random() * 2)]);
+moteGeo.setAttribute('position', new THREE.BufferAttribute(moteArr, 3));
+const moteSprite = canvasTex(64, 64, (g) => { const r = g.createRadialGradient(32, 32, 0, 32, 32, 32); r.addColorStop(0, 'rgba(255,240,214,1)'); r.addColorStop(1, 'rgba(255,240,214,0)'); g.fillStyle = r; g.fillRect(0, 0, 64, 64); });
+const moteMat = new THREE.PointsMaterial({ size: 0.035, map: moteSprite, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: '#ffe9c8', opacity: 0 });
+const motes = new THREE.Points(moteGeo, moteMat);
+motes.frustumCulled = false;
+scene.add(motes);
+
+// ---------- camera: down to the floor after the crash, a slow push through the month, back up ----------
+const CAM = [
+  [0, 0.78, 4.55, 7.6, 0.75, 4.45, 0.05, 31],
+  [at(2, 2.2), 0.72, 4.5, 7.2, 0.7, 4.4, 0.05, 31],
+  [at(3, 2.5), -0.95, 3.7, 6.3, -1.25, 0.25, 0.9, 36],
+  [T_GOLD_DAWN, -1.25, 2.35, 3.6, -1.3, 0.38, 1.0, 33],
+  [at(15, 3), -1.05, 2.3, 3.45, -1.3, 0.4, 1.0, 33],
+  [at(18, 0.5), 0.82, 4.58, 7.85, 0.78, 4.47, 0.05, 31],
+  [60, 0.78, 4.55, 7.6, 0.75, 4.45, 0.05, 31]
+];
+const camTrack = [1, 2, 3, 4, 5, 6, 7].map((c) => monotoneTrack(CAM.map((k) => k[0]), CAM.map((k) => k[c])));
+const camTarget = V();
+function placeCamera(t) {
+  const [px, py, pz, tx, ty, tz, fov] = camTrack.map((f) => f(t));
+  // the crash happens out of frame: the camera takes a small jolt instead
+  const jolt = t > T_CRASH ? 0.018 * Math.exp(-(t - T_CRASH) * 9) : 0;
+  camera.position.set(px, py + jolt * Math.sin((t - T_CRASH) * 70), pz);
+  camTarget.set(tx + 0.6 * jolt * Math.sin((t - T_CRASH) * 53 + 1), ty, tz);
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  camera.lookAt(camTarget);
+}
+
+// ---------- post ----------
+const target = new THREE.WebGLRenderTarget(900, 900, { type: THREE.HalfFloatType, samples: 4 });
+const composer = new EffectComposer(renderer, target);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(900, 900), 0.25, 0.55, 1.05);
+composer.addPass(bloom);
+composer.addPass(new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `uniform sampler2D tDiffuse; varying vec2 vUv;
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); float d = length(vUv - 0.5);
+      c.rgb *= mix(1.0, 0.55, smoothstep(0.32, 0.78, d)); gl_FragColor = c; }`
+}));
+composer.addPass(new OutputPass());
+
+// ---------- one frame, from absolute time only ----------
+const warm = new THREE.Color('#ff9a52'), white = new THREE.Color('#fff2de'), tmpC = new THREE.Color();
+const nightBlue = new THREE.Color('#5a6f9e'), fillWarm = new THREE.Color('#f4e6d6');
+function placeLight(t) {
+  const c = dayClock(t), el = elevation(c), a = TAU * (c - 0.25);
+  const day = smooth(-0.04, 0.32, el), night = 1 - smooth(-0.22, 0.06, el);
+  const craft = t > N_GATHER - 1.2 && t < N_RETURN + 1.4 ? 1 : 0;
+  const lampOn = night * craft;
+  sun.intensity = 1.85 * day;
+  sun.color.copy(warm).lerp(white, smooth(0.05, 0.62, el));
+  sun.target.position.copy(camTarget);
+  sun.position.copy(camTarget).add(V(-Math.cos(a) * 9, Math.max(0.12, el) * 10 + 2.5, -8.5));
+  fill.intensity = 0.5 * day + 0.16 * night;
+  fill.color.copy(nightBlue).lerp(fillWarm, day);
+  hemi.intensity = 0.09 + 0.39 * day;
+  moon.intensity = 0.62 * night;
+  lamp.intensity = 90 * lampOn;
+  lanternMat.emissiveIntensity = 1.6 * lampOn;
+  tmpC.copy(warm).lerp(white, smooth(0.0, 0.5, el));
+  shojiMat.color.setRGB(0.03 + day * tmpC.r + 0.04 * night, 0.035 + 0.96 * day * tmpC.g + 0.06 * night, 0.05 + 0.88 * day * tmpC.b + 0.12 * night);
+  furRim.uRim.value.setRGB(0.32 * day + 0.07 * lampOn, 0.26 * day + 0.045 * lampOn, 0.2 * day + 0.025 * lampOn);
+  const envK = 0.22 + 0.78 * day + 0.3 * lampOn;
+  for (const [m, base] of envLit) m.envMapIntensity = base * envK;
+  return { day, night, lampOn };
+}
+// [x, z, body yaw, head yaw] per half-night; the time-lapse jumps between them at midnight
+const NIGHT_SPOTS = [[-1.35, -1.75, 1.57, 0.0], [-2.25, -1.6, 1.25, -0.35], [-0.55, -1.85, 1.9, 0.4], [-1.75, -1.7, 1.45, 0.2], [-0.95, -1.8, 1.7, -0.25]];
+function placeCat(t, light) {
+  const onTable = t < N_GATHER - 1.5 || t >= N_RETURN;
+  catRig.visible = onTable || (light.lampOn > 0.02 && t >= N_GATHER && t < N_GOLD);
+
+  if (onTable) {
+    catRig.position.copy(CAT_TABLE);
+    catRig.rotation.set(0, 0, 0);
+  } else {
+    const k = MIDNIGHT.findIndex((m) => m > t);
+    const [x, z, yaw] = NIGHT_SPOTS[(k < 0 ? 11 : k) % NIGHT_SPOTS.length];
+    catRig.position.set(x, 0, z);
+    catRig.rotation.set(0, yaw, 0);
+  }
+  const spot = NIGHT_SPOTS[(MIDNIGHT.findIndex((m) => m > t) + NIGHT_SPOTS.length) % NIGHT_SPOTS.length];
+  catRig.updateMatrixWorld(true);
+  bone.root.scale.set(1, 1 + 0.012 * Math.sin(TAU * t * 9 / DUR), 1);
+  // the head turns to the camera on the table, to the work on the floor
+  const look = camera.position.clone();
+  const local = catRig.worldToLocal(look.clone()).sub(V(...headAt));
+  const yaw = Math.atan2(local.z, -local.x), pitch = Math.atan2(local.y, Math.hypot(local.x, local.z));
+  if (onTable) {
+    bone.neck.rotation.set(0, 0.42 * yaw, -0.3 * pitch);
+    bone.head.rotation.set(0.17 * bump(53.2, 54.4, 57.2, 58.8, t), 0.58 * yaw, -0.6 * pitch);
+  } else {                                  // chin down on its paws
+    bone.neck.rotation.set(0, 0.4 * spot[3], 1.45);
+    bone.head.rotation.set(0, 0.6 * spot[3], -1.25);
+  }
+  const flick = bump(T_CRASH + 0.02, T_CRASH + 0.08, T_CRASH + 0.2, T_CRASH + 0.5, t);
+  bone.earL.rotation.set(0.35 * flick, 0, -0.25 * flick);
+  bone.earR.rotation.set(-0.35 * flick, 0, -0.25 * flick);
+  reachTo(onTable ? pawTarget(t) : V(-1.2, 0.09, 0.4));
+  catRig.updateMatrixWorld(true);
+  const blink = Math.max(bump(T_CRASH + 0.55, T_CRASH + 0.85, T_CRASH + 1.05, T_CRASH + 1.45, t), 1 - smooth(0, 0.09, Math.abs(t - 55.6)), 1 - smooth(0, 0.08, Math.abs(t - 0.7)));
+  const nightEyes = onTable ? 0 : light.lampOn;
+  eyeMat.map = eyeMat.emissiveMap = nightEyes > 0.5 ? irisNight : irisDay;
+  eyeMat.emissiveIntensity = 0.06 + 1.6 * nightEyes;
+  for (const e of eyes) {
+    e.lookAt(look);
+    e.scale.set(1, Math.max(0.08, 1 - blink), 1);
+  }
+}
+function placeBowl(t) {
+  for (let i = 0; i < NSHARD; i++) {
+    const pose = shardPose(i, t);
+    shardGroups[i].position.copy(pose.p);
+    shardGroups[i].quaternion.copy(pose.q);
+  }
+  for (const b of beads) {
+    const m = seamMaterial(t, b.self, b.other);
+    b.mesh.visible = !!m;
+    if (m) b.mesh.material = m;
+  }
+  const cm = chipMaterial(t);
+  shardMeshes[CHIP_ID].material = [cm, cm];
+  cloth.visible = kit.visible = t >= N_GATHER && t < N_RETURN;
+  const reveal = bump(T_GOLD_DAWN - 0.4, T_GOLD_DAWN + 0.3, T_GOLD_DAWN + 2.4, T_GOLD_DAWN + 3.8, t);
+  glint.uGlint.value = 2.4 * reveal;
+  glint.uSweep.value = mix(-0.95, 0.95, smooth(T_GOLD_DAWN, T_GOLD_DAWN + 3.0, t));
+  glint.uSweepOrigin.value.set(CLOTH.x, 0.4, CLOTH.z);
+  bloom.strength = 0.25 + 0.3 * reveal;
+}
+function placeMotes(t, light) {
+  for (let i = 0; i < MOTES; i++) {
+    const [x, y, z, p, q, k1, k2] = moteBase[i];
+    moteArr[i * 3] = x + 0.22 * Math.sin(TAU * k1 * t / DUR + p);
+    moteArr[i * 3 + 1] = y + 0.16 * Math.sin(TAU * k2 * t / DUR + q);
+    moteArr[i * 3 + 2] = z + 0.18 * Math.cos(TAU * k1 * t / DUR + q);
+  }
+  moteGeo.attributes.position.needsUpdate = true;
+  moteMat.opacity = 0.55 * light.day * (1 - smooth(T_CRASH + 2.5, T_CRASH + 4.5, t) + smooth(T_HOME - 1.5, T_HOME + 0.5, t));
+}
+
+window.renderFrame = (time) => {
+  const t = ((time % DUR) + DUR) % DUR;
+  placeCamera(t);
+  const light = placeLight(t);
+  placeBowl(t);
+  placeCat(t, light);
+  placeMotes(t, light);
+  composer.render();
+};
+
+// live playback for the draft preview; the MP4 renderer calls renderFrame(t) itself
+let liveStart = null;
+(function loop(now) {
+  if (liveStart === null) liveStart = now;
+  window.renderFrame(((now - liveStart) / 1000) % DUR);
+  requestAnimationFrame(loop);
+})(performance.now());
+window.ready = true;
+
+
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 88\\n// DURATION: 60\\n// FORM: morning and fracture 0-4 | month of nights 4-14 | gold dawn 14-17 | lamplit return 17-18 | morning reprise 18-22\\n// TONAL CENTER: Eb major\\n// MOTIF: G4 Bb4 F4 Eb4 G4 D5 Bb4 - G4 eighth, Bb4 eighth, F4 quarter, eighth rest, Eb4 eighth, G4 eighth, D5 sixteenth, Bb4 sixteenth\\n// HARMONIC PLAN: Ebmaj9 | Bb/D | Cm9 | Abmaj7(#11) four-bar loop; Eb pedal in cycles 2-3; three bars of the loop across the gold dawn; Abmaj7(#11) suspended in cycle 17; opening voicings restored exactly in cycles 18-21\\n// GROOVE: synthesized percussion - low sine felt mallet on beat 1 through the month, soft filtered-noise and sine wooden tock on beats 2 and 4, no hats or backbeat, marimba carrying straight unhurried eighths\\n\\nconst chords = note(\\\"\u003c[eb3,g3,bb3,d4,f4] [d3,f3,bb3,d4,f4] [c3,eb3,g3,bb3,d4] [ab2,c3,eb3,g3,d4]>\\\")\\nconst pedal = note(\\\"[eb2,eb3,bb3,g4]\\\")\\nconst hook = note(\\\"g4 bb4 f4@2 ~ eb4 g4 [d5 bb4]\\\")\\nconst build = \\\"\u003c[x@2 ~@14] [x@4 ~@12] [x@8 ~@8] [x@8 ~@2 x@2 ~@4] [x@8 ~@2 x@4 ~@2] [x@8 ~@2 x@5 ~@1] [x@8 ~@2 x@6]>\\\"\\nconst marimba = note(\\\"\u003c[eb4 g4 bb4 d5 bb4 g4 f4 g4] [d4 f4 bb4 d5 bb4 f4 d4 f4] [c4 eb4 g4 bb4 d5 bb4 g4 eb4] [ab3 c4 eb4 g4 d5 g4 eb4 c4]>\\\")\\nconst cascade = note(\\\"[eb7 d7 bb6 g6 f6 eb6 d6 bb5] ~ ~ ~\\\")\\n\\nconst pad = (p) => stack(p, p.add(note(0.11)), p.add(note(-0.09))).s(\\\"sawtooth\\\").lpf(sine.range(620, 1400).slow(8)).lpq(4).attack(1.1).decay(1.4).sustain(0.55).release(1.6).room(0.6).roomsize(6)\\nconst ep = (p) => stack(p.s(\\\"triangle\\\").postgain(0.75), p.add(note(12)).s(\\\"sine\\\").postgain(0.2)).attack(0.006).decay(0.85).sustain(0).release(0.6).lpf(2900).room(0.4).roomsize(3)\\nconst bell = (p) => stack(p.s(\\\"sine\\\").fm(1.2).fmh(3.01).postgain(0.55), p.add(note(12.1)).s(\\\"sine\\\").postgain(0.2), p.add(note(7.03)).s(\\\"triangle\\\").postgain(0.09)).attack(0.002).decay(1.1).sustain(0).release(0.9).lpf(9000).room(0.55).roomsize(5)\\nconst mar = (p) => stack(p.s(\\\"triangle\\\").postgain(0.8), p.add(note(-12)).s(\\\"sine\\\").postgain(0.22)).attack(0.003).decay(0.22).sustain(0).release(0.18).lpf(4200).room(0.35).roomsize(3)\\n\\nconst tock = stack(s(\\\"~ white ~ white\\\").bpf(1300).bpq(9).postgain(0.38), note(\\\"~ bb4 ~ bb4\\\").s(\\\"sine\\\").postgain(0.16)).attack(0.001).decay(0.055).sustain(0).release(0.05)\\nconst mallet = note(\\\"eb2 ~ ~ ~\\\").s(\\\"sine\\\").attack(0.005).decay(0.5).sustain(0).release(0.35).lpf(220).postgain(0.85)\\nconst crash = stack(s(\\\"white ~ ~ ~\\\").bpf(2400).bpq(3).attack(0.001).decay(0.3).sustain(0).release(0.25).postgain(0.55), s(\\\"white ~ ~ ~\\\").bpf(820).bpq(5).attack(0.001).decay(0.14).sustain(0).release(0.12).postgain(0.4), note(\\\"eb2 ~ ~ ~\\\").s(\\\"sine\\\").attack(0.004).decay(0.4).sustain(0).release(0.3).lpf(240).postgain(0.7))\\n\\n$: arrange(\\n  [2, silence],\\n  [1, crash],\\n  [1, silence],\\n  [1, tock.velocity(0.7)],\\n  [12, stack(mallet, tock).velocity(0.85)],\\n  [5, silence]\\n).room(0.22).roomsize(3).gain(0.46)\\n\\n$: arrange(\\n  [4, silence],\\n  [10, mar(marimba.sometimesBy(0.14, x => x.add(note(12)))).velocity(0.7)],\\n  [3, mar(marimba.off(0.125, y => y.add(note(12)).velocity(0.25))).velocity(0.8)],\\n  [5, silence]\\n).gain(0.42)\\n\\n$: arrange(\\n  [2, ep(hook).velocity(0.85)],\\n  [2, silence],\\n  [1, silence],\\n  [7, ep(hook.mask(build)).velocity(0.7)],\\n  [2, ep(hook).velocity(0.8)],\\n  [3, ep(hook.fast(2).mask(\\\"x ~\\\")).velocity(0.95)],\\n  [1, ep(hook.fast(2).mask(\\\"~ x\\\")).velocity(0.45)],\\n  [4, ep(hook).velocity(0.85)]\\n).gain(0.45)\\n\\n$: arrange(\\n  [2, pad(chords).velocity(0.7)],\\n  [2, pad(pedal).velocity(0.75)],\\n  [8, silence],\\n  [2, pad(chords).velocity(0.6)],\\n  [3, pad(chords).velocity(0.9)],\\n  [1, pad(note(\\\"[ab2,c3,eb3,g3,d4]\\\")).velocity(0.7)],\\n  [4, pad(chords).velocity(0.7)]\\n).gain(0.3)\\n\\n$: arrange(\\n  [1, silence],\\n  [1, bell(note(\\\"bb6 eb6 ~ ~\\\")).velocity(0.6)],\\n  [1, bell(note(\\\"[bb6 eb7 g6 d7 bb6 f7 eb6] ~ ~ ~\\\")).velocity(0.65)],\\n  [1, bell(note(\\\"~ ~ ~ bb5 ~ ~ g5 ~\\\")).velocity(0.45)],\\n  [10, bell(note(\\\"\u003ceb6 bb5 g5 d6>\\\").struct(\\\"~ ~ ~ x\\\").degradeBy(0.25)).velocity(0.4)],\\n  [3, stack(bell(cascade.mask(\\\"\u003cx ~ ~>\\\")).velocity(0.8), bell(hook.add(note(12)).fast(2).mask(\\\"~ x\\\")).velocity(0.85))],\\n  [1, bell(hook.add(note(12)).fast(2).mask(\\\"x ~\\\")).velocity(0.5)],\\n  [4, silence]\\n).gain(0.32)\",\"bpm\":88,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.36666666666666664,\"cycles\":22,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

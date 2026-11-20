@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 72
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+const DURATION = 72;
+const SIZE = 900;
+const COUNT = 850;
+const SIM_FRAMES = 420;
+const TAU = Math.PI * 2;
+let seed = 6472756;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const smooth = (a, b, x) => {
+  const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1);
+  return t * t * (3 - 2 * t);
+};
+const bg = new THREE.Color('#050706');
+const green = new THREE.Color('#8faa78');
+const pink = new THREE.Color('#ff668c');
+const amber = new THREE.Color('#ffb24a');
+const scene = new THREE.Scene();
+scene.background = bg;
+scene.fog = new THREE.FogExp2(bg, 0.062);
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 40);
+camera.position.set(0, 0.05, 11.2);
+camera.lookAt(0, 0, 0);
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  alpha: false,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(1);
+renderer.setSize(SIZE, SIZE, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.domElement.style.width = `${SIZE}px`;
+renderer.domElement.style.height = `${SIZE}px`;
+document.body.style.margin = '0';
+document.body.style.background = '#050706';
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.AmbientLight(0x78906d, 0.12));
+const key = new THREE.PointLight(0xff9768, 12, 18, 2);
+key.position.set(-3.8, 2.4, 4.5);
+scene.add(key);
+const composer = new EffectComposer(renderer);
+composer.setSize(SIZE, SIZE);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(SIZE, SIZE),
+  0.72,
+  0.58,
+  0.19
+);
+composer.addPass(bloomPass);
+const grainPass = new ShaderPass({
+  uniforms: {
+    tDiffuse: { value: null },
+    uTau: { value: 0 }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    uniform float uTau;
+    varying vec2 vUv;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+    }
+    void main() {
+      vec4 col = texture2D(tDiffuse, vUv);
+      vec2 loop = vec2(cos(uTau), sin(uTau)) * 29.0;
+      float n = hash(floor(gl_FragCoord.xy * 0.5) + loop) - 0.5;
+      float lum = dot(col.rgb, vec3(0.2126, 0.7152, 0.0722));
+      col.rgb += n * 0.017 * (1.0 - lum * 0.55);
+      gl_FragColor = col;
+    }
+  `
+});
+composer.addPass(grainPass);
+const rods = [];
+function addRod(a, b) {
+  const axis = new THREE.Vector3(
+    random() - 0.5,
+    random() - 0.5,
+    random() - 0.5
+  ).normalize();
+  rods.push({
+    a: a.clone(),
+    b: b.clone(),
+    axis,
+    delay: 0.46 + random() * 0.19,
+    spin: (random() - 0.5) * 1.8,
+    kick: 0.18 + random() * 0.48,
+    phase: random() * TAU
+  });
+}
+const spine = [];
+for (let i = 0; i < 13; i++) {
+  spine.push(new THREE.Vector3(
+    Math.sin(i * 1.37) * 0.1,
+    -3 + i * 0.5,
+    Math.cos(i * 0.91) * 0.11
+  ));
+  if (i) addRod(spine[i - 1], spine[i]);
+}
+for (let i = 1; i < 12; i++) {
+  const root = spine[i];
+  const width = 1.05 + Math.sin((i / 12) * Math.PI) * 0.82;
+  const z = i % 2 ? 0.17 : -0.17;
+  for (const side of [-1, 1]) {
+    const joint = root.clone().add(new THREE.Vector3(side * 0.5, 0.08, z));
+    const arc = root.clone().add(new THREE.Vector3(side * width, -0.2, side * 0.18));
+    const tip = root.clone().add(new THREE.Vector3(side * (width + 0.34), -0.58, 0.03));
+    addRod(root, joint);
+    addRod(joint, arc);
+    addRod(arc, tip);
+  }
+}
+const boneGeo = new THREE.CylinderGeometry(0.045, 0.06, 1, 6, 1, false);
+const boneMat = new THREE.MeshStandardMaterial({
+  color: 0xffffff,
+  vertexColors: true,
+  roughness: 0.8,
+  metalness: 0.08,
+  emissive: green,
+  emissiveIntensity: 0.78
+});
+const bones = new THREE.InstancedMesh(boneGeo, boneMat, rods.length);
+bones.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+bones.frustumCulled = false;
+scene.add(bones);
+const dummy = new THREE.Object3D();
+const up = new THREE.Vector3(0, 1, 0);
+const dir = new THREE.Vector3();
+const mid = new THREE.Vector3();
+const qAlign = new THREE.Quaternion();
+const qBreak = new THREE.Quaternion();
+const boneColor = new THREE.Color();
+function updateBones(phase, tau, growth, fracture) {
+  for (let i = 0; i < rods.length; i++) {
+    const r = rods[i];
+    const local = smooth(r.delay, r.delay + 0.11, phase);
+    const f = fracture * local;
+    dir.copy(r.b).sub(r.a);
+    const len = dir.length();
+    mid.copy(r.a).add(r.b).multiplyScalar(0.5);
+    mid.addScaledVector(r.axis, f * r.kick);
+    qAlign.setFromUnitVectors(up, dir.normalize());
+    qBreak.setFromAxisAngle(r.axis, r.spin * f);
+    dummy.position.copy(mid);
+    dummy.quaternion.copy(qBreak).multiply(qAlign);
+    const pulse = 1 + growth * 0.045 * Math.sin(tau * 2 + r.phase);
+    const radius = 1 - f * 0.62;
+    dummy.scale.set(radius, len * (1 - f * 0.78) * pulse, radius);
+    dummy.updateMatrix();
+    bones.setMatrixAt(i, dummy.matrix);
+    boneColor.copy(green).lerp(pink, f * 0.52).multiplyScalar(1 - f * 0.55);
+    bones.setColorAt(i, boneColor);
+  }
+  bones.instanceMatrix.needsUpdate = true;
+  if (bones.instanceColor) bones.instanceColor.needsUpdate = true;
+  boneMat.emissive.copy(green).lerp(pink, growth * 0.26);
+  boneMat.emissiveIntensity = 0.78 + growth * 0.36;
+}
+const initPos = new Float32Array(COUNT * 3);
+const initVel = new Float32Array(COUNT * 3);
+const anchors = new Float32Array(COUNT * 3);
+const heat = new Float32Array(COUNT);
+const point = new THREE.Vector3();
+const tangent = new THREE.Vector3();
+const normal = new THREE.Vector3();
+const binormal = new THREE.Vector3();
+const zAxis = new THREE.Vector3(0, 0, 1);
+const xAxis = new THREE.Vector3(1, 0, 0);
+for (let i = 0; i < COUNT; i++) {
+  const j = i * 3;
+  const r = rods[Math.floor(random() * rods.length)];
+  const t = random();
+  point.copy(r.a).lerp(r.b, t);
+  tangent.copy(r.b).sub(r.a).normalize();
+  normal.crossVectors(tangent, zAxis);
+  if (normal.lengthSq() < 0.01) normal.crossVectors(tangent, xAxis);
+  normal.normalize();
+  binormal.crossVectors(tangent, normal).normalize();
+  const angle = random() * TAU;
+  const radius = 0.1 + Math.pow(random(), 1.55) * 0.43;
+  const flatten = 0.62 + random() * 0.46;
+  anchors[j] = point.x + normal.x * Math.cos(angle) * radius
+    + binormal.x * Math.sin(angle) * radius * flatten;
+  anchors[j + 1] = point.y + normal.y * Math.cos(angle) * radius
+    + binormal.y * Math.sin(angle) * radius * flatten;
+  anchors[j + 2] = point.z + normal.z * Math.cos(angle) * radius
+    + binormal.z * Math.sin(angle) * radius * flatten;
+  const spread = 0.55 + random() * 1.25;
+  const sx = anchors[j] + normal.x * spread + (random() - 0.5) * 0.55;
+  const sy = anchors[j + 1] + normal.y * spread + (random() - 0.5) * 0.55;
+  const sz = anchors[j + 2] + normal.z * spread + (random() - 0.5) * 0.55;
+  initPos[j] = Math.round(sx / 0.16) * 0.16;
+  initPos[j + 1] = Math.round(sy / 0.16) * 0.16;
+  initPos[j + 2] = Math.round(sz / 0.16) * 0.16;
+  initVel[j] = (random() - 0.5) * 0.025;
+  initVel[j + 1] = (random() - 0.5) * 0.025;
+  initVel[j + 2] = (random() - 0.5) * 0.025;
+  heat[i] = random();
+}
+const frames = new Float32Array((SIM_FRAMES + 1) * COUNT * 3);
+frames.set(initPos, 0);
+const px = new Float32Array(initPos);
+const vel = new Float32Array(initVel);
+const acc = new Float32Array(COUNT * 3);
+const stride = COUNT * 3;
+const dt = 0.04;
+for (let frame = 1; frame <= SIM_FRAMES; frame++) {
+  const phase = frame / SIM_FRAMES;
+  const growth = smooth(0.06, 0.54, phase) * (1 - smooth(0.82, 1, phase));
+  for (let sub = 0; sub < 2; sub++) {
+    acc.fill(0);
+    for (let i = 0; i < COUNT; i++) {
+      const j = i * 3;
+      const n1 = ((i + 1) % COUNT) * 3;
+      const n2 = ((i + 37) % COUNT) * 3;
+      const spring = 0.045 + growth * 0.92;
+      const chaos = 0.026 + growth * 0.072;
+      acc[j] += (anchors[j] - px[j]) * spring;
+      acc[j + 1] += (anchors[j + 1] - px[j + 1]) * spring;
+      acc[j + 2] += (anchors[j + 2] - px[j + 2]) * spring;
+      acc[j] += chaos * (Math.sin(px[j + 1] * 1.35) - 0.208186 * px[j]);
+      acc[j + 1] += chaos * (Math.sin(px[j + 2] * 1.35) - 0.208186 * px[j + 1]);
+      acc[j + 2] += chaos * (Math.sin(px[j] * 1.35) - 0.208186 * px[j + 2]);
+      for (const n of [n1, n2]) {
+        const dx = px[j] - px[n];
+        const dy = px[j + 1] - px[n + 1];
+        const dz = px[j + 2] - px[n + 2];
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < 0.24) {
+          const repel = growth * (0.24 - d2) * 0.055 / (d2 + 0.018);
+          acc[j] += dx * repel;
+          acc[j + 1] += dy * repel;
+          acc[j + 2] += dz * repel;
+        }
+        acc[j] += (vel[n] - vel[j]) * growth * 0.012;
+        acc[j + 1] += (vel[n + 1] - vel[j + 1]) * growth * 0.012;
+        acc[j + 2] += (vel[n + 2] - vel[j + 2]) * growth * 0.012;
+      }
+    }
+    const damping = 0.986 - growth * 0.006;
+    for (let i = 0; i < stride; i++) {
+      vel[i] = (vel[i] + acc[i] * dt) * damping;
+      px[i] += vel[i] * dt;
+    }
+  }
+  const restore = smooth(0.84, 1, phase);
+  const base = frame * stride;
+  for (let i = 0; i < stride; i++) {
+    frames[base + i] = px[i] * (1 - restore) + initPos[i] * restore;
+  }
+}
+frames.set(initPos, SIM_FRAMES * stride);
+const particleGeo = new THREE.BufferGeometry();
+const renderPos = new Float32Array(stride);
+particleGeo.setAttribute('position', new THREE.BufferAttribute(renderPos, 3));
+particleGeo.setAttribute('aHeat', new THREE.BufferAttribute(heat, 1));
+const particleMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  uniforms: {
+    uGrowth: { value: 0 },
+    uTau: { value: 0 },
+    uGreen: { value: green },
+    uPink: { value: pink },
+    uAmber: { value: amber }
+  },
+  vertexShader: `
+    attribute float aHeat;
+    uniform float uGrowth;
+    uniform float uTau;
+    uniform vec3 uGreen;
+    uniform vec3 uPink;
+    uniform vec3 uAmber;
+    varying vec3 vColor;
+    varying float vLife;
+    void main() {
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      float pulse = 0.82 + 0.18 * sin(uTau * 3.0 + aHeat * 6.2831853);
+      vec3 warm = mix(uPink, uAmber, smoothstep(0.34, 0.9, aHeat));
+      vColor = mix(uGreen, warm, uGrowth * 0.96);
+      vLife = 0.3 + uGrowth * 0.7;
+      gl_PointSize = (1.15 + uGrowth * (4.8 + aHeat * 2.1))
+        * pulse * (27.0 / max(1.0, -mv.z));
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor;
+    varying float vLife;
+    void main() {
+      vec2 p = gl_PointCoord - 0.5;
+      float d = length(p);
+      if (d > 0.5) discard;
+      float edge = smoothstep(0.5, 0.12, d);
+      float core = smoothstep(0.22, 0.0, d);
+      gl_FragColor = vec4(vColor * (0.72 + core * 1.65), edge * vLife);
+    }
+  `
+});
+const flesh = new THREE.Points(particleGeo, particleMat);
+flesh.frustumCulled = false;
+scene.add(flesh);
+function phaseAt(seconds) {
+  return (((seconds % DURATION) + DURATION) % DURATION) / DURATION;
+}
+function renderPhase(phase) {
+  phase = ((phase % 1) + 1) % 1;
+  const tau = phase * TAU;
+  const growth = smooth(0.06, 0.54, phase) * (1 - smooth(0.82, 1, phase));
+  const fracture = smooth(0.46, 0.73, phase) * (1 - smooth(0.84, 1, phase));
+  const f = phase * SIM_FRAMES;
+  const f0 = Math.floor(f);
+  const f1 = Math.min(f0 + 1, SIM_FRAMES);
+  const mix = f - f0;
+  const base0 = f0 * stride;
+  const base1 = f1 * stride;
+  for (let i = 0; i < stride; i++) {
+    renderPos[i] = frames[base0 + i] * (1 - mix) + frames[base1 + i] * mix;
+  }
+  particleGeo.attributes.position.needsUpdate = true;
+  particleMat.uniforms.uGrowth.value = growth;
+  particleMat.uniforms.uTau.value = tau;
+  updateBones(phase, tau, growth, fracture);
+  camera.position.z = 11.2 - 1.38 * (0.5 - 0.5 * Math.cos(tau));
+  camera.lookAt(0, 0, 0);
+  key.intensity = 11 + growth * 9;
+  bloomPass.strength = 0.68 + growth * 0.62;
+  bloomPass.radius = 0.52 + growth * 0.14;
+  grainPass.uniforms.uTau.value = tau;
+  composer.render();
+}
+console.assert(phaseAt(0) === phaseAt(DURATION), 'loop phase mismatch');
+let start = null;
+function animate(ms) {
+  if (start === null) start = ms;
+  renderPhase(phaseAt((ms - start) * 0.001));
+  requestAnimationFrame(animate);
+}
+window.renderAtTime = seconds => renderPhase(phaseAt(seconds));
+renderPhase(0);
+window.ready = true;
+window.animationReady = true;
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  // === SETUP ===
+  const duration = 72;
+  const targetBpm = 62;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+
+  let rngState = 0xc4066b60;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+
+  // === EFFECTS & MASTERS ===
+  const masterCompressor = new Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.02, release: 0.2 }).toDestination();
+  
+  // Reverb for the organic/bio-matter feel
+  const reverb = new Tone.Reverb({ decay: 4, wet: 0.4 }).connect(masterCompressor);
+  await reverb.generate();
+
+  // Filter for the "brittle lattice" to "dissolving" arc
+  const globalFilter = new Tone.Filter({ type: "lowpass", frequency: 200, Q: 2 }).connect(reverb);
+  
+  // Chorus for the "warm flesh" texture
+  const chorus = new Tone.Chorus({ frequency: 1.2, delayTime: 4, depth: 0.5, wet: 0.3 }).connect(globalFilter);
+
+  // === INSTRUMENTS ===
+
+  // 1. The "Digital Skeleton" - Metallic, sparse, high-frequency FM
+  // Avoids the standard MembraneSynth kick; uses MetalSynth for brittle texture
+  const skeleton = new Tone.MetalSynth({
+    frequency: 200,
+    envelope: { attack: 0.001, decay: 0.5, release: 0.1 },
+    harmonicity: 3.2,
+    modulationIndex: 10,
+    resonance: 2000,
+    volume: -10
+  }).connect(globalFilter);
+
+  // 2. The "Emergent Flesh" - Warm, sub-bass drone (Amber/Pink)
+  // Uses NoiseSynth for texture + MonoSynth for the "pulse"
+  const droneNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 2, decay: 4, sustain: 1, release: 4 }
+  }).connect(globalFilter);
+  droneNoise.volume.value = -18;
+
+  const fleshPulse = new Tone.MonoSynth({
+    oscillator: { type: "sine" },
+    filter: { type: "lowpass", Q: 5 },
+    envelope: { attack: 0.1, decay: 0.5, sustain: 0.4, release: 1 },
+    filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 0.2, baseFrequency: 100, octaves: 1 }
+  }).connect(globalFilter);
+  fleshPulse.volume.value = -6;
+
+  // 3. The "Cellular Bloom" - Soft PolySynth for harmonic shifts
+  // Uses a unique "add9" style voicing approach
+  const bloom = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.8, decay: 1.5, sustain: 0.5, release: 3 }
+  }).connect(chorus);
+  bloom.volume.value = -12;
+
+  // === PATTERNS ===
+
+  // A. Skeleton Pattern (Sparse, brittle, early in the track)
+  // Uses random pitch selection to simulate "glitching"
+  const boneNotes = ["C6", "D#6", "F6", "G6", "A#6", "C7"];
+  let boneIndex = 0;
+  const skeletonLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Skeleton is only present in the first 40% (the "brittle lattice" phase)
+    if (bar < totalBars * 0.40) {
+      // Randomly skip notes to create "cracking" gaps
+      if (R() > 0.3) {
+        const note = boneNotes[Math.floor(R() * boneNotes.length)];
+        skeleton.triggerAttackRelease(note, "16n", time + H(2), 0.6);
+      }
+    } else if (bar >= totalBars * 0.80) {
+      // Fade out skeleton completely for the loop
+      if (R() > 0.8) {
+         const note = boneNotes[Math.floor(R() * boneNotes.length)];
+         skeleton.triggerAttackRelease(note, "16n", time + H(2), 0.6 * (1.0 - (bar/totalBars)*2));
+      }
+    } else {
+       // Middle section: occasional ghost of the skeleton
+       if (R() > 0.95) {
+         const note = boneNotes[Math.floor(R() * boneNotes.length)];
+         skeleton.triggerAttackRelease(note, "16n", time + H(2), 0.2);
+       }
+    }
+    boneIndex++;
+  }, "8n").start(0);
+
+  // B. Flesh Pulse (Rhythmic, heart-like)
+  // Enters at 10%, stabilizes, then exits for the loop
+  const fleshNotes = ["C2", "G1", "A1", "F1"];
+  let fleshIndex = 0;
+  const pulseLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Pulse starts at 10%
+    if (bar >= totalBars * 0.10) {
+      // Main pulse section
+      if (bar < totalBars * 0.75) {
+        const note = fleshNotes[fleshIndex % fleshNotes.length];
+        fleshPulse.triggerAttackRelease(note, "4n", time + H(5), 0.9);
+      } 
+      // Wind down phase (75%-85%)
+      else if (bar < totalBars * 0.85) {
+        // Only play on every other beat
+        if (fleshIndex % 2 === 0) {
+           const note = fleshNotes[fleshIndex % fleshNotes.length];
+           fleshPulse.triggerAttackRelease(note, "4n", time + H(5), 0.5 * (1.0 - (bar/totalBars)));
+        }
+      }
+    }
+    fleshIndex++;
+  }, "8n").start(0);
+
+  // C. Bloom (Harmonic shifts - "Pink and Amber" colors)
+  // Chords change every 4 bars, moving from dark minor to warm major
+  const chordProgression = [
+    ["C3", "Eb3", "G3", "Bb3"], // C minor 7 (Digital/Cold)
+    ["C3", "Eb3", "G3", "Bb3"],
+    ["F2", "A2", "C3", "E3"],   // F major (Emerging/Warm)
+    ["F2", "A2", "C3", "E3"],
+    ["A2", "C3", "E3", "G3"],   // A minor (Tension/Amber)
+    ["A2", "C3", "E3", "G3"],
+    ["F2", "A2", "C3", "E3"],   // Return to Warm
+    ["F2", "A2", "C3", "E3"]
+  ];
+
+  const bloomLoop = new Tone.Loop((time) => {
+    const bar = barAt(time);
+    // Bloom enters at 15%
+    if (bar >= totalBars * 0.15) {
+      // Calculate which chord to use based on bar position
+      const chordIndex = Math.floor(bar / 4) % chordProgression.length;
+      const chord = chordProgression[chordIndex];
+      
+      // Fade in
+      let velocity = 0.6;
+      if (bar < totalBars * 0.25) {
+        velocity = 0.6 * ((bar - totalBars * 0.15) / (totalBars * 0.10));
+      }
+      // Fade out for loop
+      if (bar >= totalBars * 0.80) {
+        velocity = 0.6 * (1.0 - ((bar - totalBars * 0.80) / (totalBars * 0.20)));
+      }
+
+      if (velocity > 0.05) {
+        bloom.triggerAttackRelease(chord, "1n", time, velocity);
+      }
+    }
+  }, "1n").start(0);
+
+  // D. Noise Bed (Continuous "flesh" texture)
+  const noiseBed = new Tone.Noise("pink").start();
+  const noiseFilter = new Tone.Filter({ type: "lowpass", frequency: 400 }).toDestination();
+  noiseBed.connect(noiseFilter);
+
+  // E. Filter Sweep Automation (The "Morphogenesis" arc)
+  // Starts narrow (skeleton), opens wide (bloom), closes for loop
+  const secPerBar = 240 / bpm;
+
+  Tone.Transport.schedule((time) => {
+    // Open filter at 15%
+    globalFilter.frequency.setValueAtTime(400, time);
+    globalFilter.frequency.linearRampToValueAtTime(3500, time + totalBars * 0.35 * secPerBar);
+  }, totalBars * 0.12 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Close filter at 75% to wind down
+    globalFilter.frequency.setValueAtTime(3500, time);
+    globalFilter.frequency.linearRampToValueAtTime(300, time + totalBars * 0.15 * secPerBar);
+  }, totalBars * 0.75 * secPerBar);
+
+  // F. Drone Volume Automation
+  Tone.Transport.schedule((time) => {
+    // Fade in noise bed
+    droneNoise.envelope.attack = 0.1;
+    droneNoise.envelope.decay = 0.1;
+    droneNoise.volume.rampToValueAtTime(-12, time + 5);
+  }, totalBars * 0.10 * secPerBar);
+
+  Tone.Transport.schedule((time) => {
+    // Fade out noise bed for loop
+    droneNoise.volume.rampToValueAtTime(-30, time + 10);
+  }, totalBars * 0.85 * secPerBar);
+
+  // === STORE REFERENCES ===
+  window.toneJsInstruments = {
+    skeleton,
+    droneNoise,
+    fleshPulse,
+    bloom,
+    masterCompressor,
+    reverb,
+    globalFilter,
+    chorus,
+    noiseBed,
+    noiseFilter
+  };
+
+  window.toneJsParts = {
+    skeletonLoop,
+    pulseLoop,
+    bloomLoop
+  };
+};
+
+
+
+
+
+window.audioDuration = 72;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 32.0;\nconst float TAU = 6.28318530718;\nmat2 rot(float a) {\n  float c = cos(a);\n  float s = sin(a);\n  return mat2(c, -s, s, c);\n}\nfloat hash21(vec2 p) {\n  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);\n}\nfloat cross2(vec2 a, vec2 b) {\n  return a.x * b.y - a.y * b.x;\n}\nfloat sdBox2D(vec2 p, vec2 b) {\n  vec2 q = abs(p) - b;\n  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);\n}\nfloat sdEllipseApprox(vec2 p, vec2 r) {\n  return (length(p / r) - 1.0) * min(r.x, r.y);\n}\nfloat sdSegment2D(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.000001), 0.0, 1.0);\n  return length(pa - ba * h);\n}\nfloat sdTriangle2D(vec2 p, vec2 a, vec2 b, vec2 c) {\n  vec2 e0 = b - a;\n  vec2 e1 = c - b;\n  vec2 e2 = a - c;\n  vec2 v0 = p - a;\n  vec2 v1 = p - b;\n  vec2 v2 = p - c;\n  vec2 q0 = v0 - e0 * clamp(dot(v0, e0) / max(dot(e0, e0), 0.000001), 0.0, 1.0);\n  vec2 q1 = v1 - e1 * clamp(dot(v1, e1) / max(dot(e1, e1), 0.000001), 0.0, 1.0);\n  vec2 q2 = v2 - e2 * clamp(dot(v2, e2) / max(dot(e2, e2), 0.000001), 0.0, 1.0);\n  float s = sign(cross2(e0, e2));\n  vec2 d = min(\n    min(vec2(dot(q0, q0), s * cross2(v0, e0)),\n        vec2(dot(q1, q1), s * cross2(v1, e1))),\n    vec2(dot(q2, q2), s * cross2(v2, e2))\n  );\n  return -sqrt(d.x) * sign(d.y);\n}\nfloat fillMask(float d, float aa) {\n  return 1.0 - smoothstep(-aa, aa, d);\n}\nfloat pulse(float t, float center, float width) {\n  float x = abs(t - center) / max(width, 0.000001);\n  return 1.0 - smoothstep(0.0, 1.0, x);\n}\nvec3 layerSdf(\n  vec3 under,\n  float d,\n  vec3 fillColor,\n  vec3 inkColor,\n  float border,\n  float aa\n) {\n  float outer = fillMask(d - border, aa);\n  float inner = fillMask(d, aa);\n  vec3 col = mix(under, inkColor, outer);\n  return mix(col, fillColor, inner);\n}\nvec3 layerVisibleSdf(\n  vec3 under,\n  float d,\n  vec3 fillColor,\n  vec3 inkColor,\n  float border,\n  float visibility,\n  float aa\n) {\n  float outer = fillMask(d - border, aa) * visibility;\n  float inner = fillMask(d, aa) * visibility;\n  vec3 col = mix(under, inkColor, outer);\n  return mix(col, fillColor, inner);\n}\nvec3 layerMask(vec3 under, float mask, vec3 fillColor) {\n  return mix(under, fillColor, clamp(mask, 0.0, 1.0));\n}\nfloat billboardSlabLandmark(vec2 p) {\n  return sdBox2D(p - vec2(-0.285, -0.045), vec2(0.137, 0.158));\n}\nfloat billboardSocketLandmark(vec2 p) {\n  return sdBox2D(p - vec2(-0.285, -0.045), vec2(0.108, 0.116));\n}\nfloat billboardBraceLandmark(vec2 p) {\n  float leftLeg = sdSegment2D(\n    p,\n    vec2(-0.375, -0.285),\n    vec2(-0.340, -0.195)\n  ) - 0.014;\n  float rightLeg = sdSegment2D(\n    p,\n    vec2(-0.195, -0.285),\n    vec2(-0.230, -0.195)\n  ) - 0.014;\n  float crossBrace = sdSegment2D(\n    p,\n    vec2(-0.365, -0.255),\n    vec2(-0.213, -0.205)\n  ) - 0.009;\n  return min(min(leftLeg, rightLeg), crossBrace);\n}\nvec3 paintBillboard(vec3 color, vec2 p, float hum, float aa) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 asphalt = vec3(0.145, 0.145, 0.165);\n  vec3 slab = vec3(0.265, 0.255, 0.265);\n  vec3 cobalt = vec3(0.205, 0.275, 0.535);\n  vec3 blackSocket = vec3(0.018, 0.016, 0.022);\n  float braceD = billboardBraceLandmark(p);\n  color = layerSdf(color, braceD, asphalt, ink, 0.004, aa);\n  vec2 shifted = p - vec2(hum, 0.0);\n  float slabD = billboardSlabLandmark(shifted);\n  color = layerSdf(color, slabD, slab, ink, 0.007, aa);\n  float shadedFace = fillMask(slabD, aa)\n    * smoothstep(-0.13, 0.13, -shifted.x - shifted.y - 0.27);\n  color = mix(color, cobalt, 0.26 * shadedFace);\n  float socketD = billboardSocketLandmark(shifted);\n  color = layerSdf(color, socketD, blackSocket, ink, 0.004, aa);\n  float topSlot = sdBox2D(\n    shifted - vec2(-0.285, 0.073),\n    vec2(0.082, 0.009)\n  );\n  color = layerSdf(color, topSlot, blackSocket, ink, 0.002, aa);\n  float braceBoltA = sdEllipseApprox(\n    shifted - vec2(-0.382, -0.176),\n    vec2(0.009, 0.009)\n  );\n  float braceBoltB = sdEllipseApprox(\n    shifted - vec2(-0.188, -0.176),\n    vec2(0.009, 0.009)\n  );\n  color = layerSdf(color, braceBoltA, vec3(0.86, 0.83, 0.72), ink, 0.002, aa);\n  color = layerSdf(color, braceBoltB, vec3(0.86, 0.83, 0.72), ink, 0.002, aa);\n  return color;\n}\nfloat nestBackLandmark(vec2 p) {\n  float backA = sdSegment2D(\n    p,\n    vec2(0.205, -0.205),\n    vec2(0.395, -0.190)\n  ) - 0.017;\n  float backB = sdSegment2D(\n    p,\n    vec2(0.222, -0.235),\n    vec2(0.375, -0.165)\n  ) - 0.013;\n  float backC = sdSegment2D(\n    p,\n    vec2(0.235, -0.165),\n    vec2(0.215, -0.226)\n  ) - 0.012;\n  return min(backA, min(backB, backC));\n}\nfloat nestFrontLandmark(vec2 p) {\n  float frontA = sdSegment2D(\n    p,\n    vec2(0.210, -0.228),\n    vec2(0.398, -0.215)\n  ) - 0.019;\n  float frontB = sdSegment2D(\n    p,\n    vec2(0.230, -0.245),\n    vec2(0.386, -0.185)\n  ) - 0.013;\n  float frontC = sdSegment2D(\n    p,\n    vec2(0.205, -0.205),\n    vec2(0.275, -0.245)\n  ) - 0.011;\n  return min(frontA, min(frontB, frontC));\n}\nvec3 paintNestBack(vec3 color, vec2 p, float aa) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 cobalt = vec3(0.205, 0.275, 0.535);\n  float d = nestBackLandmark(p);\n  return layerSdf(color, d, cobalt, ink, 0.005, aa);\n}\nvec3 paintNestFront(vec3 color, vec2 p, float locked, float aa) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 asphalt = vec3(0.145, 0.145, 0.165);\n  vec3 ivory = vec3(0.885, 0.855, 0.745);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  float d = nestFrontLandmark(p);\n  color = layerSdf(color, d, asphalt, ink, 0.005, aa);\n  float paleTwig = sdSegment2D(\n    p,\n    vec2(0.245, -0.214),\n    vec2(0.370, -0.232)\n  ) - 0.007;\n  color = layerSdf(color, paleTwig, ivory, ink, 0.003, aa);\n  float contact = sdBox2D(\n    p - vec2(0.300, -0.204),\n    vec2(0.024, 0.008)\n  );\n  color = layerVisibleSdf(\n    color,\n    contact,\n    orange,\n    ink,\n    0.002,\n    locked,\n    aa\n  );\n  return color;\n}\nvec3 paintPanel(\n  vec3 color,\n  vec2 p,\n  vec2 center,\n  float angle,\n  float locked,\n  float cargoAccent,\n  float aa\n) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 ivory = vec3(0.885, 0.855, 0.745);\n  vec3 cobalt = vec3(0.205, 0.275, 0.535);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  vec2 q = rot(-angle) * (p - center);\n  float panelD = sdBox2D(q, vec2(0.115, 0.115));\n  float outer = fillMask(panelD - 0.009, aa);\n  float inner = fillMask(panelD, aa);\n  float contour = clamp(outer - inner, 0.0, 1.0);\n  float topBreak = fillMask(\n    sdBox2D(q - vec2(0.040, 0.119), vec2(0.029, 0.014)),\n    aa\n  );\n  float rightBreak = fillMask(\n    sdBox2D(q - vec2(0.119, -0.025), vec2(0.014, 0.031)),\n    aa\n  );\n  float breakMask = clamp(topBreak + rightBreak, 0.0, 1.0);\n  float continuousContour = contour * (1.0 - breakMask * (1.0 - locked));\n  color = layerMask(color, outer, ivory);\n  float lowerPlane = inner\n    * smoothstep(-0.015, 0.025, -q.y)\n    * smoothstep(-0.12, 0.10, -q.x - q.y);\n  color = mix(color, cobalt, 0.72 * lowerPlane);\n  float headerD = sdBox2D(q - vec2(0.018, 0.070), vec2(0.070, 0.017));\n  color = layerMask(color, fillMask(headerD, aa) * inner, cobalt);\n  float ruleA = fillMask(\n    sdBox2D(q - vec2(0.015, 0.025), vec2(0.066, 0.006)),\n    aa\n  ) * inner;\n  float ruleB = fillMask(\n    sdBox2D(q - vec2(-0.005, 0.001), vec2(0.046, 0.005)),\n    aa\n  ) * inner;\n  color = layerMask(color, max(ruleA, ruleB), ink);\n  vec2 holePos = vec2(-0.082, 0.082);\n  float holeRingD = sdEllipseApprox(q - holePos, vec2(0.017, 0.017));\n  float holeCoreD = sdEllipseApprox(q - holePos, vec2(0.009, 0.009));\n  color = layerSdf(color, holeRingD, ink, ink, 0.001, aa);\n  color = layerMask(color, fillMask(holeCoreD, aa), ivory);\n  float gripCorner = sdTriangle2D(\n    q,\n    vec2(0.074, 0.115),\n    vec2(0.115, 0.074),\n    vec2(0.115, 0.115)\n  );\n  color = layerMask(\n    color,\n    fillMask(gripCorner, aa) * cargoAccent,\n    orange\n  );\n  color = layerMask(color, continuousContour, ink);\n  return color;\n}\nvec3 paintScrew(\n  vec3 color,\n  vec2 p,\n  vec2 anchor,\n  float snap,\n  float snapFlash,\n  float aa\n) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 ivory = vec3(0.885, 0.855, 0.745);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  vec2 fall = vec2(0.020, -0.47) * snap;\n  vec2 screwPos = anchor + fall;\n  float visible = 1.0 - smoothstep(0.68, 0.96, snap);\n  float headD = sdEllipseApprox(p - screwPos, vec2(0.020, 0.020));\n  color = layerVisibleSdf(\n    color,\n    headD,\n    mix(ivory, orange, snapFlash),\n    ink,\n    0.004,\n    visible,\n    aa\n  );\n  float slotD = sdSegment2D(\n    p,\n    screwPos + vec2(-0.011, 0.0),\n    screwPos + vec2(0.011, 0.0)\n  ) - 0.003;\n  color = layerMask(\n    color,\n    fillMask(slotD, aa) * visible,\n    ink\n  );\n  float shaftD = sdSegment2D(\n    p,\n    screwPos + vec2(0.0, -0.015),\n    screwPos + vec2(0.0, -0.044)\n  ) - 0.006;\n  color = layerVisibleSdf(\n    color,\n    shaftD,\n    ivory,\n    ink,\n    0.002,\n    visible,\n    aa\n  );\n  return color;\n}\nvec3 paintStressTicks(\n  vec3 color,\n  vec2 p,\n  vec2 anchor,\n  float strength,\n  float flash,\n  float aa\n) {\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  vec3 tickColor = mix(ink, orange, flash);\n  float a = sdSegment2D(\n    p,\n    anchor + vec2(-0.033, 0.019),\n    anchor + vec2(-0.061, 0.038)\n  ) - 0.004;\n  float b = sdSegment2D(\n    p,\n    anchor + vec2(0.000, 0.031),\n    anchor + vec2(0.000, 0.066)\n  ) - 0.004;\n  float c = sdSegment2D(\n    p,\n    anchor + vec2(0.031, 0.020),\n    anchor + vec2(0.061, 0.040)\n  ) - 0.004;\n  float d = sdSegment2D(\n    p,\n    anchor + vec2(-0.038, -0.018),\n    anchor + vec2(-0.068, -0.031)\n  ) - 0.004;\n  float mask = max(\n    max(fillMask(a, aa), fillMask(b, aa)),\n    max(fillMask(c, aa), fillMask(d, aa))\n  );\n  return layerMask(color, mask * strength, tickColor);\n}\nvec3 paintBird(\n  vec3 color,\n  vec2 p,\n  vec2 center,\n  float facing,\n  float wingOpen,\n  float wingBeat,\n  float crouch,\n  float bandAccent,\n  float aa\n) {\n  vec3 peach = vec3(0.955, 0.700, 0.560);\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 asphalt = vec3(0.145, 0.145, 0.165);\n  vec3 ivory = vec3(0.885, 0.855, 0.745);\n  vec3 cobalt = vec3(0.205, 0.275, 0.535);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  vec2 q = p - center;\n  q.x *= facing;\n  q.y += 0.012 * crouch;\n  float tailA = sdTriangle2D(\n    q,\n    vec2(-0.030, -0.045),\n    vec2(-0.154, -0.074),\n    vec2(-0.048, -0.002)\n  );\n  float tailB = sdTriangle2D(\n    q,\n    vec2(-0.026, -0.053),\n    vec2(-0.130, -0.128),\n    vec2(-0.014, -0.026)\n  );\n  float tailC = sdTriangle2D(\n    q,\n    vec2(-0.010, -0.050),\n    vec2(-0.070, -0.145),\n    vec2(0.018, -0.032)\n  );\n  color = layerSdf(color, tailA, asphalt, ink, 0.005, aa);\n  color = layerSdf(color, tailB, cobalt, ink, 0.005, aa);\n  color = layerSdf(color, tailC, asphalt, ink, 0.005, aa);\n  float upperReach = 0.105 + wingOpen * (0.105 + 0.025 * wingBeat);\n  float lowerReach = 0.095 + wingOpen * (0.095 - 0.022 * wingBeat);\n  float upperWing = sdTriangle2D(\n    q,\n    vec2(-0.025, 0.025),\n    vec2(-0.102, upperReach),\n    vec2(0.045, 0.050)\n  );\n  float upperPrimary = sdTriangle2D(\n    q,\n    vec2(-0.082, upperReach * 0.72),\n    vec2(-0.046, upperReach + 0.070),\n    vec2(0.006, 0.058)\n  );\n  float lowerWing = sdTriangle2D(\n    q,\n    vec2(-0.022, 0.000),\n    vec2(-0.112, -lowerReach),\n    vec2(0.045, -0.036)\n  );\n  float lowerPrimary = sdTriangle2D(\n    q,\n    vec2(-0.082, -lowerReach * 0.72),\n    vec2(-0.052, -lowerReach - 0.060),\n    vec2(0.005, -0.040)\n  );\n  color = layerVisibleSdf(\n    color,\n    upperWing,\n    cobalt,\n    ink,\n    0.006,\n    wingOpen,\n    aa\n  );\n  color = layerVisibleSdf(\n    color,\n    upperPrimary,\n    asphalt,\n    ink,\n    0.005,\n    wingOpen,\n    aa\n  );\n  color = layerVisibleSdf(\n    color,\n    lowerWing,\n    asphalt,\n    ink,\n    0.006,\n    wingOpen,\n    aa\n  );\n  color = layerVisibleSdf(\n    color,\n    lowerPrimary,\n    cobalt,\n    ink,\n    0.005,\n    wingOpen,\n    aa\n  );\n  float upperNotch = sdTriangle2D(\n    q,\n    vec2(-0.067, upperReach + 0.010),\n    vec2(-0.048, upperReach + 0.046),\n    vec2(-0.030, upperReach + 0.006)\n  );\n  float lowerNotch = sdTriangle2D(\n    q,\n    vec2(-0.072, -lowerReach - 0.004),\n    vec2(-0.052, -lowerReach - 0.039),\n    vec2(-0.034, -lowerReach - 0.003)\n  );\n  color = layerMask(\n    color,\n    max(fillMask(upperNotch, aa), fillMask(lowerNotch, aa)) * wingOpen,\n    peach\n  );\n  float rearBody = sdEllipseApprox(\n    q - vec2(-0.012, -0.012),\n    vec2(0.067, 0.086)\n  );\n  float chest = sdEllipseApprox(\n    q - vec2(0.034, -0.022),\n    vec2(0.072, 0.101)\n  );\n  float bodyD = min(rearBody, chest);\n  color = layerSdf(color, bodyD, ivory, ink, 0.007, aa);\n  float bodyShade = fillMask(bodyD, aa)\n    * smoothstep(0.010, 0.105, -q.x - q.y);\n  color = mix(color, cobalt, 0.42 * bodyShade);\n  float foldedWing = sdEllipseApprox(\n    q - vec2(-0.010, -0.008),\n    vec2(0.065, 0.054)\n  );\n  color = layerVisibleSdf(\n    color,\n    foldedWing,\n    cobalt,\n    ink,\n    0.005,\n    1.0 - wingOpen,\n    aa\n  );\n  float wingSlashA = sdSegment2D(\n    q,\n    vec2(-0.050, 0.005),\n    vec2(0.018, -0.034)\n  ) - 0.004;\n  float wingSlashB = sdSegment2D(\n    q,\n    vec2(-0.043, 0.023),\n    vec2(0.028, -0.016)\n  ) - 0.003;\n  color = layerMask(\n    color,\n    max(fillMask(wingSlashA, aa), fillMask(wingSlashB, aa))\n      * (1.0 - wingOpen),\n    ink\n  );\n  float neck = sdEllipseApprox(\n    q - vec2(0.037, 0.039),\n    vec2(0.040, 0.046)\n  );\n  color = layerSdf(color, neck, ivory, ink, 0.003, aa);\n  float head = sdEllipseApprox(\n    q - vec2(0.058, 0.073),\n    vec2(0.047, 0.050)\n  );\n  color = layerSdf(color, head, asphalt, ink, 0.006, aa);\n  float capPlane = fillMask(\n    sdEllipseApprox(q - vec2(0.047, 0.086), vec2(0.044, 0.029)),\n    aa\n  );\n  color = layerMask(color, capPlane, vec3(0.045, 0.042, 0.052));\n  float beakLower = sdTriangle2D(\n    q,\n    vec2(0.090, 0.071),\n    vec2(0.141, 0.078),\n    vec2(0.091, 0.054)\n  );\n  float beakUpper = sdTriangle2D(\n    q,\n    vec2(0.088, 0.078),\n    vec2(0.148, 0.108),\n    vec2(0.092, 0.068)\n  );\n  color = layerSdf(color, beakLower, cobalt, ink, 0.003, aa);\n  color = layerSdf(color, beakUpper, ivory, ink, 0.003, aa);\n  float beakGap = sdSegment2D(\n    q,\n    vec2(0.096, 0.071),\n    vec2(0.139, 0.082)\n  ) - 0.0025;\n  color = layerMask(color, fillMask(beakGap, aa), ink);\n  float eyeWhite = sdEllipseApprox(\n    q - vec2(0.069, 0.087),\n    vec2(0.009, 0.009)\n  );\n  float pupil = sdEllipseApprox(\n    q - vec2(0.071, 0.088),\n    vec2(0.004, 0.004)\n  );\n  color = layerSdf(color, eyeWhite, ivory, ink, 0.0015, aa);\n  color = layerMask(color, fillMask(pupil, aa), ink);\n  float legLength = mix(0.074, 0.043, crouch);\n  vec2 nearHip = vec2(0.030, -0.084);\n  vec2 farHip = vec2(-0.017, -0.080);\n  vec2 nearFoot = nearHip + vec2(0.003, -legLength);\n  vec2 farFoot = farHip + vec2(-0.004, -legLength * 0.94);\n  float nearLeg = sdSegment2D(q, nearHip, nearFoot) - 0.0045;\n  float farLeg = sdSegment2D(q, farHip, farFoot) - 0.004;\n  color = layerSdf(color, farLeg, asphalt, ink, 0.002, aa);\n  color = layerSdf(color, nearLeg, asphalt, ink, 0.002, aa);\n  vec2 bandCenter = mix(nearHip, nearFoot, 0.56);\n  float bandD = sdBox2D(q - bandCenter, vec2(0.011, 0.010));\n  color = layerSdf(\n    color,\n    bandD,\n    mix(cobalt, orange, bandAccent),\n    ink,\n    0.002,\n    aa\n  );\n  float clawA = sdSegment2D(\n    q,\n    nearFoot,\n    nearFoot + vec2(0.025, -0.007)\n  ) - 0.003;\n  float clawB = sdSegment2D(\n    q,\n    nearFoot,\n    nearFoot + vec2(-0.020, -0.008)\n  ) - 0.003;\n  float clawC = sdSegment2D(\n    q,\n    farFoot,\n    farFoot + vec2(0.021, -0.007)\n  ) - 0.003;\n  color = layerSdf(color, clawA, asphalt, ink, 0.0015, aa);\n  color = layerSdf(color, clawB, asphalt, ink, 0.0015, aa);\n  color = layerSdf(color, clawC, asphalt, ink, 0.0015, aa);\n  return color;\n}\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  float seconds = phase * DURATION;\n  float rewind = smoothstep(28.0, 32.0, seconds);\n  float story = mix(seconds, 0.0, rewind);\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float aa = 1.35 / iResolution.y;\n  vec3 peach = vec3(0.955, 0.700, 0.560);\n  vec3 peachLight = vec3(0.985, 0.765, 0.620);\n  vec3 ivory = vec3(0.885, 0.855, 0.745);\n  vec3 cobalt = vec3(0.205, 0.275, 0.535);\n  vec3 asphalt = vec3(0.145, 0.145, 0.165);\n  vec3 ink = vec3(0.075, 0.064, 0.078);\n  vec3 orange = vec3(1.0, 0.31, 0.045);\n  vec3 color = mix(\n    peach,\n    peachLight,\n    0.16 + 0.10 * smoothstep(-0.42, 0.42, uv.y)\n  );\n  float margin = smoothstep(0.32, 0.45, abs(uv.x))\n    + smoothstep(0.32, 0.46, uv.y);\n  float paperMark = step(\n    0.93,\n    hash21(floor((gl_FragCoord.xy + vec2(17.0, 43.0)) / 11.0))\n  );\n  color = mix(\n    color,\n    peach * 0.94,\n    0.038 * paperMark * clamp(margin, 0.0, 1.0)\n  );\n  float leftRoof = sdBox2D(\n    uv - vec2(-0.270, -0.410),\n    vec2(0.245, 0.125)\n  );\n  float rightRoof = sdBox2D(\n    uv - vec2(0.335, -0.405),\n    vec2(0.190, 0.120)\n  );\n  color = layerSdf(color, leftRoof, vec3(0.195, 0.185, 0.200), ink, 0.005, aa);\n  color = layerSdf(color, rightRoof, vec3(0.195, 0.185, 0.200), ink, 0.005, aa);\n  float leftLip = sdBox2D(\n    uv - vec2(-0.270, -0.282),\n    vec2(0.245, 0.013)\n  );\n  float rightLip = sdBox2D(\n    uv - vec2(0.335, -0.280),\n    vec2(0.190, 0.013)\n  );\n  color = layerSdf(color, leftLip, ivory, ink, 0.003, aa);\n  color = layerSdf(color, rightLip, ivory, ink, 0.003, aa);\n  float asphaltAnchor = sdBox2D(\n    uv - vec2(0.0, -0.486),\n    vec2(0.50, 0.040)\n  );\n  color = layerSdf(color, asphaltAnchor, asphalt, ink, 0.003, aa);\n  float roofGrain = step(\n    0.94,\n    hash21(floor((gl_FragCoord.xy + vec2(71.0, 23.0)) / 10.0))\n  );\n  float roofMask = max(fillMask(leftRoof, aa), fillMask(rightRoof, aa));\n  color = mix(color, cobalt, 0.075 * roofGrain * roofMask);\n  float preSnap = 1.0 - smoothstep(7.0, 8.4, story);\n  float snap = smoothstep(7.0, 9.0, story);\n  float takeoff = smoothstep(8.8, 12.5, story);\n  float flightClock = clamp((story - 12.5) / 12.0, 0.0, 1.0);\n  float travel = smoothstep(0.0, 1.0, flightClock);\n  float seatProgress = smoothstep(24.8, 27.8, story);\n  float settle = smoothstep(0.0, 0.82, seatProgress);\n  float locked = step(0.84, seatProgress);\n  float snapFlash = pulse(story, 7.8, 0.72);\n  float seatFlash = pulse(story, 27.35, 0.58) * locked;\n  float stressStrength = (0.52 + 0.48 * pulse(story, 6.5, 1.6)) * preSnap;\n  float hum = 0.003 * sin(story * 9.0) * preSnap;\n  color = paintBillboard(color, uv, hum, aa);\n  color = paintNestBack(color, uv, aa);\n  vec2 screwAnchor = vec2(-0.365, 0.085);\n  vec2 holeLocal = vec2(-0.082, 0.082);\n  float widening = smoothstep(0.0, 7.0, story);\n  float hangingAngle = -0.145\n    + (0.022 + 0.055 * widening) * sin(story * 1.72);\n  vec2 hangingCenter = screwAnchor - rot(hangingAngle) * holeLocal;\n  vec2 catchCenter = vec2(-0.035, -0.047);\n  float catchAngle = -0.245;\n  vec2 flightBird = mix(\n    vec2(-0.035, 0.184),\n    vec2(0.300, 0.174),\n    travel\n  );\n  flightBird.y += 0.014 * sin(flightClock * TAU * 2.0);\n  vec2 cargoCenter = flightBird + vec2(0.0, -0.215);\n  float cargoAngle = -0.262\n    + 0.120 * sin(flightClock * TAU * 2.0 + 0.8);\n  vec2 panelCenter = mix(hangingCenter, catchCenter, snap);\n  float panelAngle = mix(hangingAngle, catchAngle, snap);\n  panelCenter = mix(panelCenter, cargoCenter, takeoff);\n  panelAngle = mix(panelAngle, cargoAngle, takeoff);\n  vec2 seatedPanelCenter = vec2(0.300, -0.090);\n  panelCenter = mix(panelCenter, seatedPanelCenter, settle);\n  panelAngle = mix(panelAngle, 0.0, settle);\n  float airborne = smoothstep(9.0, 12.5, story)\n    * (1.0 - smoothstep(24.8, 26.2, story));\n  float cargoAccent = airborne * (1.0 - locked);\n  color = paintPanel(\n    color,\n    uv,\n    panelCenter,\n    panelAngle,\n    locked,\n    cargoAccent,\n    aa\n  );\n  color = paintScrew(\n    color,\n    uv,\n    screwAnchor,\n    snap,\n    snapFlash,\n    aa\n  );\n  color = paintStressTicks(\n    color,\n    uv,\n    screwAnchor,\n    stressStrength,\n    snapFlash,\n    aa\n  );\n  vec2 openingBird = vec2(\n    -0.108,\n    -0.164 + 0.003 * sin(tau * 4.0)\n  );\n  vec2 catchingBird = vec2(-0.035, 0.184);\n  vec2 birdCenter = mix(openingBird, catchingBird, takeoff);\n  birdCenter = mix(birdCenter, flightBird, travel);\n  vec2 seatedBird = vec2(0.300, 0.135);\n  birdCenter = mix(birdCenter, seatedBird, settle);\n  float wingBeat = sin(flightClock * TAU * 2.0);\n  float wingOpen = airborne;\n  float crouch = 1.0 - airborne;\n  float facing = -1.0;\n  float bandAccent = preSnap * (1.0 - snapFlash);\n  color = paintBird(\n    color,\n    uv,\n    birdCenter,\n    facing,\n    wingOpen,\n    wingBeat,\n    crouch,\n    bandAccent,\n    aa\n  );\n  vec2 finalHoleWorld = seatedPanelCenter + holeLocal;\n  float twigStubD = sdSegment2D(\n    uv,\n    vec2(0.230, -0.196),\n    finalHoleWorld\n  ) - 0.006;\n  color = layerVisibleSdf(\n    color,\n    twigStubD,\n    ivory,\n    ink,\n    0.003,\n    locked,\n    aa\n  );\n  float twigTipD = sdEllipseApprox(\n    uv - finalHoleWorld,\n    vec2(0.011, 0.011)\n  );\n  color = layerVisibleSdf(\n    color,\n    twigTipD,\n    orange,\n    ink,\n    0.002,\n    locked,\n    aa\n  );\n  color = paintNestFront(color, uv, locked, aa);\n  vec2 contactPoint = vec2(0.300, -0.204);\n  float contactA = sdSegment2D(\n    uv,\n    contactPoint + vec2(-0.030, 0.006),\n    contactPoint + vec2(-0.056, 0.022)\n  ) - 0.004;\n  float contactB = sdSegment2D(\n    uv,\n    contactPoint + vec2(0.0, 0.018),\n    contactPoint + vec2(0.0, 0.050)\n  ) - 0.004;\n  float contactC = sdSegment2D(\n    uv,\n    contactPoint + vec2(0.030, 0.006),\n    contactPoint + vec2(0.056, 0.022)\n  ) - 0.004;\n  float contactTicks = max(\n    fillMask(contactA, aa),\n    max(fillMask(contactB, aa), fillMask(contactC, aa))\n  );\n  color = layerMask(color, contactTicks * seatFlash, orange);\n  float broadLight = 0.035 * smoothstep(-0.40, 0.45, uv.x + uv.y);\n  color = mix(color, vec3(1.0, 0.91, 0.76), broadLight);\n  gl_FragColor = vec4(color, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 32;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 32;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 32;
+  const targetBpm = 87;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x38208871;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const masterBus = new Tone.Gain(0.72).connect(masterLimiter);
+  const windBus = new Tone.Volume(-10).connect(masterBus);
+  const windFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 520,
+    Q: 0.55,
+    rolloff: -24
+  }).connect(windBus);
+  const rooftopWind = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: {
+      attack: 0.32,
+      decay: 0.8,
+      sustain: 0.22,
+      release: 0.5
+    }
+  }).connect(windFilter);
+  const clapBus = new Tone.Volume(-9).connect(masterBus);
+  const shortDarkRoom = new Tone.Reverb({
+    decay: 0.48,
+    preDelay: 0.012,
+    wet: 0.24
+  }).connect(clapBus);
+  const clapFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1900,
+    Q: 0.7,
+    rolloff: -24
+  }).connect(shortDarkRoom);
+  const wingClap = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: {
+      attack: 0.003,
+      decay: 0.13,
+      sustain: 0.03,
+      release: 0.16
+    }
+  }).connect(clapFilter);
+  const pingBus = new Tone.Volume(-10).connect(masterBus);
+  const longLowTail = new Tone.Reverb({
+    decay: 2.7,
+    preDelay: 0.024,
+    wet: 0.17
+  }).connect(pingBus);
+  const pingFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 3100,
+    Q: 0.8,
+    rolloff: -24
+  }).connect(longLowTail);
+  const screwPing = new Tone.PluckSynth({
+    attackNoise: 0.35,
+    dampening: 3000,
+    resonance: 0.72,
+    release: 0.55
+  }).connect(pingFilter);
+  const beatBus = new Tone.Volume(-10).connect(masterBus);
+  const beatFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1650,
+    Q: 0.45,
+    rolloff: -12
+  }).connect(beatBus);
+  const threeHitBeat = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.004,
+      decay: 0.1,
+      sustain: 0.02,
+      release: 0.3
+    }
+  }).connect(beatFilter);
+  await Promise.all([
+    shortDarkRoom.generate(),
+    longLowTail.generate()
+  ]);
+  const sections = {
+    screw: totalBars * (7 / duration),
+    flight: totalBars * (14 / duration),
+    nest: totalBars * (25 / duration)
+  };
+  const secondsAtBar = (bars) => bars * 240 / bpm;
+  const localBarAt = (time) => (
+    (barAt(time) % totalBars) + totalBars
+  ) % totalBars;
+  const windLevels = Array.from(
+    { length: totalBars },
+    () => 0.72 + R() * 0.08
+  );
+  const windFrequencies = Array.from(
+    { length: totalBars },
+    () => 470 + R() * 110
+  );
+  const windLoop = new Tone.Loop((time) => {
+    const bar = localBarAt(time);
+    if ((bar + 1) % 4 === 0) return;
+    const flightLift = (
+      bar >= Math.floor(sections.flight) &&
+      bar < Math.floor(sections.nest)
+    ) ? 0.95 : 0.82;
+    windFilter.frequency.setValueAtTime(windFrequencies[bar], time);
+    rooftopWind.triggerAttackRelease(
+      '2n',
+      time,
+      windLevels[bar] * flightLift
+    );
+  }, '1m').start(0);
+  const shortStep = totalBars / 64;
+  const longStep = totalBars * 5 / 192;
+  const actionEvents = [
+    {
+      time: secondsAtBar(sections.screw) + H(8),
+      role: 'screw',
+      note: 'C#6',
+      velocity: 0.61 + R() * 0.04
+    },
+    {
+      time: secondsAtBar(sections.flight) + H(10),
+      role: 'wing',
+      velocity: 0.72 + R() * 0.05
+    },
+    {
+      time: secondsAtBar(sections.nest),
+      role: 'beat',
+      notes: ['F#3', 'C#4'],
+      velocity: 0.57 + R() * 0.04
+    },
+    {
+      time: secondsAtBar(sections.nest + shortStep),
+      role: 'beat',
+      notes: ['C#3', 'F#3'],
+      velocity: 0.48 + R() * 0.04
+    },
+    {
+      time: secondsAtBar(sections.nest + shortStep + longStep),
+      role: 'beat',
+      notes: ['B2', 'F#3'],
+      velocity: 0.53 + R() * 0.04
+    }
+  ];
+  const actionPart = new Tone.Part((time, event) => {
+    const bar = localBarAt(time);
+    if (
+      event.role === 'screw' &&
+      bar >= Math.floor(sections.screw) &&
+      bar < Math.ceil(sections.flight)
+    ) {
+      screwPing.triggerAttackRelease(
+        event.note,
+        '16n',
+        time,
+        event.velocity
+      );
+    }
+    if (
+      event.role === 'wing' &&
+      bar >= Math.floor(sections.flight) &&
+      bar < Math.ceil(sections.nest)
+    ) {
+      wingClap.triggerAttackRelease('8n', time, event.velocity);
+    }
+    if (
+      event.role === 'beat' &&
+      bar >= Math.floor(sections.nest) &&
+      bar < totalBars
+    ) {
+      threeHitBeat.triggerAttackRelease(
+        event.notes,
+        '16n',
+        time,
+        event.velocity
+      );
+    }
+  }, actionEvents);
+  actionPart.loop = true;
+  actionPart.loopEnd = duration;
+  actionPart.start(0);
+  window.toneJsInstruments = {
+    masterLimiter,
+    masterBus,
+    rooftopWind,
+    windFilter,
+    windBus,
+    wingClap,
+    clapFilter,
+    shortDarkRoom,
+    clapBus,
+    screwPing,
+    pingFilter,
+    longLowTail,
+    pingBus,
+    threeHitBeat,
+    beatFilter,
+    beatBus
+  };
+  window.toneJsParts = {
+    windLoop,
+    actionPart
+  };
+};
+/*
+*/
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 75
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 77913;
+function random() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+
+const W = 900, H = 900;
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.setClearColor(0x050208);
+document.body.style.margin = '0';
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 200);
+camera.position.set(0, 12, 28);
+camera.lookAt(0, 0, 0);
+
+// Fog for depth
+scene.fog = new THREE.FogExp2(0x050208, 0.018);
+
+// --- MYCELIAL NETWORK ---
+
+// Nodes (fruiting bodies / connection points)
+const NODE_COUNT = 180;
+const nodes = [];
+for (let i = 0; i < NODE_COUNT; i++) {
+  const angle = random() * Math.PI * 2;
+  const r = random() * 18 + 1;
+  const layer = Math.floor(random() * 4);
+  const y = (layer - 1.5) * 3 + (random() - 0.5) * 1.5;
+  nodes.push({
+    pos: new THREE.Vector3(Math.cos(angle) * r, y, Math.sin(angle) * r),
+    energy: random() * 0.3,
+    connections: [],
+    pulsePhase: random() * Math.PI * 2,
+    size: 0.15 + random() * 0.35,
+    layer
+  });
+}
+
+// Connect nearby nodes (hyphae)
+const MAX_DIST = 6.5;
+const edges = [];
+for (let i = 0; i < NODE_COUNT; i++) {
+  for (let j = i + 1; j < NODE_COUNT; j++) {
+    const d = nodes[i].pos.distanceTo(nodes[j].pos);
+    if (d < MAX_DIST && random() < 0.45) {
+      edges.push({ a: i, b: j, dist: d, signal: 0, signalDir: 1, signalPos: 0, active: false, width: 0.02 + random() * 0.04 });
+      nodes[i].connections.push(edges.length - 1);
+      nodes[j].connections.push(edges.length - 1);
+    }
+  }
+}
+
+// Node meshes (instanced glowing spheres)
+const nodeGeo = new THREE.SphereGeometry(1, 12, 12);
+const nodeMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.9 });
+const nodeInstances = new THREE.InstancedMesh(nodeGeo, nodeMat, NODE_COUNT);
+const dummy = new THREE.Object3D();
+const col = new THREE.Color();
+
+for (let i = 0; i < NODE_COUNT; i++) {
+  dummy.position.copy(nodes[i].pos);
+  dummy.scale.setScalar(nodes[i].size * 0.3);
+  dummy.updateMatrix();
+  nodeInstances.setMatrixAt(i, dummy.matrix);
+  col.setHSL(0.08 + random() * 0.06, 0.7, 0.2);
+  nodeInstances.setColorAt(i, col);
+}
+scene.add(nodeInstances);
+
+// Hyphae lines (tube-like connections)
+const hyphaeMat = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.25, color: 0xc08030 });
+const hyphaeLines = [];
+for (const edge of edges) {
+  const pts = [];
+  const a = nodes[edge.a].pos;
+  const b = nodes[edge.b].pos;
+  const mid = a.clone().add(b).multiplyScalar(0.5);
+  mid.y += (random() - 0.5) * 1.5;
+  const curve = new THREE.QuadraticBezierCurve3(a, mid, b);
+  const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(16));
+  const line = new THREE.Line(geo, hyphaeMat.clone());
+  scene.add(line);
+  hyphaeLines.push({ line, curve, edge });
+}
+
+// Signal particles traveling along hyphae
+const SIGNAL_COUNT = 600;
+const signalGeo = new THREE.SphereGeometry(0.06, 6, 6);
+const signalMat = new THREE.MeshBasicMaterial({ transparent: true });
+const signalMesh = new THREE.InstancedMesh(signalGeo, signalMat, SIGNAL_COUNT);
+const signals = [];
+for (let i = 0; i < SIGNAL_COUNT; i++) {
+  const edgeIdx = Math.floor(random() * edges.length);
+  signals.push({
+    edgeIdx,
+    t: random(),
+    speed: 0.1 + random() * 0.4,
+    dir: random() > 0.5 ? 1 : -1,
+    brightness: 0.3 + random() * 0.7,
+    hue: 0.06 + random() * 0.1
+  });
+  dummy.position.set(0, -100, 0);
+  dummy.scale.setScalar(0.5);
+  dummy.updateMatrix();
+  signalMesh.setMatrixAt(i, dummy.matrix);
+  col.setHSL(0.08, 0.8, 0.6);
+  signalMesh.setColorAt(i, col);
+}
+scene.add(signalMesh);
+
+// Nutrient motes (floating particles in the soil)
+const MOTE_COUNT = 3000;
+const moteGeo = new THREE.SphereGeometry(0.03, 4, 4);
+const moteMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.6 });
+const moteMesh = new THREE.InstancedMesh(moteGeo, moteMat, MOTE_COUNT);
+const motes = [];
+for (let i = 0; i < MOTE_COUNT; i++) {
+  const angle = random() * Math.PI * 2;
+  const r = random() * 22;
+  const y = (random() - 0.5) * 14;
+  motes.push({
+    pos: new THREE.Vector3(Math.cos(angle) * r, y, Math.sin(angle) * r),
+    vel: new THREE.Vector3((random() - 0.5) * 0.01, random() * 0.015 + 0.005, (random() - 0.5) * 0.01),
+    baseY: y,
+    drift: random() * Math.PI * 2,
+    hue: 0.05 + random() * 0.15
+  });
+  dummy.position.copy(motes[i].pos);
+  dummy.scale.setScalar(0.3 + random() * 0.7);
+  dummy.updateMatrix();
+  moteMesh.setMatrixAt(i, dummy.matrix);
+  col.setHSL(motes[i].hue, 0.5, 0.3);
+  moteMesh.setColorAt(i, col);
+}
+scene.add(moteMesh);
+
+// Fruiting bodies (larger luminous structures at dense nodes)
+const fruitNodes = nodes.filter(n => n.connections.length >= 4).slice(0, 20);
+const fruitGeo = new THREE.ConeGeometry(0.2, 0.8, 8);
+const fruitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0.7, color: 0xffaa44 });
+const fruitMeshes = fruitNodes.map(n => {
+  const m = new THREE.Mesh(fruitGeo, fruitMat.clone());
+  m.position.copy(n.pos);
+  m.position.y += 0.4;
+  m.scale.setScalar(0.5 + n.connections.length * 0.15);
+  scene.add(m);
+  return m;
+});
+
+// Ambient point lights
+const ambLight = new THREE.AmbientLight(0x201008, 0.3);
+scene.add(ambLight);
+
+// Spore origin point (center ignition)
+const sporeLight = new THREE.PointLight(0xffaa22, 0, 30);
+sporeLight.position.set(0, 0, 0);
+scene.add(sporeLight);
+
+// Global bioluminescent pulse wave
+let pulseWaveOrigin = new THREE.Vector3(0, 0, 0);
+let pulseWaveTime = -999;
+let pulseWaveRadius = 0;
+
+// Heartbeat timing
+let lastHeartbeat = 0;
+const HEARTBEAT_INTERVAL = 4.5;
+
+const startTime = performance.now();
+let prevTime = startTime;
+const DURATION = 75;
+
+function noise3D(x, y, z) {
+  const n = Math.sin(x * 12.9898 + y * 78.233 + z * 45.164) * 43758.5453;
+  return (n - Math.floor(n)) * 2 - 1;
+}
+
+function animate() {
+  const now = performance.now();
+  const elapsed = (now - startTime) / 1000;
+  const dt = Math.min((now - prevTime) / 1000, 0.05);
+  prevTime = now;
+
+  const progress = elapsed / DURATION;
+  const revealRadius = Math.min(elapsed * 1.8, 25);
+
+  // Bioluminescent heartbeat
+  if (elapsed - lastHeartbeat > HEARTBEAT_INTERVAL) {
+    lastHeartbeat = elapsed;
+    pulseWaveTime = elapsed;
+    pulseWaveOrigin.set((Math.sin(elapsed * 0.3)) * 5, 0, (Math.cos(elapsed * 0.2)) * 5);
+  }
+  pulseWaveRadius = (elapsed - pulseWaveTime) * 6;
+
+  // Spore ignition (first 5 seconds)
+  const ignition = Math.min(elapsed / 5, 1);
+  sporeLight.intensity = ignition * 2.5 * (1 + Math.sin(elapsed * 3) * 0.3);
+
+  // Update nodes
+  for (let i = 0; i < NODE_COUNT; i++) {
+    const n = nodes[i];
+    const distFromCenter = n.pos.length();
+    const revealed = distFromCenter < revealRadius ? 1 : 0;
+
+    // Pulse wave energy
+    const distFromPulse = n.pos.distanceTo(pulseWaveOrigin);
+    const pulseHit = Math.max(0, 1 - Math.abs(distFromPulse - pulseWaveRadius) / 2);
+
+    n.energy = n.energy * 0.95 + pulseHit * 0.5;
+    const glow = revealed * (0.2 + n.energy * 0.8 + Math.sin(elapsed * 2 + n.pulsePhase) * 0.1);
+
+    const s = n.size * (0.3 + glow * 0.7) * revealed;
+    dummy.position.copy(n.pos);
+    dummy.scale.setScalar(s);
+    dummy.updateMatrix();
+    nodeInstances.setMatrixAt(i, dummy.matrix);
+
+    col.setHSL(0.06 + n.energy * 0.08, 0.6 + n.energy * 0.3, 0.15 + glow * 0.55);
+    nodeInstances.setColorAt(i, col);
+  }
+  nodeInstances.instanceMatrix.needsUpdate = true;
+  nodeInstances.instanceColor.needsUpdate = true;
+
+  // Update hyphae visibility
+  for (const h of hyphaeLines) {
+    const na = nodes[h.edge.a];
+    const nb = nodes[h.edge.b];
+    const avgDist = (na.pos.length() + nb.pos.length()) / 2;
+    const vis = avgDist < revealRadius ? 1 : 0;
+    const energy = (na.energy + nb.energy) / 2;
+    h.line.material.opacity = vis * (0.08 + energy * 0.5);
+    h.line.material.color.setHSL(0.07 + energy * 0.06, 0.5 + energy * 0.4, 0.25 + energy * 0.35);
+  }
+
+  // Update signals
+  for (let i = 0; i < SIGNAL_COUNT; i++) {
+    const s = signals[i];
+    const edge = edges[s.edgeIdx];
+    const h = hyphaeLines[s.edgeIdx];
+
+    s.t += s.speed * s.dir * dt;
+    if (s.t > 1) { s.t = 1; s.dir = -1; }
+    if (s.t < 0) { s.t = 0; s.dir = 1; }
+
+    const pt = h.curve.getPoint(s.t);
+    const na = nodes[edge.a];
+    const nb = nodes[edge.b];
+    const avgDist = (na.pos.length() + nb.pos.length()) / 2;
+    const vis = avgDist < revealRadius && elapsed > 2 ? 1 : 0;
+
+    const energy = (na.energy + nb.energy) / 2;
+    const sc = vis * (0.3 + energy * 1.2) * s.brightness;
+
+    dummy.position.copy(pt);
+    dummy.scale.setScalar(sc);
+    dummy.updateMatrix();
+    signalMesh.setMatrixAt(i, dummy.matrix);
+
+    col.setHSL(s.hue, 0.8, 0.4 + energy * 0.4);
+    signalMesh.setColorAt(i, col);
+  }
+  signalMesh.instanceMatrix.needsUpdate = true;
+  signalMesh.instanceColor.needsUpdate = true;
+
+  // Update motes
+  for (let i = 0; i < MOTE_COUNT; i++) {
+    const m = motes[i];
+    m.pos.x += Math.sin(elapsed * 0.3 + m.drift) * 0.003;
+    m.pos.y += m.vel.y * (0.5 + Math.sin(elapsed + m.drift) * 0.5);
+    m.pos.z += Math.cos(elapsed * 0.2 + m.drift) * 0.003;
+
+    if (m.pos.y > m.baseY + 7) m.pos.y = m.baseY - 7;
+
+    // Attract to nearby nodes
+    let nearestDist = 999;
+    for (let j = 0; j < NODE_COUNT; j += 5) {
+      const d = m.pos.distanceTo(nodes[j].pos);
+      if (d < nearestDist) nearestDist = d;
+      if (d < 3 && nodes[j].energy > 0.2) {
+        const dir = nodes[j].pos.clone().sub(m.pos).normalize();
+        m.pos.add(dir.multiplyScalar(0.005 * nodes[j].energy));
+      }
+    }
+
+    const vis = m.pos.length() < revealRadius + 3 ? 1 : 0;
+    dummy.position.copy(m.pos);
+    dummy.scale.setScalar(vis * (0.2 + Math.sin(elapsed * 2 + m.drift) * 0.15));
+    dummy.updateMatrix();
+    moteMesh.setMatrixAt(i, dummy.matrix);
+
+    const bright = 0.2 + (nearestDist < 4 ? 0.3 : 0);
+    col.setHSL(m.hue, 0.4, bright);
+    moteMesh.setColorAt(i, col);
+  }
+  moteMesh.instanceMatrix.needsUpdate = true;
+  moteMesh.instanceColor.needsUpdate = true;
+
+  // Update fruiting bodies
+  fruitMeshes.forEach((fm, idx) => {
+    const n = fruitNodes[idx];
+    const vis = n.pos.length() < revealRadius;
+    const pulse = 1 + Math.sin(elapsed * 1.5 + n.pulsePhase) * 0.15;
+    const grow = vis ? Math.min((revealRadius - n.pos.length()) / 3, 1) : 0;
+    fm.scale.setScalar((0.5 + n.connections.length * 0.15) * pulse * grow);
+    fm.material.opacity = 0.4 + n.energy * 0.5;
+    fm.material.color.setHSL(0.08 + n.energy * 0.05, 0.7, 0.35 + n.energy * 0.3);
+    fm.rotation.y = elapsed * 0.2 + n.pulsePhase;
+  });
+
+  // Camera: slow orbit revealing cat-shaped network
+  const camAngle = elapsed * 0.08;
+  const camDist = 28 - Math.sin(elapsed * 0.05) * 5;
+  const camY = 12 + Math.sin(elapsed * 0.07) * 4;
+  camera.position.set(Math.sin(camAngle) * camDist, camY, Math.cos(camAngle) * camDist);
+  camera.lookAt(0, 0, 0);
+
+  // Background color pulse with heartbeat
+  const heartPulse = Math.max(0, 1 - (elapsed - lastHeartbeat) / 1);
+  const bgR = 0.02 + heartPulse * 0.03;
+  const bgG = 0.008 + heartPulse * 0.015;
+  const bgB = 0.03 + heartPulse * 0.01;
+  renderer.setClearColor(new THREE.Color(bgR, bgG, bgB));
+
+  renderer.render(scene, camera);
+
+  if (elapsed < DURATION) {
+    window.ready = true;
+    requestAnimationFrame(animate);
+  }
+}
+
+window.ready = true;
+animate();
+
+window.initToneJsEngine = async function() {
+  const bpm = 88;
+  Tone.Transport.bpm.value = bpm;
+  Tone.Transport.timeSignature = [4, 4];
+  const secondsPerBar = (60 / bpm) * 4;
+  const mixBus = new Tone.Gain(1).toDestination();
+  const kickBus = new Tone.Gain(1).connect(mixBus);
+  const duckBus = new Tone.Gain(1).connect(mixBus);
+  const hall = new Tone.Reverb({ decay: 1.7, wet: 0.3 }).connect(duckBus);
+  await hall.generate();
+  const plate = new Tone.Reverb({ decay: 0.78, wet: 0.38 }).connect(duckBus);
+  await plate.generate();
+  const shimmer = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.34, wet: 0.22 }).connect(duckBus);
+  const padChorus = new Tone.Chorus({ frequency: 0.19, delayTime: 3.4, depth: 0.62, wet: 0.58 }).connect(hall).start();
+  const arpPhaser = new Tone.Phaser({ Q: 12, baseFrequency: 280, octaves: 1.4, wet: 0.26 }).connect(shimmer);
+  function getBar(time) {
+    const seconds = Tone.Transport.getSecondsAtTime(time);
+    return Math.floor(seconds / secondsPerBar);
+  }
+  function triggerDuck(time) {
+    duckBus.gain.cancelScheduledValues(time);
+    duckBus.gain.setValueAtTime(0.45, time);
+    duckBus.gain.linearRampToValueAtTime(1, time + 0.3);
+  }
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.032,
+    octaves: 5.2,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.07 }
+  }).connect(kickBus);
+  kick.volume.value = -0.5;
+  let kickStep = 0;
+  const kickLoop = new Tone.Loop((time) => {
+    const idx = kickStep % 8;
+    const bar = getBar(time);
+    const base = [1, null, 1, null, 1, null, 1, null];
+    const flare = [1, null, 1, null, 1, 1, null, 1];
+    const pattern = bar % 8 === 6 ? flare : base;
+    if (pattern[idx]) {
+      kick.triggerAttackRelease('F1', '8n', time, 1);
+      triggerDuck(time);
+    }
+    kickStep++;
+  }, '8n').start(0);
+  const clapNoise = new Tone.NoiseSynth({
+    noise: { type: 'white' },
+    envelope: { attack: 0.001, decay: 0.16, sustain: 0, release: 0.06 }
+  });
+  const clapFilter = new Tone.Filter({ type: 'highpass', frequency: 1100, Q: 1.1 }).connect(plate);
+  clapNoise.connect(clapFilter);
+  clapNoise.volume.value = -2;
+  let clapStep = 0;
+  const clapLoop = new Tone.Loop((time) => {
+    const idx = clapStep % 8;
+    const bar = getBar(time);
+    const pattern = [null, null, 1, null, null, null, 1, null];
+    if (pattern[idx] && bar >= 2 && bar < 24) {
+      const level = bar >= 16 ? 0.8 : 0.9;
+      clapNoise.triggerAttackRelease('16n', time, level);
+    }
+    clapStep++;
+  }, '8n').start(0);
+  const hat = new Tone.MetalSynth({
+    frequency: 430,
+    envelope: { attack: 0.001, decay: 0.06, release: 0.02 },
+    harmonicity: 5.5,
+    modulationIndex: 38,
+    resonance: 6500
+  }).connect(duckBus);
+  hat.volume.value = -15;
+  let hatStep = 0;
+  const hatPattern = [1, 0, 1, 0, 1, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 0];
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar >= 4 && bar < 24 && hatPattern[hatStep % hatPattern.length]) {
+      const vel = 0.32 + Math.random() * 0.12;
+      hat.triggerAttackRelease('32n', time, vel);
+    }
+    hatStep++;
+  }, '16n').start(0);
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 140, Q: 0.8 }).connect(duckBus);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    filter: { type: 'lowpass', frequency: 120 },
+    filterEnvelope: { attack: 0.01, decay: 0.22, sustain: 0.1, release: 0.08, baseFrequency: 50, octaves: 3 },
+    envelope: { attack: 0.004, decay: 0.12, sustain: 0.25, release: 0.07 }
+  }).connect(bassFilter);
+  bass.volume.value = -5;
+  const bassSections = [
+    ['F1', 'F1', 'C2', 'C2'],
+    ['F1', 'C2', 'Ab1', 'Eb1', 'Db2', 'C2', 'Eb1', 'C2'],
+    ['F1', 'F1', 'C2', 'C2']
+  ];
+  let bassIndex = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    let pattern;
+    if (bar < 8) pattern = bassSections[0];
+    else if (bar < 20) pattern = bassSections[1];
+    else pattern = bassSections[2];
+    const note = pattern[bassIndex % pattern.length];
+    const vel = bar >= 12 && bar < 20 ? 0.95 : 0.85;
+    bass.triggerAttackRelease(note, '8n', time, vel);
+    bassIndex++;
+  }, '8n').start(0);
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 2000, Q: 0.5 }).connect(padChorus);
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    detune: 12,
+    envelope: { attack: 0.45, decay: 0.6, sustain: 0.75, release: 2.2 }
+  }).connect(padFilter);
+  pad.volume.value = -11;
+  const padProgressionA = [
+    ['F3', 'Ab3', 'C4', 'F4'],
+    ['Db3', 'F3', 'Ab3', 'C4'],
+    ['Eb3', 'G3', 'Bb3', 'Eb4'],
+    ['C3', 'Eb3', 'G3', 'C4']
+  ];
+  const padProgressionB = [
+    ['F3', 'Ab3', 'C4', 'Eb4'],
+    ['Db3', 'F3', 'Ab3', 'Db4'],
+    ['Eb3', 'G3', 'Bb3', 'F4'],
+    ['C3', 'Eb3', 'G3', 'Bb3']
+  ];
+  let padIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    let chords;
+    if (bar < 16) chords = padProgressionA;
+    else if (bar < 24) chords = padProgressionB;
+    else chords = padProgressionA.slice(0, 1);
+    const chord = chords[padIndex % chords.length];
+    const level = bar >= 24 ? 0.25 : 0.35;
+    pad.triggerAttackRelease(chord, '2n', time, level);
+    padIndex++;
+  }, '2n').start(0);
+  const arpFilter = new Tone.Filter({ type: 'lowpass', frequency: 900, Q: 1 }).connect(arpPhaser);
+  const arp = new Tone.Synth({
+    oscillator: { type: 'pulse', width: 0.2 },
+    envelope: { attack: 0.002, decay: 0.12, sustain: 0.2, release: 0.05 }
+  }).connect(arpFilter);
+  arp.volume.value = -13;
+  const arpScale = [0, 2, 3, 5, 7, 10];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar < 6 || bar >= 23) return;
+    const roots = ['F4', 'Db4', 'Eb4', 'C4'];
+    const root = roots[Math.floor(bar / 4) % roots.length];
+    const rootMidi = Tone.Frequency(root).toMidi();
+    const degree = arpScale[arpStep % arpScale.length];
+    const octaveLift = arpStep % 12 === 8 ? 12 : 0;
+    const freq = Tone.Frequency(rootMidi + degree + octaveLift, 'midi').toFrequency();
+    const vel = 0.4 + Math.random() * 0.2;
+    arp.triggerAttackRelease(freq, '16n', time, vel);
+    arpStep++;
+  }, '16n').start(0);
+  const leadFilter = new Tone.Filter({ type: 'lowpass', frequency: 2200, Q: 0.7 }).connect(shimmer);
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 0.015, decay: 0.25, sustain: 0.3, release: 0.5 },
+    portamento: 0.08
+  }).connect(leadFilter);
+  lead.volume.value = -9;
+  const leadEvents = [
+    { time: '8:2:0', note: 'C5', dur: '4n', vel: 0.75 },
+    { time: '10:0:0', note: 'Ab4', dur: '2n', vel: 0.7 },
+    { time: '12:2:0', note: 'F4', dur: '2n', vel: 0.72 },
+    { time: '16:0:0', note: 'Eb5', dur: '4n', vel: 0.78 },
+    { time: '18:0:0', note: 'C5', dur: '2n', vel: 0.74 },
+    { time: '19:2:0', note: 'Ab4', dur: '4n', vel: 0.71 },
+    { time: '20:2:0', note: 'G4', dur: '2n', vel: 0.68 }
+  ];
+  const leadPart = new Tone.Part((time, event) => {
+    const bar = getBar(time);
+    if (bar >= 8 && bar < 22) {
+      lead.triggerAttackRelease(event.note, event.dur, time, event.vel);
+    }
+  }, leadEvents).start(0);
+  const textureFilter = new Tone.Filter({ type: 'bandpass', frequency: 1800, Q: 1.5 }).connect(hall);
+  const texture = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.3, decay: 0.45, sustain: 0, release: 0.9 }
+  }).connect(textureFilter);
+  texture.volume.value = -18;
+  const textureLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar % 8 === 4 && bar < 22) {
+      textureFilter.frequency.linearRampToValueAtTime(2600, time + 0.8);
+      textureFilter.frequency.exponentialRampToValueAtTime(1400, time + 1.4);
+      texture.triggerAttackRelease(1.2, time);
+    }
+  }, '1m').start(0);
+  const pluck = new Tone.PluckSynth({
+    attackNoise: 1.1,
+    dampening: 3800,
+    resonance: 0.88
+  }).connect(shimmer);
+  pluck.volume.value = -16;
+  let pluckBeat = 0;
+  const pluckNotes = ['F4', 'C5', 'Eb5', 'Ab4', 'G4', 'Db5', 'Bb4', 'C5'];
+  const pluckLoop = new Tone.Loop((time) => {
+    const bar = getBar(time);
+    if (bar >= 10 && bar < 21) {
+      if (pluckBeat % 3 === 0) {
+        const note = pluckNotes[(pluckBeat / 3) % pluckNotes.length];
+        const level = 0.4 + Math.random() * 0.1;
+        pluck.triggerAttackRelease(note, '8n', time, level);
+      }
+      pluckBeat++;
+    }
+  }, '8n').start(0);
+  const scheduleIds = [];
+  scheduleIds.push(Tone.Transport.schedule((time) => {
+    padFilter.frequency.cancelScheduledValues(time);
+    padFilter.frequency.exponentialRampToValueAtTime(3200, time + Tone.Time('6m').toSeconds());
+    bassFilter.frequency.linearRampToValueAtTime(220, time + Tone.Time('6m').toSeconds());
+  }, '4:0:0'));
+  scheduleIds.push(Tone.Transport.schedule((time) => {
+    arpFilter.frequency.exponentialRampToValueAtTime(3000, time + Tone.Time('4m').toSeconds());
+  }, '8:0:0'));
+  scheduleIds.push(Tone.Transport.schedule((time) => {
+    padFilter.frequency.exponentialRampToValueAtTime(900, time + Tone.Time('4m').toSeconds());
+    bassFilter.frequency.linearRampToValueAtTime(140, time + Tone.Time('2m').toSeconds());
+    arpFilter.frequency.exponentialRampToValueAtTime(700, time + Tone.Time('2m').toSeconds());
+  }, '20:0:0'));
+  window.toneJsInstruments = {
+    kick,
+    clapNoise,
+    hat,
+    bass,
+    pad,
+    arp,
+    lead,
+    texture,
+    pluck,
+    hall,
+    plate,
+    shimmer,
+    padChorus,
+    arpPhaser,
+    bassFilter,
+    padFilter,
+    arpFilter,
+    duckBus,
+    mixBus,
+    kickBus
+  };
+  window.toneJsParts = {
+    kickLoop,
+    clapLoop,
+    hatLoop,
+    bassLoop,
+    padLoop,
+    arpLoop,
+    leadPart,
+    textureLoop,
+    pluckLoop,
+    scheduleIds
+  };
+};
+
+
+
+
+
+window.audioDuration = 75;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

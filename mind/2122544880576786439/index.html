@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+
+(() => {
+  const DURATION = 60;
+  const W = 300, H = 300, SCALE = 3;
+  const BPM = 84, BEAT = 60 / BPM;
+
+  // ---- logical pixel buffer -------------------------------------------------
+  const buf = document.createElement('canvas');
+  buf.width = W; buf.height = H;
+  const b = buf.getContext('2d', { alpha: false });
+  ctx.imageSmoothingEnabled = false;
+
+  // ---- palette (named roles) ------------------------------------------------
+  const P = {
+    skyTop: '#070b18', skyLow: '#0c1326', skyGlow: '#14203a',
+    farTower: '#121b31', farTowerLit: '#1b2744',
+    midTower: '#0e1626', midEdge: '#172338',
+    block: '#131a28', blockLit: '#1d273a', blockDark: '#0a0e18',
+    stone: '#1a2233', stoneEdge: '#243049',
+    teal: '#1f4a4f', tealDim: '#153439',
+    roof: '#141b27', roofWet: '#1c2a3a', roofPool: '#23364a',
+    shack: '#1b212c', shackEdge: '#2a3341', corrug: '#121823',
+    amber: '#ffc46a', amberDim: '#c98a3c', amberDeep: '#8a5a22',
+    gold: '#ffe3a0', orange: '#ff8a3c', orangeDeep: '#b4531c',
+    rain: '#5f93a8', rainDim: '#2c4b5c', rainBright: '#9ed2e2',
+    magenta: '#d2459b', magentaDim: '#7d2a5e',
+    violet: '#8f5cff', violetDim: '#50338f',
+    green: '#6fe08a', greenDim: '#2f6b44',
+    tv: '#7fb6ff', tvDim: '#3d5f8c',
+    cat: '#05070b', eye: '#ffd27a',
+    fern: '#2e6d4e', fernDim: '#1d4433',
+    cable: '#0b0f16', rail: '#101722', railEdge: '#1b2533',
+    white: '#f2f6ff'
+  };
+
+  // ---- seeded rng (init only) ----------------------------------------------
+  let seed = 6980594 % 233280;
+  const rnd = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+  const ri = (a, c) => a + Math.floor(rnd() * (c - a + 1));
+
+  const px = (x, y, col) => { b.fillStyle = col; b.fillRect(x | 0, y | 0, 1, 1); };
+  const rect = (x, y, w, h, col) => { b.fillStyle = col; b.fillRect(x | 0, y | 0, w | 0, h | 0); };
+  const hash = (a, c) => {
+    let h = (a * 374761393 + c * 668265263) | 0;
+    h = (h ^ (h >> 13)) * 1274126177;
+    return ((h ^ (h >> 16)) >>> 0) / 4294967296;
+  };
+  const sstep = (e0, e1, x) => {
+    const u = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
+    return u * u * (3 - 2 * u);
+  };
+  // bayer 4x4, fixed in screen space
+  const BAYER = [0,8,2,10,12,4,14,6,3,11,1,9,15,7,13,5];
+  const bay = (x, y) => BAYER[(y & 3) * 4 + (x & 3)] / 16;
+
+  // ---- 3x5 bitmap glyph squiggles for the CRT ------------------------------
+  const GLYPH = [
+    [0b111,0b010,0b010,0b010,0b111], [0b101,0b101,0b111,0b001,0b001],
+    [0b110,0b100,0b110,0b010,0b011], [0b111,0b001,0b010,0b100,0b111],
+    [0b010,0b111,0b010,0b111,0b010], [0b101,0b010,0b101,0b010,0b101],
+    [0b100,0b100,0b100,0b100,0b111], [0b011,0b100,0b010,0b001,0b110]
+  ];
+
+  // ---- pre-baked static layers ---------------------------------------------
+  const layer = (draw) => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d', { alpha: true });
+    const sx = b; // swap target
+    const saveRect = rect, savePx = px;
+    draw(g);
+    return c;
+  };
+  // simpler: draw into b then snapshot
+  const snapshot = (drawFn, transparent) => {
+    const c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    const g = c.getContext('2d', { alpha: true });
+    drawFn(g);
+    return c;
+  };
+  const R = (g) => (x, y, w, h, col) => { g.fillStyle = col; g.fillRect(x | 0, y | 0, w | 0, h | 0); };
+
+  // --- sky + distant city ---
+  const skyLayer = snapshot((g) => {
+    const r = R(g);
+    for (let y = 0; y < 150; y++) {
+      const u = y / 150;
+      let col = P.skyTop;
+      if (u > 0.30) col = P.skyLow;
+      if (u > 0.58) col = P.skyGlow;
+      r(0, y, W, 1, col);
+      // static dither band between steps so shadows keep steps, no crawl
+      if (u > 0.22 && u < 0.36) for (let x = 0; x < W; x++) if (bay(x, y) < 0.25) r(x, y, 1, 1, P.skyLow);
+      if (u > 0.50 && u < 0.62) for (let x = 0; x < W; x++) if (bay(x, y) < 0.3) r(x, y, 1, 1, P.skyGlow);
+    }
+    // far skyline (cold layer 1)
+    let x = -4;
+    while (x < W) {
+      const w = ri(7, 20), h = ri(14, 46), top = 118 - h;
+      r(x, top, w, h + 8, P.farTower);
+      // roofline details
+      if (rnd() < 0.5) r(x + 2, top - 3, 2, 3, P.farTower);
+      if (rnd() < 0.35) r(x + w - 4, top - 5, 1, 5, P.farTower);
+      for (let wy = top + 3; wy < 120; wy += 4)
+        for (let wx = x + 2; wx < x + w - 2; wx += 3)
+          if (rnd() < 0.10) r(wx, wy, 1, 1, P.farTowerLit);
+      x += w + ri(1, 4);
+    }
+    // nearer cold layer 2 with setbacks + tanks
+    x = -6;
+    while (x < W) {
+      const w = ri(12, 28), h = ri(22, 58), top = 140 - h;
+      r(x, top, w, h + 10, P.midTower);
+      r(x, top, w, 1, P.midEdge);
+      const sb = ri(3, 7);
+      r(x + sb, top - ri(4, 11), w - sb * 2, 11, P.midTower);
+      if (rnd() < 0.6) { r(x + 3, top - 7, 4, 4, P.midTower); r(x + 4, top - 3, 1, 3, P.midTower); }
+      for (let wy = top + 4; wy < 142; wy += 5)
+        for (let wx = x + 3; wx < x + w - 3; wx += 4)
+          if (rnd() < 0.14) r(wx, wy, 1, 2, P.farTowerLit);
+      x += w + ri(2, 6);
+    }
+    // viaduct across the far band
+    r(0, 108, W, 2, P.stone);
+    r(0, 110, W, 1, P.midEdge);
+    for (let vx = 4; vx < W; vx += 26) { r(vx, 111, 3, 10, P.stone); r(vx, 121, 3, 1, P.midEdge); }
+    // nearer cold layer 3: the rooftops of the neighbouring block, the band between the far
+    // city and the shack roof. Its own hashed sequence, so the seeded layout after it is unchanged.
+    r(0, 148, W, 152, P.midTower);
+    for (let y = 148; y < 154; y++) for (let x = 0; x < W; x++) if (bay(x, y) < (154 - y) / 7) r(x, y, 1, 1, P.skyGlow);
+    let nx = -3, k = 0;
+    while (nx < W) {
+      const nw = 14 + Math.floor(hash(k, 71) * 22), top = 152 + Math.floor(hash(k, 72) * 26);
+      r(nx, top, nw, 300 - top, k & 1 ? P.blockDark : P.block);
+      r(nx, top, nw, 1, P.midEdge);
+      r(nx + nw - 1, top + 1, 1, 300 - top, P.blockDark);
+      if (hash(k, 73) < 0.5) {
+        const tx = nx + 2 + Math.floor(hash(k, 74) * Math.max(1, nw - 9));
+        r(tx, top - 7, 6, 5, P.midEdge); r(tx, top - 7, 6, 1, P.stoneEdge);
+        r(tx + 1, top - 2, 1, 2, P.midEdge); r(tx + 4, top - 2, 1, 2, P.midEdge);
+      } else if (hash(k, 75) < 0.6) {
+        r(nx + 3, top - 3, 5, 3, P.midEdge); r(nx + 4, top - 4, 3, 1, P.midEdge);
+      }
+      for (let wy = top + 4; wy < 238; wy += 6)
+        for (let wx = nx + 2; wx < nx + nw - 2; wx += 4) {
+          const v = hash(k * 977 + wx, wy);
+          if (v < 0.035) r(wx, wy, 2, 2, P.amberDeep);
+          else if (v < 0.16) r(wx, wy, 2, 2, P.farTowerLit);
+        }
+      nx += nw + 1 + Math.floor(hash(k, 76) * 3);
+      k++;
+    }
+  });
+
+  // --- the apartment block (midground right) ---
+  const BLOCK = { x: 168, y: 86, w: 126, h: 214 };
+  const windows = [];   // {x,y,w,h,floor,kind}
+  const blockLayer = snapshot((g) => {
+    const r = R(g);
+    const { x, y, w, h } = BLOCK;
+    // stair tower (left edge, taller)
+    r(x, y - 16, 22, h + 16, P.block);
+    r(x, y - 16, 22, 1, P.stoneEdge);
+    for (let sy = y - 10; sy < y + h; sy += 12) { r(x + 3, sy, 16, 1, P.blockLit); r(x + 3, sy + 1, 1, 11, P.blockDark); }
+    // main mass with setbacks
+    r(x + 22, y, w - 22, h, P.block);
+    r(x + 22, y, w - 22, 1, P.stoneEdge);
+    r(x + 34, y - 12, 54, 12, P.block);
+    r(x + 34, y - 12, 54, 1, P.stoneEdge);
+    r(x + 96, y - 6, 22, 6, P.block);
+    r(x + 96, y - 6, 22, 1, P.stoneEdge);
+    // brick courses: value steps so shadow never goes muddy
+    for (let cy = y + 3; cy < y + h; cy += 6) r(x + 22, cy, w - 22, 1, P.blockLit);
+    for (let cx = x + 24; cx < x + w; cx += 9) r(cx, y + 1, 1, h - 1, P.blockDark);
+    // vertical pipe + fire escape
+    r(x + 28, y + 6, 2, h - 6, P.blockDark);
+    for (let fy = y + 28; fy < y + h - 10; fy += 26) {
+      r(x + 100, fy, 24, 1, P.stoneEdge);
+      r(x + 100, fy + 1, 1, 25, P.stoneEdge);
+      r(x + 123, fy + 1, 1, 25, P.blockDark);
+      for (let dx = 0; dx < 10; dx++) r(x + 112 + dx, fy + 3 + dx * 2, 10, 1, P.stone);
+    }
+    // balconies with laundry lines
+    for (let by = y + 40; by < y + h - 24; by += 38) {
+      r(x + 40, by, 46, 1, P.stoneEdge);
+      r(x + 40, by + 1, 46, 3, P.blockDark);
+      for (let bx = x + 41; bx < x + 86; bx += 4) r(bx, by - 5, 1, 5, P.stone);
+      r(x + 44, by - 9, 36, 1, P.stone);
+      for (let k = 0; k < 4; k++) { const lx = x + 47 + k * 9; r(lx, by - 8, 5, ri(4, 7), k % 2 ? P.tealDim : P.stoneEdge); }
+    }
+    // roof clutter: tanks, dishes, AC boxes, ducts
+    r(x + 40, y - 24, 14, 12, P.stone);
+    r(x + 40, y - 25, 14, 1, P.stoneEdge);
+    r(x + 42, y - 12, 2, 4, P.blockDark); r(x + 51, y - 12, 2, 4, P.blockDark);
+    r(x + 66, y - 20, 9, 8, P.stone); r(x + 66, y - 21, 9, 1, P.stoneEdge);
+    for (let d = 0; d < 5; d++) r(x + 76 + d, y - 24 + d, 1, 2, P.stoneEdge); // dish rim
+    r(x + 81, y - 22, 1, 10, P.blockDark);
+    // windows grid: 6 cols x 5 rows, floor 0 = bottom
+    const cols = 6, rows = 5;
+    for (let row = 0; row < rows; row++) {
+      for (let c = 0; c < cols; c++) {
+        const wx = x + 32 + c * 15, wy = y + 16 + row * 36;
+        if (wx > x + w - 12) continue;
+        r(wx - 1, wy - 1, 10, 14, P.blockDark);
+        r(wx, wy, 8, 12, P.stone);
+        r(wx, wy, 8, 1, P.stoneEdge);
+        windows.push({ x: wx, y: wy, floor: rows - 1 - row, col: c });
+      }
+    }
+    // AC boxes hung under some windows
+    for (let k = 0; k < 5; k++) {
+      const wi = [2, 7, 12, 16, 22][k] % windows.length;
+      const ww = windows[wi];
+      r(ww.x + 1, ww.y + 13, 7, 5, P.stone);
+      r(ww.x + 1, ww.y + 13, 7, 1, P.stoneEdge);
+      ww.ac = { x: ww.x + 2, y: ww.y + 14 };
+    }
+  });
+
+  // assign window roles with the seeded rng (after layer baked windows[])
+  for (let i = 0; i < windows.length; i++) {
+    const wn = windows[i];
+    wn.lit = rnd() < 0.55;
+    wn.k = [2, 3, 5, 7, 9, 11, 13][ri(0, 6)];
+    wn.ph = rnd();
+    wn.curtain = rnd() < 0.22;
+    wn.pane = rnd() < 0.5;
+  }
+  windows[8].tv = true; windows[8].lit = true;
+  windows[3].toggle = 'off';     // goes dark during the life beat
+  windows[17].toggle = 'on';     // comes on during the life beat
+  // relight order for the return: bottom floor first
+  const relight = windows.filter(w => w.lit).sort((a, c) => (c.floor - a.floor) || (a.col - c.col));
+
+  // --- rooftop, shack, street level, foreground frame ---
+  const SHACK = { x: 26, y: 186, w: 84, h: 70 };
+  const roofLayer = snapshot((g) => {
+    const r = R(g);
+    // street canyon between shack roof and block
+    r(0, 240, W, 60, P.skyTop);
+    r(150, 246, 150, 54, '#090d16');
+    // wet street + puddles (static base; reflections animate)
+    r(150, 268, 150, 32, '#0b1220');
+    r(150, 268, 150, 1, P.teal);
+    r(188, 280, 34, 7, P.roofPool);
+    r(240, 288, 44, 6, P.roofPool);
+    r(160, 292, 20, 4, P.roofPool);
+
+    // noodle stall (bottom right) — awning, counter, stools
+    r(210, 250, 54, 3, P.magentaDim);
+    for (let sx2 = 210; sx2 < 264; sx2 += 6) r(sx2, 253, 3, 2, P.magentaDim);
+    r(214, 256, 46, 12, '#161018');
+    r(214, 268, 46, 2, '#0d0a10');
+    for (let k = 0; k < 4; k++) r(219 + k * 11, 270, 3, 6, '#140f16');
+    r(246, 247, 1, 3, P.magentaDim);
+    // vending machine
+    r(272, 248, 18, 24, '#151c28');
+    r(273, 250, 16, 14, P.stoneEdge);
+    for (let k = 0; k < 3; k++) r(275, 251 + k * 4, 12, 3, P.stone);
+    r(273, 266, 16, 4, '#0d1420');
+
+    // rooftop deck (foreground plane)
+    r(0, 248, 152, 52, P.roof);
+    r(0, 248, 152, 1, P.roofWet);
+    for (let ry = 254; ry < 300; ry += 7) r(0, ry, 152, 1, P.roofWet);
+    for (let rx2 = 6; rx2 < 152; rx2 += 11) r(rx2, 249, 1, 51, '#101620');
+    // standing water on the deck
+    r(16, 274, 40, 6, P.roofPool);
+    r(74, 286, 46, 7, P.roofPool);
+    r(112, 262, 22, 4, P.roofPool);
+
+    // water tank on stilts, right of shack
+    r(116, 170, 28, 24, P.stone);
+    r(116, 169, 28, 1, P.stoneEdge);
+    r(116, 176, 28, 1, P.stoneEdge);
+    r(116, 186, 28, 1, P.blockDark);
+    for (let k = 0; k < 4; k++) r(118 + k * 8, 194, 2, 56, P.stone);
+    r(116, 194, 28, 1, P.blockDark);
+    r(138, 194, 2, 30, P.stoneEdge); // downpipe
+    r(138, 224, 6, 1, P.stoneEdge);
+
+    // the shack
+    const { x, y, w, h } = SHACK;
+    r(x - 2, y + 8, w + 4, h, P.shack);
+    r(x - 2, y + 8, w + 4, 1, P.shackEdge);
+    // corrugated roof: alternating value steps, overhanging
+    for (let cx = x - 8; cx < x + w + 8; cx += 3) {
+      r(cx, y, 2, 9, P.corrug);
+      r(cx + 2, y, 1, 9, P.shackEdge);
+    }
+    r(x - 8, y + 9, w + 16, 2, P.blockDark);
+    // wall panels + rivets
+    for (let py = y + 14; py < y + h + 8; py += 9) r(x - 2, py, w + 4, 1, P.shackEdge);
+    for (let rx2 = x + 2; rx2 < x + w; rx2 += 14) r(rx2, y + 12, 1, h + 2, '#141a24');
+    // doorway cavity (light fills it per frame)
+    r(x + 26, y + 20, 30, 50, P.blockDark);
+    // shelves inside, left of the door
+    r(x + 4, y + 26, 20, 1, P.shackEdge);
+    r(x + 4, y + 40, 20, 1, P.shackEdge);
+    // window slit right of door
+    r(x + 62, y + 24, 14, 10, P.blockDark);
+    r(x + 62, y + 24, 14, 1, P.shackEdge);
+    // potted fern by the door
+    r(x + 58, y + 62, 9, 8, P.orangeDeep);
+    r(x + 58, y + 62, 9, 1, P.orange);
+    r(x + 61, y + 66, 1, 4, '#5d2a10'); // crack
+    // railing (foreground frame) along deck edge
+    r(0, 232, 152, 1, P.railEdge);
+    for (let rx2 = 4; rx2 < 152; rx2 += 16) r(rx2, 233, 2, 20, P.rail);
+    r(0, 240, 152, 1, P.rail);
+    r(152, 228, 148, 1, P.railEdge);
+    for (let rx2 = 156; rx2 < 300; rx2 += 18) r(rx2, 229, 2, 16, P.rail);
+  });
+
+  // --- foreground cable along the top edge, with junction box ---
+  const cablePts = [];
+  for (let x = 0; x < W; x++) {
+    const u = x / (W - 1);
+    const y = 16 + 26 * Math.sin(Math.PI * u) * (0.6 + 0.4 * Math.sin(Math.PI * u * 1.7));
+    cablePts.push(y | 0);
+  }
+  const JBOX = { x: 196, y: 0 };
+  JBOX.y = cablePts[196] - 5;
+
+  // ---- animated element tables (immutable) ---------------------------------
+  const K = [2, 3, 5, 7, 9, 11, 13];
+  // rain: three depth planes, closed-form wrap
+  const mkRain = (n, span, cycles, len, col, dim) => Array.from({ length: n }, () => ({
+    x: ri(-20, W + 10), y0: rnd() * span, span, v: (span * cycles) / DURATION,
+    len, col, dim, lean: 0.18 + rnd() * 0.08
+  }));
+  const rainFar = mkRain(150, 300, 9, 1, P.rainDim, true);
+  const rainMid = mkRain(190, 320, 14, 2, P.rain, false);
+  const rainNear = mkRain(120, 340, 22, 4, P.rainBright, false);
+
+  // drips from named ledges
+  const drips = [
+    { x: 36, y: 196, land: 248, k: 5, ph: 0.1 },      // shack roof edge
+    { x: 104, y: 196, land: 258, k: 7, ph: 0.4 },
+    { x: 131, y: 224, land: 264, k: 3, ph: 0.7 },     // tank downpipe
+    { x: 236, y: 255, land: 288, k: 5, ph: 0.25 },    // stall awning
+    { x: 252, y: 255, land: 288, k: 9, ph: 0.62 },
+    { x: 84, y: 233, land: 288, k: 11, ph: 0.33 }     // railing
+  ];
+  // ripple ring (precomputed pixel offsets per radius)
+  const rings = [];
+  for (let rad = 1; rad <= 6; rad++) {
+    const pts = [];
+    let rx = rad, ry = 0, err = 0;
+    while (rx >= ry) {
+      const o = [[rx, ry], [ry, rx], [-rx, ry], [-ry, rx], [rx, -ry], [ry, -rx], [-rx, -ry], [-ry, -rx]];
+      for (const p of o) pts.push(p);
+      ry++; err += 1 + 2 * ry;
+      if (2 * (err - rx) + 1 > 0) { rx--; err += 1 - 2 * rx; }
+    }
+    rings.push(pts);
+  }
+  // steam puffs from the mug, vent smoke from the block
+  const puffs = Array.from({ length: 10 }, (_, i) => ({ k: K[i % 7], ph: i / 10, dx: (i % 3) - 1 }));
+  const vents = Array.from({ length: 8 }, (_, i) => ({ k: K[(i + 2) % 7], ph: (i * 0.37) % 1, dx: (i % 2) ? 1 : 0 }));
+  // AC fan blades: 4-step
+  const fans = windows.filter(w => w.ac).map((w, i) => ({ x: w.ac.x, y: w.ac.y, k: [9, 11, 13, 7, 5][i % 5] }));
+  // LEDs on the vending machine / terminal / dishes
+  const leds = [
+    { x: 288, y: 250, k: 7, col: P.green }, { x: 288, y: 256, k: 11, col: P.orange },
+    { x: 258, y: 249, k: 13, col: P.magenta }, { x: 249, y: 87, k: 5, col: P.green },
+    { x: 182, y: 70, k: 9, col: P.orange }
+  ];
+  // rain beads sliding along the top cable
+  const beads = Array.from({ length: 7 }, (_, i) => ({ k: [3, 5, 7, 9, 11, 13, 5][i], ph: i / 7, dir: i % 2 ? 1 : -1 }));
+  // CRT glyph rows
+  const crtRows = Array.from({ length: 6 }, () => Array.from({ length: 5 }, () => ri(0, 7)));
+  // billboard koi body: pixel list in local coords
+  const koi = [];
+  for (let i = 0; i < 26; i++) {
+    const u = i / 25;
+    const bx = u * 24, byy = 4 * Math.sin(u * 3.1), th = 3.2 * Math.sin(Math.PI * Math.pow(u, 0.7));
+    for (let o = -th; o <= th; o++) koi.push([bx, byy + o, u]);
+  }
+
+  // helper: how lit is the city at time t (brownout envelope)
+  const cityPower = (p) => {
+    // dark from 0.455 → wave down, hold, relight 0.72..0.90
+    if (p < 0.45) return 1;
+    if (p < 0.72) return 0;
+    return sstep(0.72, 0.90, p);
+  };
+
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const p = t / DURATION;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.imageSmoothingEnabled = false;
+    b.setTransform(1, 0, 0, 1, 0, 0);
+    b.globalAlpha = 1;
+    b.globalCompositeOperation = 'source-over';
+    b.filter = 'none';
+
+    // ===== brownout timing =====
+    // wave: top floor (4) dark first, 2 s sweep starting at 0.45
+    const waveU = sstep(0.45, 0.483, p);              // ~2 s of 60
+    const darkFloor = 4.999 - waveU * 5.2;            // floors above this are dark
+    const power = cityPower(p);
+    const signPower = p < 0.452 ? 1 : (p < 0.73 ? 0 : sstep(0.755, 0.80, p));
+    const billPower = p < 0.448 ? 1 : (p < 0.73 ? 0 : sstep(0.86, 0.925, p));
+    // stutter while dying: hashed buckets, integer rate
+    const stut = (rate, sign) => {
+      const bucket = Math.floor(t * rate);
+      return hash(sign, bucket) > 0.42 ? 1 : 0;
+    };
+    const dying = p > 0.448 && p < 0.47;
+    const relitCount = Math.floor(sstep(0.72, 0.90, p) * relight.length + 1e-6);
+
+    // ===== base layers =====
+    // clear the whole buffer: every frame is a pure function of t
+    b.fillStyle = P.skyTop;
+    b.fillRect(0, 0, W, H);
+    b.drawImage(skyLayer, 0, 0);
+
+    // distant tower windows dim with power (cold layer keeps a floor value)
+    if (power < 1) {
+      b.globalAlpha = 1;
+      for (let y = 60; y < 142; y++) {
+        // no-op: towers are baked dim; dim them with a sparse indigo veil instead
+      }
+      b.fillStyle = 'rgba(7,11,24,0.55)';
+      b.fillRect(0, 40, W, 200);
+      b.globalAlpha = 1;
+    }
+
+    // --- hologram billboard: slow-turning koi over the skyline ---
+    const bbX = 214, bbY = 42;
+    if (billPower > 0.02) {
+      const on = dying ? stut(4, 11) : 1;
+      if (on) {
+        const turn = (p * 2) % 1;                       // 2 slow turns per loop
+        const sq = Math.cos(turn * Math.PI * 2);        // squash = turning in depth
+        const bright = billPower;
+        // frame brackets only (no panel fill) so it reads as a hologram
+        rect(bbX - 2, bbY - 2, 2, 2, P.violetDim);
+        rect(bbX + 46, bbY - 2, 2, 2, P.violetDim);
+        rect(bbX - 2, bbY + 30, 2, 2, P.violetDim);
+        rect(bbX + 46, bbY + 30, 2, 2, P.violetDim);
+        for (const [kx, ky, u] of koi) {
+          const sx = bbX + 12 + kx * sq * 1.5;
+          const sy = bbY + 15 + ky + 2 * Math.sin(turn * Math.PI * 2 + u * 2.4);
+          if (bay(sx | 0, sy | 0) > bright * 0.95) continue;
+          px(sx, sy, (u > 0.78 || bay(sx | 0, sy | 0) < 0.3 * bright) ? P.violet : P.violetDim);
+        }
+        // scan lines, fixed in screen space
+        for (let sy = bbY; sy < bbY + 31; sy += 4) for (let sx = bbX; sx < bbX + 46; sx += 7) px(sx, sy, P.violetDim);
+      }
+    }
+
+    // --- elevated train crossing the viaduct (life beat, 0.18 → 0.40) ---
+    const trU = sstep(0.17, 0.42, p);
+    if (trU > 0 && trU < 1) {
+      const headX = -70 + trU * (W + 150);
+      for (let car = 0; car < 5; car++) {
+        const cx0 = (headX - car * 15) | 0;
+        if (cx0 > W || cx0 < -14) continue;
+        rect(cx0, 100, 13, 8, P.midEdge);
+        rect(cx0, 100, 13, 1, P.stoneEdge);
+        const lit = power > 0.3 || p < 0.45;
+        for (let k = 0; k < 3; k++) px(cx0 + 2 + k * 4, 103, lit ? P.gold : P.tealDim);
+        px(cx0 + 12, 105, P.rain);
+      }
+    }
+
+    // --- apartment block ---
+    b.drawImage(blockLayer, 0, 0);
+    for (let i = 0; i < windows.length; i++) {
+      const wn = windows[i];
+      if (!wn.lit) {
+        // unlit windows keep three value steps so construction reads
+        rect(wn.x, wn.y + 1, 8, 11, P.stone);
+        rect(wn.x + 1, wn.y + 2, 6, 4, P.blockLit);
+        continue;
+      }
+      // toggles during the life beat
+      let on = 1;
+      if (wn.toggle === 'off' && p > 0.26 && p < 0.45) on = 0;
+      if (wn.toggle === 'on' && p < 0.31) on = 0;
+      // brownout wave by floor, then relight by order
+      if (p >= 0.45) {
+        if (p < 0.72) on = wn.floor > darkFloor ? 0 : (p < 0.49 ? on : 0);
+        else on = relight.indexOf(wn) < relitCount ? 1 : 0;
+      }
+      if (!on) {
+        rect(wn.x, wn.y + 1, 8, 11, P.stone);
+        rect(wn.x + 1, wn.y + 2, 6, 4, P.blockLit);
+        continue;
+      }
+      // just-relit windows get one bright frame-run (the bell strike)
+      const idx = relight.indexOf(wn);
+      const fresh = p > 0.72 && idx === relitCount - 1 ? 1 : 0;
+      const body = wn.tv ? (hash(i, Math.floor(t * 6)) > 0.5 ? P.tv : P.tvDim)
+        : (fresh ? P.gold : P.amber);
+      rect(wn.x, wn.y + 1, 8, 11, body);
+      rect(wn.x + 1, wn.y + 2, 6, 9, wn.tv ? P.tv : (fresh ? P.white : P.gold));
+      if (wn.pane) { rect(wn.x + 4, wn.y + 1, 1, 11, P.amberDeep); rect(wn.x, wn.y + 6, 8, 1, P.amberDeep); }
+      // tiny silhouette crossing behind the curtain
+      if (wn.curtain) {
+        const ph = ((t / (DURATION / wn.k)) + wn.ph) % 1;
+        const sx = wn.x + 1 + Math.floor(ph * 7);
+        rect(sx, wn.y + 4, 2, 7, P.amberDeep);
+        rect(sx, wn.y + 3, 2, 1, P.blockDark);
+      }
+      // sill spill onto the brick: stepped halo, no alpha
+      rect(wn.x - 1, wn.y + 12, 10, 1, P.amberDim);
+      if (bay(wn.x, wn.y) < 0.6) rect(wn.x - 2, wn.y + 13, 12, 1, P.amberDeep);
+    }
+
+    // AC fan blades step through 4 frames
+    for (const f of fans) {
+      const step = Math.floor(((t / (DURATION / f.k)) % 1) * 4);
+      const c = power > 0.2 || p < 0.45 ? P.stoneEdge : P.tealDim;
+      if (step === 0) { rect(f.x + 1, f.y + 1, 5, 1, c); }
+      else if (step === 1) { rect(f.x + 2, f.y, 1, 3, c); rect(f.x + 4, f.y + 1, 1, 2, c); }
+      else if (step === 2) { rect(f.x + 3, f.y, 1, 3, c); }
+      else { rect(f.x + 1, f.y, 1, 2, c); rect(f.x + 4, f.y + 1, 1, 2, c); }
+    }
+
+    // ===== street level: stall + vending machine =====
+    b.drawImage(roofLayer, 0, 0);
+    const stallOn = signPower > 0.3 ? (dying ? stut(6, 3) : 1) : 0;
+    if (stallOn) {
+      for (let sx = 210; sx < 264; sx += 2) rect(sx, 250, 1, 3, P.magenta);
+      rect(214, 256, 46, 1, P.magentaDim);
+      // one tube buzzes unreliably
+      if (hash(7, Math.floor(t * 12)) > 0.22) rect(236, 250, 12, 3, P.magenta);
+      rect(246, 247, 1, 2, P.magenta);
+      // warm interior of the stall
+      rect(216, 258, 42, 8, P.amberDeep);
+      rect(218, 259, 8, 5, P.amberDim);
+      // cook silhouette, swaying a pixel
+      const sw = Math.floor(2 * Math.sin((t / DURATION) * Math.PI * 2 * 7));
+      rect(232 + sw, 257, 4, 9, '#0b0810');
+      rect(231 + sw, 255, 6, 2, '#0b0810');
+    }
+    const vendOn = signPower > 0.25 ? 1 : 0;
+    if (vendOn) {
+      rect(273, 250, 16, 14, P.gold);
+      for (let k = 0; k < 3; k++) rect(275, 251 + k * 4, 12, 2, P.amber);
+      rect(273, 266, 16, 3, P.amberDim);
+    }
+
+    // wet-street reflections: broken vertical streaks under every light source
+    const refl = (srcX, w, top, col, k, strength) => {
+      if (strength <= 0) return;
+      for (let x = srcX; x < srcX + w; x++) {
+        const amp = 3 + Math.floor(4 * Math.abs(Math.sin((t / DURATION) * Math.PI * 2 * k + x * 0.7)));
+        for (let y = top; y < top + amp; y++) {
+          if (bay(x, y + Math.floor(t * 0 /* fixed mask */)) < 0.45 * strength) px(x, y, col);
+        }
+      }
+    };
+    refl(214, 46, 269, P.magentaDim, 5, stallOn);
+    refl(273, 16, 272, P.amberDim, 7, vendOn);
+    // block window reflections in the street
+    for (const wn of windows) {
+      if (!wn.lit || wn.y > BLOCK.y + 90) continue;
+      const on = (p < 0.45) || (p >= 0.72 && relight.indexOf(wn) < relitCount);
+      if (!on) continue;
+      refl(wn.x, 8, 270, P.amberDeep, wn.k, 0.8);
+    }
+
+    // ===== the shack: light, interior, cat =====
+    const { x: sx0, y: sy0 } = SHACK;
+    // heater coil + bulb never go out — the last warm pixels
+    const bulbFlick = hash(2, Math.floor(t * 8)) > 0.08 ? 1 : 0.85;
+    const doorX = sx0 + 26, doorY = sy0 + 20;
+    // doorway interior, lit amber
+    rect(doorX, doorY, 30, 50, P.amberDeep);
+    rect(doorX + 2, doorY + 2, 26, 44, P.amberDim);
+    rect(doorX + 6, doorY + 6, 18, 34, bulbFlick > 0.9 ? P.amber : P.amberDim);
+    // hanging bulb, swaying one pixel
+    const bulbSway = Math.round(Math.sin((t / DURATION) * Math.PI * 2 * 3));
+    rect(doorX + 14 + bulbSway, doorY, 1, 7, P.cable);
+    rect(doorX + 13 + bulbSway, doorY + 7, 3, 3, P.gold);
+    rect(doorX + 14 + bulbSway, doorY + 6, 1, 1, P.white);
+    // heater coil, orange, pulsing by palette step on its own cycle
+    const coilStep = Math.floor(((t / (DURATION / 11)) % 1) * 3);
+    for (let k = 0; k < 4; k++) {
+      const cy = doorY + 36 + (k % 2);
+      rect(doorX + 6 + k * 4, cy, 3, 1, coilStep === k % 3 ? P.orange : P.orangeDeep);
+    }
+    rect(doorX + 5, doorY + 39, 18, 1, P.orangeDeep);
+    // CRT terminal on the shelf, scrolling green glyphs
+    rect(sx0 + 5, sy0 + 28, 18, 11, '#07120c');
+    rect(sx0 + 5, sy0 + 28, 18, 1, P.greenDim);
+    const scroll = Math.floor((t / DURATION) * 6 * crtRows.length) % crtRows.length;
+    for (let row = 0; row < 2; row++) {
+      const gl = crtRows[(scroll + row) % crtRows.length];
+      for (let c = 0; c < 4; c++) {
+        const bits = GLYPH[gl[c]];
+        for (let gy = 0; gy < 5; gy++) for (let gx = 0; gx < 3; gx++) {
+          if (bits[gy] & (1 << (2 - gx))) px(sx0 + 7 + c * 4 + gx, sy0 + 30 + row * 5 + gy, row ? P.greenDim : P.green);
+        }
+      }
+    }
+    // shelf jars
+    rect(sx0 + 7, sy0 + 20, 3, 6, P.tealDim);
+    rect(sx0 + 12, sy0 + 21, 3, 5, P.amberDeep);
+    rect(sx0 + 17, sy0 + 20, 2, 6, P.tealDim);
+    // small window slit glow
+    rect(sx0 + 63, sy0 + 25, 12, 8, P.amberDeep);
+    rect(sx0 + 65, sy0 + 26, 8, 5, P.amberDim);
+    // fern leaves over the cracked pot, swaying a pixel
+    const fsw = Math.round(Math.sin((t / DURATION) * Math.PI * 2 * 5));
+    for (let k = 0; k < 7; k++) {
+      const a = -1.5 + k * 0.42, lx = sx0 + 62, ly = sy0 + 62;
+      for (let s = 1; s <= 5; s++) {
+        px(lx + Math.cos(a) * s * 1.3 + (s > 3 ? fsw : 0), ly - Math.abs(Math.sin(a)) * s * 1.1 - s * 0.5, s > 3 ? P.fernDim : P.fern);
+      }
+    }
+    // cable tangle over the door
+    for (let k = 0; k < 3; k++) {
+      for (let cx = sx0 + 18; cx < sx0 + 70; cx++) {
+        const yy = sy0 + 14 + k * 2 + Math.round(2 * Math.sin((cx - sx0) * 0.22 + k));
+        px(cx, yy, P.cable);
+      }
+    }
+
+    // --- light spill from the doorway onto the wet roof: stepped halo ---
+    for (let y = sy0 + 70; y < 300; y++) {
+      const d = (y - (sy0 + 70)) / (300 - sy0 - 70);
+      const half = 15 + d * 26;
+      for (let x = doorX + 15 - half; x < doorX + 15 + half; x++) {
+        if (x < 0 || x >= 152) continue;
+        const edge = Math.abs(x - (doorX + 15)) / half;
+        const th = 0.86 - d * 0.5;
+        if (bay(x | 0, y) > th * (1 - edge * edge)) continue;
+        px(x, y, edge < 0.45 ? P.amberDim : P.amberDeep);
+      }
+    }
+
+    // --- ClawedCode on the doorstep ---
+    const catX = doorX + 10, catY = sy0 + 56;
+    // the head turn: once during the dark hold
+    const turn = sstep(0.555, 0.60, p) * (1 - sstep(0.68, 0.715, p));
+    // body
+    rect(catX, catY + 6, 11, 10, P.cat);
+    rect(catX + 1, catY + 15, 10, 2, P.cat);
+    // haunch + curled tail round the paws
+    rect(catX + 9, catY + 9, 4, 7, P.cat);
+    for (let k = 0; k < 9; k++) {
+      const a = Math.PI * (0.15 + k * 0.1);
+      px(catX + 3 + Math.cos(a) * 8, catY + 16 + Math.sin(a) * 3.2, P.cat);
+    }
+    // tail tip flick on its own cycle
+    const flick = hash(3, Math.floor(t * 2)) > 0.62 ? 1 : 0;
+    px(catX - 5, catY + 16 - flick, P.cat);
+    px(catX - 6, catY + 15 - flick * 2, P.cat);
+    // head, shifting toward us on the turn
+    const hx = catX + 1 + Math.round(turn * -1);
+    rect(hx, catY, 8, 7, P.cat);
+    rect(hx, catY - 2, 2, 3, P.cat);       // ears
+    rect(hx + 6, catY - 2, 2, 3, P.cat);
+    // eyes: profile → two eyes facing us
+    const eyeOn = 1;
+    if (turn < 0.5) {
+      px(hx + 6, catY + 2, P.eye);
+      px(hx + 5, catY + 2, P.eye);
+    } else {
+      px(hx + 1, catY + 2, P.eye);
+      px(hx + 2, catY + 2, P.eye);
+      px(hx + 5, catY + 2, P.eye);
+      px(hx + 6, catY + 2, P.eye);
+    }
+    // mug beside the cat, two-pixel steam curl
+    rect(catX + 14, catY + 11, 5, 5, P.stone);
+    rect(catX + 14, catY + 11, 5, 1, P.stoneEdge);
+    rect(catX + 19, catY + 12, 1, 2, P.stoneEdge);
+    for (const pf of puffs) {
+      const ph = ((t / (DURATION / pf.k)) + pf.ph) % 1;
+      const py2 = catY + 10 - ph * 12;
+      const pxx = catX + 16 + Math.round(1.6 * Math.sin(ph * 4 + pf.ph * 6)) + pf.dx * 0;
+      if (ph < 0.82) px(pxx, py2, ph < 0.45 ? P.rain : P.rainDim);
+    }
+
+    // vent smoke off the block's roof
+    for (const v of vents) {
+      const ph = ((t / (DURATION / v.k)) + v.ph) % 1;
+      const vy = BLOCK.y - 24 - ph * 22;
+      const vx = BLOCK.x + 67 + Math.round(2.4 * Math.sin(ph * 5 + v.ph * 7)) + v.dx;
+      if (ph < 0.9) px(vx, vy, ph < 0.5 ? P.midEdge : P.skyGlow);
+    }
+
+    // ===== rain: three depth planes =====
+    // gust window: smooth lean that returns to calm
+    const gust = Math.sin((t / DURATION) * Math.PI * 2 * 3) * 0.5 + Math.sin((t / DURATION) * Math.PI * 2 * 5) * 0.2;
+    const coldOnly = p > 0.455 && p < 0.745;
+    const drawRain = (arr, bright) => {
+      for (const d of arr) {
+        const y = (d.y0 + d.v * t) % d.span;
+        const yy = y - 20;
+        if (yy < -4 || yy > 300) continue;
+        const lean = (d.lean + gust * 0.5);
+        const col = coldOnly ? (bright ? P.rain : P.rainDim) : d.col;
+        for (let k = 0; k < d.len; k++) {
+          px(d.x + lean * k - (yy * 0.06), yy + k, k === 0 && bright ? P.rainBright : col);
+        }
+      }
+    };
+    drawRain(rainFar, false);
+    drawRain(rainMid, false);
+    drawRain(rainNear, true);
+
+    // ===== drips, splashes, ripples =====
+    for (const d of drips) {
+      const ph = ((t / (DURATION / d.k)) + d.ph) % 1;
+      const fall = ph / 0.72;
+      if (fall < 1) {
+        const dy = d.y + (d.land - d.y) * fall * fall;
+        px(d.x, dy, P.rainBright);
+        px(d.x, dy - 1, P.rain);
+      } else {
+        const sp = (ph - 0.72) / 0.28;
+        const radius = Math.min(6, 1 + Math.floor(sp * 7));
+        const col = sp < 0.5 ? P.rainBright : P.rain;
+        for (const [ox, oy] of rings[radius - 1]) {
+          if (oy > 1 || oy < -1) continue;
+          px(d.x + ox, d.land + oy * 0.4, col);
+        }
+        if (sp < 0.25) { px(d.x - 1, d.land - 1, P.rainBright); px(d.x + 1, d.land - 2, P.rain); }
+      }
+    }
+
+    // ===== foreground cable, beads, junction box spark =====
+    for (let x = 0; x < W; x++) px(x, cablePts[x], P.cable);
+    for (let x = 0; x < W; x++) if (bay(x, cablePts[x] + 1) < 0.4) px(x, cablePts[x] + 1, '#060a12');
+    rect(JBOX.x, JBOX.y, 7, 9, P.rail);
+    rect(JBOX.x, JBOX.y, 7, 1, P.railEdge);
+    // spark spits during the life beat, and once as power returns
+    const sparkWin = (p > 0.33 && p < 0.40) || (p > 0.745 && p < 0.775);
+    if (sparkWin && hash(5, Math.floor(t * 10)) > 0.55) {
+      for (let k = 0; k < 4; k++) {
+        const a = -0.6 - k * 0.5;
+        px(JBOX.x + 3 + Math.cos(a) * (2 + k), JBOX.y + 9 + Math.sin(a) * -(1 + k * 1.4), k < 2 ? P.gold : P.orange);
+      }
+      px(JBOX.x + 3, JBOX.y + 9, P.white);
+    }
+    for (const bd of beads) {
+      const ph = ((t / (DURATION / bd.k)) + bd.ph) % 1;
+      if (ph > 0.84) {
+        const fall = (ph - 0.84) / 0.16;
+        const bx0 = bd.dir > 0 ? 40 + bd.ph * 200 : 240 - bd.ph * 200;
+        px(bx0 | 0, cablePts[bx0 | 0] + 2 + fall * 40, P.rainBright);
+      } else {
+        const u = bd.dir > 0 ? ph / 0.84 : 1 - ph / 0.84;
+        const bx0 = (20 + u * 260) | 0;
+        px(bx0, cablePts[bx0] - 1, P.rainBright);
+        px(bx0, cablePts[bx0], P.rain);
+      }
+    }
+
+    // ===== dark-hold veil: cold cyan world, warm pixels survive =====
+    if (coldOnly) {
+      const depth = sstep(0.455, 0.50, p) * (1 - sstep(0.70, 0.745, p));
+      for (let y = 0; y < 248; y++) {
+        for (let x = 0; x < W; x++) {
+          if (bay(x, y) < depth * 0.42) px(x, y, P.skyTop);
+        }
+      }
+    }
+
+    // ===== composite to 900x900 =====
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(buf, 0, 0, W, H, 0, 0, W * SCALE, H * SCALE);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 88\\n// DURATION: 60\\n// FORM: intro 0-2 | beat 2-10 | brownout 10-16 | relight 16-20 | settle 20-22\\n// TONAL CENTER: F aeolian (natural minor)\\n// MOTIF: C5 Eb5 C5 Ab4 F4; eighth pickup on 4.5, swung eighths on 1 and 1.5, dotted-quarter landing on 2.5, then silence\\n// HARMONIC PLAN: Fm9 | Dbmaj7 | Bbm9 | C7; six-cycle Fm9 pedal in brownout; Bbm9 | C7 settle turnaround\\n// GROOVE: AkaiMPC60; bd on 1 and 2.5, sd on 2 and 4, second-bar ghost rim on 3.5, swung eighth hh with breathing gaps; dusty and slightly behind the grid\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\nconst drumCore = stack(\\n  s('bd ~ ~ bd ~ ~ ~ ~'),\\n  s('~ ~ sd ~ ~ ~ sd ~').late(0.008).velocity(0.72),\\n  s('hh hh hh hh hh ~ hh ~').late(0.008).velocity(0.18),\\n  s('\u003c~ [~ ~ ~ ~ ~ rim ~ ~]>').late(0.008).velocity(0.15)\\n)\\nconst boundaryHat = s('~ ~ ~ ~ ~ ~ ~ oh')\\n  .late(0.008)\\n  .velocity(0.18)\\nconst beatDrums = stack(\\n  drumCore,\\n  arrange(\\n    [7, silence],\\n    [1, boundaryHat]\\n  )\\n)\\nconst relightDrums = stack(\\n  drumCore,\\n  arrange(\\n    [2, silence],\\n    [1, boundaryHat]\\n  )\\n)\\nconst drumForm = arrange(\\n  [2, silence],\\n  [8, beatDrums],\\n  [6, silence],\\n  [1, silence],\\n  [3, relightDrums],\\n  [1, s('bd ~ ~ ~')],\\n  [1, silence]\\n)\\nconst bassLoop = note('\u003c[f1 ~ ~ ~ ~ f1 ~ ~] [db1 ~ ~ ~ ~ db1 ~ ~] [bb1 ~ ~ ~ ~ bb1 ~ ~] [c2 ~ ~ ~ ~ g1 ~ ~]>')\\n  .clip(0.65)\\n  .attack(0.01)\\n  .release(0.16)\\nconst bassDb = note('[db1 ~ ~ ~ ~ db1 ~ ~]')\\n  .clip(0.65)\\n  .attack(0.01)\\n  .release(0.16)\\n  .velocity(0.5)\\nconst bassDrone = note('f1')\\n  .clip(0.94)\\n  .attack(0.12)\\n  .release(0.24)\\n  .velocity(0.25)\\nconst bassRelight = note('\u003c[bb1 ~ ~ ~ ~ bb1 ~ ~] [c2 ~ ~ ~ ~ g1 ~ ~]>')\\n  .clip(0.65)\\n  .attack(0.01)\\n  .release(0.16)\\nconst bassTurn = bassRelight.velocity(0.5)\\nconst bassForm = arrange(\\n  [1, silence],\\n  [1, bassDb],\\n  [8, bassLoop],\\n  [6, bassDrone],\\n  [2, silence],\\n  [2, bassRelight],\\n  [2, bassTurn]\\n)\\nconst powerSag = arrange(\\n  [9.9, silence],\\n  [0.88, note('[f1 e1 eb1]')\\n    .s('sine')\\n    .lpf('[900 500 260]')\\n    .clip(0.3)\\n    .attack(0.04)\\n    .release(0.28)\\n    .velocity(0.7)],\\n  [11.22, silence]\\n)\\nconst pianoLoop = stack(\\n  note('\u003cab3 f3 db4 e3>'),\\n  note('\u003ceb4 ab3 ab4 bb3>').late(0.02),\\n  note('\u003cg4 c4 c5 bb4>').late(0.04)\\n)\\n  .clip(0.72)\\n  .attack(0.12)\\n  .release(1.1)\\nconst pianoPedal = stack(\\n  note('ab3'),\\n  note('c4').late(0.02),\\n  note('eb4').late(0.04)\\n)\\n  .clip(0.86)\\n  .attack(0.18)\\n  .release(1.2)\\n  .lpf(650)\\nconst pianoPedalHint = stack(\\n  note('ab3'),\\n  note('db4').late(0.02),\\n  note('eb4').late(0.04)\\n)\\n  .clip(0.86)\\n  .attack(0.18)\\n  .release(1.2)\\n  .lpf(720)\\nconst pianoBrownout = arrange(\\n  [5, pianoPedal],\\n  [1, pianoPedalHint]\\n)\\nconst pianoReturn = pianoLoop.lpf('\u003c900 1400 1900 2200>')\\nconst pianoTurn = stack(\\n  note('\u003cdb4 e3>'),\\n  note('\u003cab4 bb3>').late(0.02),\\n  note('\u003cc5 bb4>').late(0.04)\\n)\\n  .clip(0.72)\\n  .attack(0.12)\\n  .release(1.1)\\n  .lpf(2200)\\nconst pianoForm = arrange(\\n  [2, pianoLoop.lpf(2200)],\\n  [8, pianoLoop.lpf(2200)],\\n  [6, pianoBrownout],\\n  [4, pianoReturn],\\n  [2, pianoTurn]\\n)\\nconst bellFragment = note('\u003c[c5 eb5 c5] ~>')\\n  .clip(0.22)\\n  .adsr('0.012:0.48:0:0.08')\\nconst bellBeat = note('\u003c[c5 eb5 c5 ab4 f4@3] ~ [c5 eb5 c5 ab4 f4@3] ~ [c5 eb5@2 c5 ab4] ~ [c5 eb5 c5 ab4 f4@3] ~>')\\n  .clip(0.22)\\n  .adsr('0.012:0.48:0:0.08')\\nconst bellBrownout = arrange(\\n  [5, silence],\\n  [1, note('f4')\\n    .clip(0.8)\\n    .attack(0.25)\\n    .decay(0.5)\\n    .sustain(0.25)\\n    .release(0.8)\\n    .velocity(0.42)]\\n)\\nconst bellRelight = note('\u003c[c5 eb5 c5 ab4] [f4 c5 eb5 c5] [ab4 f4 c5 eb5] [c5 eb5 c5 ab4 f4@3]>')\\n  .clip(0.2)\\n  .adsr('0.012:0.48:0:0.08')\\nconst bellSettle = note('\u003c[c5 eb5 c5] ~>')\\n  .clip(0.22)\\n  .adsr('0.012:0.48:0:0.08')\\nconst bellForm = arrange(\\n  [2, bellFragment],\\n  [8, bellBeat],\\n  [6, bellBrownout],\\n  [4, bellRelight],\\n  [2, bellSettle]\\n)\\nconst rainWarm = s('pink')\\n  .hpf('\u003c620 760 680 840>')\\n  .clip(1)\\n  .attack(0.18)\\n  .release(0.32)\\n  .velocity(0.68)\\nconst rainCold = s('pink')\\n  .hpf('\u003c920 1080>')\\n  .clip(1)\\n  .attack(0.18)\\n  .release(0.32)\\n  .velocity(0.68)\\nconst rainForm = arrange(\\n  [2, rainWarm],\\n  [8, rainWarm],\\n  [6, rainCold],\\n  [4, rainWarm],\\n  [2, rainWarm]\\n)\\nconst closeRain = s('pink')\\n  .bpf(3000)\\n  .clip(1)\\n  .attack(0.2)\\n  .release(0.3)\\n  .velocity(0.16)\\nconst spark = stack(\\n  s('[white white white] ~ ~ ~')\\n    .hpf(4000)\\n    .clip(0.04)\\n    .adsr('0.002:0.025:0:0.03'),\\n  s('white')\\n    .hpf(4500)\\n    .clip(0.32)\\n    .adsr('0.005:0.45:0:0.1')\\n    .velocity(0.35)\\n)\\n  .velocity(0.9)\\nconst sparkWindow = arrange(\\n  [7.7, silence],\\n  [0.33, spark],\\n  [13.97, silence]\\n)\\nconst neonBuzz = stack(\\n  s('[white ~ white white] [~ white] ~ ~')\\n    .bpf(1200)\\n    .clip(0.055)\\n    .adsr('0.004:0.06:0:0.04'),\\n  s('white')\\n    .bpf(1200)\\n    .clip(0.4)\\n    .adsr('0.02:0.62:0:0.08')\\n    .velocity(0.28)\\n)\\n  .velocity(0.72)\\nconst neonWindow = arrange(\\n  [18.7, silence],\\n  [0.44, neonBuzz],\\n  [2.86, silence]\\n)\\n$: drumForm\\n  .bank('AkaiMPC60')\\n  .lpf(9000)\\n  .gain(0.24)\\n$: stack(\\n  bassForm.s('sine'),\\n  bassForm.add(note(12)).s('triangle').velocity(0.33),\\n  powerSag\\n)\\n  .late(0.01)\\n  .gain(0.16)\\n$: stack(\\n  pianoForm.add(note(-0.06)).s('triangle').velocity(0.52).pan(0.42),\\n  pianoForm.add(note(0.06)).s('triangle').velocity(0.52).pan(0.58),\\n  pianoForm.s('sawtooth').velocity(0.12).pan(0.5)\\n)\\n  .lpf(2400)\\n  .room(0.18)\\n  .roomsize(0.55)\\n  .gain(0.3)\\n$: stack(\\n  bellForm.s('sine'),\\n  bellForm.add(note(19)).s('sine').velocity(0.25)\\n)\\n  .late(0.012)\\n  .gain(0.18)\\n$: stack(\\n  rainForm,\\n  closeRain,\\n  sparkWindow,\\n  neonWindow\\n)\\n  .pan('\u003c0.28 0.72 0.4 0.64>')\\n  .gain(0.07)\",\"bpm\":88,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.36666666666666664,\"cycles\":22,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

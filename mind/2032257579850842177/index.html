@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+
+let seed = 872634;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+
+let scene, camera, renderer;
+let instances;
+let particles = [];
+const count = 8000;
+
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x080510);
+  scene.fog = new THREE.Fog(0x080510, 8, 25);
+
+  camera = new THREE.PerspectiveCamera(65, 1, 0.1, 1000);
+  camera.position.set(0, 2, 12);
+  camera.lookAt(0, 0, 0);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(800, 800);
+  document.body.appendChild(renderer.domElement);
+
+  const geometry = new THREE.SphereGeometry(0.035, 6, 6);
+  const material = new THREE.MeshBasicMaterial();
+  instances = new THREE.InstancedMesh(geometry, material, count);
+
+  const dummy = new THREE.Object3D();
+  const color = new THREE.Color();
+
+  for (let i = 0; i < count; i++) {
+    const angle = random() * Math.PI * 2;
+    const radius = 2 + random() * 8;
+    const height = (random() - 0.5) * 12;
+
+    particles.push({
+      pos: new THREE.Vector3(
+        Math.cos(angle) * radius,
+        height,
+        Math.sin(angle) * radius
+      ),
+      vel: new THREE.Vector3(),
+      acc: new THREE.Vector3(),
+      trail: [],
+      hue: random() * 0.15 + 0.75
+    });
+
+    dummy.position.copy(particles[i].pos);
+    dummy.updateMatrix();
+    instances.setMatrixAt(i, dummy.matrix);
+
+    color.setHSL(particles[i].hue, 0.7, 0.5);
+    instances.setColorAt(i, color);
+  }
+
+  scene.add(instances);
+
+  const centerGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 16, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff6633, transparent: true, opacity: 0.8 })
+  );
+  scene.add(centerGlow);
+
+  animate();
+}
+
+function lorenzStep(x, y, z, dt) {
+  const sigma = 10, rho = 28, beta = 8/3;
+  const dx = sigma * (y - x);
+  const dy = x * (rho - z) - y;
+  const dz = x * y - beta * z;
+  return {
+    x: x + dx * dt,
+    y: y + dy * dt,
+    z: z + dz * dt
+  };
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  const time = performance.now() / 1000;
+  const progress = (time % 60) / 60;
+
+  const attractorScale = 0.12;
+  const attractorPos = new THREE.Vector3();
+
+  const dummy = new THREE.Object3D();
+  const color = new THREE.Color();
+
+  for (let i = 0; i < count; i++) {
+    const p = particles[i];
+
+    const step = lorenzStep(
+      p.pos.x / attractorScale,
+      p.pos.y / attractorScale,
+      p.pos.z / attractorScale,
+      0.008
+    );
+
+    const targetX = step.x * attractorScale;
+    const targetY = step.y * attractorScale;
+    const targetZ = step.z * attractorScale;
+
+    const toTarget = new THREE.Vector3(targetX, targetY, targetZ).sub(p.pos);
+    toTarget.multiplyScalar(0.15);
+
+    p.acc.add(toTarget);
+
+    const toCenterDist = p.pos.length();
+    if (toCenterDist > 15) {
+      const pullBack = p.pos.clone().normalize().multiplyScalar(-0.3);
+      p.acc.add(pullBack);
+    }
+
+    p.vel.add(p.acc);
+    p.vel.multiplyScalar(0.96);
+
+    const maxSpeed = 0.25;
+    if (p.vel.length() > maxSpeed) {
+      p.vel.normalize().multiplyScalar(maxSpeed);
+    }
+
+    p.pos.add(p.vel);
+    p.acc.set(0, 0, 0);
+
+    dummy.position.copy(p.pos);
+    const scale = 0.6 + p.vel.length() * 1.8;
+    dummy.scale.set(scale, scale, scale);
+    dummy.updateMatrix();
+    instances.setMatrixAt(i, dummy.matrix);
+
+    const velocityFactor = Math.min(p.vel.length() / maxSpeed, 1);
+    const hue = p.hue + velocityFactor * 0.1;
+    const lightness = 0.4 + velocityFactor * 0.3;
+    color.setHSL(hue, 0.8, lightness);
+    instances.setColorAt(i, color);
+  }
+
+  instances.instanceMatrix.needsUpdate = true;
+  instances.instanceColor.needsUpdate = true;
+
+  camera.position.x = Math.sin(time * 0.08) * 14;
+  camera.position.z = Math.cos(time * 0.08) * 14;
+  camera.position.y = 2 + Math.sin(time * 0.05) * 3;
+  camera.lookAt(0, 0, 0);
+
+  renderer.render(scene, camera);
+}
+
+init();
+
+window.initToneJsEngine = async function() {
+  const bpm = 82;
+  Tone.Transport.bpm.value = bpm;
+
+  const masterReverb = new Tone.Reverb({ decay: 3.5, wet: 0.35 }).toDestination();
+  await masterReverb.generate();
+
+  const compressor = new Tone.Compressor({ threshold: -22, ratio: 8, attack: 0.005, release: 0.18 }).toDestination();
+
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.035,
+    octaves: 7,
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.04 }
+  }).toDestination();
+
+  const kickLoop = new Tone.Loop((time) => {
+    kick.triggerAttackRelease("C1", "8n", time, 0.9);
+    compressor.threshold.setValueAtTime(-32, time);
+    compressor.threshold.exponentialRampToValueAtTime(-22, time + 0.18);
+  }, "4n").start(0);
+
+  const bassFilter = new Tone.Filter({ type: "lowpass", frequency: 180, Q: 1.5 }).connect(compressor);
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    envelope: { attack: 0.003, decay: 0.12, sustain: 0, release: 0.06 },
+    filterEnvelope: { attack: 0.01, decay: 0.15, sustain: 0, baseFrequency: 90, octaves: 2.5 }
+  }).connect(bassFilter);
+
+  const bassPatterns = [
+    ["C2", "C2"],
+    ["C2", "G1", "A#1", "G1"],
+    ["C2", "D#2", "G1", "A#1", "F2", "G1"],
+    ["C2", "C2"]
+  ];
+
+  let bassIndex = 0;
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+
+    let pattern;
+    if (bar < 2) pattern = bassPatterns[0];
+    else if (bar < 6) pattern = bassPatterns[1];
+    else if (bar < 14) pattern = bassPatterns[2];
+    else pattern = bassPatterns[3];
+
+    bass.triggerAttackRelease(pattern[bassIndex % pattern.length], "8n", time, 0.85);
+    bassIndex++;
+  }, "8n").start(0);
+
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(450, time + 8 * (60 / bpm) * 4);
+  }, "2:0:0");
+
+  Tone.Transport.schedule((time) => {
+    bassFilter.frequency.linearRampToValueAtTime(180, time + 4 * (60 / bpm) * 4);
+  }, "14:0:0");
+
+  const arpFilter = new Tone.Filter({ type: "lowpass", frequency: 600, Q: 1.8 }).connect(compressor);
+  const arp = new Tone.Synth({
+    oscillator: { type: "triangle" },
+    envelope: { attack: 0.005, decay: 0.15, sustain: 0, release: 0.08 }
+  }).connect(arpFilter);
+
+  const arpScale = [0, 3, 7, 10, 12, 15, 19];
+  let arpStep = 0;
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+
+    if (bar >= 4 && bar < 14) {
+      const rootMidi = 48;
+      const degree = arpScale[arpStep % arpScale.length];
+      const octaveJump = Math.floor(arpStep / arpScale.length) * 12;
+      const note = Tone.Frequency(rootMidi + degree + octaveJump, "midi");
+
+      const velocity = 0.4 + (arpStep % 4) * 0.1;
+      arp.triggerAttackRelease(note, "16n", time, velocity);
+    }
+    arpStep++;
+  }, "16n").start(0);
+
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.linearRampToValueAtTime(2800, time + 6 * (60 / bpm) * 4);
+  }, "6:0:0");
+
+  Tone.Transport.schedule((time) => {
+    arpFilter.frequency.linearRampToValueAtTime(600, time + 2 * (60 / bpm) * 4);
+  }, "13:0:0");
+
+  const padHPF = new Tone.Filter({ type: "highpass", frequency: 250 }).connect(compressor);
+  const padChorus = new Tone.Chorus({ frequency: 0.15, delayTime: 4, depth: 0.6, wet: 0.4 }).connect(padHPF);
+  padChorus.start();
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: "sawtooth" },
+    detune: -6,
+    envelope: { attack: 0.8, decay: 0.5, sustain: 0.6, release: 2.0 }
+  }).connect(padChorus);
+
+  const padChords = [
+    ["C3", "G3", "C4"],
+    ["A#2", "F3", "A#3"],
+    ["G2", "D3", "G3"]
+  ];
+  let chordIndex = 0;
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+    const velocity = bar < 2 ? 0.12 : (bar < 14 ? 0.18 : 0.12);
+
+    pad.triggerAttackRelease(padChords[chordIndex % padChords.length], "2n", time, velocity);
+    chordIndex++;
+  }, "2n").start(0);
+
+  const hat = new Tone.MetalSynth({
+    frequency: 320,
+    envelope: { attack: 0.001, decay: 0.14, release: 0.04 },
+    harmonicity: 4.8,
+    modulationIndex: 28,
+    resonance: 3800
+  }).connect(masterReverb);
+
+  let beatCount = 0;
+  const hatLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / (60 / bpm) / 4);
+
+    if (bar >= 6 && bar < 15 && beatCount % 2 === 1) {
+      hat.triggerAttackRelease("16n", time, 0.35);
+    }
+    beatCount++;
+  }, "8n").start(0);
+
+  const noiseHPF = new Tone.Filter({ type: "highpass", frequency: 800 }).connect(masterReverb);
+  const noise = new Tone.NoiseSynth({
+    noise: { type: "pink" },
+    envelope: { attack: 0.6, decay: 0.3, sustain: 0, release: 0.8 }
+  }).connect(noiseHPF);
+
+  Tone.Transport.schedule((time) => {
+    noiseHPF.frequency.linearRampToValueAtTime(4000, time + 1.2);
+    noise.triggerAttackRelease(1.2, time);
+  }, "5:2:0");
+
+  window.toneJsInstruments = { kick, bass, arp, pad, hat, noise };
+  window.toneJsParts = { kickLoop, bassLoop, arpLoop, padLoop, hatLoop };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>
