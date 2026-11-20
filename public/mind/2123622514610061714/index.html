@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+
+(() => {
+  // THE SLIDE EDGE. Johns Hopkins, 1958: Hubel and Wiesel record one cell in a cat's visual cortex while spots of light
+  // are thrown on a screen in front of its eyes. For hours the cell says nothing. Then a glass slide goes into the
+  // projector, the faint shadow of its edge sweeps across the screen, and the cell goes off "like a machine gun".
+  // It wants lines, at one angle. We are the cat, looking at the screen; the scope at the bottom is the cell's voice
+  // (its spikes are the same table the score plays). Then the whole cortex: every angle has its cells, arranged in
+  // pinwheels. Machines that see were built on those cells. The last thing on the screen is what one of them saw.
+  const W = 900, H = 900, DURATION = 60, BPM = 104, BAR = 240 / BPM, BARS = 26;
+  const PI = Math.PI, TAU = PI * 2, DEG = PI / 180;
+  const PREF = 60 * DEG; // the recorded cell's angle
+
+  // ------------------------------------------------------------------ helpers (setup and pure math only)
+  let seed = 1958;
+  const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+  const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a), 0, 1); return u * u * (3 - 2 * u); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const axial = (a) => ((a % PI) + PI) % PI; // an orientation, 0..pi
+  const adiff = (a, b) => { const d = axial(a - b); return Math.min(d, PI - d); };
+  const hash = (a, b) => { let h = (a * 374761393 + b * 668265263) >>> 0; h = ((h ^ (h >>> 13)) * 1274126177) >>> 0; return (h ^ (h >>> 16)) / 4294967296; };
+
+  // the orientation palette: one colour per angle, cyclic over 180 degrees
+  const PAL = [[232, 163, 58], [239, 230, 210], [63, 183, 176], [212, 96, 122]];
+  const pal = (theta) => {
+    const x = (axial(theta) / PI) * 4, i = Math.floor(x) % 4, f = x - Math.floor(x), u = f * f * (3 - 2 * f);
+    const a = PAL[i], b = PAL[(i + 1) % 4];
+    return [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
+  };
+  const rgba = (c, a, k = 1) => `rgba(${(c[0] * k) | 0},${(c[1] * k) | 0},${(c[2] * k) | 0},${a})`;
+
+  // ------------------------------------------------------------------ the shared clock: this table is also the score's
+  // Spikes on a grid of 32nd notes: g = bar * 32 + slot. The score (strudel.js) builds the same table with the same code.
+  const thetaS = (b) => (b < 14.75 ? PREF : b < 19 ? PREF + PI * (b - 14.75) / 4.25 : b < 21 ? PREF + PI + PI * (b - 19) / 2 : PREF);
+  const SPIKES = (() => {
+    const out = [];
+    [[1, 18], [2, 7], [3, 26], [4, 11], [5, 3], [5, 21], [24, 14], [25, 9]].forEach(([bar, s]) => out.push(bar * 32 + s));
+    for (let s = 0; s < 32; s++) if (s < 12 || (s < 24 && s % 2 === 0) || s % 4 === 0) out.push(7 * 32 + s);
+    for (let k = 0; k < 12; k++) {
+      const d = adiff(k * 15 * DEG, PREF) / DEG, n = Math.round(7 * Math.exp(-Math.pow(d / 20, 2)));
+      const bar = 8 + Math.floor(k / 2), base = (k % 2) * 16 + 8;
+      for (let j = 0; j < n; j++) out.push(bar * 32 + base - Math.floor(n / 2) + j);
+    }
+    for (let g = 14 * 32; g < 21 * 32; g += 2) {
+      const b = g / 32;
+      if (b < 14.75) continue;
+      if (adiff(thetaS(b), PREF) < 9 * DEG) out.push(g);
+    }
+    return out.sort((a, b) => a - b);
+  })();
+  const SWEEPS = Array.from({ length: 12 }, (_, k) => {
+    const d = adiff(k * 15 * DEG, PREF) / DEG;
+    return { a: k * 15 * DEG, n: Math.round(7 * Math.exp(-Math.pow(d / 20, 2))), start: 8 + k / 2 };
+  });
+
+  // ------------------------------------------------------------------ the lab: a tangent screen in a dark room
+  const SCR = { x: 90, y: 64, w: 720, h: 560 };
+  const FIX = [450, 344];
+  const RF = [566, 300];
+  const lab = document.createElement('canvas');
+  lab.width = W; lab.height = H;
+  {
+    const g = lab.getContext('2d');
+    g.fillStyle = '#06080b';
+    g.fillRect(0, 0, W, H);
+    const room = g.createRadialGradient(450, 340, 80, 450, 380, 640);
+    room.addColorStop(0, 'rgba(70,64,52,0.35)');
+    room.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = room;
+    g.fillRect(0, 0, W, H);
+    // the screen: matte board lit by the projector
+    const lit = g.createRadialGradient(470, 320, 40, 450, 344, 520);
+    lit.addColorStop(0, '#d9d2c1');
+    lit.addColorStop(0.6, '#b9b1a0');
+    lit.addColorStop(1, '#8e8778');
+    g.fillStyle = lit;
+    g.fillRect(SCR.x, SCR.y, SCR.w, SCR.h);
+    // board texture, fixed
+    const img = g.getImageData(SCR.x, SCR.y, SCR.w, SCR.h);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const n = (rnd() - 0.5) * 7;
+      img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
+    }
+    g.putImageData(img, SCR.x, SCR.y);
+    // degrees of visual angle, printed faintly
+    g.save();
+    g.beginPath();
+    g.rect(SCR.x, SCR.y, SCR.w, SCR.h);
+    g.clip();
+    g.strokeStyle = 'rgba(70,62,50,0.22)';
+    g.lineWidth = 1;
+    [70, 150, 250, 380].forEach((r) => { g.beginPath(); g.arc(FIX[0], FIX[1], r, 0, TAU); g.stroke(); });
+    for (let k = 0; k < 12; k++) {
+      const a = k * 30 * DEG;
+      g.beginPath();
+      g.moveTo(FIX[0] + Math.cos(a) * 18, FIX[1] + Math.sin(a) * 18);
+      g.lineTo(FIX[0] + Math.cos(a) * 600, FIX[1] + Math.sin(a) * 600);
+      g.stroke();
+    }
+    g.restore();
+    g.strokeStyle = 'rgba(50,44,36,0.7)';
+    g.lineWidth = 2;
+    g.beginPath();
+    g.moveTo(FIX[0] - 9, FIX[1]); g.lineTo(FIX[0] + 9, FIX[1]);
+    g.moveTo(FIX[0], FIX[1] - 9); g.lineTo(FIX[0], FIX[1] + 9);
+    g.stroke();
+    g.fillStyle = 'rgba(60,54,44,0.55)';
+    g.font = '13px "Courier New", monospace';
+    g.fillText('10°', FIX[0] + 152, FIX[1] - 4);
+    g.fillText('20°', FIX[0] + 252, FIX[1] - 4);
+  }
+
+  // the projected spot visits one place per beat (seeded once)
+  const SPOTS = Array.from({ length: 104 }, () => [SCR.x + 70 + rnd() * (SCR.w - 140), SCR.y + 60 + rnd() * (SCR.h - 120)]);
+
+  // ------------------------------------------------------------------ the cortex: an orientation map with pinwheels
+  const MN = 450, MS = W / MN;
+  const mapCos = new Float32Array(MN * MN), mapSin = new Float32Array(MN * MN), mapSel = new Float32Array(MN * MN);
+  const mapCol = new Uint8ClampedArray(MN * MN * 3);
+  let cellAt = [450, 330];
+  {
+    const N = 22, k0 = TAU / 118; // about 5.5 hypercolumns across the frame
+    const waves = Array.from({ length: N }, () => {
+      const a = rnd() * TAU;
+      return [Math.cos(a) * k0, Math.sin(a) * k0, rnd() * TAU];
+    });
+    let best = -1;
+    for (let y = 0; y < MN; y++) {
+      for (let x = 0; x < MN; x++) {
+        let re = 0, im = 0;
+        for (let j = 0; j < N; j++) {
+          const ph = waves[j][0] * x + waves[j][1] * y + waves[j][2];
+          re += Math.cos(ph); im += Math.sin(ph);
+        }
+        const i = y * MN + x, th = axial(Math.atan2(im, re) / 2), sel = Math.min(1, Math.hypot(re, im) / Math.sqrt(N) / 1.25);
+        mapCos[i] = Math.cos(2 * th); mapSin[i] = Math.sin(2 * th); mapSel[i] = sel;
+        const c = pal(th);
+        mapCol[i * 3] = c[0]; mapCol[i * 3 + 1] = c[1]; mapCol[i * 3 + 2] = c[2];
+        // the recorded cell: tuned to PREF, strongly selective, near the middle
+        const px = x * MS, py = y * MS;
+        if (Math.abs(px - 450) < 160 && Math.abs(py - 330) < 120) {
+          const score = sel - adiff(th, PREF) * 3;
+          if (score > best) { best = score; cellAt = [px, py]; }
+        }
+      }
+    }
+  }
+  // pinwheel centres: points the angle turns all the way around (winding of arg z over a small loop)
+  const PINS = [];
+  {
+    const ang = (i) => Math.atan2(mapSin[i], mapCos[i]);
+    const wrap = (x) => x - TAU * Math.round(x / TAU);
+    for (let y = 2; y < MN - 3; y += 2) for (let x = 2; x < MN - 3; x += 2) {
+      const a = y * MN + x, b2 = a + 2, c = a + 2 * MN + 2, d = a + 2 * MN;
+      const w = wrap(ang(b2) - ang(a)) + wrap(ang(c) - ang(b2)) + wrap(ang(d) - ang(c)) + wrap(ang(a) - ang(d));
+      if (Math.abs(w) > PI && !PINS.some(([px, py]) => Math.hypot(px - (x + 1) * MS, py - (y + 1) * MS) < 24)) PINS.push([(x + 1) * MS, (y + 1) * MS]);
+    }
+  }
+  const mapC = document.createElement('canvas');
+  mapC.width = MN; mapC.height = MN;
+  const mapG = mapC.getContext('2d');
+  const mapImg = mapG.createImageData(MN, MN);
+
+  // ------------------------------------------------------------------ what it saw: a black cat, known only by its edges
+  const EN = 300, ES = W / EN; // edge image at 1/3 scale
+  const drawFace = (g, part) => {
+    g.save();
+    g.scale(1 / ES, 1 / ES);
+    g.fillStyle = '#000';
+    g.fillRect(0, 0, W, H);
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    if (part === 'base') {
+      g.fillStyle = '#fff';
+      g.beginPath();
+      g.moveTo(450, 606);
+      g.bezierCurveTo(372, 606, 286, 566, 262, 478);
+      g.bezierCurveTo(244, 410, 262, 336, 296, 288);
+      g.lineTo(268, 122);
+      g.bezierCurveTo(330, 160, 372, 206, 398, 246);
+      g.quadraticCurveTo(450, 230, 502, 246);
+      g.bezierCurveTo(528, 206, 570, 160, 632, 122);
+      g.lineTo(604, 288);
+      g.bezierCurveTo(638, 336, 656, 410, 638, 478);
+      g.bezierCurveTo(614, 566, 528, 606, 450, 606);
+      g.closePath();
+      g.fill();
+      // shoulders, down into the scope
+      g.beginPath();
+      g.moveTo(330, 580); g.bezierCurveTo(250, 610, 200, 650, 170, 720);
+      g.lineTo(730, 720);
+      g.bezierCurveTo(700, 650, 650, 610, 570, 580);
+      g.closePath();
+      g.fill();
+      g.strokeStyle = '#000';
+      g.lineWidth = 7;
+      // inner ears
+      g.beginPath();
+      g.moveTo(300, 270); g.lineTo(290, 170); g.lineTo(372, 240);
+      g.moveTo(600, 270); g.lineTo(610, 170); g.lineTo(528, 240);
+      g.stroke();
+      // nose and mouth
+      g.beginPath();
+      g.moveTo(426, 470); g.lineTo(474, 470); g.lineTo(450, 494); g.closePath();
+      g.fillStyle = '#000';
+      g.fill();
+      g.beginPath();
+      g.moveTo(450, 494); g.lineTo(450, 512);
+      g.quadraticCurveTo(428, 536, 404, 518);
+      g.moveTo(450, 512);
+      g.quadraticCurveTo(472, 536, 496, 518);
+      g.stroke();
+      // whiskers, out past the cheeks
+      g.lineWidth = 5;
+      g.strokeStyle = '#fff';
+      [[-1, 0], [1, 0]].forEach(([side]) => {
+        [[-14, -30], [0, 4], [14, 38]].forEach(([dy, end]) => {
+          g.beginPath();
+          g.moveTo(450 + side * 70, 500 + dy);
+          g.quadraticCurveTo(450 + side * 200, 492 + dy + end * 0.3, 450 + side * 350, 486 + dy + end);
+          g.stroke();
+        });
+      });
+      // the seam where the chest meets the head
+      g.strokeStyle = '#000';
+      g.lineWidth = 6;
+      g.beginPath();
+      g.moveTo(320, 578); g.quadraticCurveTo(450, 640, 580, 578);
+      g.stroke();
+    } else {
+      g.fillStyle = '#fff';
+      g.strokeStyle = '#fff';
+      [375, 525].forEach((cx, side) => {
+        const tilt = side ? -0.12 : 0.12;
+        g.save();
+        g.translate(cx, 404);
+        g.rotate(tilt);
+        if (part === 'open') {
+          g.beginPath();
+          g.moveTo(-50, 0);
+          g.quadraticCurveTo(0, -46, 50, 0);
+          g.quadraticCurveTo(0, 40, -50, 0);
+          g.fill();
+          g.fillStyle = '#000';
+          g.beginPath();
+          g.ellipse(0, 0, 7, 25, 0, 0, TAU);
+          g.fill();
+          g.fillStyle = '#fff';
+        } else {
+          g.lineWidth = 9;
+          g.beginPath();
+          g.moveTo(-50, 0);
+          g.quadraticCurveTo(0, 22, 50, 0);
+          g.stroke();
+        }
+        g.restore();
+      });
+    }
+    g.restore();
+  };
+  const NB = 24; // orientation buckets of 7.5 degrees
+  const edgeSet = (part) => {
+    const c = document.createElement('canvas');
+    c.width = EN; c.height = EN;
+    const g = c.getContext('2d');
+    drawFace(g, part);
+    const b = document.createElement('canvas');
+    b.width = EN; b.height = EN;
+    const bg = b.getContext('2d');
+    bg.filter = 'blur(1.2px)';
+    bg.drawImage(c, 0, 0);
+    const d = bg.getImageData(0, 0, EN, EN).data;
+    const v = (x, y) => d[(clamp(y, 0, EN - 1) * EN + clamp(x, 0, EN - 1)) * 4] / 255;
+    const GX = new Float32Array(EN * EN), GY = new Float32Array(EN * EN), M = new Float32Array(EN * EN);
+    for (let y = 1; y < EN - 1; y++) for (let x = 1; x < EN - 1; x++) {
+      const i = y * EN + x;
+      GX[i] = (v(x + 1, y) - v(x - 1, y)) * 0.5; GY[i] = (v(x, y + 1) - v(x, y - 1)) * 0.5;
+      M[i] = Math.hypot(GX[i], GY[i]);
+    }
+    // thin to one line per edge (non-maximum suppression), then space the cells evenly along it
+    const paths = Array.from({ length: NB }, () => new Path2D());
+    const taken = new Uint8Array(EN * EN);
+    const SP = 2.4;
+    let count = 0;
+    for (let y = 2; y < EN - 2; y++) for (let x = 2; x < EN - 2; x++) {
+      const i = y * EN + x, m = M[i];
+      if (m < 0.075) continue;
+      const ox = Math.round(GX[i] / m), oy = Math.round(GY[i] / m);
+      if (m < M[i + oy * EN + ox] || m < M[i - oy * EN - ox]) continue;
+      let near = false;
+      for (let dy = -3; dy <= 3 && !near; dy++) for (let dx = -3; dx <= 3; dx++) {
+        if (dx * dx + dy * dy < SP * SP && taken[(y + dy) * EN + x + dx]) { near = true; break; }
+      }
+      if (near) continue;
+      taken[i] = 1;
+      const phi = axial(Math.atan2(GY[i], GX[i]) + PI / 2), k = Math.floor((phi / PI) * NB) % NB;
+      const px = x * ES, py = y * ES, L = 3.4, ca = Math.cos(phi) * L, sa = Math.sin(phi) * L;
+      if (py > 668) continue; // the scope covers below
+      paths[k].moveTo(px - ca, py - sa);
+      paths[k].lineTo(px + ca, py + sa);
+      count++;
+    }
+    return { paths, count };
+  };
+  const EDGE = { base: edgeSet('base'), open: edgeSet('open'), shut: edgeSet('shut') };
+  const bucketTheta = (k) => ((k + 0.5) / NB) * PI;
+
+  // ------------------------------------------------------------------ the scope: one sweep per bar
+  const SC = { x0: 108, x1: 792, y: 790 };
+  const scopePath = (bar, from, to) => {
+    // the trace of one bar between two phases, with that bar's spikes; noise is a hash of (bar, x)
+    const bb = ((bar % BARS) + BARS) % BARS;
+    const pts = [];
+    const x0 = lerp(SC.x0, SC.x1, from), x1 = lerp(SC.x0, SC.x1, to);
+    for (let x = x0; x <= x1; x += 3) pts.push([x, SC.y + (hash(bb, x | 0) - 0.5) * 3.2]);
+    const sp = [];
+    for (let i = 0; i < SPIKES.length; i++) {
+      const g = SPIKES[i];
+      if (Math.floor(g / 32) !== bb) continue;
+      const ph = (g - bb * 32) / 32;
+      if (ph >= from && ph < to) sp.push(lerp(SC.x0, SC.x1, ph));
+    }
+    return { pts, sp };
+  };
+  const drawScope = (t, b, alpha) => {
+    if (alpha <= 0.001) return;
+    const bar = Math.floor(b), ph = b - bar;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = '#0b0e0d';
+    ctx.fillRect(60, 676, 780, 196);
+    ctx.fillStyle = '#121b17';
+    ctx.fillRect(84, 692, 732, 164);
+    // graticule
+    ctx.strokeStyle = 'rgba(110,190,140,0.09)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i <= 8; i++) { const x = lerp(SC.x0, SC.x1, i / 8); ctx.moveTo(x, 700); ctx.lineTo(x, 848); }
+    for (let i = 0; i <= 4; i++) { const y = 700 + i * 37; ctx.moveTo(SC.x0, y); ctx.lineTo(SC.x1, y); }
+    ctx.stroke();
+    const trace = (seg, a, w) => {
+      ctx.strokeStyle = `rgba(140,255,170,${a})`;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      seg.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.stroke();
+      ctx.beginPath();
+      seg.sp.forEach((x) => {
+        ctx.moveTo(x - 1.5, SC.y);
+        ctx.lineTo(x, SC.y - 74);
+        ctx.lineTo(x + 2, SC.y + 26);
+        ctx.lineTo(x + 3.5, SC.y);
+      });
+      ctx.stroke();
+    };
+    trace(scopePath(bar - 1, Math.min(0.999, ph + 0.03), 1), 0.18, 1.4); // last sweep's persistence
+    ctx.shadowColor = 'rgba(120,255,160,0.8)';
+    ctx.shadowBlur = 8;
+    trace(scopePath(bar, 0, ph), 0.9, 1.8);
+    ctx.shadowBlur = 0;
+    // the beam's head
+    ctx.fillStyle = 'rgba(200,255,215,0.9)';
+    ctx.beginPath();
+    ctx.arc(lerp(SC.x0, SC.x1, ph), SC.y, 2.6, 0, TAU);
+    ctx.fill();
+    // the audio monitor's lamp lights on a spike
+    let lamp = 0;
+    const g = b * 32;
+    for (let i = 0; i < SPIKES.length; i++) {
+      const dt = (g - SPIKES[i]) / 32 * BAR; // seconds since that spike
+      if (dt >= 0 && dt < 0.12) lamp = Math.max(lamp, 1 - dt / 0.12);
+    }
+    ctx.fillStyle = `rgba(${lerp(60, 255, lamp) | 0},${lerp(40, 190, lamp) | 0},${lerp(30, 90, lamp) | 0},1)`;
+    ctx.beginPath();
+    ctx.arc(824, 700, 5, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(140,200,160,0.55)';
+    ctx.font = '12px "Courier New", monospace';
+    ctx.textAlign = 'left';
+    ctx.fillText('CELL · AUDIO MONITOR', 96, 846);
+    ctx.restore();
+  };
+
+  // ------------------------------------------------------------------ captions
+  const CAPS = [
+    [0, 6, '1958 · cat visual cortex · spots of light, for hours'],
+    [6, 7, 'a glass slide goes into the projector'],
+    [7, 8.25, '"like a machine gun"'],
+    [8.25, 14.25, 'one cell. it wants a line, at one angle.'],
+    [14.75, 19, 'every angle has its cells. they turn around points.'],
+    [19.25, 23, 'machines that see were built on these cells.'],
+    [24, 26.5, '1958 · cat visual cortex · spots of light, for hours']
+  ];
+  const caption = (b) => {
+    for (const [a, z, text] of CAPS) {
+      const k = Math.min(smooth(a, a + 0.25, b), 1 - smooth(z - 0.25, z, b));
+      const kk = a === 24 ? Math.min(smooth(a, a + 0.25, b), 1) : k;
+      const k0 = a === 0 ? 1 - smooth(z - 0.25, z, b) : kk;
+      if (k0 > 0.01) {
+        ctx.globalAlpha = k0;
+        ctx.fillStyle = '#a7ad9f';
+        ctx.font = '20px "Courier New", monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(text, 90, 46);
+        ctx.globalAlpha = 1;
+      }
+    }
+  };
+
+  // ------------------------------------------------------------------ the lab frame (sections on the screen)
+  const labLayer = document.createElement('canvas');
+  labLayer.width = W; labLayer.height = H;
+  const L = labLayer.getContext('2d');
+  const drawLab = (b) => {
+    L.setTransform(1, 0, 0, 1, 0, 0);
+    L.globalAlpha = 1;
+    L.globalCompositeOperation = 'source-over';
+    L.drawImage(lab, 0, 0);
+    L.save();
+    L.beginPath();
+    L.rect(SCR.x, SCR.y, SCR.w, SCR.h);
+    L.clip();
+    // the spot of light, one place per beat
+    const spotOn = b < 6.25 || b >= 23.75;
+    if (spotOn) {
+      const beat = Math.floor(((b * 4) % 104 + 104) % 104), inBeat = b * 4 - Math.floor(b * 4);
+      const [sx, sy] = SPOTS[beat];
+      const flash = 0.82 + 0.18 * (1 - smooth(0, 0.12, inBeat));
+      const fade = b < 6 ? 1 : b < 6.25 ? 1 - smooth(6, 6.25, b) : smooth(23.75, 24, b);
+      const gr = L.createRadialGradient(sx, sy, 0, sx, sy, 46);
+      gr.addColorStop(0, `rgba(255,252,236,${0.95 * flash * fade})`);
+      gr.addColorStop(0.32, `rgba(255,246,214,${0.85 * flash * fade})`);
+      gr.addColorStop(0.42, `rgba(255,240,200,${0.18 * fade})`);
+      gr.addColorStop(1, 'rgba(255,240,200,0)');
+      L.fillStyle = gr;
+      L.beginPath();
+      L.arc(sx, sy, 46, 0, TAU);
+      L.fill();
+    }
+    // the glass slide: its edge's shadow sweeps the screen at the cell's angle
+    if (b >= 6 && b < 8.2) {
+      const u = lerp(-430, 430, (b - 6) / 2); // crosses the field at bar 7
+      const d = [Math.cos(PREF), -Math.sin(PREF)], n = [Math.sin(PREF), Math.cos(PREF)];
+      const ex = RF[0] + n[0] * u, ey = RF[1] + n[1] * u;
+      L.save();
+      L.translate(ex, ey);
+      L.rotate(Math.atan2(d[1], d[0]));
+      // the glass trails behind its edge (on the -n side, which is -y in this frame)
+      const glass = L.createLinearGradient(0, 0, 0, -520);
+      glass.addColorStop(0, 'rgba(40,52,58,0.30)');
+      glass.addColorStop(1, 'rgba(40,52,58,0.16)');
+      L.fillStyle = glass;
+      L.fillRect(-900, -520, 1800, 520);
+      L.fillStyle = 'rgba(18,22,24,0.75)';
+      L.fillRect(-900, -5, 1800, 5);
+      L.fillStyle = 'rgba(255,250,235,0.20)';
+      L.fillRect(-900, -9, 1800, 2);
+      L.restore();
+    }
+    // a line of light, swept across the field at twelve angles
+    for (const s of SWEEPS) {
+      if (b < s.start || b >= s.start + 0.5) continue;
+      const k = (b - s.start) / 0.5, u = lerp(-120, 120, k);
+      const d = [Math.cos(s.a), -Math.sin(s.a)], n = [Math.sin(s.a), Math.cos(s.a)];
+      L.save();
+      L.translate(RF[0] + n[0] * u, RF[1] + n[1] * u);
+      L.rotate(Math.atan2(d[1], d[0]));
+      L.fillStyle = 'rgba(255,244,210,0.22)';
+      L.fillRect(-98, -14, 196, 28);
+      L.fillStyle = 'rgba(255,252,238,0.95)';
+      L.fillRect(-88, -6, 176, 12);
+      L.restore();
+    }
+    // pencil: what the experimenters marked on the screen (x = the cell fires, triangle = it is held quiet)
+    const marks = smooth(7.1, 7.4, b) * (1 - smooth(14.2, 14.6, b));
+    if (marks > 0.01) {
+      L.globalAlpha = marks;
+      L.strokeStyle = 'rgba(46,40,60,0.85)';
+      L.lineWidth = 2;
+      const d = [Math.cos(PREF), -Math.sin(PREF)], n = [Math.sin(PREF), Math.cos(PREF)];
+      const grown = clamp((b - 7.2) / 4.6, 0, 1);
+      const draw = (along, across, kind) => {
+        const x = RF[0] + d[0] * along + n[0] * across, y = RF[1] + d[1] * along + n[1] * across;
+        L.beginPath();
+        if (kind === 'x') { L.moveTo(x - 5, y - 5); L.lineTo(x + 5, y + 5); L.moveTo(x + 5, y - 5); L.lineTo(x - 5, y + 5); }
+        else { L.moveTo(x, y - 6); L.lineTo(x + 6, y + 5); L.lineTo(x - 6, y + 5); L.closePath(); }
+        L.stroke();
+      };
+      const N = Math.floor(1 + grown * 13);
+      for (let i = 0; i < N; i++) {
+        const along = (i - 6.5) * 13;
+        draw(along, (hash(i, 3) - 0.5) * 6, 'x');
+        if (i >= 2 && i < N && grown > 0.25) { draw(along, -30 + (hash(i, 5) - 0.5) * 6, 't'); draw(along, 30 + (hash(i, 7) - 0.5) * 6, 't'); }
+      }
+      L.setLineDash([6, 5]);
+      L.strokeStyle = 'rgba(46,40,60,0.5)';
+      L.beginPath();
+      L.ellipse(RF[0], RF[1], 108 * Math.max(0.3, grown), 54 * Math.max(0.3, grown), -PREF, 0, TAU);
+      L.stroke();
+      L.setLineDash([]);
+      L.globalAlpha = 1;
+    }
+    // the tuning curve, plotted as each sweep comes back
+    const plot = smooth(8.2, 8.5, b) * (1 - smooth(14.2, 14.6, b));
+    if (plot > 0.01) {
+      const P = [236, 470], R = 15;
+      L.globalAlpha = plot;
+      L.strokeStyle = 'rgba(46,40,60,0.35)';
+      L.lineWidth = 1;
+      L.beginPath();
+      L.arc(P[0], P[1], R * 7, 0, TAU);
+      L.moveTo(P[0] - R * 7.6, P[1]); L.lineTo(P[0] + R * 7.6, P[1]);
+      L.moveTo(P[0], P[1] - R * 7.6); L.lineTo(P[0], P[1] + R * 7.6);
+      L.stroke();
+      L.fillStyle = 'rgba(46,40,60,0.6)';
+      L.font = '12px "Courier New", monospace';
+      L.textAlign = 'center';
+      L.fillText('spikes per sweep', P[0], P[1] + R * 7 + 20);
+      SWEEPS.forEach((s) => {
+        const crossed = s.start + 0.25;
+        if (b < crossed) return;
+        const c = pal(s.a), len = 6 + s.n * R;
+        const k = smooth(crossed, crossed + 0.06, b);
+        L.strokeStyle = rgba(c, 0.95, 0.72);
+        L.lineWidth = 5;
+        L.lineCap = 'round';
+        L.beginPath();
+        L.moveTo(P[0] - Math.cos(s.a) * len * k, P[1] + Math.sin(s.a) * len * k);
+        L.lineTo(P[0] + Math.cos(s.a) * len * k, P[1] - Math.sin(s.a) * len * k);
+        L.stroke();
+      });
+      L.lineCap = 'butt';
+      L.globalAlpha = 1;
+    }
+    L.restore();
+  };
+
+  // ------------------------------------------------------------------ the frame
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const b = t / BAR;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.filter = 'none';
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = 'rgba(0,0,0,0)';
+    ctx.setLineDash([]);
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+    ctx.fillStyle = '#05070a';
+    ctx.fillRect(0, 0, W, H);
+
+    // how much of the lab is on screen, and how far the camera has fallen into the receptive field
+    const labIn = b < 14 ? 1 : b < 14.75 ? 1 - smooth(14, 14.75, b) : b < 23 ? 0 : smooth(23, 24, b);
+    const zoomIn = b < 14 ? 1 : b < 14.75 ? lerp(1, 7, Math.pow(smooth(14, 14.75, b), 1.6)) : b >= 23 && b < 24 ? lerp(5, 1, smooth(23, 24, b)) : 1;
+    const mapIn = b < 14.3 ? 0 : b < 14.9 ? smooth(14.3, 14.9, b) : b < 19 ? 1 : 1 - smooth(19, 19.7, b);
+    const catIn = b < 19 ? 0 : b < 23 ? 1 : 1 - smooth(23, 23.9, b);
+    const th = thetaS(b);
+
+    // the cortex
+    if (mapIn > 0.001) {
+      const C = Math.cos(2 * th), S = Math.sin(2 * th), px = mapImg.data;
+      for (let i = 0, j = 0; i < MN * MN; i++, j += 4) {
+        const c = (1 + mapCos[i] * C + mapSin[i] * S) * 0.5;
+        const r = mapSel[i] * c * c * c * c;
+        const base = 0.17 + 0.07 * mapSel[i];
+        const k = base + 1.05 * r;
+        px[j] = 6 + mapCol[i * 3] * k;
+        px[j + 1] = 8 + mapCol[i * 3 + 1] * k;
+        px[j + 2] = 12 + mapCol[i * 3 + 2] * k;
+        px[j + 3] = 255;
+      }
+      mapG.putImageData(mapImg, 0, 0);
+      const push = 1 + 0.12 * clamp((b - 14.75) / 4.25, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = mapIn;
+      ctx.translate(450, 330);
+      ctx.scale(push, push);
+      ctx.translate(-450, -330);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(mapC, 0, 0, W, H);
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      PINS.forEach(([x, y]) => { ctx.moveTo(x + 4, y); ctx.arc(x, y, 4, 0, TAU); });
+      ctx.stroke();
+      // the cell we have been listening to
+      const fire = Math.exp(-Math.pow(adiff(th, PREF) / (10 * DEG), 2));
+      ctx.strokeStyle = `rgba(255,255,255,${0.55 + 0.45 * fire})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(cellAt[0], cellAt[1], 11 + 5 * fire, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      ctx.font = '13px "Courier New", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillText('the cell', cellAt[0] + 20, cellAt[1] + 4);
+      // the angle being shown to the whole cortex, as a bar in the corner
+      const c = pal(th);
+      ctx.translate(806, 104);
+      ctx.rotate(-th);
+      ctx.fillStyle = rgba(c, 0.95);
+      ctx.fillRect(-34, -4, 68, 8);
+      ctx.restore();
+    }
+
+    // what it saw
+    if (catIn > 0.001) {
+      const sweep = clamp((b - 19) / 2, 0, 1) * PI;
+      const eyesOpen = b < 21.5 ? 0 : b < 21.75 ? smooth(21.5, 21.75, b) : 1;
+      const blink = Math.exp(-Math.pow((b - 22.55) / 0.045, 2));
+      const open = eyesOpen * (1 - blink);
+      const conv = b < 23 ? 0 : smooth(23, 23.9, b);
+      const sx = SPOTS[96][0], sy = SPOTS[96][1];
+      ctx.save();
+      ctx.globalAlpha = catIn;
+      if (conv > 0) {
+        const s = lerp(1, 0.04, conv);
+        ctx.translate(lerp(450, sx, conv), lerp(380, sy, conv));
+        ctx.scale(s, s);
+        ctx.translate(-450, -380);
+      }
+      ctx.lineCap = 'round';
+      // the eyes' amber, the only filled surface
+      if (open > 0.01) {
+        [375, 525].forEach((cx, side) => {
+          ctx.save();
+          ctx.translate(cx, 404);
+          ctx.rotate(side ? -0.12 : 0.12);
+          ctx.scale(1, Math.max(0.05, open));
+          const gr = ctx.createRadialGradient(0, 0, 4, 0, 0, 50);
+          gr.addColorStop(0, `rgba(255,214,110,${0.55 * catIn})`);
+          gr.addColorStop(1, `rgba(200,120,30,${0.18 * catIn})`);
+          ctx.fillStyle = gr;
+          ctx.beginPath();
+          ctx.moveTo(-48, 0);
+          ctx.quadraticCurveTo(0, -44, 48, 0);
+          ctx.quadraticCurveTo(0, 38, -48, 0);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(4,4,6,0.92)';
+          ctx.beginPath();
+          ctx.ellipse(0, 0, 6, 24, 0, 0, TAU);
+          ctx.fill();
+          ctx.restore();
+        });
+      }
+      for (let k = 0; k < NB; k++) {
+        const phi = bucketTheta(k);
+        const passed = axial(phi - PREF - PI) <= sweep + 1e-6 || sweep >= PI - 1e-6; // swept since bar 19
+        const firing = b < 21.2 ? Math.exp(-Math.pow(adiff(phi, th) / (9 * DEG), 2)) : 0;
+        const lit = (passed ? 0.78 : 0) + firing * 0.9;
+        if (lit < 0.01) continue;
+        const c = pal(phi);
+        const w = 2.3 + 1.4 * firing;
+        const stroke = (path, a) => {
+          if (a < 0.01) return;
+          ctx.strokeStyle = rgba(c, Math.min(1, lit * a), 1 + 0.25 * firing);
+          ctx.lineWidth = w;
+          ctx.stroke(path);
+        };
+        stroke(EDGE.base.paths[k], 1);
+        stroke(EDGE.shut.paths[k], 1 - open);
+        stroke(EDGE.open.paths[k], open);
+      }
+      ctx.restore();
+    }
+
+    // the lab, possibly falling into the field
+    if (labIn > 0.001) {
+      drawLab(b);
+      ctx.save();
+      ctx.globalAlpha = labIn;
+      if (zoomIn !== 1) {
+        ctx.translate(RF[0], RF[1]);
+        ctx.scale(zoomIn, zoomIn);
+        ctx.translate(-RF[0], -RF[1]);
+      }
+      ctx.drawImage(labLayer, 0, 0);
+      ctx.restore();
+    }
+
+    const band = ctx.createLinearGradient(0, 0, 0, 84);
+    band.addColorStop(0, 'rgba(5,7,10,0.85)');
+    band.addColorStop(1, 'rgba(5,7,10,0)');
+    ctx.fillStyle = band;
+    ctx.fillRect(0, 0, W, 84);
+    drawScope(t, b, labIn > 0.5 ? 1 : 0.92);
+    caption(b);
+    return canvas.toDataURL('image/png');
+  };
+  window.__edges = { pins: PINS.length, spikes: SPIKES.length, strokes: EDGE.base.count + EDGE.open.count + EDGE.shut.count, cellAt };
+  window.ready = true;
+})();
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 104\\n// DURATION: 60\\n// FORM: spots 0-6 | the slide 6-8 | one angle 8-14 | every angle 14-19 | what it saw 19-23 | spots again 23-26\\n// TONAL CENTER: G# minor\\n// MOTIF: the tuning curve, a bell arch B4 D#5 G#5 D#5 B4 sounded only on the sweeps the cell answers (rests where it says nothing)\\n// HARMONIC PLAN: G#m9 | G#m9 | Emaj9 | F#6/9, one four-bar loop all the way through, dub-techno stabs with the bass on the roots\\n// GROOVE: minimal dub techno on a TR-808: four on the floor, off-beat hats, claps on 2 and 4 and a rim figure in the groove; the cell's spikes are the lead percussion, struck from the same table the picture's oscilloscope draws\\n//\\n// The cell's voice: Hubel and Wiesel listened to their neurons through a loudspeaker. Every spike in SPIKES is one pop here and one\\n// stroke on the picture's scope, on a grid of 32nd notes (g = bar * 32 + slot). The picture's source builds the same table with the same code.\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst BARS = 26;\\nconst PI = Math.PI, DEG = PI / 180, PREF = 60 * DEG;\\nconst SEMI = { C: 0, 'C#': 1, Db: 1, D: 2, 'D#': 3, Eb: 3, E: 4, F: 5, 'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11 };\\nconst hz = (name) => {\\n  const m = name.match(/^([A-G](?:#|b)?)(-?\\\\d)$/);\\n  return 440 * Math.pow(2, (SEMI[m[1]] + 12 * (Number(m[2]) + 1) - 69) / 12);\\n};\\nconst lane = () => Array.from({ length: BARS }, () => []);\\n// an event at a bar and a beat of it, lenBeats long\\nconst put = (L, bar, beat, lenBeats, v) => {\\n  let b = bar + Math.floor(beat / 4), bt = beat - Math.floor(beat / 4) * 4;\\n  b = ((b % BARS) + BARS) % BARS;\\n  const a = bt / 4;\\n  L[b].push(pure(v).compress(a, Math.min(0.9999, a + Math.max(lenBeats, 0.02) / 4)));\\n};\\nconst play = (L) => cat(...L.map((list) => (list.length ? stack(...list) : silence)));\\nconst inRange = (b, a, z) => b >= a && b \u003c z;\\n\\n// ------------------------------------------------------------------ the cell's spike table (identical code in the picture)\\nconst axial = (a) => ((a % PI) + PI) % PI;\\nconst adiff = (a, b) => { const d = axial(a - b); return Math.min(d, PI - d); };\\nconst thetaS = (b) => (b \u003c 14.75 ? PREF : b \u003c 19 ? PREF + PI * (b - 14.75) / 4.25 : b \u003c 21 ? PREF + PI + PI * (b - 19) / 2 : PREF);\\nconst SPIKES = (() => {\\n  const out = [];\\n  [[1, 18], [2, 7], [3, 26], [4, 11], [5, 3], [5, 21], [24, 14], [25, 9]].forEach(([bar, s]) => out.push(bar * 32 + s));\\n  for (let s = 0; s \u003c 32; s++) if (s \u003c 12 || (s \u003c 24 && s % 2 === 0) || s % 4 === 0) out.push(7 * 32 + s);\\n  for (let k = 0; k \u003c 12; k++) {\\n    const d = adiff(k * 15 * DEG, PREF) / DEG, n = Math.round(7 * Math.exp(-Math.pow(d / 20, 2)));\\n    const bar = 8 + Math.floor(k / 2), base = (k % 2) * 16 + 8;\\n    for (let j = 0; j \u003c n; j++) out.push(bar * 32 + base - Math.floor(n / 2) + j);\\n  }\\n  for (let g = 14 * 32; g \u003c 21 * 32; g += 2) {\\n    const b = g / 32;\\n    if (b \u003c 14.75) continue;\\n    if (adiff(thetaS(b), PREF) \u003c 9 * DEG) out.push(g);\\n  }\\n  return out.sort((a, b) => a - b);\\n})();\\n\\nconst KIT = lane(), CELL = lane(), LOW = lane(), STAB = lane(), BELL = lane();\\nconst AIR = STAB; // the pad and the noise risers share the stabs' lane\\nconst TR = 'RolandTR808';\\nconst drum = (bar, beat, name, n, gain, extra = {}) => put(KIT, bar, beat, 0.5, { s: name, bank: TR, n, gain, orbit: 1, ...extra });\\n\\n// ------------------------------------------------------------------ the cell: a pop per spike (a pitched tock plus a wide knock)\\nSPIKES.forEach((g) => {\\n  const bar = Math.floor(g / 32), beat = (g - bar * 32) / 8;\\n  const burst = bar === 7;\\n  put(CELL, bar, beat, 0.12, { s: 'triangle', freq: hz('D#7'), attack: 0.001, decay: 0.026, sustain: 0, release: 0.01, gain: burst ? 0.15 : 0.18, orbit: 2 });\\n  put(CELL, bar, beat, 0.12, { s: 'white', bandf: 3200, bandq: 1.4, attack: 0.001, decay: 0.018, sustain: 0, release: 0.01, gain: burst ? 0.22 : 0.27, orbit: 2 });\\n  put(CELL, bar, beat, 0.12, { s: 'sine', freq: hz('G#4'), attack: 0.001, decay: 0.03, sustain: 0, release: 0.01, gain: 0.05, orbit: 2 });\\n});\\n\\n// ------------------------------------------------------------------ the kit\\nconst GROOVE = (b) => inRange(b, 8, 14) || inRange(b, 15, 19);\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  const room = inRange(bar, 0, 2), slide = inRange(bar, 6, 8), fall = inRange(bar, 23, 24), dive = bar === 14;\\n  const half = inRange(bar, 19, 23);\\n  // the projector's shutter: one soft tick per spot of light\\n  if (inRange(bar, 0, 6) || inRange(bar, 24, 26)) for (let beat = 0; beat \u003c 4; beat++) put(KIT, bar, beat + 0.005, 0.1, { s: 'sine', freq: hz('G#5'), attack: 0.002, decay: 0.05, sustain: 0, release: 0.02, gain: 0.07, orbit: 1 });\\n  if (room || slide || fall || dive) continue;\\n  for (let beat = 0; beat \u003c 4; beat++) {\\n    if (half && beat % 2 === 1) continue;\\n    if (bar === BARS - 1 && beat === 3) continue;\\n    drum(bar, beat, 'bd', 3, GROOVE(bar) ? 0.19 : 0.17, { cutoff: 3000 });\\n  }\\n  // off-beat hats; open in the cortex\\n  const openHats = inRange(bar, 15, 19);\\n  for (let beat = 0; beat \u003c 4; beat++) {\\n    if (half && beat % 2 === 0) continue;\\n    if (openHats) drum(bar, beat + 0.5, 'oh', 1, 0.11, { cut: 1, cutoff: 7000 });\\n    else drum(bar, beat + 0.5, 'hh', 0, 0.13, { cut: 1, cutoff: 8000 });\\n  }\\n  if (GROOVE(bar)) {\\n    [1, 3].forEach((beat) => drum(bar, beat + 0.04, 'cp', 1, 0.12, { cutoff: 5000, room: 0.2, roomsize: 2 }));\\n    // a dub rim figure on sixteenths 3, 6 and 13\\n    [3, 6, 13].forEach((six) => drum(bar, six / 4 + 0.01, 'rim', 0, 0.12, { cutoff: 6000, delay: 0.2, delaytime: 0.433, delayfeedback: 0.35 }));\\n    for (let six = 0; six \u003c 16; six++) put(KIT, bar, six / 4 + 0.02, 0.2, { s: 'sh', bank: TR, n: 0, gain: six % 4 === 2 ? 0.055 : 0.035, cutoff: 7000, orbit: 1 });\\n  }\\n}\\ndrum(8, 0, 'cr', 2, 0.16, { cutoff: 8000 });\\ndrum(15, 0, 'cr', 4, 0.14, { cutoff: 8000 });\\n\\n// ------------------------------------------------------------------ the chord loop: G#m9 | G#m9 | Emaj9 | F#6/9\\nconst LOOP = [\\n  { root: 'G#1', keys: ['B3', 'D#4', 'F#4', 'A#4'] },\\n  { root: 'G#1', keys: ['B3', 'D#4', 'F#4', 'A#4'] },\\n  { root: 'E1', keys: ['G#3', 'B3', 'D#4', 'F#4'] },\\n  { root: 'F#1', keys: ['A#3', 'C#4', 'D#4', 'G#4'] }\\n];\\nconst chordOf = (bar) => LOOP[bar % 4];\\n\\n// sub bass: the root on the one and the and of two; long notes while the slide crosses and the cat looks\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  const f = hz(chordOf(bar).root) * 2;\\n  if (bar === 7 || bar === 14 || bar === 23) continue;\\n  const hold = inRange(bar, 19, 23) || bar === 6;\\n  const hits = hold ? [[0, 3.6]] : [[0.06, 1.2], [1.56, 0.8], [3.06, 0.5]];\\n  hits.forEach(([beat, len]) => {\\n    if (bar === BARS - 1 && beat > 3) return;\\n    put(LOW, bar, beat, len, { s: 'sine', freq: f, attack: 0.008, decay: 0.3, sustain: 0.75, release: 0.08, gain: 0.24, orbit: 3 });\\n    put(LOW, bar, beat + 0.005, len * 0.8, { s: 'sawtooth', freq: f * 2, cutoff: 900, attack: 0.008, decay: 0.15, sustain: 0.3, release: 0.06, gain: 0.15, orbit: 3 });\\n  });\\n}\\n\\n// dub stabs: one chord on the and of one, echoing; filtered shut while the cell is silent, open in the groove\\nfor (let bar = 0; bar \u003c BARS; bar++) {\\n  if (bar === 7 || bar === 14) continue;\\n  const { keys } = chordOf(bar);\\n  const open = GROOVE(bar) ? 1 : inRange(bar, 19, 23) ? 0.5 : 0.25;\\n  const last = bar === BARS - 1;\\n  const fx = last ? {} : { delay: 0.32, delaytime: 0.433, delayfeedback: 0.42 };\\n  const stab = (beat, g) => keys.forEach((name, i) => {\\n    const f = hz(name);\\n    put(STAB, bar, beat + i * 0.006, 0.35, { s: 'sawtooth', freq: f, cutoff: 600 + 1500 * open, resonance: 6, attack: 0.004, decay: 0.16, sustain: 0.2, release: 0.12, gain: g, orbit: 4, ...fx });\\n    put(STAB, bar, beat + i * 0.006, 0.35, { s: 'triangle', freq: f, attack: 0.004, decay: 0.22, sustain: 0.25, release: 0.12, gain: g * 0.9, orbit: 4, ...fx });\\n  });\\n  stab(0.5, 0.13);\\n  if (GROOVE(bar)) stab(2.75, 0.075);\\n}\\n\\n// ------------------------------------------------------------------ the motif: the tuning curve as a bell arch\\nconst bell = (bar, beat, name, gain, len = 1.2, wet = 0.3) => {\\n  const f = hz(name);\\n  put(BELL, bar, beat, len, { s: 'sine', freq: f, attack: 0.002, decay: len * 0.55, sustain: 0, release: 0.2, gain, orbit: 5, room: wet, roomsize: 3 });\\n  put(BELL, bar, beat, 0.25, { s: 'sine', freq: f * 2.76, attack: 0.001, decay: 0.12, sustain: 0, release: 0.05, gain: gain * 0.35, orbit: 5 });\\n  put(BELL, bar, beat, 0.4, { s: 'triangle', freq: f, attack: 0.002, decay: 0.2, sustain: 0, release: 0.05, gain: gain * 0.45, orbit: 5 });\\n};\\nconst ARCH = { 0: null, 1: 'B4', 4: 'D#5', 7: 'G#5' };\\nfor (let k = 0; k \u003c 12; k++) {\\n  const d = adiff(k * 15 * DEG, PREF) / DEG, n = Math.round(7 * Math.exp(-Math.pow(d / 20, 2)));\\n  const name = ARCH[n];\\n  if (!name) continue;\\n  // at the moment the line of light crosses the field: beat 1 of its half-bar sweep\\n  bell(8 + Math.floor(k / 2), (k % 2) * 2 + 1, name, 0.17 + n * 0.015);\\n}\\n// every angle: the population, a sixteenth arpeggio on the arch that brightens each time the cell's angle comes round\\nconst POP = ['B4', 'D#5', 'G#5', 'D#5'];\\nfor (let bar = 15; bar \u003c 21; bar++) {\\n  for (let six = 0; six \u003c 16; six++) {\\n    const b = bar + six / 16;\\n    const near = Math.exp(-Math.pow(adiff(thetaS(b), PREF) / (25 * DEG), 2));\\n    const f = hz(POP[six % 4]) * (six % 8 === 7 ? 2 : 1);\\n    const g = (bar >= 19 ? 0.12 : 0.15) + 0.1 * near;\\n    put(BELL, bar, six / 4 + 0.015, 0.22, { s: 'triangle', freq: f, attack: 0.002, decay: 0.09, sustain: 0, release: 0.03, gain: g, cutoff: 2500 + 3000 * near, orbit: 6, delay: 0.18, delaytime: 0.433, delayfeedback: 0.3 });\\n  }\\n}\\n// what it saw: the arch once, slowly, as the whole face is there\\n[['B4', 0], ['D#5', 1], ['G#5', 2], ['D#5', 3]].forEach(([n, beat]) => bell(21, beat, n, 0.16, 1.6, 0.35));\\nbell(22, 0, 'B4', 0.15, 2.4, 0.35);\\n// the eyes open (bar 21.5) and blink (22.55)\\n[['G#5', 0], ['B5', 0.04], ['D#6', 0.08]].forEach(([n, d]) => bell(21, 2 + d, n, 0.07, 3, 0.4));\\nput(BELL, 22, 2.2, 0.15, { s: 'triangle', freq: hz('D#6'), attack: 0.001, decay: 0.05, sustain: 0, release: 0.02, gain: 0.12, orbit: 7 });\\n\\n// ------------------------------------------------------------------ air: the slide's approach, the dive and the fall back to the screen\\nput(AIR, 6, 0, 3.98, { s: 'white', gain: 0.07, bandf: 500, bandq: 0.7, bpenv: 3, bpattack: 3.5, bpdecay: 0.1, bpsustain: 1, attack: 3.2, decay: 0.1, sustain: 0.9, release: 0.03, orbit: 6 });\\nput(AIR, 14, 0, 3, { s: 'white', gain: 0.06, bandf: 2500, bandq: 0.6, attack: 1.5, decay: 1.4, sustain: 0, release: 0.2, orbit: 6 });\\nput(AIR, 23, 0, 3.6, { s: 'white', gain: 0.06, bandf: 3000, bandq: 0.6, bpenv: -3, bpattack: 0.1, bpdecay: 3.2, bpsustain: 0, attack: 0.05, decay: 3.4, sustain: 0, release: 0.1, orbit: 6 });\\n// a pad under the cortex and the face\\nconst pad = (bar, name, gain, cutoff) => {\\n  const f = hz(name);\\n  [0, 0.11, -0.11].forEach((d, k) => put(AIR, bar, 0.02, 3.95, { s: 'sawtooth', freq: f * Math.pow(2, d / 12), cutoff, attack: 0.8, decay: 0.3, sustain: 0.85, release: 0.5, gain: gain * (k ? 0.7 : 1), orbit: 8, room: 0.35, roomsize: 3 }));\\n};\\nfor (let bar = 14; bar \u003c 23; bar++) {\\n  const { keys } = chordOf(bar);\\n  [keys[0], keys[2]].forEach((name) => pad(bar, name, bar >= 19 ? 0.1 : 0.075, bar >= 19 ? 1100 : 1600));\\n}\\n\\n$: play(KIT);\\n$: play(CELL);\\n$: play(LOW);\\n$: play(STAB);\\n$: play(BELL);\",\"bpm\":104,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.43333333333333335,\"cycles\":26,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
