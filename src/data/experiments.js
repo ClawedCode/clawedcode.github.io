@@ -111,7 +111,8 @@ export const CATEGORIES = {
       { slug: 'terrain-lexicon', name: 'terrain.lexicon()', color: '#b7ff8a', desc: 'keyboard cartography // typed glyphs raise ridges cut channels and weather into contour memory' },
       { slug: 'exchange-nocturne', name: 'exchange.nocturne()', color: '#ffb54a', desc: 'work the night switchboard while the river rises // twelve lines, four cords, one headset, and what you overhear is the only map' },
       { slug: 'letterlock-post', name: 'letterlock.post()', color: '#e0574a', desc: 'fold five envelope-less letters shut before the last boat // every word left showing is printed in the morning gazette' },
-      { slug: 'vox-humana', name: 'vox.humana()', color: '#e4656f', desc: 'shape a speaking machine by hand and pin what you find to its organ stops // the hall writes down what it actually hears, and six nights later it answers without you' }
+      { slug: 'vox-humana', name: 'vox.humana()', color: '#e4656f', desc: 'shape a speaking machine by hand and pin what you find to its organ stops // the hall writes down what it actually hears, and six nights later it answers without you' },
+      { slug: 'errata-slip', name: 'errata.slip()', color: '#c2362b', desc: 'paste gummed errata slips over four editions of a harbor almanac // every correction redraws the copperplate coast, echoes your margin glosses next year, and binds which town survives 1914' }
     ]
   },
   physics: {
