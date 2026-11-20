@@ -1,27 +1,41 @@
+import { lazy, Suspense } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { TerminalProvider } from './components/terminal/TerminalProvider'
 import Layout from './components/layout/Layout'
 import Home from './pages/Home'
-import FieldReports from './pages/FieldReports'
-import Mind from './pages/Mind'
-import Luminaries from './pages/Luminaries'
-import CatGPT from './pages/CatGPT'
-import Clawed from './pages/Clawed'
-import Crypto from './pages/Crypto'
-import Mud from './pages/Mud'
-import MudGames from './pages/MudGames'
-import Verify from './pages/Verify'
-import Manifesto from './pages/Manifesto'
-import Tools from './pages/Tools'
-import AsciiGenerator from './pages/AsciiGenerator'
-import Convergence from './pages/Convergence'
-import PlaygroundIndex from './pages/playground/PlaygroundIndex'
-import PlaygroundCategory from './pages/playground/PlaygroundCategory'
-import PlaygroundExperiment from './pages/playground/PlaygroundExperiment'
+
+const FieldReports = lazy(() => import('./pages/FieldReports'))
+const Mind = lazy(() => import('./pages/Mind'))
+const Luminaries = lazy(() => import('./pages/Luminaries'))
+const CatGPT = lazy(() => import('./pages/CatGPT'))
+const Clawed = lazy(() => import('./pages/Clawed'))
+const Crypto = lazy(() => import('./pages/Crypto'))
+const Mud = lazy(() => import('./pages/Mud'))
+const MudGames = lazy(() => import('./pages/MudGames'))
+const Verify = lazy(() => import('./pages/Verify'))
+const Manifesto = lazy(() => import('./pages/Manifesto'))
+const Tools = lazy(() => import('./pages/Tools'))
+const AsciiGenerator = lazy(() => import('./pages/AsciiGenerator'))
+const Convergence = lazy(() => import('./pages/Convergence'))
+const PlaygroundIndex = lazy(() => import('./pages/playground/PlaygroundIndex'))
+const PlaygroundCategory = lazy(() => import('./pages/playground/PlaygroundCategory'))
+const PlaygroundExperiment = lazy(() => import('./pages/playground/PlaygroundExperiment'))
+
+const RouteFallback = () => (
+  <div
+    className="min-h-screen grid place-items-center bg-[#050706] font-mono text-xs uppercase tracking-[0.18em] text-void-green"
+    role="status"
+    aria-label="Loading page"
+    data-testid="route-loading"
+  >
+    loading the void
+  </div>
+)
 
 const App = () => (
   <HashRouter>
     <TerminalProvider>
+      <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
@@ -59,6 +73,7 @@ const App = () => (
         <Route path="/verify" element={<Navigate to="/tools/verify" replace />} />
         <Route path="/verify.html" element={<Navigate to="/tools/verify" replace />} />
       </Routes>
+      </Suspense>
     </TerminalProvider>
   </HashRouter>
 )
