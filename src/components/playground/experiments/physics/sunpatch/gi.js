@@ -169,7 +169,6 @@ export async function createGI (canvas, { onLost } = {}) {
   }
   writeSceneParams()
 
-  let latest = null
   let onMeasure = null
 
   const groups = n => Math.ceil(n / 8)
@@ -217,8 +216,8 @@ export async function createGI (canvas, { onLost } = {}) {
     f[4] = state.exposure; f[5] = state.bounce; f[6] = state.xray; f[7] = state.time
     if (state.debugLevel >= 0) {
       const l = state.debugLevel
-      f[10] = (probeCount(W, l) * 2 ** (l + 1)) / cw
-      f[11] = (probeCount(H, l) * 2 ** (l + 1)) / ch
+      f[8] = (probeCount(W, l) * 2 ** (l + 1)) / cw
+      f[9] = (probeCount(H, l) * 2 ** (l + 1)) / ch
     }
     device.queue.writeBuffer(displayU, 0, data)
     const pass = encoder.beginRenderPass({
@@ -235,7 +234,6 @@ export async function createGI (canvas, { onLost } = {}) {
     width: W,
     height: H,
     raysPerFrame: Array.from({ length: levels }, (_, l) => probeCount(W, l) * probeCount(H, l) * 4 ** (l + 1)).reduce((a, b) => a + b, 0),
-    adapterInfo: adapter.info || {},
     setPaint (rgba) {
       device.queue.writeTexture({ texture: paintTex }, rgba, { bytesPerRow: W * 4 }, [W, H])
       this.invalidate()
@@ -258,14 +256,8 @@ export async function createGI (canvas, { onLost } = {}) {
       device.queue.writeBuffer(sampleU, 0, new Uint32Array([state.probeCount, 0, 0, 0]))
       this.invalidate()
     },
-    setView ({ xray, debugLevel, exposure, bounce } = {}) {
+    setView ({ xray, debugLevel } = {}) {
       if (xray !== undefined) state.xray = xray
-      if (exposure !== undefined) state.exposure = exposure
-      if (bounce !== undefined && bounce !== state.bounce) {
-        state.bounce = bounce
-        writeSceneParams()
-        this.invalidate()
-      }
       if (debugLevel !== undefined && debugLevel !== state.debugLevel) {
         state.debugLevel = debugLevel
         writeCascadeParams(debugLevel)
@@ -274,14 +266,12 @@ export async function createGI (canvas, { onLost } = {}) {
       state.displayDirty = true
     },
     onMeasure (fn) { onMeasure = fn },
-    latest () { return latest },
     // Bounce light needs a few frames to propagate through repeated wall
     // re-emission; 24 frames settles even a chalk-lined room.
     invalidate (frames = 24) {
       state.pending = Math.max(state.pending, frames)
       state.displayDirty = true
     },
-    get busy () { return state.pending > 0 },
     frame (time = 0) {
       if (!alive) return false
       state.time = time % 1000
@@ -309,8 +299,8 @@ export async function createGI (canvas, { onLost } = {}) {
           const values = new Float32Array(readBuf.getMappedRange().slice(0, count * 16))
           readBuf.unmap()
           state.reading = false
-          latest = Array.from({ length: count }, (_, i) => [values[i * 4], values[i * 4 + 1], values[i * 4 + 2]])
-          onMeasure?.(latest, state.pending === 0 && !state.measureStale)
+          const rgb = Array.from({ length: count }, (_, i) => [values[i * 4], values[i * 4 + 1], values[i * 4 + 2]])
+          onMeasure?.(rgb, state.pending === 0 && !state.measureStale)
         }).catch(() => { state.reading = false })
       }
       return true

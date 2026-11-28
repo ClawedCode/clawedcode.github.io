@@ -241,7 +241,7 @@ export const DISPLAY_WGSL = LAMP + /* wgsl */`
 struct Params {
   scene: vec2<f32>, mode: u32, lampCount: u32,
   exposure: f32, bounce: f32, xray: f32, time: f32,
-  focus: vec2<f32>, debugScale: vec2<f32>
+  debugScale: vec2<f32>
 }
 @group(0) @binding(0) var<uniform> P: Params;
 @group(0) @binding(1) var irrTex: texture_2d<f32>;
