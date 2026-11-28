@@ -27,6 +27,7 @@ const EyepointLane = lazy(() => import('../../components/playground/experiments/
 const WolfNote = lazy(() => import('../../components/playground/experiments/physics/WolfNote'))
 const ErrataSlip = lazy(() => import('../../components/playground/experiments/linguistics/ErrataSlip'))
 const SafeLight = lazy(() => import('../../components/playground/experiments/physics/SafeLight'))
+const SunpatchCascade = lazy(() => import('../../components/playground/experiments/physics/SunpatchCascade'))
 
 const slugForPath = (path) => path
   .split('/')
@@ -63,7 +64,8 @@ const EXPERIMENT_COMPONENTS = {
       '!../../components/playground/experiments/physics/EyepointLane.jsx',
       '!../../components/playground/experiments/physics/WolfNote.jsx',
       '!../../components/playground/experiments/linguistics/ErrataSlip.jsx',
-      '!../../components/playground/experiments/physics/SafeLight.jsx'
+      '!../../components/playground/experiments/physics/SafeLight.jsx',
+      '!../../components/playground/experiments/physics/SunpatchCascade.jsx'
     ]))
       .map(([path, loader]) => [slugForPath(path), lazy(loader)])
   ),
@@ -91,7 +93,8 @@ const EXPERIMENT_COMPONENTS = {
   'eyepoint-lane': EyepointLane,
   'wolf-note': WolfNote,
   'errata-slip': ErrataSlip,
-  'safe-light': SafeLight
+  'safe-light': SafeLight,
+  'sunpatch-cascade': SunpatchCascade
 }
 
 const LoadingExperiment = ({ color }) => (
