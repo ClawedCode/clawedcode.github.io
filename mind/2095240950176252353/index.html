@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "// Recovered from the final semantically corrected preview candidate.\nprecision highp float;\nuniform vec2 iResolution;\nuniform float iTime;\nconst float DURATION = 60.0;\nconst float TAU = 6.28318530718;\nconst float PI = 3.14159265359;\nfloat hash11(float n) {\n  return fract(sin(n * 127.1 + 71.7) * 43758.5453123);\n}\nfloat sdEllipseApprox(vec2 p, vec2 radius) {\n  return (length(p / radius) - 1.0) * min(radius.x, radius.y);\n}\nfloat sdSegment2D(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(\n    dot(pa, ba) / max(dot(ba, ba), 0.000001),\n    0.0,\n    1.0\n  );\n  return length(pa - ba * h);\n}\nfloat fillMask(float d, float softness) {\n  return 1.0 - smoothstep(-softness, softness, d);\n}\nfloat strokeMask(float d, float width, float softness) {\n  return 1.0 - smoothstep(\n    width - softness,\n    width + softness,\n    abs(d)\n  );\n}\nfloat band(float d, float halfWidth, float softness) {\n  return 1.0 - smoothstep(\n    halfWidth - softness,\n    halfWidth + softness,\n    abs(d)\n  );\n}\nfloat shapedWindow(\n  float phase,\n  float riseA,\n  float riseB,\n  float fallA,\n  float fallB\n) {\n  return smoothstep(riseA, riseB, phase)\n    * (1.0 - smoothstep(fallA, fallB, phase));\n}\nfloat bayer4(vec2 pixel) {\n  vec2 cell = floor(mod(pixel, 4.0));\n  if (cell.y \u003c 0.5) {\n    if (cell.x \u003c 0.5) return 0.0 / 16.0;\n    if (cell.x \u003c 1.5) return 8.0 / 16.0;\n    if (cell.x \u003c 2.5) return 2.0 / 16.0;\n    return 10.0 / 16.0;\n  }\n  if (cell.y \u003c 1.5) {\n    if (cell.x \u003c 0.5) return 12.0 / 16.0;\n    if (cell.x \u003c 1.5) return 4.0 / 16.0;\n    if (cell.x \u003c 2.5) return 14.0 / 16.0;\n    return 6.0 / 16.0;\n  }\n  if (cell.y \u003c 2.5) {\n    if (cell.x \u003c 0.5) return 3.0 / 16.0;\n    if (cell.x \u003c 1.5) return 11.0 / 16.0;\n    if (cell.x \u003c 2.5) return 1.0 / 16.0;\n    return 9.0 / 16.0;\n  }\n  if (cell.x \u003c 0.5) return 15.0 / 16.0;\n  if (cell.x \u003c 1.5) return 7.0 / 16.0;\n  if (cell.x \u003c 2.5) return 13.0 / 16.0;\n  return 5.0 / 16.0;\n}\nfloat bellPlateField(\n  vec2 p,\n  float width,\n  float height,\n  float rimY,\n  float contract,\n  float asymmetry\n) {\n  float rightSide = step(0.0, p.x);\n  vec2 warped = p;\n  warped.x *= 1.0 + rightSide * asymmetry * 0.20;\n  float dome = sdEllipseApprox(\n    warped - vec2(0.0, rimY + 0.008),\n    vec2(width, height)\n  );\n  float upperPlate = max(\n    dome,\n    rimY + 0.004 - warped.y\n  );\n  float rimWidth = width * mix(0.98, 0.73, contract);\n  float nx = warped.x / max(rimWidth, 0.001);\n  float cell = fract((nx + 1.0) * 4.0);\n  float lobeRound = sin(PI * cell);\n  float lobeDepth = mix(0.051, 0.036, contract);\n  float lowerEdge = rimY\n    - lobeDepth * (0.20 + 0.80 * lobeRound);\n  float scallopedSkirt = max(\n    abs(warped.x) - rimWidth,\n    max(\n      warped.y - (rimY + 0.020),\n      lowerEdge - warped.y\n    )\n  );\n  return min(upperPlate, scallopedSkirt);\n}\nfloat scallopLandmarks(\n  vec2 p,\n  float width,\n  float rimY,\n  float contract,\n  float asymmetry\n) {\n  float mark = 0.0;\n  float rimWidth = width * mix(0.98, 0.73, contract);\n  float lobeSpan = rimWidth * 0.105;\n  float depth = mix(0.051, 0.036, contract);\n  for (int i = 0; i \u003c 8; i++) {\n    float fi = float(i);\n    float u = (fi + 0.5) / 8.0;\n    float cx = mix(-0.875, 0.875, u) * rimWidth;\n    float rightSide = step(0.0, cx);\n    cx *= 1.0 - rightSide * asymmetry * 0.17;\n    vec2 a = vec2(cx - lobeSpan, rimY - 0.009);\n    vec2 b = vec2(cx - lobeSpan * 0.42, rimY - depth * 0.76);\n    vec2 c = vec2(cx, rimY - depth);\n    vec2 d = vec2(cx + lobeSpan * 0.42, rimY - depth * 0.76);\n    vec2 e = vec2(cx + lobeSpan, rimY - 0.009);\n    float lobe = min(\n      min(sdSegment2D(p, a, b), sdSegment2D(p, b, c)),\n      min(sdSegment2D(p, c, d), sdSegment2D(p, d, e))\n    );\n    mark = max(\n      mark,\n      1.0 - smoothstep(0.0018, 0.0040, lobe)\n    );\n  }\n  return mark;\n}\nfloat curledCupLandmarks(\n  vec2 p,\n  float width,\n  float rimY,\n  float contract\n) {\n  float rimWidth = width * mix(0.98, 0.73, contract);\n  float strength = smoothstep(0.48, 0.86, contract);\n  vec2 leftA = vec2(-rimWidth, rimY + 0.013);\n  vec2 leftB = vec2(-rimWidth * 0.82, rimY + 0.035);\n  vec2 leftC = vec2(-rimWidth * 0.69, rimY + 0.010);\n  vec2 leftD = vec2(-rimWidth * 0.77, rimY - 0.010);\n  vec2 rightA = vec2(rimWidth, rimY + 0.013);\n  vec2 rightB = vec2(rimWidth * 0.82, rimY + 0.035);\n  vec2 rightC = vec2(rimWidth * 0.69, rimY + 0.010);\n  vec2 rightD = vec2(rimWidth * 0.77, rimY - 0.010);\n  float leftCurl = min(\n    sdSegment2D(p, leftA, leftB),\n    min(\n      sdSegment2D(p, leftB, leftC),\n      sdSegment2D(p, leftC, leftD)\n    )\n  );\n  float rightCurl = min(\n    sdSegment2D(p, rightA, rightB),\n    min(\n      sdSegment2D(p, rightB, rightC),\n      sdSegment2D(p, rightC, rightD)\n    )\n  );\n  return (\n    1.0 - smoothstep(\n      0.0025,\n      0.0053,\n      min(leftCurl, rightCurl)\n    )\n  ) * strength;\n}\nfloat lensField(vec2 p, vec2 size) {\n  vec2 q = abs(p) / max(size, vec2(0.001));\n  float lid = q.y - (1.0 - q.x * q.x);\n  return max(q.x - 1.0, lid)\n    * min(size.x, size.y);\n}\nfloat apertureOpening(\n  vec2 p,\n  vec2 center,\n  float reveal\n) {\n  vec2 size = vec2(\n    mix(0.010, 0.205, reveal),\n    mix(0.006, 0.083, reveal)\n  );\n  return fillMask(\n    lensField(p - center, size),\n    0.0022\n  ) * smoothstep(0.18, 0.55, reveal);\n}\nfloat apertureHinges(\n  vec2 p,\n  vec2 center,\n  float reveal\n) {\n  vec2 size = vec2(\n    mix(0.010, 0.205, reveal),\n    mix(0.006, 0.083, reveal)\n  );\n  vec2 local = p - center;\n  float rim = strokeMask(\n    lensField(local, size),\n    0.0042,\n    0.0016\n  );\n  float displacement = 0.050 * reveal;\n  float upperFlap = strokeMask(\n    lensField(\n      local - vec2(0.0, displacement),\n      size * vec2(0.98, 0.54)\n    ),\n    0.0031,\n    0.0014\n  ) * smoothstep(-0.008, 0.008, local.y);\n  float lowerFlap = strokeMask(\n    lensField(\n      local + vec2(0.0, displacement),\n      size * vec2(0.98, 0.54)\n    ),\n    0.0031,\n    0.0014\n  ) * (\n    1.0 - smoothstep(-0.008, 0.008, local.y)\n  );\n  float leftHinge = 1.0 - smoothstep(\n    0.0020,\n    0.0048,\n    sdSegment2D(\n      p,\n      center + vec2(-size.x, -0.010),\n      center + vec2(-size.x, 0.010)\n    )\n  );\n  float rightHinge = 1.0 - smoothstep(\n    0.0020,\n    0.0048,\n    sdSegment2D(\n      p,\n      center + vec2(size.x, -0.010),\n      center + vec2(size.x, 0.010)\n    )\n  );\n  return max(\n    rim,\n    max(\n      upperFlap,\n      max(lowerFlap, max(leftHinge, rightHinge))\n    )\n  ) * smoothstep(0.18, 0.55, reveal);\n}\nfloat fourLeafOrgan(vec2 p, vec2 center, float scale) {\n  vec2 q = p - center;\n  float topLeaf = fillMask(\n    sdEllipseApprox(\n      q - vec2(0.0, 0.040 * scale),\n      vec2(0.024, 0.046) * scale\n    ),\n    0.0017\n  );\n  float bottomLeaf = fillMask(\n    sdEllipseApprox(\n      q + vec2(0.0, 0.040 * scale),\n      vec2(0.024, 0.046) * scale\n    ),\n    0.0017\n  );\n  float leftLeaf = fillMask(\n    sdEllipseApprox(\n      q + vec2(0.040 * scale, 0.0),\n      vec2(0.046, 0.024) * scale\n    ),\n    0.0017\n  );\n  float rightLeaf = fillMask(\n    sdEllipseApprox(\n      q - vec2(0.040 * scale, 0.0),\n      vec2(0.046, 0.024) * scale\n    ),\n    0.0017\n  );\n  return max(\n    max(topLeaf, bottomLeaf),\n    max(leftLeaf, rightLeaf)\n  );\n}\nfloat gutDivisions(vec2 p, vec2 center, float scale) {\n  vec2 q = p - center;\n  float cross = max(\n    band(q.x, 0.0018 * scale, 0.0009),\n    band(q.y, 0.0018 * scale, 0.0009)\n  );\n  float organ = fourLeafOrgan(p, center, scale);\n  return cross * organ;\n}\nfloat straightCanals(\n  vec2 p,\n  vec2 center,\n  float width,\n  float height\n) {\n  float canals = 0.0;\n  for (int i = 0; i \u003c 8; i++) {\n    float angle = float(i) * PI * 0.25;\n    vec2 endPoint = center + vec2(\n      cos(angle) * width * 0.75,\n      sin(angle) * height * 0.69\n    );\n    float canal = 1.0 - smoothstep(\n      0.0012,\n      0.0037,\n      sdSegment2D(p, center, endPoint)\n    );\n    canals = max(canals, canal);\n  }\n  return canals;\n}\nfloat tendrilCurtain(\n  vec2 p,\n  float width,\n  float rimY,\n  float bow,\n  float streamUp,\n  float tau\n) {\n  float curtain = 0.0;\n  for (int i = 0; i \u003c 28; i++) {\n    float fi = float(i);\n    float u = (fi + 0.5) / 28.0;\n    float rootX = mix(-0.78, 0.78, u) * width;\n    float strandLength = 0.270\n      + 0.074 * hash11(fi + 31.0);\n    float spacingWave = 0.006 * sin(fi * 1.91 + tau);\n    float s1 = 0.30;\n    float s2 = 0.66;\n    vec2 a = vec2(rootX, rimY - 0.010);\n    vec2 b = vec2(\n      rootX - bow * 0.24 + spacingWave,\n      rimY - strandLength * s1\n        + streamUp * strandLength * 0.16\n    );\n    vec2 c = vec2(\n      rootX - bow * 0.67 - spacingWave * 0.6,\n      rimY - strandLength * s2\n        + streamUp * strandLength * 0.52\n    );\n    vec2 d = vec2(\n      rootX - bow + spacingWave * 0.4,\n      rimY - strandLength\n        + streamUp * strandLength * 1.22\n    );\n    float strandDistance = min(\n      sdSegment2D(p, a, b),\n      min(\n        sdSegment2D(p, b, c),\n        sdSegment2D(p, c, d)\n      )\n    );\n    curtain = max(\n      curtain,\n      1.0 - smoothstep(\n        0.0007,\n        0.0024,\n        strandDistance\n      )\n    );\n  }\n  return curtain;\n}\nfloat frilledRibbon(\n  vec2 p,\n  float rootX,\n  float rimY,\n  float bow,\n  float streamUp,\n  float phaseOffset,\n  float tau\n) {\n  float ribbon = 0.0;\n  float ribbonLength = 0.250;\n  for (int i = 0; i \u003c 12; i++) {\n    float s0 = float(i) / 12.0;\n    float s1 = float(i + 1) / 12.0;\n    float wave0 = 0.018 * sin(\n      s0 * TAU * 3.25 + phaseOffset + tau * 0.10\n    );\n    float wave1 = 0.018 * sin(\n      s1 * TAU * 3.25 + phaseOffset + tau * 0.10\n    );\n    vec2 a = vec2(\n      rootX - bow * s0 * s0 + wave0,\n      rimY - ribbonLength * s0\n        + streamUp * ribbonLength * 0.78 * s0 * s0\n    );\n    vec2 b = vec2(\n      rootX - bow * s1 * s1 + wave1,\n      rimY - ribbonLength * s1\n        + streamUp * ribbonLength * 0.78 * s1 * s1\n    );\n    float segment = 1.0 - smoothstep(\n      0.0060,\n      0.0100,\n      sdSegment2D(p, a, b)\n    );\n    ribbon = max(ribbon, segment);\n  }\n  return ribbon;\n}\nfloat engravedHatching(\n  vec2 p,\n  float bellMask,\n  float contract\n) {\n  float hatch = 0.0;\n  for (int i = 0; i \u003c 13; i++) {\n    float fi = float(i);\n    float offset = mix(-0.245, 0.245, fi / 12.0);\n    float diagonal = p.y - 0.42 * p.x - offset;\n    float line = band(\n      diagonal,\n      mix(0.0007, 0.0012, contract),\n      0.0008\n    );\n    hatch = max(hatch, line);\n  }\n  return hatch * bellMask;\n}\nvoid main() {\n  vec2 uv = (\n    gl_FragCoord.xy - 0.5 * iResolution.xy\n  ) / iResolution.y;\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * TAU;\n  float strikeOne = shapedWindow(\n    phase,\n    0.145,\n    0.175,\n    0.215,\n    0.255\n  );\n  float strikeTwo = shapedWindow(\n    phase,\n    0.295,\n    0.325,\n    0.380,\n    0.420\n  );\n  float paperEvent = step(0.450, phase)\n    * (1.0 - step(0.720, phase));\n  float seamRecovery = max(\n    1.0 - smoothstep(0.000, 0.120, phase),\n    smoothstep(0.940, 0.995, phase)\n  );\n  float contract = max(\n    0.18 + seamRecovery * 0.28,\n    max(\n      strikeOne * 0.88,\n      max(strikeTwo * 0.94, paperEvent)\n    )\n  );\n  float apertureReveal = max(\n    strikeTwo * 0.62,\n    paperEvent\n  );\n  float rise = smoothstep(0.110, 0.430, phase);\n  float descent = smoothstep(0.720, 0.910, phase);\n  float returnHome = smoothstep(0.945, 0.995, phase);\n  float streamUp = shapedWindow(\n    phase,\n    0.740,\n    0.790,\n    0.940,\n    0.995\n  );\n  float centerY = 0.020\n    + 0.100 * rise\n    - 0.180 * descent;\n  centerY = mix(centerY, 0.020, returnHome);\n  float centerX = 0.090\n    - 0.035 * rise\n    + 0.020 * descent;\n  centerX = mix(centerX, 0.090, returnHome);\n  vec2 creatureCenter = vec2(\n    centerX + 0.004 * sin(tau),\n    centerY + 0.004 * cos(tau)\n  );\n  vec2 p = uv - creatureCenter;\n  float width = mix(0.310, 0.340, contract);\n  float height = mix(0.210, 0.120, contract);\n  float rimY = mix(-0.055, -0.015, contract);\n  float asymmetry = seamRecovery;\n  float residualBow = 0.080\n    + 0.018 * sin(tau + 0.4);\n  float thrustBow = max(strikeOne, max(strikeTwo, paperEvent));\n  float bow = residualBow + 0.085 * thrustBow;\n  bow = mix(bow, -0.085, streamUp);\n  vec3 midnightTop = vec3(0.075, 0.112, 0.180);\n  vec3 midnightBottom = vec3(0.003, 0.007, 0.018);\n  vec3 paperWhite = vec3(0.985, 0.975, 0.935);\n  vec3 paperGray = vec3(0.690, 0.685, 0.650);\n  vec3 specimenInk = vec3(0.012, 0.018, 0.025);\n  vec3 midnightInk = vec3(0.090, 0.120, 0.160);\n  vec3 sodiumAmber = vec3(0.965, 0.525, 0.105);\n  vec3 ocean = mix(\n    midnightBottom,\n    midnightTop,\n    clamp(uv.y + 0.52, 0.0, 1.0)\n  );\n  vec3 color = mix(ocean, paperWhite, paperEvent);\n  float shaftHeight = smoothstep(-0.31, 0.48, uv.y);\n  float shaftA = 1.0 - smoothstep(\n    0.025,\n    0.092,\n    abs(uv.x + 0.335 - uv.y * 0.22)\n  );\n  float shaftB = 1.0 - smoothstep(\n    0.020,\n    0.074,\n    abs(uv.x + 0.205 - uv.y * 0.31)\n  );\n  float shaftC = 1.0 - smoothstep(\n    0.022,\n    0.083,\n    abs(uv.x + 0.430 - uv.y * 0.13)\n  );\n  float shafts = clamp(\n    shaftA * 0.72 + shaftB * 0.48 + shaftC * 0.30,\n    0.0,\n    1.0\n  ) * shaftHeight * (1.0 - paperEvent);\n  color = mix(\n    color,\n    vec3(0.300, 0.340, 0.385),\n    shafts * 0.27\n  );\n  float behindSnow = 0.0;\n  float frontSnow = 0.0;\n  float amberMotes = 0.0;\n  for (int i = 0; i \u003c 24; i++) {\n    float fi = float(i);\n    float hx = hash11(fi + 9.0);\n    float hy = hash11(fi + 57.0);\n    float hz = hash11(fi + 121.0);\n    float rate = 0.35 + 0.22 * mod(fi, 3.0);\n    vec2 motePosition = vec2(\n      -0.48 + 0.96 * hx\n        + 0.010 * sin(tau + fi * 1.4),\n      -0.50 + fract(hy - phase * rate)\n    );\n    float radius = mix(0.0015, 0.0040, hz);\n    float mote = 1.0 - smoothstep(\n      radius,\n      radius + 0.0016,\n      length(uv - motePosition)\n    );\n    float amberClass = 1.0 - step(\n      0.5,\n      mod(fi, 8.0)\n    );\n    float frontClass = step(0.58, hz);\n    amberMotes = max(\n      amberMotes,\n      mote * amberClass\n    );\n    behindSnow = max(\n      behindSnow,\n      mote\n        * (1.0 - amberClass)\n        * (1.0 - frontClass)\n    );\n    frontSnow = max(\n      frontSnow,\n      mote\n        * (1.0 - amberClass)\n        * frontClass\n    );\n  }\n  vec3 snowColor = mix(\n    vec3(0.700, 0.715, 0.700),\n    specimenInk,\n    paperEvent\n  );\n  color = mix(color, snowColor, behindSnow * 0.42);\n  color = mix(color, sodiumAmber, amberMotes * 0.70);\n  float bellDistance = bellPlateField(\n    p,\n    width,\n    height,\n    rimY,\n    contract,\n    asymmetry\n  );\n  float bellMask = fillMask(bellDistance, 0.0022);\n  float bellContour = strokeMask(\n    bellDistance,\n    0.0047,\n    0.0016\n  );\n  float tendrils = tendrilCurtain(\n    p,\n    width,\n    rimY - 0.018,\n    bow,\n    streamUp,\n    tau\n  );\n  float leftRibbon = frilledRibbon(\n    p,\n    -0.064,\n    rimY - 0.013,\n    bow * 0.74,\n    streamUp,\n    0.35,\n    tau\n  );\n  float rightRibbon = frilledRibbon(\n    p,\n    0.058,\n    rimY - 0.013,\n    bow * 0.56,\n    streamUp,\n    2.25,\n    tau\n  );\n  float oralArms = max(leftRibbon, rightRibbon);\n  vec3 normalContour = vec3(0.965, 0.945, 0.855);\n  vec3 contourColor = mix(\n    normalContour,\n    specimenInk,\n    paperEvent\n  );\n  color = mix(\n    color,\n    contourColor,\n    clamp(tendrils * 0.96 + oralArms * 0.92, 0.0, 1.0)\n  );\n  float shade = clamp(\n    0.30\n      + 0.46 * (\n        p.y - rimY + height * 0.10\n      ) / max(height, 0.001)\n      - 0.12 * p.x / max(width, 0.001),\n    0.18,\n    0.88\n  );\n  float orderedDots = step(\n    bayer4(gl_FragCoord.xy),\n    shade\n  );\n  vec3 normalMembrane = mix(\n    vec3(0.675, 0.690, 0.675),\n    vec3(0.400, 0.430, 0.445),\n    orderedDots * 0.44\n  );\n  vec3 eventMembrane = mix(\n    vec3(0.075, 0.082, 0.085),\n    specimenInk,\n    orderedDots * 0.72\n  );\n  vec3 membraneColor = mix(\n    normalMembrane,\n    eventMembrane,\n    paperEvent\n  );\n  color = mix(color, membraneColor, bellMask * 0.96);\n  vec2 organCenter = vec2(\n    0.000,\n    rimY + height * 0.48\n  );\n  float opening = apertureOpening(\n    p,\n    organCenter,\n    apertureReveal\n  ) * bellMask;\n  vec3 cavityColor = mix(\n    vec3(0.020, 0.030, 0.048),\n    paperWhite,\n    paperEvent\n  );\n  color = mix(color, cavityColor, opening);\n  float canals = straightCanals(\n    p,\n    organCenter,\n    width,\n    height\n  ) * bellMask;\n  float canalVisibility = mix(\n    0.48,\n    1.0,\n    max(apertureReveal, paperEvent)\n  );\n  color = mix(\n    color,\n    sodiumAmber,\n    canals * canalVisibility * 0.84\n  );\n  float gutScale = mix(\n    0.72,\n    1.18,\n    max(apertureReveal, paperEvent)\n  );\n  float gut = fourLeafOrgan(\n    p,\n    organCenter,\n    gutScale\n  );\n  float gutVisibility = mix(\n    0.68,\n    1.0,\n    max(apertureReveal, paperEvent)\n  );\n  color = mix(\n    color,\n    sodiumAmber,\n    gut * gutVisibility\n  );\n  float divisions = gutDivisions(\n    p,\n    organCenter,\n    gutScale\n  );\n  color = mix(\n    color,\n    specimenInk,\n    divisions * 0.96\n  );\n  float scallops = scallopLandmarks(\n    p,\n    width,\n    rimY,\n    contract,\n    asymmetry\n  ) * bellMask;\n  float curls = curledCupLandmarks(\n    p,\n    width,\n    rimY,\n    contract\n  ) * bellMask;\n  float hinges = apertureHinges(\n    p,\n    organCenter,\n    apertureReveal\n  ) * bellMask;\n  float hatching = engravedHatching(\n    p,\n    bellMask,\n    contract\n  );\n  vec3 anatomyInk = mix(\n    midnightInk,\n    vec3(0.045, 0.048, 0.048),\n    paperEvent\n  );\n  color = mix(\n    color,\n    anatomyInk,\n    hatching * mix(0.30, 0.52, paperEvent)\n  );\n  color = mix(\n    color,\n    anatomyInk,\n    max(scallops, max(curls, hinges))\n  );\n  color = mix(\n    color,\n    contourColor,\n    max(bellContour, hinges)\n  );\n  color = mix(color, snowColor, frontSnow * 0.68);\n  float inkActive = step(0.740, phase);\n  float inkRise = smoothstep(0.740, 0.925, phase);\n  float inkRetreat = smoothstep(0.945, 0.995, phase);\n  float inkLineY = mix(-0.520, 0.180, inkRise);\n  inkLineY = mix(inkLineY, -0.550, inkRetreat);\n  float belowInk = (\n    1.0 - smoothstep(\n      inkLineY - 0.0020,\n      inkLineY + 0.0020,\n      uv.y\n    )\n  ) * inkActive;\n  color = mix(\n    color,\n    vec3(0.000, 0.001, 0.003),\n    belowInk\n  );\n  float inkBoundary = band(\n    uv.y - inkLineY,\n    0.0035,\n    0.0012\n  ) * inkActive * (1.0 - inkRetreat);\n  color = mix(\n    color,\n    paperWhite,\n    inkBoundary\n  );\n  float paperFiber = sin(\n    gl_FragCoord.x * 0.071\n      + gl_FragCoord.y * 0.019\n  ) * sin(gl_FragCoord.y * 0.113);\n  color += vec3(\n    paperFiber * 0.005 * paperEvent\n  );\n  gl_FragColor = vec4(\n    clamp(color, 0.0, 1.0),\n    1.0\n  );\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 800, 800);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 800, 800);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 60;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+
+
+
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 64\\n// DURATION: 60\\n// FORM: 16 cycles — trench 1-4, ascent 5-8, moonlit breath 9-11, descent and return 12-16\\n\\n// The trench is a slow C minor pedal with one widening interval at the crest.\\n$: note(\\\"\u003cc1 ~ c1 g1 c1 db1 eb1 g1 [c1,g1] [db1,ab1] [c1,g1] eb1 db1 c1 ~ c1>\\\")\\n  .s(\\\"sine\\\").attack(.25).release(2.8).lpf(170).room(.42).gain(.3).orbit(0)\\n\\n// A four-note bell motif climbs with the jellyfish, opens into dyads, then returns to G.\\n$: note(\\\"\u003cg3 ~ ~ g3 ab3 ~ c4 eb4 [g4,c5] [eb4,g4] [c4,eb4] ab3 g3 ~ ~ g3>\\\")\\n  .s(\\\"triangle\\\").attack(.35).release(3.1).lpf(1800).room(.62).gain(.24)\\n  .pan(\\\"\u003c.42 .58 .46 .54>\\\").orbit(1)\\n\\n// Fine tendril figures appear only during ascent and the held moonlit breath.\\n$: note(\\\"\u003c~ ~ ~ ~ [g5 ~ d6] [ab5 ~ eb6] [c6 ~ g6] [eb6 c6 g5] [g6 ~ c7] [eb6 c6 g5] [c6 ~ g5] [ab5 ~ eb5] ~ ~ ~ ~>\\\")\\n  .s(\\\"sine\\\").attack(.03).release(.85).hpf(650).lpf(3200).room(.7).gain(.1)\\n  .pan(\\\"\u003c.22 .74 .38 .82>\\\").orbit(2)\\n\\n// One warm, rounded pressure pulse marks the value inversion without becoming a drum hit.\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ c2 [c2,g2,c3] [db2,ab2,db3] [c2,g2,c3] c2 ~ ~ ~ ~>\\\")\\n  .s(\\\"triangle\\\").attack(.55).release(3.3).lpf(480).room(.5).gain(.18).orbit(3)\\n\",\"bpm\":64,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.26666666666666666,\"cycles\":16,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

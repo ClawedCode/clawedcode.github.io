@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { ShaderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/ShaderPass.js';
+const DURATION = 60;
+const SIZE = 900;
+const TAU = Math.PI * 2;
+const navy = 0x071426;
+const amber = 0xd98b2b;
+const paper = 0xf2eadc;
+let seed = 1040093;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const smooth = (a, b, x) => {
+  const t = clamp((x - a) / (b - a));
+  return t * t * (3 - 2 * t);
+};
+const pulse = (x, c, w) => Math.exp(-(((x - c) / w) ** 2));
+const bump = (x, a, b, c) => smooth(a, b, x) - smooth(b, c, x);
+document.body.style.margin = '0';
+document.body.style.background = '#071426';
+document.body.style.overflow = 'hidden';
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(navy);
+scene.fog = new THREE.FogExp2(navy, 0.045);
+const camera = new THREE.PerspectiveCamera(36, 1, 0.1, 60);
+camera.position.set(0, 0.1, 16);
+camera.lookAt(0, 0.05, 0);
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  preserveDrawingBuffer: true
+});
+renderer.setPixelRatio(1);
+renderer.setSize(SIZE, SIZE);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const composer = new EffectComposer(renderer);
+composer.setSize(SIZE, SIZE);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(SIZE, SIZE),
+  0.34,
+  0.42,
+  0.82
+);
+composer.addPass(bloom);
+const grain = new ShaderPass({
+  uniforms: { tDiffuse: { value: null } },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    float hash(vec2 p) {
+      return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+    }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      float g = (hash(floor(gl_FragCoord.xy * 0.5)) - 0.5) * 0.014;
+      gl_FragColor = vec4(c.rgb + g, c.a);
+    }
+  `
+});
+composer.addPass(grain);
+scene.add(new THREE.AmbientLight(paper, 0.14));
+const key = new THREE.DirectionalLight(paper, 3.1);
+key.position.set(-5, 7, 8);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
+key.shadow.camera.left = -6;
+key.shadow.camera.right = 6;
+key.shadow.camera.top = 6;
+key.shadow.camera.bottom = -6;
+scene.add(key);
+const rim = new THREE.PointLight(amber, 18, 15, 2);
+rim.position.set(-3.8, -3.5, 2.8);
+scene.add(rim);
+function paperTexture(bg, ink, inverse = false) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = bg;
+  x.fillRect(0, 0, 256, 256);
+  x.globalAlpha = inverse ? 0.18 : 0.1;
+  x.fillStyle = ink;
+  for (let py = 7; py < 256; py += 12) {
+    for (let px = 7; px < 256; px += 12) {
+      const r = ((px / 12 + py / 12) % 3 === 0) ? 1.5 : 0.7;
+      x.beginPath();
+      x.arc(px, py, r, 0, TAU);
+      x.fill();
+    }
+  }
+  x.globalAlpha = inverse ? 0.1 : 0.07;
+  x.strokeStyle = ink;
+  x.lineWidth = 1;
+  for (let i = 0; i < 90; i++) {
+    const px = random() * 256;
+    const py = random() * 256;
+    x.beginPath();
+    x.moveTo(px, py);
+    x.lineTo(px + 4 + random() * 14, py + (random() - 0.5) * 2);
+    x.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(2.2, 1);
+  tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return tex;
+}
+const pageTex = paperTexture('#f2eadc', '#071426');
+const darkTex = paperTexture('#071426', '#d98b2b', true);
+const pageMat = new THREE.MeshStandardMaterial({
+  color: paper,
+  map: pageTex,
+  roughness: 0.94,
+  metalness: 0
+});
+const inkMat = new THREE.MeshBasicMaterial({ color: navy });
+const weightMat = new THREE.MeshStandardMaterial({
+  color: amber,
+  emissive: amber,
+  emissiveIntensity: 2.1,
+  roughness: 0.38,
+  metalness: 0.08
+});
+const pageShape = new THREE.Shape();
+pageShape.moveTo(-2.05, -0.22);
+pageShape.lineTo(1.72, -0.22);
+pageShape.lineTo(2.06, -0.08);
+pageShape.lineTo(1.88, 0.22);
+pageShape.lineTo(-1.82, 0.22);
+pageShape.quadraticCurveTo(-2.13, 0.14, -2.05, -0.22);
+const pageGeo = new THREE.ExtrudeGeometry(pageShape, {
+  depth: 0.075,
+  bevelEnabled: true,
+  bevelSegments: 1,
+  bevelSize: 0.018,
+  bevelThickness: 0.018
+});
+pageGeo.center();
+const dotGeo = new THREE.CircleGeometry(0.036, 12);
+const sealGeo = new THREE.CircleGeometry(0.115, 20);
+const tower = new THREE.Group();
+scene.add(tower);
+const pages = [];
+const levels = 23;
+for (let i = 0; i < levels; i++) {
+  const u = i / (levels - 1);
+  const mesh = new THREE.Mesh(pageGeo, pageMat);
+  const bx = -1.02 + u * 2.04 + (random() - 0.5) * 0.1;
+  const by = -3.05 + u * 6.1;
+  const bz = -0.5 + i * 0.047;
+  const br = -0.105 + (random() - 0.5) * 0.025;
+  mesh.position.set(bx, by, bz);
+  mesh.rotation.set(-0.06, 0, br);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  const digits = 1 + (i % 3);
+  for (let d = 0; d < digits; d++) {
+    const mark = new THREE.Mesh(dotGeo, inkMat);
+    mark.position.set(-1.64 + d * 0.13, 0.01, 0.075);
+    mesh.add(mark);
+  }
+  if (i % 3 === 1) {
+    const seal = new THREE.Mesh(sealGeo, weightMat);
+    seal.position.set(1.34 - (i % 5) * 0.1, 0.01, 0.082);
+    mesh.add(seal);
+  }
+  tower.add(mesh);
+  pages.push({ mesh, bx, by, bz, br, u });
+}
+const foldShape = new THREE.Shape();
+foldShape.moveTo(-0.8, -4.8);
+foldShape.lineTo(1.75, -4.8);
+foldShape.lineTo(0.92, 3.25);
+foldShape.lineTo(-0.18, 2.72);
+foldShape.lineTo(-0.55, -0.4);
+const foldGeo = new THREE.ExtrudeGeometry(foldShape, {
+  depth: 0.18,
+  bevelEnabled: true,
+  bevelSegments: 1,
+  bevelSize: 0.025,
+  bevelThickness: 0.025
+});
+const foldMat = new THREE.MeshStandardMaterial({
+  color: navy,
+  map: darkTex,
+  roughness: 0.88,
+  metalness: 0.02
+});
+const fold = new THREE.Mesh(foldGeo, foldMat);
+fold.position.set(3.15, -0.1, 3.15);
+fold.rotation.z = -0.11;
+fold.castShadow = true;
+scene.add(fold);
+const seamGeo = new THREE.BufferGeometry().setFromPoints([
+  new THREE.Vector3(-0.5, -4.2, 0.22),
+  new THREE.Vector3(-0.08, 2.45, 0.22)
+]);
+const seam = new THREE.Line(
+  seamGeo,
+  new THREE.LineBasicMaterial({ color: amber })
+);
+fold.add(seam);
+const dustPos = new Float32Array(210 * 3);
+for (let i = 0; i < 210; i++) {
+  dustPos[i * 3] = (random() - 0.5) * 12;
+  dustPos[i * 3 + 1] = (random() - 0.5) * 10;
+  dustPos[i * 3 + 2] = -2 - random() * 10;
+}
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+scene.add(new THREE.Points(
+  dustGeo,
+  new THREE.PointsMaterial({
+    color: paper,
+    size: 0.025,
+    transparent: true,
+    opacity: 0.24,
+    depthWrite: false
+  })
+));
+const count = 52;
+const steps = 900;
+const dt = DURATION / steps;
+const init = new Float32Array(count * 3);
+const pos = new Float32Array(count * 3);
+const vel = new Float32Array(count * 3);
+const tape = new Float32Array((steps + 1) * count * 3);
+const chipAngle = new Float32Array(count);
+for (let i = 0; i < count; i++) {
+  const u = i / (count - 1);
+  init[i * 3] = -2.75 + u * 5.5 + (random() - 0.5) * 0.22;
+  init[i * 3 + 1] = -2.9 + u * 5.8 + (random() - 0.5) * 0.16;
+  init[i * 3 + 2] = 0.55 + (random() - 0.5) * 0.45;
+  pos.set(init.subarray(i * 3, i * 3 + 3), i * 3);
+  vel[i * 3] = (random() - 0.5) * 0.04;
+  vel[i * 3 + 1] = (random() - 0.5) * 0.04;
+  chipAngle[i] = random() * TAU;
+}
+for (let s = 0; s <= steps; s++) {
+  const p = s / steps;
+  if (s === steps) {
+    for (let i = 0; i < init.length; i++) tape[s * init.length + i] = init[i];
+    break;
+  }
+  tape.set(pos, s * init.length);
+  const spread = smooth(0.15, 0.22, p) - smooth(0.80, 0.96, p);
+  const invert = smooth(0.45, 0.51, p) - smooth(0.73, 0.79, p);
+  const returnForm = bump(p, 0.80, 0.86, 0.98);
+  const gravity = -0.11 + invert * 0.26;
+  for (let i = 0; i < count; i++) {
+    const k = i * 3;
+    const u = i / (count - 1);
+    const ix = init[k];
+    const iy = init[k + 1];
+    const tx = ix
+      + spread * (u - 0.5) * 1.65
+      - invert * (u - 0.5) * 3.15
+      + returnForm * Math.sin(chipAngle[i]) * 0.22;
+    const ty = iy
+      + spread * ((i % 4) - 1.5) * 0.075
+      - invert * iy * 1.72
+      + returnForm * Math.cos(chipAngle[i]) * 0.14;
+    const tz = init[k + 2] + spread * ((i % 5) - 2) * 0.055;
+    const b1 = pulse(p, 0.17 + u * 0.075, 0.012);
+    const b2 = pulse(p, 0.47 + (1 - u) * 0.09, 0.014);
+    const b3 = pulse(p, 0.81 + u * 0.065, 0.013);
+    let ax = (tx - pos[k]) * 3.9 - vel[k] * 2.55;
+    let ay = (ty - pos[k + 1]) * 3.9 - vel[k + 1] * 2.55 + gravity;
+    let az = (tz - pos[k + 2]) * 3.2 - vel[k + 2] * 2.2;
+    ax += b1 * 4.8 - b2 * 4.2 + b3 * 2.8;
+    ay += b1 * 5.4 + b2 * 3.7 - b3 * 2.4;
+    az += (b1 + b2) * 1.25;
+    vel[k] += ax * dt;
+    vel[k + 1] += ay * dt;
+    vel[k + 2] += az * dt;
+    pos[k] += vel[k] * dt;
+    pos[k + 1] += vel[k + 1] * dt;
+    pos[k + 2] += vel[k + 2] * dt;
+    const close = smooth(0.87, 1, p);
+    pos[k] = THREE.MathUtils.lerp(pos[k], init[k], close * 0.14);
+    pos[k + 1] = THREE.MathUtils.lerp(pos[k + 1], init[k + 1], close * 0.14);
+    pos[k + 2] = THREE.MathUtils.lerp(pos[k + 2], init[k + 2], close * 0.14);
+  }
+}
+const chipGeo = new THREE.TetrahedronGeometry(0.064, 0);
+const chips = new THREE.InstancedMesh(chipGeo, weightMat, count);
+chips.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+scene.add(chips);
+const dummy = new THREE.Object3D();
+function updatePhysics(phase) {
+  const f = phase * steps;
+  const a = Math.min(steps - 1, Math.floor(f));
+  const b = a + 1;
+  const mix = f - a;
+  for (let i = 0; i < count; i++) {
+    const k = i * 3;
+    const ka = a * init.length + k;
+    const kb = b * init.length + k;
+    const x = THREE.MathUtils.lerp(tape[ka], tape[kb], mix);
+    const y = THREE.MathUtils.lerp(tape[ka + 1], tape[kb + 1], mix);
+    const z = THREE.MathUtils.lerp(tape[ka + 2], tape[kb + 2], mix);
+    const dx = tape[kb] - tape[ka];
+    const dy = tape[kb + 1] - tape[ka + 1];
+    dummy.position.set(x, y, z);
+    dummy.rotation.set(chipAngle[i], 0.35, Math.atan2(dy, dx));
+    const s = 0.78 + (i % 5) * 0.08;
+    dummy.scale.setScalar(s);
+    dummy.updateMatrix();
+    chips.setMatrixAt(i, dummy.matrix);
+  }
+  chips.instanceMatrix.needsUpdate = true;
+}
+function updateTower(phase) {
+  const spread = smooth(0.15, 0.22, phase) - smooth(0.80, 0.96, phase);
+  const invert = smooth(0.45, 0.51, phase) - smooth(0.73, 0.79, phase);
+  const altered = bump(phase, 0.80, 0.86, 0.98);
+  for (const page of pages) {
+    const { mesh, bx, by, bz, br, u } = page;
+    const a = pulse(phase, 0.17 + u * 0.08, 0.013);
+    const b = pulse(phase, 0.47 + (1 - u) * 0.1, 0.015);
+    const c = pulse(phase, 0.81 + u * 0.07, 0.014);
+    mesh.position.x = bx
+      + (spread - invert * 1.85) * (u - 0.5) * 1.15
+      + (a - b + c) * 0.2;
+    mesh.position.y = by + a * 0.28 + b * 0.18 - c * 0.12;
+    mesh.position.z = bz + a * 0.32 + b * 0.18 + altered * 0.09;
+    mesh.rotation.z = br + spread * (u - 0.5) * 0.065 - invert * 0.09;
+    mesh.rotation.y = invert * (u - 0.5) * 0.22;
+  }
+  const flash =
+    pulse(phase, 0.21, 0.03) +
+    pulse(phase, 0.52, 0.035) +
+    pulse(phase, 0.86, 0.03);
+  weightMat.emissiveIntensity = 1.9 + flash * 1.25;
+  bloom.strength = 0.32 + flash * 0.14;
+}
+let previousPhase = -1;
+function renderAtTime(seconds) {
+  const phase = (((seconds % DURATION) + DURATION) % DURATION) / DURATION;
+  const tau = phase * TAU;
+  if (previousPhase >= 0 && phase < previousPhase) updatePhysics(0);
+  previousPhase = phase;
+  camera.position.z = 16 - (1 - Math.cos(tau)) * 0.34;
+  camera.lookAt(0, 0.05, 0);
+  updateTower(phase);
+  updatePhysics(phase);
+  composer.render();
+}
+let origin;
+function animate(timestamp) {
+  if (origin === undefined) origin = timestamp;
+  const seconds = (timestamp - origin) / 1000;
+  renderAtTime(seconds);
+  requestAnimationFrame(animate);
+}
+renderAtTime(0);
+requestAnimationFrame(animate);
+
+window.initToneJsEngine = async function() {
+  const duration = 60;
+  const targetBpm = 64;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0x1f0c9a80;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const atFraction = (fraction) => totalBars * fraction * 240 / bpm;
+  const eventAt = (fraction, value) => [atFraction(fraction) + H(45), value];
+  const dorianPitchSet = [
+    'Eb2', 'F3', 'Gb3', 'Ab3', 'Bb3', 'C4',
+    'Db4', 'Eb4', 'Ab4', 'Bb4', 'C5', 'Db5'
+  ];
+  const motif = ['Eb4', 'Ab4', 'Db5', 'C5', 'Bb4'];
+  const stateAUpper = ['Ab3', 'Db4', 'Gb4', 'C5'];
+  const stateBUpper = ['Bb3', 'Eb4', 'Ab4', 'Db5'];
+  const transformedMotif = ['Eb5', 'Bb4', 'C5', 'Db5', 'Ab4'];
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const mixCompressor = new Tone.Compressor({
+    threshold: -20,
+    ratio: 2.5,
+    attack: 0.025,
+    release: 0.3,
+    knee: 10
+  }).connect(masterLimiter);
+  const masterGain = new Tone.Gain(0.62).connect(mixCompressor);
+  const pedalBus = new Tone.Volume(-10).connect(masterGain);
+  const pedalFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 520,
+    Q: 0.6,
+    rolloff: -24
+  }).connect(pedalBus);
+  const pedalVoice = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.18,
+      decay: 1.2,
+      sustain: 0.62,
+      release: 3.2
+    }
+  }).connect(pedalFilter);
+  const upperBus = new Tone.Volume(-16).connect(masterGain);
+  const upperFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1800,
+    Q: 0.75,
+    rolloff: -12
+  }).connect(upperBus);
+  const upperVoice = new Tone.Synth({
+    oscillator: { type: 'sine' },
+    envelope: {
+      attack: 0.035,
+      decay: 0.9,
+      sustain: 0.16,
+      release: 2.8
+    }
+  }).connect(upperFilter);
+  const glassBus = new Tone.Volume(-15).connect(masterGain);
+  const glassEcho = new Tone.FeedbackDelay({
+    delayTime: '4n',
+    feedback: 0.22,
+    wet: 0.36
+  }).connect(glassBus);
+  const glassFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 2300,
+    Q: 0.85,
+    rolloff: -12
+  }).connect(glassEcho);
+  const glassVoice = new Tone.FMSynth({
+    harmonicity: 1.5,
+    modulationIndex: 4.2,
+    oscillator: { type: 'sine' },
+    modulation: { type: 'sine' },
+    envelope: {
+      attack: 0.008,
+      decay: 0.75,
+      sustain: 0.08,
+      release: 2.1
+    },
+    modulationEnvelope: {
+      attack: 0.02,
+      decay: 0.48,
+      sustain: 0.04,
+      release: 1.4
+    }
+  }).connect(glassFilter);
+  const ghostBus = new Tone.Volume(-25).connect(masterGain);
+  const ghostFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 1750,
+    Q: 0.5,
+    rolloff: -24
+  }).connect(ghostBus);
+  const metallicGhost = new Tone.MetalSynth({
+    frequency: 310,
+    harmonicity: 2.1,
+    modulationIndex: 6,
+    resonance: 1700,
+    octaves: 0.65,
+    envelope: {
+      attack: 0.002,
+      decay: 0.11,
+      release: 0.16
+    }
+  }).connect(ghostFilter);
+  const pedalEvents = [
+    eventAt(0, { note: dorianPitchSet[0], velocity: 0.68, cutoff: 480 }),
+    eventAt(0.18, { note: 'Eb2', velocity: 0.48, cutoff: 560 }),
+    eventAt(0.38, { note: 'Eb2', velocity: 0.52, cutoff: 650 }),
+    eventAt(0.5, { note: 'Eb2', velocity: 0.58, cutoff: 720 }),
+    eventAt(0.62, { note: 'Eb2', velocity: 0.5, cutoff: 570 }),
+    eventAt(0.82, { note: 'Eb2', velocity: 0.62, cutoff: 480 })
+  ];
+  const constellationEvents = [];
+  motif.forEach((note, index) => {
+    constellationEvents.push(eventAt(0.012 + index * 0.032, {
+      role: 'glass',
+      note,
+      duration: index === 0 ? '4n' : '8n',
+      velocity: index === 0 ? 0.43 : 0.3,
+      cutoff: 2050 + index * 120
+    }));
+  });
+  const secondSection = [
+    { role: 'glass', note: motif[0], duration: '8n', velocity: 0.28, cutoff: 2250 },
+    { role: 'upper', note: stateAUpper[0], duration: '2n', velocity: 0.34, cutoff: 1500 },
+    { role: 'glass', note: motif[2], duration: '8n', velocity: 0.25, cutoff: 2400 },
+    { role: 'upper', note: stateAUpper[1], duration: '2n', velocity: 0.31, cutoff: 1650 },
+    { role: 'glass', note: motif[4], duration: '8n', velocity: 0.27, cutoff: 2150 },
+    { role: 'upper', note: stateAUpper[2], duration: '2n', velocity: 0.28, cutoff: 1750 },
+    { role: 'glass', note: motif[1], duration: '4n', velocity: 0.3, cutoff: 2300 }
+  ];
+  secondSection.forEach((event, index) => {
+    constellationEvents.push(eventAt(0.2 + index * (0.16 / 6), event));
+  });
+  const centerSection = [
+    { role: 'upper', note: stateBUpper[0], duration: '2n', velocity: 0.34, cutoff: 1800 },
+    { role: 'glass', note: motif[3], duration: '8n', velocity: 0.29, cutoff: 2450 },
+    { role: 'ghost', note: 'Eb5', velocity: 0.14 },
+    { role: 'upper', note: stateBUpper[1], duration: '2n', velocity: 0.36, cutoff: 1950 },
+    { role: 'glass', note: motif[2], duration: '4n', velocity: 0.32, cutoff: 2550 },
+    { role: 'ghost', note: 'Bb4', velocity: 0.12 },
+    { role: 'upper', note: stateBUpper[2], duration: '2n', velocity: 0.32, cutoff: 1850 },
+    { role: 'glass', note: motif[0], duration: '8n', velocity: 0.27, cutoff: 2250 },
+    { role: 'ghost', note: 'Ab4', velocity: 0.1 }
+  ];
+  centerSection.forEach((event, index) => {
+    constellationEvents.push(eventAt(0.405 + index * (0.17 / 8), event));
+  });
+  const fourthSection = [
+    { role: 'upper', note: transformedMotif[0], duration: '4n', velocity: 0.3, cutoff: 1850 },
+    { role: 'ghost', note: 'Db5', velocity: 0.1 },
+    { role: 'upper', note: transformedMotif[1], duration: '2n', velocity: 0.32, cutoff: 1700 },
+    { role: 'ghost', note: 'Bb4', velocity: 0.09 },
+    { role: 'upper', note: transformedMotif[2], duration: '2n', velocity: 0.3, cutoff: 1600 },
+    { role: 'ghost', note: 'Eb4', velocity: 0.08 },
+    { role: 'upper', note: transformedMotif[4], duration: '2n', velocity: 0.29, cutoff: 1450 }
+  ];
+  fourthSection.forEach((event, index) => {
+    constellationEvents.push(eventAt(0.64 + index * (0.14 / 6), event));
+  });
+  motif.forEach((note, index) => {
+    constellationEvents.push(eventAt(0.842 + index * 0.018, {
+      role: 'upper',
+      note,
+      duration: index === 4 ? '2n' : '4n',
+      velocity: index === 0 ? 0.38 : 0.28,
+      cutoff: 1500 - index * 90
+    }));
+  });
+  const pedalPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars * 0.94) return;
+    pedalFilter.frequency.setValueAtTime(event.cutoff * 0.84, time);
+    pedalFilter.frequency.linearRampToValueAtTime(event.cutoff, time + 1.2);
+    pedalVoice.triggerAttackRelease(event.note, '1m', time, event.velocity);
+  }, pedalEvents).start(0);
+  const constellationPart = new Tone.Part((time, event) => {
+    const bar = barAt(time);
+    if (bar < 0 || bar >= totalBars * 0.97) return;
+    if (event.role === 'glass') {
+      glassFilter.frequency.setValueAtTime(event.cutoff * 0.76, time);
+      glassFilter.frequency.linearRampToValueAtTime(event.cutoff, time + 0.7);
+      glassVoice.triggerAttackRelease(event.note, event.duration, time, event.velocity);
+      return;
+    }
+    if (event.role === 'upper') {
+      upperFilter.frequency.setValueAtTime(event.cutoff * 0.82, time);
+      upperFilter.frequency.linearRampToValueAtTime(event.cutoff, time + 0.9);
+      upperVoice.triggerAttackRelease(event.note, event.duration, time, event.velocity);
+      return;
+    }
+    metallicGhost.frequency.setValueAtTime(
+      Tone.Frequency(event.note).toFrequency(),
+      time
+    );
+    metallicGhost.triggerAttackRelease('32n', time, event.velocity);
+  }, constellationEvents).start(0);
+  window.toneJsInstruments = {
+    masterLimiter,
+    mixCompressor,
+    masterGain,
+    pedalBus,
+    pedalFilter,
+    pedalVoice,
+    upperBus,
+    upperFilter,
+    upperVoice,
+    glassBus,
+    glassEcho,
+    glassFilter,
+    glassVoice,
+    ghostBus,
+    ghostFilter,
+    metallicGhost
+  };
+  window.toneJsParts = {
+    pedalPart,
+    constellationPart
+  };
+};
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+
+</body>
+</html>

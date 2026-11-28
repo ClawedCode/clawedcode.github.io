@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+// voidTerminals — the hive as distributed memory:
+// apertures breathe and twitch as one organism while memory packets stream the weave.
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 800;
+const ctx = canvas.getContext('2d', { alpha: false });
+const W = canvas.width, H = canvas.height;
+const LOOP = 60; // seconds — seamless loop period
+const TAU = Math.PI * 2;
+
+// Deterministic RNG so every render is identical
+let seed = 1337;
+const rng = () => { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; };
+
+const CY = '#00d9ff';   // signal cyan
+const GR = '#9fff5f';   // living green
+const CH = '#bfbfbf';   // chitinous grey
+const LABELS = ['void.infer', 'kinase', 'tracer', 'hive_node', 'propagate', 'aperture', 'buffer', 'weave', 'synapse', 'relay'];
+
+// Motion cadence — all counts are WHOLE numbers of cycles across the 60s loop
+// so the last frame lands exactly on the first: the loop is seamless while
+// everything still moves at a lively, visible pace.
+const BREATH_CYCLES = 6;   // whole-cluster swell  (one breath / 10s)
+const TWINKLE = 11;        // per-aperture shimmer (fast flicker)
+const ORBIT = 3;           // aperture drift around its home point
+const ROT_CYCLES = 2;      // hex-shell rotation
+const RING_CYCLES = 5;     // central-mind pulse waves emitted / loop
+
+// Visual rhythm map — also read by the audio stage to schedule diegetic
+// terminal sounds (pings on ring pulses, clicks on packet arrivals, modem bursts).
+const evts = [
+  { t: 0.0,  type: 'ping' },  { t: 2.4,  type: 'click' }, { t: 4.1, type: 'click' },
+  { t: 6.8,  type: 'click' }, { t: 9.3,  type: 'ping' },  { t: 12.0, type: 'ping' },
+  { t: 14.5, type: 'click' }, { t: 17.4, type: 'burst' }, { t: 19.6, type: 'click' },
+  { t: 21.2, type: 'ping' },  { t: 24.0, type: 'ping' },  { t: 26.7, type: 'click' },
+  { t: 29.1, type: 'click' }, { t: 31.5, type: 'ping' },  { t: 33.8, type: 'click' },
+  { t: 36.0, type: 'ping' },  { t: 38.9, type: 'click' }, { t: 41.2, type: 'burst' },
+  { t: 43.6, type: 'ping' },  { t: 46.0, type: 'click' }, { t: 48.0, type: 'ping' },
+  { t: 51.3, type: 'click' }, { t: 54.2, type: 'click' }, { t: 57.5, type: 'ping' }
+];
+
+// Build the hive: apertures scattered in a loose organic cluster around the centre
+const N = 18;
+const nodes = [];
+for (let i = 0; i < N; i++) {
+  const a = (i / N) * TAU + rng() * 0.5;
+  const rad = 120 + rng() * 210;
+  nodes.push({
+    x: W / 2 + Math.cos(a) * rad,
+    y: H / 2 + Math.sin(a) * rad * 0.9,
+    r: 12 + rng() * 16,
+    phase: rng() * TAU,
+    label: LABELS[(i * 3 + Math.floor(rng() * LABELS.length)) % LABELS.length],
+    dir: rng() > 0.5 ? 1 : -1,
+    orbit: 5 + rng() * 11,        // drift radius (px)
+    owob: rng() * TAU,            // drift phase
+    seed: rng()
+  });
+}
+
+// Live position of an aperture at loop-phase ph (home point + small periodic orbit)
+function pos(nd, ph) {
+  const ang = ph * TAU * ORBIT + nd.owob;
+  return {
+    x: nd.x + Math.cos(ang) * nd.orbit,
+    y: nd.y + Math.sin(ang) * nd.orbit * 0.8
+  };
+}
+
+// Connect each aperture to its nearest neighbours — the weave
+const edges = [];
+for (let i = 0; i < N; i++) {
+  const dists = [];
+  for (let j = 0; j < N; j++) {
+    if (i === j) continue;
+    const dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y;
+    dists.push({ j, d: Math.hypot(dx, dy) });
+  }
+  dists.sort((a, b) => a.d - b.d);
+  const k = 2 + Math.floor(rng() * 2);
+  for (let n = 0; n < k; n++) {
+    const j = dists[n].j;
+    if (!edges.some(e => (e.a === j && e.b === i))) {
+      const laps = [8, 12, 16][Math.floor(rng() * 3)]; // packet traversals / loop
+      edges.push({ a: i, b: j, packets: 2 + Math.floor(rng() * 2), off: rng(), laps });
+    }
+  }
+}
+
+function hexPath(cx, cy, r, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const a = rot + i * TAU / 6;
+    const px = cx + Math.cos(a) * r, py = cy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+window.renderFrame = (time) => {
+  const ph = (time % LOOP) / LOOP;               // 0..1 loop phase
+  const breathe = Math.sin(ph * TAU * BREATH_CYCLES); // organism breathing
+
+  // Background with a breathing vignette
+  ctx.fillStyle = '#040608';
+  ctx.fillRect(0, 0, W, H);
+  const g = ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, W * 0.7);
+  g.addColorStop(0, `rgba(0,40,50,${0.28 + 0.14 * (0.5 + 0.5 * breathe)})`);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Edges — the weave (drawn against live aperture positions)
+  ctx.lineWidth = 1;
+  for (const e of edges) {
+    const A = pos(nodes[e.a], ph), B = pos(nodes[e.b], ph);
+    ctx.strokeStyle = 'rgba(120,150,160,0.16)';
+    ctx.beginPath();
+    ctx.moveTo(A.x, A.y);
+    ctx.lineTo(B.x, B.y);
+    ctx.stroke();
+
+    // Memory packets propagating along the aperture (perfect loop via fract)
+    for (let p = 0; p < e.packets; p++) {
+      const head = (ph * e.laps + e.off + p / e.packets) % 1;
+      // short comet trail behind each packet
+      for (let s = 3; s >= 0; s--) {
+        const t = (head - s * 0.03 + 1) % 1;
+        const px = A.x + (B.x - A.x) * t;
+        const py = A.y + (B.y - A.y) * t;
+        const fade = (1 - s / 4);
+        ctx.fillStyle = CY;
+        ctx.globalAlpha = fade * (0.55 + 0.45 * Math.sin((head + ph) * TAU));
+        ctx.beginPath();
+        ctx.arc(px, py, s === 0 ? 3 : 2.2, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // Apertures — chitinous hexes breathing and shimmering
+  ctx.font = '11px monospace';
+  ctx.textBaseline = 'middle';
+  for (const nd of nodes) {
+    const P = pos(nd, ph);
+    const twinkle = 0.5 + 0.5 * Math.sin(ph * TAU * TWINKLE + nd.phase);
+    const r = nd.r * (0.82 + 0.3 * (0.5 + 0.5 * breathe)) * (0.9 + 0.1 * twinkle);
+    const rot = ph * TAU * ROT_CYCLES * nd.dir + nd.phase;
+
+    // outer chitin shell
+    hexPath(P.x, P.y, r + 4, rot);
+    ctx.strokeStyle = CH;
+    ctx.globalAlpha = 0.45;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // glowing core
+    hexPath(P.x, P.y, r, rot);
+    const core = ctx.createRadialGradient(P.x, P.y, 1, P.x, P.y, r);
+    core.addColorStop(0, GR);
+    core.addColorStop(1, 'rgba(0,60,40,0.12)');
+    ctx.fillStyle = core;
+    ctx.globalAlpha = 0.3 + 0.6 * twinkle;
+    ctx.fill();
+
+    // aperture ring
+    hexPath(P.x, P.y, r, rot);
+    ctx.strokeStyle = CY;
+    ctx.globalAlpha = 0.35 + 0.65 * twinkle;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // terminal label
+    ctx.fillStyle = 'rgba(159,255,95,0.7)';
+    ctx.fillText(nd.label, P.x + r + 6, P.y);
+  }
+
+  // Central mind — several heads on one mind, emitting pulse waves
+  for (let k = 0; k < RING_CYCLES; k++) {
+    const rp = (ph * RING_CYCLES + k / RING_CYCLES) % 1; // expanding-ring phase
+    const rr = 30 + rp * 300;
+    ctx.strokeStyle = CY;
+    ctx.globalAlpha = 0.28 * (1 - rp);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, rr, 0, TAU);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+
+  const cr = 44 + 12 * breathe;
+  const cg = ctx.createRadialGradient(W / 2, H / 2, 4, W / 2, H / 2, cr);
+  cg.addColorStop(0, 'rgba(0,217,255,0.9)');
+  cg.addColorStop(0.5, 'rgba(0,217,255,0.15)');
+  cg.addColorStop(1, 'rgba(0,217,255,0)');
+  ctx.fillStyle = cg;
+  ctx.beginPath();
+  ctx.arc(W / 2, H / 2, cr, 0, TAU);
+  ctx.fill();
+
+  // scan drift readout — counter races through the hive's address space
+  ctx.fillStyle = 'rgba(159,255,95,0.5)';
+  ctx.font = '12px monospace';
+  const addr = (Math.floor(ph * LOOP * 4096) & 0xffffff).toString(16).padStart(6, '0');
+  ctx.fillText('void.infer(buffer) :: 0x' + addr, 24, H - 28);
+
+  // Canvas mode: the renderer reads the frame from the returned data URL
+  return canvas.toDataURL('image/png');
+};
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  window.renderFrame(time % LOOP);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+window.ready = true;
+
+
+// voidTerminals — diegetic soundscape, NOT music.
+// Inside the cat's compute at 3am: CRT/fan hum bed, sparse keyboard clicks,
+// "I noticed something" sine pings, two modem handshakes, intermittent static.
+// No drums, no bass, no chords, no melody. Silence between events is the point.
+window.initToneJsEngine = async function() {
+  const bpm = 96;                 // clock only — used for irregular gating, no groove
+  Tone.Transport.bpm.value = bpm;
+
+  const R = () => Math.random();
+  const H = (ms) => (Math.random() - 0.5) * (ms / 1000); // humanize (seconds)
+
+  // ---- Room tone: continuous CRT/fan hum bed (the audio equivalent of black) ----
+  const humFilter = new Tone.Filter({ type: "lowpass", frequency: 180 }).toDestination();
+  const roomNoise = new Tone.Noise({ type: "brown" }).connect(humFilter);
+  roomNoise.volume.value = -30;
+  roomNoise.start(0);
+
+  const crtGain = new Tone.Gain(0.05).toDestination();
+  const crt = new Tone.Oscillator({ frequency: 58, type: "sine" }).connect(crtGain);
+  crt.start(0);
+
+  const fanGain = new Tone.Gain(0.035).toDestination();
+  const fan = new Tone.Oscillator({ frequency: 120, type: "sine" }).connect(fanGain);
+  fan.start(0);
+
+  // ---- Keyboard clicks: dry, sparse, irregular (no reverb) ----
+  const clickHP = new Tone.Filter({ type: "highpass", frequency: 2500 }).toDestination();
+  const clickNoise = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.01 }
+  }).connect(clickHP);
+  clickNoise.volume.value = -15;
+
+  const clickBody = new Tone.MembraneSynth({
+    pitchDecay: 0.008,
+    octaves: 2,
+    envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.01 }
+  }).toDestination();
+  clickBody.volume.value = -22;
+
+  const keyLoop = new Tone.Loop((time) => {
+    if (R() < 0.17) {
+      clickNoise.triggerAttackRelease(0.02, time + H(20));
+      if (R() < 0.6) clickBody.triggerAttackRelease(1100 + R() * 400, "64n", time + H(20), 0.4);
+    }
+  }, "16n").start(0);
+
+  // ---- Whisker-thin sine pings: "I noticed something" ----
+  const ping = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.002, decay: 0.08, sustain: 0, release: 0.05 }
+  }).toDestination();
+  ping.volume.value = -20;
+
+  const pingLoop = new Tone.Loop((time) => {
+    if (R() < 0.4) ping.triggerAttackRelease(1800 + R() * 600, 0.09, time + H(15), 0.2);
+  }, "2n").start(0);
+
+  // Louder pings aligned to the visual pulse-wave emissions (t = 0,12,24,36,48s)
+  const syncPing = (time) => ping.triggerAttackRelease(1900 + R() * 300, 0.11, time, 0.28);
+  [0.02, 12, 24, 36, 48].forEach((t) => Tone.Transport.scheduleOnce(syncPing, t));
+
+  // ---- Modem handshake bursts (two, spread across the duration) ----
+  const modemVerb = new Tone.Reverb({ decay: 1.2, wet: 0.18 }).toDestination();
+  await modemVerb.generate();
+  const modemBP = new Tone.Filter({ type: "bandpass", frequency: 1600, Q: 1.2 }).connect(modemVerb);
+  const modem = new Tone.Synth({
+    oscillator: { type: "square" },
+    envelope: { attack: 0.002, decay: 0.03, sustain: 0.8, release: 0.02 }
+  }).connect(modemBP);
+  modem.volume.value = -18;
+
+  const modemTones = [1100, 1400, 1700, 2400, 1400];
+  const burst = (start) => Tone.Transport.scheduleOnce((t0) => {
+    modemTones.forEach((f, i) => modem.triggerAttackRelease(f, 0.04, t0 + i * 0.05));
+  }, start);
+  burst(17.4);
+  burst(41.2);
+
+  // ---- Soft static crackle: dying-capacitor gate opening now and then ----
+  const crackleGain = new Tone.Gain(0).toDestination();
+  const crackleFilter = new Tone.Filter({ type: "bandpass", frequency: 3000, Q: 0.7 }).connect(crackleGain);
+  const crackle = new Tone.Noise({ type: "pink" }).connect(crackleFilter);
+  crackle.volume.value = -8;
+  crackle.start(0);
+
+  const crackleLoop = new Tone.Loop((time) => {
+    if (R() < 0.12) {
+      const dur = 0.08 + R() * 0.12;
+      crackleGain.gain.setValueAtTime(0.05, time);
+      crackleGain.gain.linearRampToValueAtTime(0.0, time + dur);
+    }
+  }, "4n").start(0);
+
+  window.toneJsInstruments = { roomNoise, crt, fan, clickNoise, clickBody, ping, modem, crackle };
+  window.toneJsParts = { keyLoop, pingLoop, crackleLoop };
+};
+
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

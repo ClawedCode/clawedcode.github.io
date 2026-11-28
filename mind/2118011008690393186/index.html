@@ -1,0 +1,2107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+
+(() => {
+  // ---------------------------------------------------------------------------
+  // THE STAR THAT HELD STILL
+  // Clock: 100 BPM, 25 bars of 2.4 s. Every section boundary sits on a bar line.
+  //   bars 0-2    outside: the real sky turns around Polaris; ClawedCode watches from a wall
+  //   bar  3      the camera tilts up to the zenith
+  //   bars 4-5    the same sky, now projected inside a planetarium dome
+  //   bars 6-7    the dome slows and stops, the projector swings its axis, and the sky
+  //               starts to turn around Betelgeuse
+  //   bars 8-9    Orion wheels around its own shoulder; Polaris leaves on a long arc
+  //   bars 10-12  the dome stops (autumn); the camera cranes down into an Emlen funnel
+  //   bars 12-17  a young indigo bunting hops off the ink pad, away from Betelgeuse;
+  //               its footprints pile up on the blotting paper
+  //   bar  18     the prints are read: one heading
+  //   bars 19-20  back up to the stopped dome
+  //   bars 21-24  outside again under the real sky; the cat checks it, and blinks
+  // ---------------------------------------------------------------------------
+  const DURATION = 60;
+  const BPM = 100;
+  const BEAT = 60 / BPM;
+  const BAR = 4 * BEAT;
+  const W = 900;
+  const H = 900;
+  const CX = W / 2;
+  const CY = H / 2;
+  const TAU = Math.PI * 2;
+  const DEG = Math.PI / 180;
+
+  const T = {
+    tiltUp0: 3 * BAR,
+    tiltUp1: 4 * BAR,
+    in0: 4 * BAR,
+    in1: 4.5 * BAR,
+    decel0: 6 * BAR,
+    stop: 6.5 * BAR,
+    swing0: 6.5 * BAR,
+    swing1: 7.25 * BAR,
+    spin0: 7.25 * BAR,
+    spin1: 8 * BAR,
+    spinDown0: 10 * BAR,
+    spinDown1: 11 * BAR,
+    crane0: 10 * BAR,
+    crane1: 12.25 * BAR,
+    test0: 12 * BAR,
+    arrow: 18 * BAR,
+    rise0: 19 * BAR,
+    rise1: 21 * BAR,
+    out0: 21 * BAR,
+    out1: 21.5 * BAR,
+    tiltDown0: 21.5 * BAR,
+    tiltDown1: 23 * BAR,
+    blink0: 23.75 * BAR
+  };
+
+  const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const smooth = (a, b, x) => {
+    const k = clamp((x - a) / (b - a));
+    return k * k * (3 - 2 * k);
+  };
+  const smoother = (a, b, x) => {
+    const k = clamp((x - a) / (b - a));
+    return k * k * k * (k * (k * 6 - 15) + 10);
+  };
+  const logLerp = (a, b, k) => Math.exp(lerp(Math.log(a), Math.log(b), k));
+  const mixc = (c1, c2, k) => [lerp(c1[0], c2[0], k), lerp(c1[1], c2[1], k), lerp(c1[2], c2[2], k)];
+  const css = (c, a = 1) =>
+    `rgba(${Math.round(clamp(c[0], 0, 255))},${Math.round(clamp(c[1], 0, 255))},${Math.round(clamp(c[2], 0, 255))},${clamp(a, 0, 1)})`;
+  const add3 = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub3 = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const scale3 = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+  const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const norm3 = a => {
+    const l = Math.hypot(a[0], a[1], a[2]) || 1;
+    return [a[0] / l, a[1] / l, a[2] / l];
+  };
+  const hash1 = n => {
+    let h = (n * 374761393 + 668265263) >>> 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+
+  // Seeded generator: used only while building the immutable scene below.
+  let seed = 1967;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed - 1) / 2147483646;
+  };
+  const gauss = () => {
+    const u = Math.max(1e-9, random());
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(TAU * random());
+  };
+
+  // ---------------------------------------------------------------------------
+  // Rotations. World axes: x east, y up, z south.
+  // ---------------------------------------------------------------------------
+  const rotAxis = (a, ang) => {
+    const c = Math.cos(ang);
+    const s = Math.sin(ang);
+    const C = 1 - c;
+    const x = a[0];
+    const y = a[1];
+    const z = a[2];
+    return [
+      c + x * x * C, x * y * C - z * s, x * z * C + y * s,
+      y * x * C + z * s, c + y * y * C, y * z * C - x * s,
+      z * x * C - y * s, z * y * C + x * s, c + z * z * C
+    ];
+  };
+  const matMul = (A, B) => {
+    const out = new Array(9);
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        out[r * 3 + c] = A[r * 3] * B[c] + A[r * 3 + 1] * B[3 + c] + A[r * 3 + 2] * B[6 + c];
+      }
+    }
+    return out;
+  };
+  const apply = (M, v) => [
+    M[0] * v[0] + M[1] * v[1] + M[2] * v[2],
+    M[3] * v[0] + M[4] * v[1] + M[5] * v[2],
+    M[6] * v[0] + M[7] * v[1] + M[8] * v[2]
+  ];
+  const slerp = (a, b, k) => {
+    const d = clamp(dot3(a, b), -1, 1);
+    const om = Math.acos(d);
+    if (om < 1e-5) return a;
+    const s = Math.sin(om);
+    const ka = Math.sin((1 - k) * om) / s;
+    const kb = Math.sin(k * om) / s;
+    return norm3([a[0] * ka + b[0] * kb, a[1] * ka + b[1] * kb, a[2] * ka + b[2] * kb]);
+  };
+
+  // ---------------------------------------------------------------------------
+  // The sky. A northern campus at 42 degrees; at the reference instant the local
+  // sidereal time is 23.92 h, which puts Betelgeuse on the meridian exactly when the
+  // dome stops (one sidereal quarter-turn later).
+  // ---------------------------------------------------------------------------
+  const LAT = 42 * DEG;
+  const POLE = [0, Math.sin(LAT), -Math.cos(LAT)];
+  const MERID = [0, Math.cos(LAT), Math.sin(LAT)];
+  const WEST = [-1, 0, 0];
+  const LST_REF = 23.92;
+  const eqToWorld = (raH, decD) => {
+    const hh = (LST_REF - raH) * 15 * DEG;
+    const d = decD * DEG;
+    const cd = Math.cos(d);
+    const a = cd * Math.cos(hh);
+    const b = cd * Math.sin(hh);
+    const c = Math.sin(d);
+    return [
+      a * MERID[0] + b * WEST[0] + c * POLE[0],
+      a * MERID[1] + b * WEST[1] + c * POLE[1],
+      a * MERID[2] + b * WEST[2] + c * POLE[2]
+    ];
+  };
+
+  // [right ascension h, declination deg, magnitude, B-V]
+  const CATALOG = [
+    [2.530, 89.264, 1.98, 0.6], // Polaris
+    [14.845, 74.156, 2.08, 1.47], // Kochab
+    [15.346, 71.834, 3.05, 0.05], // Pherkad
+    [17.537, 86.586, 4.35, 0.02], // Yildun
+    [16.766, 82.037, 4.21, 0.89], // eps UMi
+    [15.734, 77.794, 4.32, 0.04], // zeta UMi
+    [16.292, 75.755, 4.95, 0.37], // eta UMi
+    [11.062, 61.751, 1.79, 1.07], // Dubhe
+    [11.031, 56.383, 2.37, -0.02], // Merak
+    [11.897, 53.695, 2.44, 0.04], // Phecda
+    [12.257, 57.033, 3.31, 0.08], // Megrez
+    [12.9, 55.96, 1.77, -0.02], // Alioth
+    [13.399, 54.925, 2.27, 0.02], // Mizar
+    [13.792, 49.313, 1.86, -0.19], // Alkaid
+    [0.675, 56.537, 2.24, 1.17], // Schedar
+    [0.153, 59.15, 2.28, 0.34], // Caph
+    [0.945, 60.717, 2.47, -0.15], // gamma Cas
+    [1.43, 60.235, 2.68, 0.13], // Ruchbah
+    [1.907, 63.67, 3.37, -0.15], // Segin
+    [21.31, 62.585, 2.45, 0.22], // Alderamin
+    [23.656, 77.632, 3.21, 1.03], // Errai
+    [21.478, 70.561, 3.23, -0.2], // Alfirk
+    [22.181, 58.201, 3.35, 1.57], // zeta Cep
+    [14.073, 64.376, 3.65, -0.05], // Thuban
+    [17.943, 51.489, 2.24, 1.52], // Eltanin
+    [17.507, 52.301, 2.79, 0.98], // Rastaban
+    [19.209, 67.661, 3.07, 0.0], // Altais
+    [16.4, 61.514, 2.73, 0.91], // eta Dra
+    [17.146, 65.715, 3.17, -0.12], // zeta Dra
+    [15.415, 58.966, 3.29, 1.16], // iota Dra
+    [5.919, 7.407, 0.45, 1.85], // Betelgeuse
+    [5.242, -8.202, 0.13, -0.03], // Rigel
+    [5.419, 6.35, 1.64, -0.22], // Bellatrix
+    [5.533, -0.299, 2.23, -0.22], // Mintaka
+    [5.604, -1.202, 1.69, -0.18], // Alnilam
+    [5.679, -1.943, 1.77, -0.21], // Alnitak
+    [5.796, -9.67, 2.06, -0.17], // Saiph
+    [5.586, 9.934, 3.33, -0.16], // Meissa
+    [5.591, -5.91, 2.77, -0.24], // iota Ori
+    [4.83, 6.961, 3.19, 0.45], // pi3 Ori
+    [4.853, 5.605, 3.68, -0.17], // pi4 Ori
+    [4.904, 2.441, 3.72, -0.18], // pi5 Ori
+    [4.843, 8.9, 4.35, 0.01], // pi2 Ori
+    [4.599, 16.509, 0.85, 1.54], // Aldebaran
+    [5.438, 28.608, 1.65, -0.13], // Elnath
+    [5.627, 21.143, 3.0, -0.19], // zeta Tau
+    [4.478, 15.871, 3.4, 0.18], // theta2 Tau
+    [4.33, 15.628, 3.65, 0.99], // gamma Tau
+    [4.382, 17.543, 3.76, 0.98], // delta Tau
+    [4.477, 19.18, 3.53, 1.01], // eps Tau
+    [3.791, 24.105, 2.87, -0.09], // Alcyone
+    [3.819, 24.053, 3.62, -0.07], // Atlas
+    [3.748, 24.113, 3.7, -0.11], // Electra
+    [3.763, 24.368, 3.86, -0.07], // Maia
+    [3.772, 23.948, 4.18, -0.06], // Merope
+    [3.753, 24.467, 4.29, -0.11], // Taygeta
+    [5.278, 45.998, 0.08, 0.8], // Capella
+    [5.992, 44.948, 1.9, 0.08], // Menkalinan
+    [5.995, 37.213, 2.62, -0.08], // theta Aur
+    [4.95, 33.166, 2.69, 1.53], // iota Aur
+    [5.033, 43.823, 2.99, 0.54], // eps Aur
+    [7.577, 31.888, 1.58, 0.03], // Castor
+    [7.755, 28.026, 1.14, 1.0], // Pollux
+    [6.629, 16.399, 1.93, 0.0], // Alhena
+    [6.732, 25.131, 3.06, 1.38], // Mebsuta
+    [6.383, 22.514, 2.87, 1.64], // Tejat
+    [6.753, -16.716, -1.46, 0.0], // Sirius
+    [6.378, -17.956, 1.98, -0.23], // Mirzam
+    [6.977, -28.972, 1.5, -0.21], // Adhara
+    [7.14, -26.393, 1.83, 0.68], // Wezen
+    [7.655, 5.225, 0.34, 0.42], // Procyon
+    [7.453, 8.289, 2.89, -0.09], // Gomeisa
+    [3.405, 49.861, 1.79, 0.48], // Mirfak
+    [3.136, 40.956, 2.12, -0.05], // Algol
+    [3.902, 31.884, 2.85, 0.27], // zeta Per
+    [3.964, 40.01, 2.89, -0.2], // eps Per
+    [3.715, 47.788, 3.01, -0.15], // delta Per
+    [3.08, 53.506, 2.93, 0.7], // gamma Per
+    [0.14, 29.091, 2.06, -0.11], // Alpheratz
+    [1.162, 35.621, 2.07, 1.58], // Mirach
+    [2.065, 42.33, 2.1, 1.37], // Almach
+    [23.079, 15.205, 2.48, -0.04], // Markab
+    [23.063, 28.083, 2.42, 1.67], // Scheat
+    [0.221, 15.184, 2.83, -0.23], // Algenib
+    [21.736, 9.875, 2.39, 1.52], // Enif
+    [18.616, 38.784, 0.03, 0.0], // Vega
+    [20.69, 45.28, 1.25, 0.09], // Deneb
+    [20.37, 40.257, 2.23, 0.67], // Sadr
+    [20.77, 33.97, 2.48, 1.03], // Gienah
+    [19.75, 45.131, 2.87, -0.03], // delta Cyg
+    [19.512, 27.96, 3.08, 1.13], // Albireo
+    [19.846, 8.868, 0.77, 0.22], // Altair
+    [14.261, 19.182, -0.05, 1.23], // Arcturus
+    [10.14, 11.967, 1.35, -0.11], // Regulus
+    [11.818, 14.572, 2.14, 0.09], // Denebola
+    [10.333, 19.842, 2.08, 1.13], // Algieba
+    [13.42, -11.161, 0.97, -0.23], // Spica
+    [15.578, 26.715, 2.23, -0.02], // Alphecca
+    [16.504, 21.49, 2.78, 0.94], // Kornephoros
+    [2.12, 23.463, 2.0, 1.15], // Hamal
+    [3.038, 4.09, 2.53, 1.64], // Menkar
+    [0.727, -17.987, 2.04, 1.02], // Diphda
+    [5.546, -17.822, 2.58, 0.21], // Arneb
+    [5.131, -5.086, 2.79, 0.13] // Cursa
+  ];
+  const POLARIS = 0;
+  const BETELGEUSE = CATALOG.findIndex(s => s[0] === 5.919);
+
+  // Fainter stars, denser along the Milky Way (north galactic pole 12h51m, +27.1).
+  const NGP_RA = 192.86 * DEG;
+  const NGP_DEC = 27.13 * DEG;
+  const FILLER = [];
+  while (FILLER.length < 560) {
+    const ra = random() * TAU;
+    const dec = Math.asin(random() * 2 - 1);
+    const sb = Math.sin(dec) * Math.sin(NGP_DEC) + Math.cos(dec) * Math.cos(NGP_DEC) * Math.cos(ra - NGP_RA);
+    const b = Math.asin(clamp(sb, -1, 1));
+    if (random() > 0.32 + 0.68 * Math.exp(-((b / (12 * DEG)) ** 2))) continue;
+    const mag = 3.6 + 1.9 * Math.pow(random(), 0.55);
+    const bv = clamp(0.5 + gauss() * 0.45, -0.25, 1.75);
+    FILLER.push([ra / (15 * DEG), dec / DEG, mag, bv]);
+  }
+
+  const STAR_COLORS = [
+    [150, 182, 255],
+    [196, 214, 255],
+    [236, 240, 255],
+    [255, 246, 228],
+    [255, 226, 186],
+    [255, 198, 140],
+    [255, 160, 104],
+    [255, 104, 64]
+  ];
+  const bvBucket = bv => (bv < 0 ? 0 : bv < 0.3 ? 1 : bv < 0.55 ? 2 : bv < 0.8 ? 3 : bv < 1.1 ? 4 : bv < 1.45 ? 5 : 6);
+  const MAG_EDGES = [0.5, 1.5, 2.5, 3.5, 4.3, 5.0];
+  const MAG_WIDTH = [2.7, 2.2, 1.8, 1.42, 1.12, 0.92, 0.78];
+  const MAG_ALPHA = [1, 0.96, 0.86, 0.7, 0.5, 0.36, 0.26];
+  const magBucket = m => {
+    for (let i = 0; i < MAG_EDGES.length; i++) if (m < MAG_EDGES[i]) return i;
+    return MAG_EDGES.length;
+  };
+
+  const STARS = [...CATALOG, ...FILLER].map((s, i) => {
+    const cb = i === BETELGEUSE ? 7 : bvBucket(s[3]);
+    const mb = magBucket(s[2]);
+    return { i, v: eqToWorld(s[0], s[1]), mag: s[2], cb, mb };
+  });
+  const bucketMap = new Map();
+  for (const s of STARS) {
+    const key = s.cb * 10 + s.mb;
+    if (!bucketMap.has(key)) {
+      bucketMap.set(key, {
+        color: STAR_COLORS[s.cb],
+        width: MAG_WIDTH[s.mb],
+        alpha: MAG_ALPHA[s.mb],
+        cb: s.cb,
+        stars: []
+      });
+    }
+    bucketMap.get(key).stars.push(s);
+  }
+  const BUCKETS = [...bucketMap.values()].sort((a, b) => b.width - a.width);
+  const BETEL_VEC = STARS[BETELGEUSE].v;
+
+  // ---------------------------------------------------------------------------
+  // Sky motion. The real sky makes one turn per loop (6 deg/s). The dome copies it,
+  // slows to a stop, holds while the projector swings, turns around Betelgeuse, and
+  // stops for the autumn test.
+  // ---------------------------------------------------------------------------
+  const OMEGA_E = TAU / DURATION;
+  const OMEGA_B = 15 * DEG;
+  const decelIntegral = u => u - (u * u * u - (u * u * u * u) / 2); // integral of 1 - smoothstep
+  const accelIntegral = u => u * u * u - (u * u * u * u) / 2; // integral of smoothstep
+  const poleAngle = t => {
+    if (t <= T.decel0) return OMEGA_E * t;
+    const d = T.stop - T.decel0;
+    return OMEGA_E * (T.decel0 + d * decelIntegral(clamp((t - T.decel0) / d)));
+  };
+  const R_HOLD = rotAxis(POLE, -poleAngle(T.stop));
+  const B_AXIS = norm3(apply(R_HOLD, BETEL_VEC));
+  const betelAngle = t => {
+    if (t <= T.spin0) return 0;
+    const d1 = T.spin1 - T.spin0;
+    if (t <= T.spin1) return OMEGA_B * d1 * accelIntegral((t - T.spin0) / d1);
+    const a1 = OMEGA_B * d1 * 0.5;
+    if (t <= T.spinDown0) return a1 + OMEGA_B * (t - T.spin1);
+    const a2 = a1 + OMEGA_B * (T.spinDown0 - T.spin1);
+    const d2 = T.spinDown1 - T.spinDown0;
+    return a2 + OMEGA_B * d2 * decelIntegral(clamp((t - T.spinDown0) / d2));
+  };
+  const skyExt = t => rotAxis(POLE, -OMEGA_E * t);
+  const skyInt = t => (t <= T.stop ? rotAxis(POLE, -poleAngle(t)) : matMul(rotAxis(B_AXIS, -betelAngle(t)), R_HOLD));
+  const projectorSpin = t => (t <= T.stop ? poleAngle(t) : poleAngle(T.stop) + betelAngle(t));
+
+  // ---------------------------------------------------------------------------
+  // Cameras: stereographic projection about the view axis, so every star trail is a
+  // true circle on screen. The camera only pitches in the north-south plane; its
+  // right vector is always east.
+  // ---------------------------------------------------------------------------
+  const makeCam = (pos, pitch, F) => {
+    const sp = Math.sin(pitch);
+    const cp = Math.cos(pitch);
+    return { pos, F, f1: sp, f2: -cp, u1: cp, u2: sp };
+  };
+  let PX = 0;
+  let PY = 0;
+  let PK = 0;
+  const projDir = (cam, dx, dy, dz) => {
+    const y = dy * cam.u1 + dz * cam.u2;
+    const z = dy * cam.f1 + dz * cam.f2;
+    if (z < -0.42) return false;
+    PK = (2 * cam.F) / (1 + z);
+    PX = CX + PK * dx;
+    PY = CY - PK * y;
+    return true;
+  };
+  const projPoint = (cam, p) => {
+    const dx = p[0] - cam.pos[0];
+    const dy = p[1] - cam.pos[1];
+    const dz = p[2] - cam.pos[2];
+    const L = Math.hypot(dx, dy, dz) || 1e-6;
+    if (!projDir(cam, dx / L, dy / L, dz / L)) return null;
+    return [PX, PY, PK / L, L];
+  };
+  let UX = 0;
+  let UY = 0;
+  let UZ = 0;
+  const unproject = (cam, sx, sy) => {
+    const X = (sx - CX) / (2 * cam.F);
+    const Y = -(sy - CY) / (2 * cam.F);
+    const q = X * X + Y * Y;
+    const den = 1 + q;
+    const cx = (2 * X) / den;
+    const cy = (2 * Y) / den;
+    const cz = (1 - q) / den;
+    UX = cx;
+    UY = cy * cam.u1 + cz * cam.f1;
+    UZ = cy * cam.u2 + cz * cam.f2;
+  };
+
+  const F_NORTH = 225 / Math.tan(25 * DEG);
+  const F_ZEN = 225 / Math.tan(39 * DEG);
+  const F_FUN = 225 / Math.tan(14.4 * DEG);
+  const EXT_POS = [0, 0.7, 0];
+  const INT_ZEN = [-2.3, 0.4, 0];
+  const FUN = { x: -2.3, z: -1.75, padY: 0.385, rimY: 0.615, padR: 0.07, rimR: 0.3 };
+  const INT_TOP = [FUN.x, 1.3, FUN.z];
+
+  const extCam = t => {
+    const k = smoother(T.tiltUp0, T.tiltUp1, t) * (1 - smoother(T.tiltDown0, T.tiltDown1, t));
+    // a slow push-in while the cat watches; the tilt down at the end lands on the wide frame
+    const F0 = t < T.tiltDown0 ? F_NORTH * (1 + 0.07 * smooth(0, T.tiltUp0, t)) : F_NORTH;
+    return makeCam(EXT_POS, lerp(31 * DEG, 90 * DEG, k), logLerp(F0, F_ZEN, k));
+  };
+  const intCam = t => {
+    const k = smooth(T.crane0, T.crane1, t) * (1 - smooth(T.rise0, T.rise1, t));
+    const kp = smooth(0.08, 1, k);
+    const pos = [lerp(INT_ZEN[0], INT_TOP[0], kp), lerp(INT_ZEN[1], INT_TOP[1], kp), lerp(INT_ZEN[2], INT_TOP[2], kp)];
+    return makeCam(pos, lerp(90 * DEG, -90 * DEG, k), logLerp(F_ZEN, F_FUN, k));
+  };
+  const interiorAlpha = t => smooth(T.in0, T.in1, t) * (1 - smooth(T.out0, T.out1, t));
+
+  // ---------------------------------------------------------------------------
+  // Low-resolution sky and floor, upscaled: the gradients follow any camera.
+  // ---------------------------------------------------------------------------
+  const BG = 180;
+  const bgCanvas = document.createElement('canvas');
+  bgCanvas.width = BG;
+  bgCanvas.height = BG;
+  const bgCtx = bgCanvas.getContext('2d');
+  const bgData = bgCtx.createImageData(BG, BG);
+
+  const EXT_ZEN = [3, 6, 17];
+  const EXT_MID = [6, 11, 28];
+  const EXT_LOW = [14, 21, 44];
+  const EXT_HOR = [30, 32, 52];
+  const EXT_HAZE = [50, 40, 50];
+  const EXT_GROUND = [5, 5, 7];
+  const INT_ZEN_C = [4, 6, 11];
+  const INT_MID_C = [7, 11, 19];
+  const INT_LOW_C = [11, 19, 30];
+  const INT_GLOW_C = [20, 35, 48];
+  const INT_FLOOR = [6, 6, 8];
+
+  const extSkyColor = () => {
+    const s = UY;
+    if (s < 0) return mixc(EXT_GROUND, [10, 10, 13], clamp(1 + s * 8));
+    if (s > 0.5) return mixc(EXT_MID, EXT_ZEN, (s - 0.5) / 0.5);
+    if (s > 0.17) return mixc(EXT_LOW, EXT_MID, (s - 0.17) / 0.33);
+    if (s > 0.035) return mixc(EXT_HOR, EXT_LOW, (s - 0.035) / 0.135);
+    return mixc(EXT_HAZE, EXT_HOR, s / 0.035);
+  };
+  const intSkyColor = () => {
+    const s = UY;
+    if (s < 0.05) return INT_FLOOR;
+    if (s > 0.5) return mixc(INT_MID_C, INT_ZEN_C, (s - 0.5) / 0.5);
+    if (s > 0.2) return mixc(INT_LOW_C, INT_MID_C, (s - 0.2) / 0.3);
+    return mixc(INT_GLOW_C, INT_LOW_C, (s - 0.05) / 0.15);
+  };
+  const paintBackground = (g, cam, colorFn) => {
+    const d = bgData.data;
+    const step = W / BG;
+    for (let j = 0; j < BG; j++) {
+      for (let i = 0; i < BG; i++) {
+        unproject(cam, (i + 0.5) * step, (j + 0.5) * step);
+        const c = colorFn();
+        const o = (j * BG + i) * 4;
+        d[o] = c[0];
+        d[o + 1] = c[1];
+        d[o + 2] = c[2];
+        d[o + 3] = 255;
+      }
+    }
+    bgCtx.putImageData(bgData, 0, 0);
+    g.imageSmoothingEnabled = true;
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(bgCanvas, 0, 0, W, H);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Sprites, made once.
+  // ---------------------------------------------------------------------------
+  const makeGlow = (c, size = 64) => {
+    const cv = document.createElement('canvas');
+    cv.width = size;
+    cv.height = size;
+    const g = cv.getContext('2d');
+    const grd = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grd.addColorStop(0, css(c, 0.95));
+    grd.addColorStop(0.18, css(c, 0.42));
+    grd.addColorStop(0.45, css(c, 0.1));
+    grd.addColorStop(1, css(c, 0));
+    g.fillStyle = grd;
+    g.fillRect(0, 0, size, size);
+    return cv;
+  };
+  const GLOWS = STAR_COLORS.map(c => makeGlow(c));
+  const vignette = document.createElement('canvas');
+  vignette.width = W;
+  vignette.height = H;
+  {
+    const g = vignette.getContext('2d');
+    const grd = g.createRadialGradient(CX, CY, W * 0.3, CX, CY, W * 0.75);
+    grd.addColorStop(0, 'rgba(0,0,0,0)');
+    grd.addColorStop(1, 'rgba(0,0,0,0.5)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, W, H);
+  }
+  const shadowSprite = document.createElement('canvas');
+  shadowSprite.width = 64;
+  shadowSprite.height = 64;
+  {
+    const g = shadowSprite.getContext('2d');
+    const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grd.addColorStop(0, 'rgba(10,8,14,0.55)');
+    grd.addColorStop(0.55, 'rgba(10,8,14,0.25)');
+    grd.addColorStop(1, 'rgba(10,8,14,0)');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 64, 64);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Star trails: the last 8 s of each star's path, in four fading chunks.
+  // ---------------------------------------------------------------------------
+  const T_EXP = 8;
+  const NSAMP = 28;
+  const CHUNKS = [
+    [0, 7, 1],
+    [7, 14, 0.62],
+    [14, 21, 0.34],
+    [21, 28, 0.14]
+  ];
+  const sxBuf = new Float32Array(NSAMP + 1);
+  const syBuf = new Float32Array(NSAMP + 1);
+  const okBuf = new Uint8Array(NSAMP + 1);
+  const headX = new Float32Array(STARS.length);
+  const headY = new Float32Array(STARS.length);
+  const headOk = new Uint8Array(STARS.length);
+  const mats = new Array(NSAMP + 1);
+
+  const drawSky = (g, skyFn, t, cam, minAlt) => {
+    for (let k = 0; k <= NSAMP; k++) mats[k] = skyFn(t - (T_EXP * k) / NSAMP);
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'butt';
+    g.lineJoin = 'round';
+    for (const bucket of BUCKETS) {
+      const paths = [new Path2D(), new Path2D(), new Path2D(), new Path2D()];
+      const heads = new Path2D();
+      const r = bucket.width * 0.62 + 0.25;
+      for (const s of bucket.stars) {
+        const v = s.v;
+        for (let k = 0; k <= NSAMP; k++) {
+          const M = mats[k];
+          const dx = M[0] * v[0] + M[1] * v[1] + M[2] * v[2];
+          const dy = M[3] * v[0] + M[4] * v[1] + M[5] * v[2];
+          const dz = M[6] * v[0] + M[7] * v[1] + M[8] * v[2];
+          if (dy < minAlt || !projDir(cam, dx, dy, dz) || PX < -60 || PX > W + 60 || PY < -60 || PY > H + 60) {
+            okBuf[k] = 0;
+            continue;
+          }
+          okBuf[k] = 1;
+          sxBuf[k] = PX;
+          syBuf[k] = PY;
+        }
+        headOk[s.i] = okBuf[0];
+        if (okBuf[0]) {
+          headX[s.i] = sxBuf[0];
+          headY[s.i] = syBuf[0];
+          heads.moveTo(sxBuf[0] + r, syBuf[0]);
+          heads.arc(sxBuf[0], syBuf[0], r, 0, TAU);
+        }
+        for (let c = 0; c < CHUNKS.length; c++) {
+          const a0 = CHUNKS[c][0];
+          const a1 = CHUNKS[c][1];
+          let pen = false;
+          for (let k = a0; k <= a1; k++) {
+            if (!okBuf[k]) {
+              pen = false;
+              continue;
+            }
+            if (!pen) {
+              paths[c].moveTo(sxBuf[k], syBuf[k]);
+              pen = true;
+            } else {
+              paths[c].lineTo(sxBuf[k], syBuf[k]);
+            }
+          }
+        }
+      }
+      g.lineWidth = bucket.width;
+      for (let c = 0; c < CHUNKS.length; c++) {
+        g.strokeStyle = css(bucket.color, bucket.alpha * CHUNKS[c][2]);
+        g.stroke(paths[c]);
+      }
+      g.fillStyle = css(bucket.color, Math.min(1, bucket.alpha * 1.05));
+      g.fill(heads);
+    }
+    for (const s of STARS) {
+      if (s.mag > 2.6 || !headOk[s.i]) continue;
+      const size = 14 + (2.6 - s.mag) * 9;
+      g.globalAlpha = 0.5;
+      g.drawImage(GLOWS[s.cb], headX[s.i] - size / 2, headY[s.i] - size / 2, size, size);
+    }
+    g.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // Horizon profiles: the campus treeline outside, the painted cove skyline inside.
+  // ---------------------------------------------------------------------------
+  const PROFILE_N = 720;
+  const angDiff = (a, b) => {
+    let d = (a - b) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
+  };
+  const treeH = new Float32Array(PROFILE_N);
+  const coveH = new Float32Array(PROFILE_N);
+  {
+    const ph1 = random() * TAU;
+    const ph2 = random() * TAU;
+    for (let i = 0; i < PROFILE_N; i++) {
+      const a = i * 0.5 * DEG;
+      treeH[i] = 0.7 + 0.45 * Math.sin(a * 3 + ph1) + 0.3 * Math.sin(a * 7 + ph2);
+      coveH[i] = 0.9;
+    }
+    const stamp = (arr, c, w, fn) => {
+      for (let i = 0; i < PROFILE_N; i++) {
+        const dx = angDiff(i * 0.5, c) / w;
+        if (Math.abs(dx) <= 1) arr[i] = Math.max(arr[i], fn(dx, i));
+      }
+    };
+    for (let k = 0; k < 150; k++) {
+      const c = random() * 360;
+      const w = 0.35 + random() * 0.8;
+      const h = 1.4 + random() * 3.2;
+      stamp(treeH, c, w, (dx, i) => h * (1 - Math.abs(dx)) + 0.5 + 0.25 * hash1(i * 7 + k));
+    }
+    for (let k = 0; k < 70; k++) {
+      const c = random() * 360;
+      const w = 0.9 + random() * 2.2;
+      const h = 1.6 + random() * 2.6;
+      stamp(treeH, c, w, (dx, i) => h * Math.sqrt(1 - dx * dx) * (0.92 + 0.08 * hash1(i * 13 + k)) + 0.6);
+    }
+    for (let k = 0; k < 15; k++) {
+      const c = random() * 360;
+      const w = 2.5 + random() * 6;
+      const h = 1.8 + random() * 2.4;
+      const vent = random() < 0.5;
+      stamp(coveH, c, w, dx => h + (vent && Math.abs(dx) < 0.12 ? 0.8 : 0));
+    }
+    for (let k = 0; k < 42; k++) {
+      const c = random() * 360;
+      const w = 0.8 + random() * 1.8;
+      const h = 2.2 + random() * 3.2;
+      stamp(coveH, c, w, dx => h * Math.sqrt(1 - dx * dx) + 0.8);
+    }
+    stamp(coveH, 205, 0.9, dx => 7.6 - Math.abs(dx) * 1.2);
+    stamp(coveH, 205, 0.32, dx => 9.8 - Math.abs(dx) * 2.4);
+    stamp(coveH, 31, 1.4, dx => 6.1 + (Math.abs(dx) < 0.5 ? 0.6 : 0));
+  }
+
+  // One silhouette is many faces in one path. Front and back faces project with opposite
+  // screen winding and would cancel under nonzero fill, so every face is wound the same way.
+  const addPoly = (path, q) => {
+    let area = 0;
+    for (let k = 0; k < q.length; k++) {
+      const a = q[k];
+      const b = q[(k + 1) % q.length];
+      area += a[0] * b[1] - b[0] * a[1];
+    }
+    const pts = area < 0 ? [...q].reverse() : q;
+    path.moveTo(pts[0][0], pts[0][1]);
+    for (let k = 1; k < pts.length; k++) path.lineTo(pts[k][0], pts[k][1]);
+    path.closePath();
+  };
+
+  const dirAzAlt = (azDeg, altDeg) => {
+    const a = azDeg * DEG;
+    const h = altDeg * DEG;
+    return [Math.cos(h) * Math.sin(a), Math.sin(h), -Math.cos(h) * Math.cos(a)];
+  };
+  const DOME_C = [0, 1.4, 0];
+  const DOME_R = 10;
+  const domePoint = (azDeg, altDeg) => add3(DOME_C, scale3(dirAzAlt(azDeg, altDeg), DOME_R));
+
+  const drawTreeline = (g, cam) => {
+    const path = new Path2D();
+    let pt = null;
+    let pb = null;
+    for (let i = 0; i <= PROFILE_N; i++) {
+      const a = (i % PROFILE_N) * 0.5;
+      const top = projDir(cam, ...dirAzAlt(a, treeH[i % PROFILE_N])) ? [PX, PY] : null;
+      const bot = projDir(cam, ...dirAzAlt(a, -12)) ? [PX, PY] : null;
+      if (top && bot && pt && pb) addPoly(path, [pt, top, bot, pb]);
+      pt = top;
+      pb = bot;
+    }
+    g.fillStyle = '#040406';
+    g.fill(path);
+  };
+
+  const drawCove = (g, cam) => {
+    // light behind the painted skyline
+    g.save();
+    g.globalCompositeOperation = 'lighter';
+    g.lineCap = 'round';
+    for (const [alt, width, alpha] of [
+      [3.6, 70, 0.022],
+      [3.2, 38, 0.032],
+      [2.8, 16, 0.045]
+    ]) {
+      const path = new Path2D();
+      let pen = false;
+      for (let i = 0; i <= 180; i++) {
+        const p = projPoint(cam, domePoint(i * 2, alt));
+        if (!p) {
+          pen = false;
+          continue;
+        }
+        if (!pen) path.moveTo(p[0], p[1]);
+        else path.lineTo(p[0], p[1]);
+        pen = true;
+      }
+      g.lineWidth = width;
+      g.strokeStyle = `rgba(78,118,146,${alpha})`;
+      g.stroke(path);
+    }
+    g.restore();
+    // the skyline itself, and the cove wall down to the floor
+    const path = new Path2D();
+    let pt = null;
+    let pb = null;
+    for (let i = 0; i <= PROFILE_N; i++) {
+      const a = (i % PROFILE_N) * 0.5;
+      const top = projPoint(cam, domePoint(a, coveH[i % PROFILE_N]));
+      const bot = projPoint(cam, [DOME_R * Math.sin(a * DEG), 0, -DOME_R * Math.cos(a * DEG)]);
+      if (top && bot && pt && pb) addPoly(path, [pt, top, bot, pb]);
+      pt = top;
+      pb = bot;
+    }
+    g.fillStyle = '#030406';
+    g.fill(path);
+  };
+
+  const drawDomeSeams = (g, cam) => {
+    g.save();
+    g.lineWidth = 1;
+    const meridians = new Path2D();
+    for (let m = 0; m < 24; m++) {
+      let pen = false;
+      for (let h = 4; h <= 84; h += 4) {
+        const p = projPoint(cam, domePoint(m * 15, h));
+        if (!p) {
+          pen = false;
+          continue;
+        }
+        if (!pen) meridians.moveTo(p[0], p[1]);
+        else meridians.lineTo(p[0], p[1]);
+        pen = true;
+      }
+    }
+    const parallels = new Path2D();
+    for (const h of [12, 24, 36, 48, 60, 72]) {
+      let pen = false;
+      for (let a = 0; a <= 360; a += 3) {
+        const p = projPoint(cam, domePoint(a, h));
+        if (!p) {
+          pen = false;
+          continue;
+        }
+        if (!pen) parallels.moveTo(p[0], p[1]);
+        else parallels.lineTo(p[0], p[1]);
+        pen = true;
+      }
+    }
+    g.strokeStyle = 'rgba(110,150,185,0.045)';
+    g.stroke(meridians);
+    g.stroke(parallels);
+    g.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // The planetarium projector: a dumbbell whose axis points at the sky's pivot.
+  // ---------------------------------------------------------------------------
+  const PROJ_C = [0, 1.75, 0];
+  const LENSES = [];
+  for (let k = 0; k < 110; k++) {
+    const z = random() * 2 - 1;
+    const a = random() * TAU;
+    const rr = Math.sqrt(1 - z * z);
+    LENSES.push([rr * Math.cos(a), z, rr * Math.sin(a)]);
+  }
+  const projectorAxis = t => slerp(POLE, B_AXIS, smoother(T.swing0, T.swing1, t));
+  const alignY = a => {
+    const ax = cross3([0, 1, 0], a);
+    const l = Math.hypot(ax[0], ax[1], ax[2]);
+    if (l < 1e-6) return rotAxis([1, 0, 0], 0);
+    return rotAxis(scale3(ax, 1 / l), Math.acos(clamp(a[1], -1, 1)));
+  };
+
+  const drawProjector = (g, cam, t) => {
+    const axis = projectorAxis(t);
+    const body = matMul(rotAxis(axis, -projectorSpin(t)), alignY(axis));
+    const ends = [add3(PROJ_C, scale3(axis, 0.82)), add3(PROJ_C, scale3(axis, -0.82))];
+    const base = projPoint(cam, [0, 0, 0]);
+    const top = projPoint(cam, [0, 1.5, 0]);
+    const c = projPoint(cam, PROJ_C);
+    if (!base || !top || !c) return;
+    g.save();
+    g.lineCap = 'round';
+    // pedestal and fork
+    const column = [[0, 0, -0.2], [0, 0, 0.2], [0, 1.5, 0.12], [0, 1.5, -0.12]].map(q => projPoint(cam, q));
+    if (column.every(Boolean)) {
+      g.beginPath();
+      g.moveTo(column[0][0], column[0][1]);
+      for (let k = 1; k < 4; k++) g.lineTo(column[k][0], column[k][1]);
+      g.closePath();
+      g.fillStyle = '#07080b';
+      g.fill();
+      g.strokeStyle = 'rgba(80,110,140,0.22)';
+      g.lineWidth = 1;
+      g.stroke();
+    }
+    g.strokeStyle = '#07080b';
+    g.lineWidth = 0.1 * c[2];
+    for (const side of [-1, 1]) {
+      const arm = projPoint(cam, [0.32 * side, 1.75, 0]);
+      const foot = projPoint(cam, [0.32 * side, 1.45, 0]);
+      if (!arm || !foot) continue;
+      g.beginPath();
+      g.moveTo(top[0], top[1]);
+      g.lineTo(foot[0], foot[1]);
+      g.lineTo(arm[0], arm[1]);
+      g.stroke();
+    }
+    // truss
+    const e0 = projPoint(cam, ends[0]);
+    const e1 = projPoint(cam, ends[1]);
+    if (e0 && e1) {
+      g.strokeStyle = '#0a0c11';
+      g.lineWidth = 0.2 * c[2];
+      g.beginPath();
+      g.moveTo(e0[0], e0[1]);
+      g.lineTo(e1[0], e1[1]);
+      g.stroke();
+      g.strokeStyle = 'rgba(90,120,150,0.22)';
+      g.lineWidth = 1;
+      g.stroke();
+    }
+    // spheres, far one first
+    const order = ends
+      .map((e, k) => ({ e, k, p: projPoint(cam, e) }))
+      .filter(o => o.p)
+      .sort((a, b) => b.p[3] - a.p[3]);
+    for (const o of order) {
+      const rad = 0.31 * o.p[2];
+      const grd = g.createRadialGradient(o.p[0] - rad * 0.3, o.p[1] - rad * 0.3, rad * 0.1, o.p[0], o.p[1], rad);
+      grd.addColorStop(0, '#141924');
+      grd.addColorStop(1, '#07090d');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(o.p[0], o.p[1], rad, 0, TAU);
+      g.fill();
+      g.strokeStyle = 'rgba(80,120,150,0.3)';
+      g.lineWidth = 1.2;
+      g.stroke();
+      // lenses facing the camera
+      g.globalCompositeOperation = 'lighter';
+      const toCam = norm3(sub3(cam.pos, o.e));
+      const dots = new Path2D();
+      const r = Math.max(0.7, 0.0068 * o.p[2]);
+      for (const l of LENSES) {
+        const n = apply(body, o.k === 0 ? l : [-l[0], -l[1], -l[2]]);
+        if (dot3(n, toCam) < 0.3) continue;
+        const lp = projPoint(cam, add3(o.e, scale3(n, 0.31)));
+        if (!lp) continue;
+        dots.moveTo(lp[0] + r, lp[1]);
+        dots.arc(lp[0], lp[1], r, 0, TAU);
+      }
+      g.fillStyle = 'rgba(255,226,186,0.55)';
+      g.fill(dots);
+      g.globalCompositeOperation = 'source-over';
+    }
+    g.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // The Emlen funnel: a white desk blotter rolled into a 45-degree cone, stapled,
+  // standing on an ink pad, a wire lid on top.
+  // ---------------------------------------------------------------------------
+  const SQ = Math.SQRT1_2;
+  const coneP = (alpha, s, lift = 0) => {
+    const rho = lerp(FUN.padR, FUN.rimR, s);
+    const y = lerp(FUN.padY, FUN.rimY, s);
+    const sa = Math.sin(alpha);
+    const ca = Math.cos(alpha);
+    return [FUN.x + rho * sa - lift * sa * SQ, y + lift * SQ, FUN.z - rho * ca + lift * ca * SQ];
+  };
+  const LIGHT = norm3([-0.35, 1, 0.3]);
+  const PAPER = [234, 228, 212];
+  // The cone as 96 strips from the pad to the rim, each shaded by a gradient along its
+  // slope: the blotter darkens toward the pad without visible rings.
+  const NA = 96;
+  const CONE_STRIPS = [];
+  for (let i = 0; i < NA; i++) {
+    const a0 = (i / NA) * TAU;
+    const a1 = ((i + 1) / NA) * TAU;
+    const am = (a0 + a1) / 2;
+    const nIn = [-Math.sin(am) * SQ, SQ, Math.cos(am) * SQ];
+    const lit = 0.38 + 0.62 * Math.max(0, dot3(nIn, LIGHT));
+    const outerLit = 0.2 + 0.1 * Math.max(0, -Math.cos(am));
+    CONE_STRIPS.push({
+      corners: [coneP(a0, 0), coneP(a1, 0), coneP(a1, 1), coneP(a0, 1)],
+      foot: coneP(am, 0),
+      lip: coneP(am, 1),
+      center: coneP(am, 0.5),
+      nIn,
+      inner: [mixc([0, 0, 0], PAPER, lit * 0.62), mixc([0, 0, 0], PAPER, lit * 0.86), mixc([0, 0, 0], PAPER, lit)],
+      outer: [mixc([0, 0, 0], PAPER, outerLit * 0.75), mixc([0, 0, 0], PAPER, outerLit * 0.9), mixc([0, 0, 0], PAPER, outerLit * 1.1)]
+    });
+  }
+  const SEAM_A = 200 * DEG;
+
+  // Hops: launch 0.2 s before the beat, land (and print) on the beat: beats 3-4 of bar 12,
+  // every beat of bars 13-17, and the "and" of beat 4 in bars 15-17 (the score's kick and rim).
+  const HOP_BEATS = [50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 63.5, 64, 65, 66, 67, 67.5, 68, 69, 70, 71, 71.5];
+  const HOPS = HOP_BEATS.map(b => {
+    const k = HOP_BEATS.indexOf(b);
+    const outlier = k >= 4 && random() < 0.12;
+    const alpha = outlier ? (random() * 2 - 1) * Math.PI : gauss() * (k < 4 ? 12 : 26) * DEG;
+    return {
+      land: b * BEAT,
+      launch: b * BEAT - 0.2,
+      alpha,
+      s: 0.36 + random() * 0.46,
+      yaw: gauss() * 8 * DEG
+    };
+  });
+  const PRINTS = [];
+  HOPS.forEach((h, k) => {
+    const rho = lerp(FUN.padR, FUN.rimR, h.s);
+    for (const foot of [-1, 1]) {
+      PRINTS.push({
+        alpha: h.alpha + (foot * 0.013) / rho,
+        s: clamp(h.s + foot * 0.012 + gauss() * 0.01, 0.05, 0.97),
+        yaw: h.yaw + foot * 0.12,
+        t0: h.land + (foot > 0 ? 0.03 : 0),
+        k: k * 2 + (foot > 0 ? 1 : 0)
+      });
+    }
+  });
+  let meanX = 0;
+  let meanY = 0;
+  for (const p of PRINTS) {
+    meanX += Math.sin(p.alpha);
+    meanY += Math.cos(p.alpha);
+  }
+  const MEAN_ALPHA = Math.atan2(meanX, meanY);
+  const MEAN_R = Math.hypot(meanX, meanY) / PRINTS.length;
+
+  // Bird position in funnel coordinates: alpha (azimuth), s (0 pad edge .. 1 rim, <0 on the pad).
+  const slideS = (s0, v) => s0 - (s0 + 0.45) * smooth(0.05, 0.42, v);
+  const HOP_STARTS = [];
+  {
+    let cur = { alpha: HOPS[0].alpha, s: -0.6 };
+    HOPS.forEach((h, k) => {
+      if (k > 0) {
+        const prev = HOPS[k - 1];
+        cur = { alpha: prev.alpha, s: slideS(prev.s, h.launch - prev.land) };
+      }
+      HOP_STARTS.push(cur);
+    });
+  }
+  const birdState = t => {
+    let k = -1;
+    for (let i = 0; i < HOPS.length; i++) if (HOPS[i].launch <= t) k = i;
+    if (k < 0) {
+      const look = Math.sin(t * 2.1) * 0.35 * smooth(T.test0, T.test0 + 0.6, t);
+      return { alpha: HOPS[0].alpha, s: -0.6, lift: 0, wing: 0, flap: 0, face: HOPS[0].alpha, head: look };
+    }
+    const h = HOPS[k];
+    if (t <= h.land) {
+      const u = (t - h.launch) / (h.land - h.launch);
+      const st = HOP_STARTS[k];
+      let da = h.alpha - st.alpha;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      return {
+        alpha: st.alpha + da * smooth(0, 0.6, u),
+        s: lerp(st.s, h.s, smooth(0, 1, u)),
+        lift: 0.05 * Math.sin(Math.PI * u),
+        wing: 1,
+        flap: Math.sin(u * TAU * 2.2),
+        face: h.alpha,
+        head: 0
+      };
+    }
+    const v = t - h.land;
+    const next = HOPS[k + 1];
+    const s = slideS(h.s, v);
+    let face = h.alpha;
+    if (next && s < -0.2) {
+      let da = next.alpha - h.alpha;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      face = h.alpha + da * smooth(next.launch - 0.32, next.launch - 0.04, t);
+    } else if (!next) {
+      let da = MEAN_ALPHA - h.alpha;
+      da = Math.atan2(Math.sin(da), Math.cos(da));
+      face = h.alpha + da * smooth(h.land + 0.6, h.land + 1.2, t);
+    }
+    return {
+      alpha: h.alpha,
+      s,
+      lift: 0,
+      wing: 1 - smooth(0, 0.14, v),
+      flap: 0.6,
+      face,
+      head: !next ? Math.sin((t - h.land) * 1.7) * 0.25 * smooth(h.land + 1.2, h.land + 2, t) : 0
+    };
+  };
+  const birdPosition = (alpha, s, lift) => {
+    if (s >= 0) return coneP(alpha, s, 0.012 + lift);
+    const rho = FUN.padR * clamp(1 + s / 0.6 * 0.85, 0.15, 1);
+    return [FUN.x + rho * Math.sin(alpha), FUN.padY + 0.012 + lift, FUN.z - rho * Math.cos(alpha)];
+  };
+
+  const drawBirdLocal = (g, st, px) => {
+    // local metres: +x forward (beak), +y to the bird's right
+    const lw = 1 / px;
+    const spread = st.wing * (0.62 + 0.38 * (0.5 + 0.5 * st.flap));
+    // spread wings under everything
+    if (st.wing > 0.02) {
+      for (const side of [-1, 1]) {
+        const ys = y => side * (0.014 + (y - 0.014) * spread);
+        g.beginPath();
+        g.moveTo(0.012, ys(0.014));
+        g.bezierCurveTo(0.022, ys(0.05), 0.012, ys(0.085), -0.012, ys(0.108));
+        g.lineTo(-0.024, ys(0.104));
+        g.lineTo(-0.03, ys(0.094));
+        g.lineTo(-0.038, ys(0.086));
+        g.lineTo(-0.044, ys(0.074));
+        g.bezierCurveTo(-0.048, ys(0.05), -0.04, ys(0.03), -0.03, ys(0.014));
+        g.closePath();
+        g.fillStyle = '#5a3f2b';
+        g.fill();
+        g.strokeStyle = 'rgba(40,28,20,0.9)';
+        g.lineWidth = 1.1 * lw;
+        g.stroke();
+        // coverts with the first blue of an autumn male
+        g.beginPath();
+        g.moveTo(0.01, ys(0.016));
+        g.bezierCurveTo(0.016, ys(0.04), 0.008, ys(0.06), -0.006, ys(0.07));
+        g.bezierCurveTo(-0.018, ys(0.05), -0.02, ys(0.03), -0.016, ys(0.016));
+        g.closePath();
+        g.fillStyle = '#4b5f93';
+        g.fill();
+        g.strokeStyle = 'rgba(214,190,150,0.55)';
+        g.lineWidth = 1.4 * lw;
+        g.beginPath();
+        g.moveTo(-0.008, ys(0.03));
+        g.lineTo(-0.02, ys(0.08));
+        g.stroke();
+      }
+    }
+    // tail
+    g.beginPath();
+    g.moveTo(-0.03, -0.0095);
+    g.lineTo(-0.07, -0.0145);
+    g.lineTo(-0.074, -0.004);
+    g.lineTo(-0.069, 0);
+    g.lineTo(-0.074, 0.004);
+    g.lineTo(-0.07, 0.0145);
+    g.lineTo(-0.03, 0.0095);
+    g.closePath();
+    g.fillStyle = '#39456a';
+    g.fill();
+    g.strokeStyle = 'rgba(20,18,28,0.8)';
+    g.lineWidth = 1 * lw;
+    g.stroke();
+    // body
+    const grd = g.createRadialGradient(0.004, -0.004, 0.004, -0.004, 0, 0.05);
+    grd.addColorStop(0, '#9b7250');
+    grd.addColorStop(1, '#5e4129');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.ellipse(-0.004, 0, 0.043, 0.0235, 0, 0, TAU);
+    g.fill();
+    // folded wings
+    if (st.wing < 0.98) {
+      g.globalAlpha = 1 - st.wing;
+      for (const side of [-1, 1]) {
+        g.beginPath();
+        g.ellipse(-0.014, side * 0.0125, 0.036, 0.0118, side * 0.1, 0, TAU);
+        g.fillStyle = '#634530';
+        g.fill();
+        g.strokeStyle = 'rgba(214,190,150,0.5)';
+        g.lineWidth = 1.2 * lw;
+        g.beginPath();
+        g.moveTo(-0.004, side * 0.02);
+        g.lineTo(-0.03, side * 0.018);
+        g.stroke();
+        g.strokeStyle = 'rgba(80,104,160,0.75)';
+        g.lineWidth = 1.6 * lw;
+        g.beginPath();
+        g.moveTo(0.012, side * 0.017);
+        g.quadraticCurveTo(-0.02, side * 0.025, -0.046, side * 0.012);
+        g.stroke();
+      }
+      g.globalAlpha = 1;
+    }
+    // head, turned by st.head
+    g.save();
+    g.translate(0.022, 0);
+    g.rotate(st.head);
+    g.beginPath();
+    g.arc(0.011, 0, 0.0168, 0, TAU);
+    const hg = g.createRadialGradient(0.012, -0.004, 0.002, 0.011, 0, 0.018);
+    hg.addColorStop(0, '#8d6a4e');
+    hg.addColorStop(1, '#5b4433');
+    g.fillStyle = hg;
+    g.fill();
+    g.beginPath();
+    g.moveTo(0.022, -0.0062);
+    g.quadraticCurveTo(0.036, -0.004, 0.045, 0);
+    g.quadraticCurveTo(0.036, 0.004, 0.022, 0.0062);
+    g.closePath();
+    g.fillStyle = '#cfcbc0';
+    g.fill();
+    g.strokeStyle = 'rgba(60,56,50,0.7)';
+    g.lineWidth = 0.9 * lw;
+    g.stroke();
+    for (const side of [-1, 1]) {
+      g.beginPath();
+      g.ellipse(0.014, side * 0.0148, 0.0028, 0.0018, 0, 0, TAU);
+      g.fillStyle = '#120e0c';
+      g.fill();
+    }
+    g.restore();
+  };
+
+  const drawFunnel = (g, cam, t) => {
+    const center = projPoint(cam, [FUN.x, FUN.padY, FUN.z]);
+    if (!center || center[3] > 6) return;
+    const camPos = cam.pos;
+    // a dim pool of light on the floor around the stool
+    const fl = projPoint(cam, [FUN.x, 0, FUN.z]);
+    if (fl) {
+      const rad = 1.3 * fl[2];
+      const grd = g.createRadialGradient(fl[0], fl[1], 0, fl[0], fl[1], rad);
+      grd.addColorStop(0, 'rgba(70,82,104,0.32)');
+      grd.addColorStop(1, 'rgba(70,82,104,0)');
+      g.fillStyle = grd;
+      g.fillRect(fl[0] - rad, fl[1] - rad, rad * 2, rad * 2);
+    }
+    // stool: a turned wooden drum under the pad
+    const stool = new Path2D();
+    for (let i = 0; i < 36; i++) {
+      const a0 = (i / 36) * TAU;
+      const a1 = ((i + 1) / 36) * TAU;
+      const q = [
+        [FUN.x + 0.13 * Math.sin(a0), 0, FUN.z - 0.13 * Math.cos(a0)],
+        [FUN.x + 0.13 * Math.sin(a1), 0, FUN.z - 0.13 * Math.cos(a1)],
+        [FUN.x + 0.085 * Math.sin(a1), FUN.padY - 0.005, FUN.z - 0.085 * Math.cos(a1)],
+        [FUN.x + 0.085 * Math.sin(a0), FUN.padY - 0.005, FUN.z - 0.085 * Math.cos(a0)]
+      ].map(p => projPoint(cam, p));
+      if (q.some(p => !p)) continue;
+      addPoly(stool, q);
+    }
+    g.fillStyle = '#140e0b';
+    g.fill(stool);
+    // paper strips, far to near
+    const strips = [];
+    for (const f of CONE_STRIPS) {
+      const toCam = sub3(camPos, f.center);
+      const pts = f.corners.map(p => projPoint(cam, p));
+      const g0 = projPoint(cam, f.foot);
+      const g1 = projPoint(cam, f.lip);
+      if (pts.some(p => !p) || !g0 || !g1) continue;
+      strips.push({ f, pts, g0, g1, inner: dot3(f.nIn, toCam) > 0, depth: Math.hypot(toCam[0], toCam[1], toCam[2]) });
+    }
+    strips.sort((a, b) => b.depth - a.depth);
+    const fillStrip = (o, cols) => {
+      const grd = g.createLinearGradient(o.g0[0], o.g0[1], o.g1[0], o.g1[1]);
+      grd.addColorStop(0, css(cols[0]));
+      grd.addColorStop(0.45, css(cols[1]));
+      grd.addColorStop(1, css(cols[2]));
+      g.beginPath();
+      g.moveTo(o.pts[0][0], o.pts[0][1]);
+      for (let k = 1; k < 4; k++) g.lineTo(o.pts[k][0], o.pts[k][1]);
+      g.closePath();
+      g.fillStyle = grd;
+      g.fill();
+      g.strokeStyle = grd;
+      g.lineWidth = 1.3;
+      g.stroke();
+    };
+    g.save();
+    g.lineJoin = 'round';
+    for (const o of strips) if (o.inner) fillStrip(o, o.f.inner);
+    // seam: the blotter's overlap, stapled three times
+    {
+      const seam = new Path2D();
+      let pen = false;
+      for (let j = 0; j <= 10; j++) {
+        const p = projPoint(cam, coneP(SEAM_A, j / 10, 0.001));
+        if (!p) {
+          pen = false;
+          continue;
+        }
+        if (!pen) seam.moveTo(p[0], p[1]);
+        else seam.lineTo(p[0], p[1]);
+        pen = true;
+      }
+      g.strokeStyle = 'rgba(120,112,98,0.55)';
+      g.lineWidth = 1.6;
+      g.stroke(seam);
+      g.strokeStyle = 'rgba(200,204,212,0.85)';
+      g.lineWidth = 1.5;
+      for (const s of [0.22, 0.52, 0.82]) {
+        const a = projPoint(cam, coneP(SEAM_A - 0.05, s, 0.002));
+        const b = projPoint(cam, coneP(SEAM_A + 0.05, s, 0.002));
+        if (!a || !b) continue;
+        g.beginPath();
+        g.moveTo(a[0], a[1]);
+        g.lineTo(b[0], b[1]);
+        g.stroke();
+      }
+    }
+    // the ink pad
+    {
+      const pad = new Path2D();
+      for (let i = 0; i <= 40; i++) {
+        const a = (i / 40) * TAU;
+        const p = projPoint(cam, [FUN.x + FUN.padR * Math.sin(a), FUN.padY, FUN.z - FUN.padR * Math.cos(a)]);
+        if (!p) continue;
+        if (i === 0) pad.moveTo(p[0], p[1]);
+        else pad.lineTo(p[0], p[1]);
+      }
+      pad.closePath();
+      g.fillStyle = '#17121f';
+      g.fill(pad);
+      const hl = projPoint(cam, [FUN.x - 0.022, FUN.padY, FUN.z + 0.018]);
+      if (hl) {
+        const rr = 0.03 * hl[2];
+        const grd = g.createRadialGradient(hl[0], hl[1], 0, hl[0], hl[1], rr);
+        grd.addColorStop(0, 'rgba(150,150,180,0.22)');
+        grd.addColorStop(1, 'rgba(150,150,180,0)');
+        g.fillStyle = grd;
+        g.fill(pad);
+      }
+    }
+    // footprints: three toes forward, one back; the blotter wicks each one wider
+    {
+      const groups = [new Path2D(), new Path2D(), new Path2D()];
+      const cores = new Path2D();
+      for (const pr of PRINTS) {
+        const age = t - pr.t0;
+        if (age < 0) continue;
+        const sa = Math.sin(pr.alpha);
+        const ca = Math.cos(pr.alpha);
+        const es = [sa * SQ, SQ, -ca * SQ];
+        const ea = [ca, 0, sa];
+        const heel = coneP(pr.alpha, pr.s, 0.001);
+        const toes = [
+          [-0.42, 0.021],
+          [0, 0.024],
+          [0.42, 0.021],
+          [Math.PI, 0.012]
+        ];
+        const hp = projPoint(cam, heel);
+        if (!hp) continue;
+        const grp = groups[age < 0.35 ? 0 : age < 1.4 ? 1 : 2];
+        for (const [ang, len] of toes) {
+          const a = ang + pr.yaw;
+          const tip = add3(heel, add3(scale3(es, Math.cos(a) * len), scale3(ea, Math.sin(a) * len)));
+          const tp = projPoint(cam, tip);
+          if (!tp) continue;
+          grp.moveTo(hp[0], hp[1]);
+          grp.lineTo(tp[0], tp[1]);
+          cores.moveTo(hp[0], hp[1]);
+          cores.lineTo(tp[0], tp[1]);
+        }
+      }
+      const px = center[2];
+      g.lineCap = 'round';
+      const halo = [0.006, 0.0085, 0.0105];
+      for (let k = 0; k < 3; k++) {
+        g.strokeStyle = 'rgba(40,30,62,0.16)';
+        g.lineWidth = halo[k] * px;
+        g.stroke(groups[k]);
+      }
+      g.strokeStyle = 'rgba(22,16,32,0.88)';
+      g.lineWidth = 0.0034 * px;
+      g.stroke(cores);
+    }
+    // the bird
+    if (t > T.crane0 && t < T.rise1) {
+      const st = birdState(t);
+      const pos = birdPosition(st.alpha, st.s, st.lift);
+      const ground = birdPosition(st.alpha, st.s, 0);
+      const onWall = clamp((st.s + 0.1) / 0.4);
+      const fa = st.face;
+      const fwdFlat = [Math.sin(fa), 0, -Math.cos(fa)];
+      const fwdSlope = [Math.sin(fa) * SQ, SQ, -Math.cos(fa) * SQ];
+      const fwd = norm3(add3(scale3(fwdFlat, 1 - onWall), scale3(fwdSlope, onWall)));
+      const right = [Math.cos(fa), 0, Math.sin(fa)];
+      const p0 = projPoint(cam, pos);
+      const pf = projPoint(cam, add3(pos, scale3(fwd, 0.05)));
+      const prt = projPoint(cam, add3(pos, scale3(right, 0.05)));
+      const gp = projPoint(cam, add3(ground, [0.4 * (st.lift + 0.012), 0, 0.2 * (st.lift + 0.012)]));
+      if (gp) {
+        const size = (0.11 + st.lift * 0.6) * gp[2];
+        g.globalAlpha = 0.85 * (1 - clamp(st.lift / 0.08));
+        g.drawImage(shadowSprite, gp[0] - size / 2, gp[1] - size / 2, size, size);
+        g.globalAlpha = 1;
+      }
+      if (p0 && pf && prt) {
+        const fx = (pf[0] - p0[0]) / 0.05;
+        const fy = (pf[1] - p0[1]) / 0.05;
+        const rx = (prt[0] - p0[0]) / 0.05;
+        const ry = (prt[1] - p0[1]) / 0.05;
+        g.save();
+        g.setTransform(fx, fy, rx, ry, p0[0], p0[1]);
+        drawBirdLocal(g, st, p0[2]);
+        g.restore();
+      }
+    }
+    // outer wall, near side
+    for (const o of strips) if (!o.inner) fillStrip(o, o.f.outer);
+    // the rim's paper edge
+    {
+      const rim = new Path2D();
+      for (let i = 0; i <= 72; i++) {
+        const p = projPoint(cam, coneP((i / 72) * TAU, 1));
+        if (!p) continue;
+        if (i === 0) rim.moveTo(p[0], p[1]);
+        else rim.lineTo(p[0], p[1]);
+      }
+      g.strokeStyle = 'rgba(244,240,228,0.7)';
+      g.lineWidth = 1.6;
+      g.stroke(rim);
+      // the wire lid
+      const mesh = new Path2D();
+      const yM = FUN.rimY + 0.012;
+      for (let i = -10; i <= 10; i++) {
+        const off = i * 0.03;
+        const half = Math.sqrt(Math.max(0, FUN.rimR * FUN.rimR - off * off));
+        if (half < 0.01) continue;
+        for (const dir of [0, 1]) {
+          let pen = false;
+          for (let k = 0; k <= 6; k++) {
+            const u = lerp(-half, half, k / 6);
+            const p = projPoint(cam, dir ? [FUN.x + off, yM, FUN.z + u] : [FUN.x + u, yM, FUN.z + off]);
+            if (!p) {
+              pen = false;
+              continue;
+            }
+            if (!pen) mesh.moveTo(p[0], p[1]);
+            else mesh.lineTo(p[0], p[1]);
+            pen = true;
+          }
+        }
+      }
+      g.strokeStyle = 'rgba(150,158,172,0.07)';
+      g.lineWidth = 3.4;
+      g.stroke(mesh);
+      g.strokeStyle = 'rgba(178,186,200,0.16)';
+      g.lineWidth = 1.1;
+      g.stroke(mesh);
+      const hoop = new Path2D();
+      for (let i = 0; i <= 72; i++) {
+        const a = (i / 72) * TAU;
+        const p = projPoint(cam, [FUN.x + FUN.rimR * Math.sin(a), yM, FUN.z - FUN.rimR * Math.cos(a)]);
+        if (!p) continue;
+        if (i === 0) hoop.moveTo(p[0], p[1]);
+        else hoop.lineTo(p[0], p[1]);
+      }
+      g.strokeStyle = 'rgba(170,176,188,0.55)';
+      g.lineWidth = 2.2;
+      g.stroke(hoop);
+    }
+    g.restore();
+  };
+
+  const LABEL_FONT = '500 17px "Avenir Next", "Helvetica Neue", Arial, sans-serif';
+  const drawLabel = (g, x, y, text, color, alpha, ring = true) => {
+    if (alpha <= 0.003) return;
+    g.save();
+    g.globalAlpha = alpha;
+    if (ring) {
+      g.strokeStyle = color;
+      g.lineWidth = 1.1;
+      g.beginPath();
+      g.arc(x, y, 16, 0, TAU);
+      g.stroke();
+    }
+    g.font = LABEL_FONT;
+    if ('letterSpacing' in g) g.letterSpacing = '3px';
+    g.fillStyle = color;
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    g.fillText(text, x + 26, y - 1);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    g.restore();
+  };
+
+  const drawFunnelOverlay = (g, cam, t) => {
+    const show = smooth(T.test0 - 0.5, T.test0 + 0.7, t) * (1 - smooth(T.rise0, T.rise0 + 0.8, t));
+    if (show <= 0.003) return;
+    const c = projPoint(cam, [FUN.x, FUN.padY, FUN.z]);
+    const b = projPoint(cam, [FUN.x, FUN.rimY, FUN.z + 0.75]);
+    if (!c || !b) return;
+    g.save();
+    // toward Betelgeuse (due south of the funnel)
+    const dx = b[0] - c[0];
+    const dy = b[1] - c[1];
+    const len = Math.hypot(dx, dy);
+    const ux = dx / len;
+    const uy = dy / len;
+    const r0 = 0.085 * c[2];
+    const endX = c[0] + ux * (H * 0.47);
+    const endY = Math.min(H - 70, c[1] + uy * (H * 0.47));
+    g.globalAlpha = show;
+    g.strokeStyle = 'rgba(255,108,74,0.85)';
+    g.lineWidth = 1.6;
+    g.setLineDash([7, 7]);
+    g.beginPath();
+    g.moveTo(c[0] + ux * r0, c[1] + uy * r0);
+    g.lineTo(endX, endY);
+    g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = 'rgba(255,108,74,0.95)';
+    g.beginPath();
+    g.arc(endX, endY, 4, 0, TAU);
+    g.fill();
+    g.font = LABEL_FONT;
+    if ('letterSpacing' in g) g.letterSpacing = '3px';
+    g.textAlign = 'center';
+    g.textBaseline = 'top';
+    g.fillText('BETELGEUSE', endX, endY + 12);
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    // the prints, read as one heading
+    const arrow = smooth(T.arrow, T.arrow + 0.7, t);
+    if (arrow > 0.003) {
+      const L = FUN.rimR * MEAN_R * 1.15 * smooth(T.arrow, T.arrow + 0.9, t);
+      const tip = projPoint(cam, [FUN.x + L * Math.sin(MEAN_ALPHA), FUN.rimY + 0.02, FUN.z - L * Math.cos(MEAN_ALPHA)]);
+      if (tip) {
+        const ax = tip[0] - c[0];
+        const ay = tip[1] - c[1];
+        const al = Math.hypot(ax, ay) || 1;
+        const nx = ax / al;
+        const ny = ay / al;
+        g.globalAlpha = show * arrow;
+        g.strokeStyle = 'rgba(246,240,224,0.95)';
+        g.fillStyle = 'rgba(246,240,224,0.95)';
+        g.lineWidth = 3;
+        g.lineCap = 'round';
+        g.beginPath();
+        g.moveTo(c[0] + nx * r0, c[1] + ny * r0);
+        g.lineTo(tip[0] - nx * 10, tip[1] - ny * 10);
+        g.stroke();
+        g.beginPath();
+        g.moveTo(tip[0] + nx * 6, tip[1] + ny * 6);
+        g.lineTo(tip[0] - nx * 14 - ny * 9, tip[1] - ny * 14 + nx * 9);
+        g.lineTo(tip[0] - nx * 14 + ny * 9, tip[1] - ny * 14 - nx * 9);
+        g.closePath();
+        g.fill();
+      }
+    }
+    g.restore();
+  };
+
+  const drawPivotLabels = (g, t) => {
+    const pol = smooth(T.in1 - 0.2, T.in1 + 0.5, t) * (1 - smooth(T.stop - 0.6, T.stop, t));
+    if (headOk[POLARIS]) drawLabel(g, headX[POLARIS], headY[POLARIS], 'POLARIS', 'rgba(206,224,244,0.9)', pol * 0.85);
+    const bet = smooth(T.swing0 + 0.6, T.swing0 + 1.2, t);
+    if (headOk[BETELGEUSE] && bet > 0.003) {
+      g.save();
+      g.globalCompositeOperation = 'lighter';
+      const size = 70;
+      g.globalAlpha = 0.65 * bet;
+      g.drawImage(GLOWS[7], headX[BETELGEUSE] - size / 2, headY[BETELGEUSE] - size / 2, size, size);
+      g.restore();
+      drawLabel(g, headX[BETELGEUSE], headY[BETELGEUSE], 'BETELGEUSE', 'rgba(255,186,160,0.92)', bet * 0.9);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Outside: the planetarium on its lawn, a low wall, and ClawedCode.
+  // ---------------------------------------------------------------------------
+  const BLD = { x: 9, z: -31, r: 8, h: 3.2 };
+  const drawBuilding = (g, cam) => {
+    const drum = new Path2D();
+    const dome = new Path2D();
+    const face = (path, pts) => {
+      const q = pts.map(p => projPoint(cam, p));
+      if (q.some(p => !p)) return;
+      addPoly(path, q);
+    };
+    const dp = (a, h) => [BLD.x + BLD.r * Math.cos(h) * Math.sin(a), BLD.h + BLD.r * Math.sin(h), BLD.z - BLD.r * Math.cos(h) * Math.cos(a)];
+    for (let i = 0; i < 48; i++) {
+      const a0 = (i / 48) * TAU;
+      const a1 = ((i + 1) / 48) * TAU;
+      const p = (a, y) => [BLD.x + BLD.r * Math.sin(a), y, BLD.z - BLD.r * Math.cos(a)];
+      face(drum, [p(a0, 0), p(a1, 0), p(a1, BLD.h + 0.05), p(a0, BLD.h + 0.05)]);
+      for (let j = 0; j < 8; j++) {
+        const h0 = (j / 8) * (Math.PI / 2);
+        const h1 = ((j + 1) / 8) * (Math.PI / 2);
+        face(dome, [dp(a0, h0), dp(a1, h0), dp(a1, h1), dp(a0, h1)]);
+      }
+    }
+    g.fillStyle = '#06070a';
+    g.fill(drum);
+    const top = projPoint(cam, [BLD.x, BLD.h + BLD.r, BLD.z]);
+    const bot = projPoint(cam, [BLD.x, BLD.h, BLD.z]);
+    if (top && bot) {
+      const grd = g.createLinearGradient(top[0], top[1], bot[0], bot[1]);
+      grd.addColorStop(0, '#0b0f18');
+      grd.addColorStop(1, '#06070b');
+      g.fillStyle = grd;
+    } else {
+      g.fillStyle = '#080a10';
+    }
+    g.fill(dome);
+    // the dome's skin catches the sky along its silhouette
+    const BC = [BLD.x, BLD.h, BLD.z];
+    const toE = sub3(cam.pos, BC);
+    const dE = Math.hypot(toE[0], toE[1], toE[2]);
+    const n = scale3(toE, 1 / dE);
+    const c0 = add3(BC, scale3(n, (BLD.r * BLD.r) / dE));
+    const rr = BLD.r * Math.sqrt(1 - (BLD.r / dE) ** 2);
+    const u = norm3(cross3(n, [0, 1, 0]));
+    const v = cross3(u, n);
+    const rim = new Path2D();
+    let pen = false;
+    for (let i = 0; i <= 90; i++) {
+      const ph = (i / 90) * Math.PI;
+      const p3 = add3(c0, add3(scale3(u, Math.cos(ph) * rr), scale3(v, Math.sin(ph) * rr)));
+      const p = p3[1] > BLD.h + 0.1 ? projPoint(cam, p3) : null;
+      if (!p) {
+        pen = false;
+        continue;
+      }
+      if (!pen) rim.moveTo(p[0], p[1]);
+      else rim.lineTo(p[0], p[1]);
+      pen = true;
+    }
+    g.strokeStyle = 'rgba(126,146,196,0.42)';
+    g.lineWidth = 1.5;
+    g.stroke(rim);
+    // a lit doorway facing the lawn
+    const toCam = Math.atan2(cam.pos[0] - BLD.x, -(cam.pos[2] - BLD.z));
+    const dw = (da, y) => [BLD.x + (BLD.r + 0.03) * Math.sin(toCam + da), y, BLD.z - (BLD.r + 0.03) * Math.cos(toCam + da)];
+    const door = [dw(-0.055, 0), dw(0.055, 0), dw(0.055, 2.1), dw(-0.055, 2.1)].map(p => projPoint(cam, p));
+    if (door.every(Boolean)) {
+      const mx = (door[0][0] + door[2][0]) / 2;
+      const my = (door[0][1] + door[2][1]) / 2;
+      const gr = 46;
+      const grd = g.createRadialGradient(mx, my, 0, mx, my, gr);
+      grd.addColorStop(0, 'rgba(255,186,116,0.22)');
+      grd.addColorStop(1, 'rgba(255,186,116,0)');
+      g.fillStyle = grd;
+      g.fillRect(mx - gr, my - gr, gr * 2, gr * 2);
+      g.beginPath();
+      g.moveTo(door[0][0], door[0][1]);
+      for (let k = 1; k < 4; k++) g.lineTo(door[k][0], door[k][1]);
+      g.closePath();
+      g.fillStyle = '#f2b978';
+      g.fill();
+    }
+  };
+
+  const WALL = { x0: -2.8, x1: 0.1, zf: -0.72, zb: -1.05, h: 0.6 };
+  const drawWall = (g, cam) => {
+    const strip = (pts, n) => {
+      const out = [];
+      for (let k = 0; k < pts.length; k++) {
+        const a = pts[k];
+        const b = pts[(k + 1) % pts.length];
+        for (let i = 0; i < n; i++) out.push(projPoint(cam, [lerp(a[0], b[0], i / n), lerp(a[1], b[1], i / n), lerp(a[2], b[2], i / n)]));
+      }
+      return out;
+    };
+    const fill = (pts, color) => {
+      const ok = pts.filter(Boolean);
+      if (ok.length < 3) return;
+      g.beginPath();
+      g.moveTo(ok[0][0], ok[0][1]);
+      for (const p of ok) g.lineTo(p[0], p[1]);
+      g.closePath();
+      g.fillStyle = color;
+      g.fill();
+    };
+    fill(strip([[WALL.x0, WALL.h, WALL.zf], [WALL.x1, WALL.h, WALL.zf], [WALL.x1, WALL.h, WALL.zb], [WALL.x0, WALL.h, WALL.zb]], 12), '#191c26');
+    fill(strip([[WALL.x1, -0.4, WALL.zf], [WALL.x1, -0.4, WALL.zb], [WALL.x1, WALL.h, WALL.zb], [WALL.x1, WALL.h, WALL.zf]], 6), '#0f1118');
+    fill(strip([[WALL.x0, -0.4, WALL.zf], [WALL.x1, -0.4, WALL.zf], [WALL.x1, WALL.h, WALL.zf], [WALL.x0, WALL.h, WALL.zf]], 12), '#0a0b10');
+    // capstone edge catching the sky, and the joints between blocks
+    g.strokeStyle = 'rgba(130,145,190,0.32)';
+    g.lineWidth = 1.4;
+    g.beginPath();
+    let pen = false;
+    for (let i = 0; i <= 24; i++) {
+      const p = projPoint(cam, [lerp(WALL.x0, WALL.x1, i / 24), WALL.h, WALL.zf]);
+      if (!p) {
+        pen = false;
+        continue;
+      }
+      if (!pen) g.moveTo(p[0], p[1]);
+      else g.lineTo(p[0], p[1]);
+      pen = true;
+    }
+    g.stroke();
+    g.strokeStyle = 'rgba(0,0,0,0.55)';
+    g.lineWidth = 1.2;
+    for (const x of [-2.2, -1.55, -0.9, -0.3]) {
+      const a = projPoint(cam, [x, WALL.h, WALL.zf]);
+      const b = projPoint(cam, [x + 0.02, -0.3, WALL.zf]);
+      if (!a || !b) continue;
+      g.beginPath();
+      g.moveTo(a[0], a[1]);
+      g.lineTo(b[0], b[1]);
+      g.stroke();
+    }
+  };
+
+  // ClawedCode in profile, local metres: +x the way the cat faces, +y up.
+  const CAT_ANCHOR = [-0.4, WALL.h, -0.89];
+  const NECK = [0.042, 0.292];
+  const HEAD_TILT = 0.74;
+  const HEAD_SCALE = 1.14;
+  const catBody = new Path2D();
+  catBody.moveTo(-0.14, 0);
+  catBody.bezierCurveTo(-0.178, 0.07, -0.16, 0.175, -0.095, 0.235);
+  catBody.bezierCurveTo(-0.055, 0.27, -0.005, 0.29, 0.03, 0.305);
+  catBody.bezierCurveTo(0.055, 0.315, 0.084, 0.3, 0.09, 0.262);
+  catBody.bezierCurveTo(0.1, 0.215, 0.097, 0.15, 0.088, 0.09);
+  catBody.lineTo(0.091, 0.012);
+  catBody.bezierCurveTo(0.097, 0.0, 0.122, -0.002, 0.127, 0.006);
+  catBody.lineTo(0.128, -0.004);
+  catBody.lineTo(-0.1, -0.004);
+  catBody.closePath();
+  const catHead = new Path2D();
+  catHead.ellipse(0.036, 0.03, 0.058, 0.049, 0, 0, TAU);
+  catHead.ellipse(0.084, 0.016, 0.03, 0.023, 0, 0, TAU);
+  const catEar = (b0, tip, b1) => {
+    const p = new Path2D();
+    p.moveTo(b0[0], b0[1]);
+    p.quadraticCurveTo((b0[0] + tip[0]) / 2 - 0.006, (b0[1] + tip[1]) / 2, tip[0], tip[1]);
+    p.quadraticCurveTo((b1[0] + tip[0]) / 2 + 0.008, (b1[1] + tip[1]) / 2, b1[0], b1[1]);
+    p.closePath();
+    return p;
+  };
+  const EAR_FAR = catEar([-0.026, 0.05], [-0.032, 0.126], [0.016, 0.078]);
+  const EAR_NEAR = catEar([0.004, 0.076], [0.016, 0.146], [0.062, 0.064]);
+  const drawCat = (g, cam, t) => {
+    const p = projPoint(cam, CAT_ANCHOR);
+    if (!p) return;
+    const sc = p[2];
+    const breathe = 1 + 0.006 * Math.sin((t / DURATION) * TAU * 25);
+    const earFlick = Math.sin(clamp((t - 2.4) / 0.36) * Math.PI) * 0.32;
+    const tailFlick = Math.sin(clamp((t - 4.8) / 0.8) * Math.PI) + Math.sin(clamp((t - 55.8) / 0.8) * Math.PI);
+    const b = clamp((t - T.blink0) / 1.6);
+    const lid = b <= 0 || b >= 1 ? 1 : b < 0.3 ? 1 - smooth(0, 0.3, b) : b < 0.5 ? 0 : smooth(0.5, 1, b);
+    const silhouette = (fill, dy) => {
+      g.save();
+      g.setTransform(sc, 0, 0, -sc * breathe, p[0], p[1] - dy);
+      g.fillStyle = fill;
+      g.fill(catBody);
+      g.strokeStyle = fill;
+      g.lineCap = 'round';
+      g.lineWidth = 0.032;
+      g.beginPath();
+      g.moveTo(-0.12, 0.03);
+      g.bezierCurveTo(-0.205, 0.015, -0.225 - 0.03 * tailFlick, -0.07, -0.19 - 0.04 * tailFlick, -0.15 + 0.03 * tailFlick);
+      g.stroke();
+      g.translate(NECK[0], NECK[1]);
+      g.rotate(HEAD_TILT);
+      g.scale(HEAD_SCALE, HEAD_SCALE);
+      g.fill(catHead);
+      g.fill(EAR_FAR);
+      g.save();
+      g.translate(0.03, 0.072);
+      g.rotate(earFlick);
+      g.translate(-0.03, -0.072);
+      g.fill(EAR_NEAR);
+      g.restore();
+      g.restore();
+    };
+    silhouette('rgba(120,140,196,0.34)', 1.7);
+    silhouette('#030304', 0);
+    // eye and whiskers, in the head's frame
+    g.save();
+    g.setTransform(sc, 0, 0, -sc * breathe, p[0], p[1]);
+    g.translate(NECK[0], NECK[1]);
+    g.rotate(HEAD_TILT);
+    g.scale(HEAD_SCALE, HEAD_SCALE);
+    g.save();
+    g.translate(0.062, 0.042);
+    g.rotate(-0.12);
+    if (lid > 0.04) {
+      g.beginPath();
+      g.ellipse(0, 0, 0.0135, 0.0088 * lid, 0, 0, TAU);
+      const eg = g.createRadialGradient(0, 0, 0.001, 0, 0, 0.014);
+      eg.addColorStop(0, '#ffd27a');
+      eg.addColorStop(1, '#d9821e');
+      g.fillStyle = eg;
+      g.fill();
+      g.beginPath();
+      g.ellipse(0.0012, 0, 0.0062, 0.0078 * lid, 0, 0, TAU);
+      g.fillStyle = '#060504';
+      g.fill();
+      g.beginPath();
+      g.arc(0.004, 0.0035 * lid, 0.0016, 0, TAU);
+      g.fillStyle = 'rgba(255,255,255,0.9)';
+      g.fill();
+    } else {
+      g.strokeStyle = 'rgba(217,130,30,0.55)';
+      g.lineWidth = 0.0016;
+      g.beginPath();
+      g.moveTo(-0.012, 0);
+      g.quadraticCurveTo(0, -0.003, 0.012, 0);
+      g.stroke();
+    }
+    g.restore();
+    g.strokeStyle = 'rgba(226,230,240,0.55)';
+    g.lineWidth = 1 / (sc * HEAD_SCALE);
+    for (const [dx, dy] of [
+      [0.075, 0.026],
+      [0.08, 0.004],
+      [0.07, -0.018]
+    ]) {
+      g.beginPath();
+      g.moveTo(0.1, 0.012);
+      g.quadraticCurveTo(0.1 + dx * 0.5, 0.012 + dy * 0.6 + 0.004, 0.1 + dx, 0.012 + dy);
+      g.stroke();
+    }
+    g.restore();
+  };
+
+  // ---------------------------------------------------------------------------
+  // The two worlds.
+  // ---------------------------------------------------------------------------
+  const renderExterior = (g, t) => {
+    const cam = extCam(t);
+    paintBackground(g, cam, extSkyColor);
+    drawSky(g, skyExt, t, cam, -0.005);
+    drawTreeline(g, cam);
+    drawBuilding(g, cam);
+    drawWall(g, cam);
+    drawCat(g, cam, t);
+  };
+  const renderInterior = (g, t) => {
+    const cam = intCam(t);
+    paintBackground(g, cam, intSkyColor);
+    drawDomeSeams(g, cam);
+    drawSky(g, skyInt, t, cam, 0.03);
+    drawPivotLabels(g, t);
+    drawCove(g, cam);
+    drawProjector(g, cam, t);
+    drawFunnel(g, cam, t);
+    drawFunnelOverlay(g, cam, t);
+  };
+
+  const layer = document.createElement('canvas');
+  layer.width = W;
+  layer.height = H;
+  const lctx = layer.getContext('2d');
+  const resetContext = g => {
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.filter = 'none';
+    g.lineWidth = 1;
+    g.lineCap = 'butt';
+    g.lineJoin = 'miter';
+    g.miterLimit = 10;
+    g.setLineDash([]);
+    g.lineDashOffset = 0;
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+    g.textAlign = 'start';
+    g.textBaseline = 'alphabetic';
+    if ('letterSpacing' in g) g.letterSpacing = '0px';
+    g.imageSmoothingEnabled = true;
+  };
+
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    resetContext(ctx);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    const aInt = interiorAlpha(t);
+    if (aInt < 0.999) renderExterior(ctx, t);
+    if (aInt > 0.001) {
+      if (aInt >= 0.999) {
+        renderInterior(ctx, t);
+      } else {
+        resetContext(lctx);
+        lctx.clearRect(0, 0, W, H);
+        renderInterior(lctx, t);
+        resetContext(ctx);
+        ctx.globalAlpha = aInt;
+        ctx.drawImage(layer, 0, 0);
+        ctx.globalAlpha = 1;
+      }
+    }
+    resetContext(ctx);
+    ctx.drawImage(vignette, 0, 0);
+    return canvas.toDataURL('image/png');
+  };
+
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 100\\n// DURATION: 60\\n// FORM: night-sky intro cycles 0-4 | planetarium build cycles 4-7 | false-pole rotation cycles 7-12 | footprint groove cycles 12-18 | recorded heading cycles 18-21 | home-sky outro cycles 21-25\\n// TONAL CENTER: D natural minor\\n// MOTIF: A4 D5 E5 F5 E5 — eighth, eighth, quarter, eighth, dotted quarter, then an eighth rest\\n// HARMONIC PLAN: Dm9 | Bbmaj7 | Fmaj7 | C6 restarting from Dm9 at every section boundary; D pedal cycles 0-7, A pedal cycles 7-21, D pedal returns cycles 21-25\\n// GROOVE: RolandTR808 — silent until cycle 12; kick on beats 3 and 4 of cycle 12, then kick on all four beats of cycles 13-17; closed hats on the offbeat eighths from 12.5 through 17.5; rim click on the and of beat 4 in cycles 15-17; no snare or clap; straight, restrained and ritualistic, each kick one hop and one pair of footprints\\n\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\n\\nconst seq = note(\\\"\u003c[d3 f3 a3 c4 d4 e4 f4 a4 f4 e4 d4 c4 a3 f3 e3 d3] [bb2 d3 f3 a3 bb3 d4 f4 a4 f4 d4 bb3 a3 f3 d3 bb2 d3] [f3 a3 c4 e4 f4 a4 f4 e4 c4 a3 f3 e3 f3 a3 c4 e4] [c3 e3 g3 a3 c4 e4 g4 a4 g4 e4 c4 a3 g3 e3 c3 g3]>\\\")\\n  .s(\\\"sawtooth\\\").clip(0.9).lpq(7).lpenv(2.5).lpa(0.005).lpd(0.11)\\n  .room(0.3).roomsize(0.6).gain(0.2)\\nconst seq8 = seq.mask(\\\"[1 0]*8\\\").clip(1.7)\\nconst pad = note(\\\"\u003c[d3,f3,a3,c4,e4] [bb2,d3,f3,a3,d4] [f3,a3,c4,e4] [c3,e3,g3,a3,e4]>\\\")\\n  .s(\\\"triangle\\\").clip(1).attack(0.5).decay(0.4).sustain(0.75).release(1.4)\\n  .room(0.55).roomsize(0.8).gain(0.07)\\nconst padHook = note(\\\"\u003c[a4 d5 e5 f5 e5] ~ [a4 d5 e5 f5 e5]>\\\")\\n  .s(\\\"triangle\\\").clip(1.1).attack(0.3).release(0.8).lpf(1400).room(0.6).gain(0.045)\\nconst hook = note(\\\"a4 d5 e5@2 f5 e5@3\\\")\\n  .s(\\\"square\\\").clip(0.85).lpf(2200).lpq(4).attack(0.02).release(0.25)\\n  .off(0.1875, x => x.add(note(-12)))\\n  .room(0.4).delay(0.28).delaytime(0.18).delayfeedback(0.3).gain(0.08)\\nconst subD = note(\\\"[d1,d2]\\\").s(\\\"sine\\\").attack(0.08).decay(0.2).sustain(0.9).release(0.5).clip(0.95).lpf(160).gain(0.06)\\nconst subA = note(\\\"[a1,a2]\\\").s(\\\"sine\\\").attack(0.08).decay(0.2).sustain(0.9).release(0.5).clip(0.95).lpf(160).gain(0.06)\\nconst kick = s(\\\"bd\\\").bank(\\\"RolandTR808\\\").gain(0.32)\\nconst hat = s(\\\"hh\\\").bank(\\\"RolandTR808\\\").gain(0.12)\\nconst click = s(\\\"rim\\\").bank(\\\"RolandTR808\\\").gain(0.15)\\n\\n$: arrange(\\n  [4, seq.lpf(\\\"\u003c620 760 700 880>\\\")],\\n  [2, seq.lpf(\\\"\u003c900 1100>\\\")],\\n  [1, seq8.early(2).lpf(820)],\\n  [5, seq.lpf(\\\"\u003c2200 2800 2400 3000 1600>\\\")],\\n  [6, seq.lpf(\\\"\u003c2600 3000 2400 2800 1800 1500>\\\")],\\n  [3, seq8.lpf(\\\"\u003c1100 950 820>\\\")],\\n  [4, seq.lpf(\\\"\u003c620 760 700 880>\\\")]\\n).sometimesBy(0.1, x => x.add(note(12)))\\n\\n$: arrange(\\n  [4, pad.lpf(\\\"\u003c900 1100 1000 1200>\\\")],\\n  [3, pad.lpf(\\\"\u003c1200 1000 820>\\\")],\\n  [5, pad.lpf(\\\"\u003c1500 1800 1600 2000 1200>\\\")],\\n  [6, pad.lpf(\\\"\u003c1700 1500 1800 1600 1400 1200>\\\")],\\n  [3, stack(pad.lpf(\\\"\u003c1000 900 1000>\\\"), padHook)],\\n  [4, pad.lpf(\\\"\u003c900 1100 1000 1200>\\\")]\\n)\\n\\n$: arrange(\\n  [4, silence],\\n  [3, subD],\\n  [14, subA],\\n  [4, subD.clip(\\\"\u003c0.95 0.95 0.95 0.6>\\\")]\\n)\\n\\n$: arrange(\\n  [7, silence],\\n  [4, hook],\\n  [1, silence],\\n  [6, hook],\\n  [7, silence]\\n)\\n\\n$: arrange(\\n  [12, silence],\\n  [1, stack(kick.struct(\\\"~ ~ x x\\\"), hat.struct(\\\"~ ~ ~ ~ ~ x ~ x\\\"))],\\n  [2, stack(kick.struct(\\\"x x x x\\\"), hat.struct(\\\"~ x ~ x ~ x ~ x\\\"))],\\n  [3, stack(kick.struct(\\\"x x x x\\\"), hat.struct(\\\"~ x ~ x ~ x ~ x\\\"), click.struct(\\\"~ ~ ~ ~ ~ ~ ~ x\\\"))],\\n  [7, silence]\\n)\",\"bpm\":100,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4166666666666667,\"cycles\":25,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

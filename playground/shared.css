@@ -1,0 +1,344 @@
+/* Shared playground navigation and color variables */
+:root {
+    /* Color accents used across playground pages */
+    --pink-accent: rgba(255, 51, 153, 0.9);
+    --cyan-accent: rgba(102, 255, 204, 0.9);
+    --yellow-accent: rgba(255, 255, 102, 0.9);
+    --purple-accent: rgba(153, 102, 255, 0.9);
+    --text-secondary: rgba(102, 255, 204, 0.6);
+    --phosphor-green: #33ff33;
+    --playground-border: rgba(51, 255, 51, 0.3);
+
+    /* Additional experiment colors */
+    --intelligence-pulse: rgba(255, 102, 255, 0.8);
+    --experiment-orange: rgba(255, 204, 153, 0.9);
+    --experiment-indigo: rgba(153, 153, 255, 0.9);
+    --experiment-sky: rgba(102, 204, 255, 0.9);
+    --experiment-lavender: rgba(204, 153, 255, 0.9);
+    --experiment-coral: rgba(255, 153, 102, 0.9);
+    --experiment-mint: rgba(102, 255, 153, 0.9);
+    --experiment-emerald: rgba(0, 255, 128, 0.8);
+    --experiment-hotpink: rgba(255, 51, 153, 0.9);
+}
+
+/* Playground navigation link styles */
+.playground-nav {
+    margin-top: 1rem;
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.playground-nav a {
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.playground-nav__home {
+    color: var(--pink-accent);
+    opacity: 0.8;
+}
+
+.playground-nav__separator {
+    color: var(--text-secondary);
+    opacity: 0.3;
+}
+
+.playground-nav__cyan { color: var(--cyan-accent); }
+.playground-nav__green { color: var(--phosphor-green); }
+.playground-nav__pink { color: var(--pink-accent); }
+.playground-nav__yellow { color: var(--yellow-accent); }
+.playground-nav__purple { color: var(--purple-accent); }
+.playground-nav__intelligence { color: var(--intelligence-pulse); }
+.playground-nav__orange { color: var(--experiment-orange); }
+.playground-nav__indigo { color: var(--experiment-indigo); }
+.playground-nav__sky { color: var(--experiment-sky); }
+.playground-nav__lavender { color: var(--experiment-lavender); }
+.playground-nav__coral { color: var(--experiment-coral); }
+.playground-nav__mint { color: var(--experiment-mint); }
+.playground-nav__emerald { color: var(--experiment-emerald); }
+.playground-nav__hotpink { color: var(--experiment-hotpink); }
+
+.playground-nav__archive {
+    color: var(--text-secondary);
+    opacity: 0.6;
+}
+
+.playground-hero {
+    padding-bottom: 1rem;
+}
+
+.playground-meta {
+    display: inline-flex;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--cyan-accent);
+}
+
+.playground-meta__item {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.playground-meta__value {
+    font-size: 1.25rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 12px rgba(51, 255, 51, 0.6);
+}
+
+@media (max-width: 768px) {
+    .playground-nav {
+        gap: 1rem;
+    }
+
+    .playground-nav a {
+        font-size: 0.85rem;
+    }
+}
+
+/* ===== SHARED COMPONENT STYLES ===== */
+/* These can be used across all experiments to reduce duplication */
+
+/* Common glow effect variable */
+:root {
+    --glow-cyan: 0 0 35px rgba(102, 255, 255, 0.4);
+    --glow-green: 0 0 35px rgba(51, 255, 51, 0.4);
+    --glow-pink: 0 0 30px rgba(255, 51, 153, 0.3);
+    --void-bg: #000103;
+}
+
+/* Control Buttons - base styles */
+.control-btn {
+    background: rgba(0, 34, 68, 0.8);
+    border: 1px solid var(--cyan-accent);
+    color: var(--cyan-accent);
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    letter-spacing: 1px;
+}
+
+.control-btn:hover {
+    background: rgba(102, 255, 255, 0.1);
+    box-shadow: var(--glow-cyan);
+    transform: translateY(-2px);
+}
+
+.control-btn.active {
+    background: rgba(102, 255, 255, 0.2);
+    box-shadow: var(--glow-cyan);
+}
+
+.control-btn.primary {
+    border-color: var(--phosphor-green);
+    color: var(--phosphor-green);
+}
+
+.control-btn.primary:hover {
+    background: rgba(51, 255, 51, 0.1);
+    box-shadow: var(--glow-green);
+}
+
+.control-btn.reset {
+    border-color: var(--pink-accent);
+    color: var(--pink-accent);
+}
+
+.control-btn.reset:hover {
+    background: rgba(255, 51, 153, 0.1);
+    box-shadow: var(--glow-pink);
+}
+
+/* Metric display */
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    color: var(--cyan-accent);
+}
+
+.metric span {
+    font-size: 1.2rem;
+    color: var(--phosphor-green);
+    text-shadow: 0 0 10px rgba(51, 255, 51, 0.6);
+}
+
+/* Experiment container */
+.experiment-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem 3rem 2rem;
+}
+
+/* Experiment controls row */
+.experiment-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+/* Experiment stage (canvas wrapper) */
+.experiment-stage {
+    position: relative;
+    border: 1px solid rgba(102, 255, 255, 0.3);
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 15% 85%, rgba(102, 255, 255, 0.02) 0%, transparent 50%),
+        radial-gradient(circle at 85% 15%, rgba(255, 255, 255, 0.01) 0%, transparent 50%),
+        var(--void-bg);
+    overflow: hidden;
+    box-shadow: var(--glow-cyan);
+    min-height: 700px;
+}
+
+/* Standard canvas styles */
+.experiment-canvas {
+    display: block;
+    width: 100%;
+    height: 700px;
+}
+
+/* Overlay for text/UI on canvas */
+.experiment-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* Log/display area at top */
+.experiment-log {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    right: 2rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.7rem;
+    color: rgba(204, 255, 204, 0.8);
+    opacity: 0;
+    max-height: 200px;
+    overflow: hidden;
+    line-height: 1.5;
+    transition: opacity 2s ease-in-out;
+    pointer-events: none;
+}
+
+.experiment-log.visible {
+    opacity: 0.9;
+}
+
+.log-entry {
+    display: block;
+    margin-bottom: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    border-left: 1px solid var(--yellow-accent);
+    background: rgba(0, 0, 0, 0.4);
+    animation: log-emerge 3s ease-out forwards;
+    opacity: 0;
+    transform: translateX(-20px);
+}
+
+@keyframes log-emerge {
+    0% { opacity: 0; transform: translateX(-20px); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+
+/* Whisper text at bottom */
+.experiment-whisper {
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    color: var(--cyan-accent);
+    font-size: 0.75rem;
+    letter-spacing: 2px;
+    text-transform: lowercase;
+    opacity: 0.7;
+}
+
+.experiment-instructions {
+    margin-top: 0.5rem;
+    font-size: 0.65rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
+}
+
+/* Philosophy section below canvas */
+.experiment-philosophy {
+    margin-top: 2rem;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.8;
+    opacity: 0.8;
+}
+
+.experiment-philosophy p {
+    margin-bottom: 0.5rem;
+}
+
+.experiment-philosophy code {
+    color: var(--cyan-accent);
+    font-size: 0.9rem;
+}
+
+/* Experiment metrics row */
+.experiment-metrics {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* ===== RESPONSIVE SHARED STYLES ===== */
+@media (max-width: 768px) {
+    .experiment-container {
+        padding: 0 1rem 2rem 1rem;
+    }
+
+    .experiment-controls {
+        gap: 0.5rem;
+    }
+
+    .control-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.75rem;
+    }
+
+    .experiment-canvas {
+        height: 500px;
+    }
+
+    .experiment-stage {
+        min-height: 500px;
+    }
+
+    .experiment-log {
+        top: 1rem;
+        left: 1rem;
+        right: 1rem;
+        font-size: 0.65rem;
+    }
+
+    .experiment-metrics {
+        gap: 1rem;
+        font-size: 0.7rem;
+    }
+}

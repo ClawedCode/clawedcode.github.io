@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const c=document.createElement('canvas'),ctx=c.getContext('2d'),W=900,H=900,duration=60,bone='#e6dcc2',ink='#25262b',vio='#5b3048',sul='#c6a82f',ox='#4d7163',verm='#d9422f';
+c.width=c.height=W;document.body.appendChild(c);
+function Q(s){return()=>((s=(Math.imul(s,1664525)+1013904223)>>>0)/4294967296)}
+function E(x){x=Math.max(0,Math.min(1,x));return x*x*(3-2*x)}
+function S(a,b,x){return E((x-a)/(b-a))}
+function M(a,b,x){return a+(b-a)*x}
+function P(u,a,h=.68){u=((u%1)+1)%1;for(let i=0;i<a.length-1;i++)if(u>=a[i][0]&&u<=a[i+1][0]){let q=(u-a[i][0])/(a[i+1][0]-a[i][0]);q=q<h?0:E((q-h)/(1-h));return M(a[i][1],a[i+1][1],q)}return a[0][1]}
+function T(a,s){const r=Q(s),o=[];for(let i=0;i<a.length;i++){const v=a[i],w=a[(i+1)%a.length],x=w[0]-v[0],y=w[1]-v[1],d=Math.hypot(x,y)||1,j=(r()-.5)*9;o.push([v[0],v[1]],[(v[0]+w[0])/2-y*j/d,(v[1]+w[1])/2+x*j/d])}o.push([...o[0]]);return o}
+function K(q,c,s,d,m=''){return{q:T(q,s),c,s,d,m}}
+const rr=Q(4828551),fc=document.createElement('canvas'),fx=fc.getContext('2d');
+fc.width=fc.height=128;fx.fillStyle='#fff';fx.fillRect(0,0,128,128);
+for(let i=0;i<190;i++){const x=rr()*128,y=rr()*128,l=2+rr()*14;fx.strokeStyle=`rgba(37,38,43,${.025+rr()*.06})`;fx.lineWidth=.4+rr()*.6;fx.beginPath();fx.moveTo(x,y);fx.lineTo(x+l,y+(rr()-.5)*2);fx.stroke()}
+const pat=ctx.createPattern(fc,'repeat'),sheet=T([[62,65],[838,58],[847,833],[69,842]],4828648);
+const L=[
+K([[0,18],[38,0],[454,8],[492,48],[480,370],[448,397],[24,386],[0,350]],ox,4828651,2,'D/AF'),
+K([[0,0],[236,7],[244,138],[8,146]],vio,4828663,4,'03'),
+K([[0,15],[33,15],[45,0],[125,4],[132,91],[4,96]],bone,4828679,3,'A'),
+K([[0,8],[49,10],[60,0],[132,8],[127,94],[0,89]],bone,4828697,3,'B'),
+K([[0,17],[24,17],[37,2],[125,0],[135,88],[8,98]],bone,4828711,3,'C'),
+K([[0,4],[56,4],[67,15],[128,13],[123,96],[2,89]],bone,4828729,3,'D'),
+K([[0,18],[53,18],[77,3],[89,11],[72,29],[148,30],[154,47],[87,52],[126,70],[117,83],[62,62],[12,70]],bone,4828741,5,''),
+K([[0,18],[53,18],[77,3],[89,11],[72,29],[148,30],[154,47],[87,52],[126,70],[117,83],[62,62],[12,70]],bone,4828757,5,''),
+K([[0,22],[74,2],[201,14],[268,54],[245,94],[38,87]],vio,4828771,1,'')
+];
+function Z(l){ctx.beginPath();ctx.moveTo(l.q[0][0],l.q[0][1]);for(let i=1;i<l.q.length;i++)ctx.lineTo(l.q[i][0],l.q[i][1]);ctx.closePath()}
+function A(l,x,y,r=0,sx=1,sy=1,a=1){ctx.save();ctx.translate(x,y);ctx.rotate(r);ctx.scale(sx,sy);ctx.globalAlpha=a;Z(l);ctx.shadowColor='rgba(30,25,24,.25)';ctx.shadowBlur=Math.min(6,l.d+1);ctx.shadowOffsetX=l.d;ctx.shadowOffsetY=l.d+1;ctx.fillStyle=l.c;ctx.fill();ctx.shadowColor='transparent';ctx.save();ctx.clip();ctx.globalAlpha=.14*a;ctx.fillStyle=pat;ctx.fillRect(-300,-300,1400,1400);ctx.restore();ctx.save();ctx.translate(l.d%2?2:-2,l.d%3-1);ctx.globalCompositeOperation='multiply';ctx.globalAlpha=.28*a;Z(l);ctx.strokeStyle=l.d%2?verm:vio;ctx.lineWidth=1.5;ctx.stroke();ctx.restore();Z(l);ctx.strokeStyle=ink;ctx.lineWidth=2;ctx.stroke();if(l.m){ctx.globalCompositeOperation='multiply';ctx.globalAlpha=.72*a;ctx.fillStyle=l.d%2?verm:ink;ctx.font='700 13px monospace';ctx.fillText(l.m,13,29)}ctx.restore()}
+function B(x,y,w,h,f,s=ink,l=2){ctx.fillStyle=f;ctx.fillRect(x,y,w,h);ctx.strokeStyle=s;ctx.lineWidth=l;ctx.strokeRect(x,y,w,h)}
+function X(x,y,s=8,a=1){ctx.save();ctx.globalCompositeOperation='multiply';ctx.globalAlpha=a;ctx.strokeStyle=verm;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(x-s,y);ctx.lineTo(x+s,y);ctx.moveTo(x,y-s);ctx.lineTo(x,y+s);ctx.stroke();ctx.beginPath();ctx.arc(x,y,s*.38,0,Math.PI*2);ctx.stroke();ctx.restore()}
+function U(i,x,y,s=1,a=1,l=0){ctx.save();ctx.translate(x,y);ctx.scale(s,s);ctx.globalAlpha=a;ctx.shadowColor='rgba(25,22,20,.22)';ctx.shadowBlur=4;ctx.shadowOffsetX=3;ctx.shadowOffsetY=4;B(-43,-57,86,114,bone);ctx.shadowColor='transparent';ctx.globalCompositeOperation='multiply';ctx.strokeStyle=vio;ctx.lineWidth=1.5;ctx.strokeRect(-40,-54,86,114);ctx.globalCompositeOperation='source-over';
+if(i===0){B(-34,-43,68,21,vio);for(let j=0;j<6;j++){ctx.fillStyle=j%2?sul:bone;ctx.fillRect(-34+j*12,-43,12,21)}B(-29,-12,58,53,ox);ctx.fillStyle=ink;ctx.beginPath();ctx.arc(0,20,17,Math.PI,0);ctx.fill();ctx.fillStyle=sul;ctx.beginPath();ctx.ellipse(0,17,12,6,0,0,Math.PI*2);ctx.fill()}
+if(i===1){ctx.strokeStyle=verm;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-25,-34);ctx.bezierCurveTo(-4,-5,7,-8,27,-35);ctx.stroke();B(-32,10,22,34,ox);B(10,10,22,34,ox);B(-18,1,36,9,sul);ctx.strokeStyle=ink;ctx.beginPath();ctx.moveTo(-28,44);ctx.lineTo(-35,54);ctx.moveTo(28,44);ctx.lineTo(35,54);ctx.stroke()}
+if(i===2){B(-34,-42,68,35,ox);ctx.fillStyle=bone;ctx.fillRect(-25,-34,18,14);ctx.fillRect(5,-34,18,14);ctx.fillStyle=verm;ctx.fillRect(-34,-7,68,6);ctx.strokeStyle=ink;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(-39,27);ctx.lineTo(39,27);ctx.moveTo(-39,39);ctx.lineTo(39,39);ctx.stroke();ctx.lineWidth=1;for(let j=-30;j<=30;j+=15){ctx.beginPath();ctx.moveTo(j,24);ctx.lineTo(j+7,42);ctx.stroke()}}
+if(i===3){B(-34,-43,68,76,ink);ctx.fillStyle=sul;ctx.font='700 15px serif';ctx.fillText('λ  Ж',-25,-15);ctx.fillText('अ  旅',-25,9);ctx.strokeStyle=bone;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-27,20);ctx.quadraticCurveTo(0,7,27,20);ctx.stroke();ctx.fillStyle=ox;ctx.fillRect(-28,40,56,8)}
+if(l>0){ctx.fillStyle=sul;for(let j=0;j<3;j++){ctx.globalAlpha=a*(.35+.65*S(.05+j*.15,.2+j*.15,l));ctx.fillRect(-28+j*22,-3,10,14)}}ctx.globalAlpha=a*.34;ctx.globalCompositeOperation='multiply';ctx.fillStyle=pat;ctx.fillRect(-43,-57,86,114);ctx.restore()}
+function F(i,x,y,u,a=1,r=0,s=1){ctx.save();ctx.translate(x,y);ctx.rotate(r);ctx.scale(s,s);A(L[2+i],0,0,0,1,1,a);if(u>.01)U(i,66,51,.44,u*a,u);ctx.save();ctx.translate(2,18);ctx.transform(1,-.08*u,.1*u,1-.86*u,0,0);ctx.globalAlpha=a;ctx.fillStyle=i%2?bone:'#d9cfb5';ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(126,1);ctx.lineTo(129,76);ctx.lineTo(3,77);ctx.closePath();ctx.fill();ctx.strokeStyle=ink;ctx.lineWidth=2;ctx.stroke();ctx.globalCompositeOperation='multiply';ctx.strokeStyle=verm;ctx.globalAlpha=.46*a;ctx.strokeRect(82,42,31,19);ctx.font='700 9px monospace';ctx.fillStyle=verm;ctx.fillText('UNLIVED',84,54);ctx.restore();ctx.fillStyle=sul;ctx.strokeStyle=ink;for(const px of [8,119]){ctx.beginPath();ctx.arc(px,19,4,0,Math.PI*2);ctx.fill();ctx.stroke()}ctx.restore()}
+window.renderFrame=function(time){const p=(((time%duration)+duration)%duration)/duration;ctx.setTransform(1,0,0,1,0,0);ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';ctx.shadowColor='transparent';ctx.setLineDash([]);ctx.fillStyle=ink;ctx.fillRect(0,0,W,H);
+ctx.beginPath();ctx.moveTo(sheet[0][0],sheet[0][1]);for(let i=1;i<sheet.length;i++)ctx.lineTo(sheet[i][0],sheet[i][1]);ctx.closePath();ctx.fillStyle=bone;ctx.fill();ctx.save();ctx.clip();ctx.globalAlpha=.16;ctx.fillStyle=pat;ctx.fillRect(0,0,W,H);ctx.restore();
+ctx.strokeStyle='rgba(37,38,43,.3)';ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(226,257,148,.8,5.2);ctx.arc(658,590,181,2.5,5.9);ctx.stroke();X(88,92,10,.7);X(811,91,10,.7);X(805,807,10,.7);
+A(L[0],88,178);
+ctx.save();ctx.translate(304,292);const q=p*20,qi=Math.floor(q),qf=q-qi,wa=(qi+E((qf-.78)/.22))*Math.PI*2/10;ctx.rotate(wa);ctx.fillStyle=sul;ctx.strokeStyle=ink;ctx.lineWidth=3;for(let i=0;i<12;i++){ctx.rotate(Math.PI/6);ctx.fillRect(67,-7,16,14);ctx.strokeRect(67,-7,16,14)}ctx.beginPath();ctx.arc(0,0,72,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=vio;ctx.beginPath();ctx.arc(0,0,48,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle=bone;ctx.font='700 16px monospace';ctx.textAlign='center';for(let i=0;i<10;i++){const a=i*Math.PI*2/10;ctx.fillText(String(i),Math.cos(a)*58,Math.sin(a)*58+5)}ctx.fillStyle=verm;ctx.fillRect(-5,-78,10,30);ctx.restore();X(304,292,9);
+ctx.fillStyle=ink;for(let i=0;i<4;i++){const h=P((p+i*.047)%1,[[0,8],[.1,8],[.18,28],[.27,8],[1,8]],.55);ctx.fillRect(405+i*30,246,8,h)}
+ctx.fillStyle=bone;ctx.font='700 14px monospace';ctx.textAlign='left';ctx.fillText('MUNICIPAL / NIGHT INTAKE',118,215);ctx.fillStyle=verm;ctx.fillText('FUTURES — NO APPEAL',369,540);
+B(568,98,260,360,ox);B(584,116,228,318,vio);
+for(let j=0;j<12;j++){const col=j%3,row=Math.floor(j/3),x=594+col*72,y=128+row*72,aa=S(.39+j*.008,.45+j*.008,p)*(1-S(.58+j*.004,.66+j*.004,p));B(x,y,61,58,ink,bone,1.5);if(aa>0){ctx.save();ctx.globalAlpha=aa;const ex=j>7?(j-7)*5*S(.48,.56,p):0;ctx.fillStyle=j%2?bone:'#d2c7ac';ctx.fillRect(x+7,y+25-ex,47,25+ex);ctx.strokeStyle=verm;ctx.strokeRect(x+10,y+31-ex,28,9);ctx.restore()}}
+ctx.fillStyle=bone;ctx.font='700 11px monospace';ctx.fillText('PIGEONHOLES 00–11',594,448);
+B(145,568,637,104,vio);B(158,581,611,69,ink);
+const bo=(p*12)%1;for(let i=0;i<13;i++){const x=158+((i/12+bo)%1)*611;ctx.strokeStyle=sul;ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x,586);ctx.lineTo(x-17,645);ctx.stroke()}ctx.fillStyle=ox;ctx.beginPath();ctx.arc(168,616,24,0,Math.PI*2);ctx.arc(758,616,24,0,Math.PI*2);ctx.fill();ctx.strokeStyle=bone;ctx.lineWidth=3;ctx.stroke();
+const st=[[86,86],[240,75],[400,88],[563,98]],it=[[122,354],[235,382],[351,347],[448,378]],ar=[[603,132],[675,203],[747,276],[603,347]];
+for(let i=0;i<4;i++){const x=P(p,[[0,st[i][0]],[.025,st[i][0]],[.145+i*.018,it[i][0]],[.37,it[i][0]],[.525+i*.012,ar[i][0]],[1,ar[i][0]]]),y=P(p,[[0,st[i][1]],[.025,st[i][1]],[.145+i*.018,it[i][1]],[.37,it[i][1]],[.525+i*.012,ar[i][1]],[1,ar[i][1]]]),u=P(p,[[0,0],[.15+i*.018,0],[.235+i*.018,1],[.37,1],[.46+i*.01,0],[1,0]],.54),a=S(.012,.035,p)*(1-S(.55+i*.012,.59+i*.012,p)),r=(i-1.5)*.035+P(p,[[0,-.08],[.16,0],[.38,0],[.53,.06],[1,.06]],.72);F(i,x,y,u,a,r,.92)}
+const gl=P(p,[[0,0],[.22,0],[.285,1],[.42,1],[.48,0],[1,0]],.48),gr=P(p,[[0,0],[.3,0],[.37,1],[.5,1],[.57,0],[1,0]],.76);
+A(L[6],M(-150,105,gl),447,M(-.12,.08,gl),1,1,gl);A(L[7],M(950,795,gr),474,M(.14,-.1,gr),-1,1,gr);if(gl)X(237,486,7,gl);if(gr)X(669,514,7,gr);
+for(let i=0;i<4;i++){const z=P(p,[[0,0],[.27+i*.035,0],[.315+i*.035,1],[.35+i*.035,1],[.39+i*.035,0],[1,0]],.5);if(z){const x=181+i*101,y=M(270,332,z);ctx.save();ctx.translate(x,y);ctx.rotate((i-1.5)*.04);ctx.globalAlpha=z;B(-32,-18,64,36,verm,ink,2);ctx.fillStyle=bone;ctx.font='700 11px monospace';ctx.textAlign='center';ctx.fillText('RETURN',0,4);ctx.restore()}}
+const city=S(.575,.68,p)*(1-S(.82,.9,p)),fold=S(.805,.94,p);if(city)A(L[8],333,538,-.03,1.12,1,city);
+const tx=[366,484,612,531],ty=[475,420,484,314];
+for(let i=0;i<4;i++){const mv=P(p,[[0,0],[.31+i*.018,0],[.55,75],[1,75]],.7),bx=214+i*135+mv,by=605+(i%2)*15,x=M(M(bx,tx[i],S(.575,.68,p)),157,fold),y=M(M(by,ty[i],S(.575,.68,p)),680,fold),sc=M(.54,1.03,S(.575,.68,p))*(1-.74*fold),a=S(.27+i*.02,.34+i*.02,p)*(1-S(.965,.998,p)),li=S(.635+i*.018,.69+i*.018,p)*(1-S(.81,.88,p));U(i,x,y,sc,a,li)}
+if(city){ctx.save();ctx.globalAlpha=city;ctx.strokeStyle=ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(335,560);ctx.lineTo(462,520);ctx.lineTo(533,548);ctx.lineTo(679,529);ctx.stroke();for(let i=0;i<4;i++)X(tx[i]+(i%2?33:-28),ty[i]+56,6,city);ctx.restore()}
+const rf=S(.79,.84,p)*(1-S(.985,.999,p)),rx=M(445,105,fold),ry=M(602,718,fold);if(rf)F(0,rx,ry,1-fold,rf,-.08*fold,M(1.08,.62,fold));
+A(L[1],69,688);B(91,714,196,88,vio);ctx.strokeStyle=sul;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(153,735);ctx.lineTo(229,737);ctx.stroke();ctx.fillStyle=bone;ctx.font='700 12px monospace';ctx.fillText('AFTER HOURS',118,786);X(281,706,7,.8);
+ctx.save();ctx.globalCompositeOperation='multiply';ctx.globalAlpha=.11;ctx.fillStyle=pat;ctx.fillRect(62,58,786,784);ctx.restore();return c.toDataURL('image/png')};
+window.ready=true;
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 80\\n// DURATION: 60\\n// FORM: cycles 1-5 folders arrive; 6-10 alternate rooms open and are classified; 11-14 archive overfills; 15-17 rooms assemble into a paper city; 18-19 city folds behind the file drawer; 20 restores the sealed-folder opening\\n$: note(\\\"\u003c[d4 f4 e4 a3 c4] [d4 ~ e4 a3 ~] ~ [d4 f4 e4 a3 c4] [f4 e4 a3 c4 d4] ~ [d4 f4 e4 ~ c4] [d4 f4 e4 a3 c4] ~ [d4 f4 e4 a3 ~] [d4 f4 e4 a3 c4] [d4 f4 [e4 e4] a3 c4] [d4 [f4 f4] e4 [a3 a3] c4] [d4 f4 e4 a3 c4] [d5 f5 e5 a4 c5] [d5 [f5 a5] e5 [a4 c5] c5] [d5 f5 e5 a4 c5] [c5 a4 e5 f5 d5] [d4 ~ e4 ~ c4] [d4 f4 e4 a3 c4]>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(.008)\\n  .release(.13)\\n  .lpf(2300)\\n  .gain(.55)\\n  .pan(.34)\\n  .orbit(0)\\n$: note(\\\"\u003c~ [d3 f3 e3 a2 c3] [d3 ~ e3 a2 c3] ~ [f3 e3 a2 c3 d3] [d3 f3 e3 a2 c3] ~ [d3 f3 e3 a2 c3] [d3 ~ e3 a2 ~] [d3 f3 e3 a2 c3] ~ [d3 f3 e3 a2 c3] [d3 f3 [e3 e3] a2 c3] [d3 f3 e3 a2 c3] [d3 a3 f3 c4 e3] [d3 a3 f3 c4 e3] [d3 f3 e3 a2 c3] [c3 a2 e3 f3 d3] [d3 ~ ~ a2 c3] ~>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(.035)\\n  .release(.5)\\n  .lpf(900)\\n  .gain(.42)\\n  .pan(.66)\\n  .orbit(1)\\n$: note(\\\"\u003c[g6 ~ ~ ~] [g6 ~ g6 ~] [g6 g6 ~ g6] [g6*3 ~ ~] [g6 ~ [g6 g6] ~] [g6*3 ~ g6] [g6 ~ g6*2 ~] [g6*4 ~] [g6 ~ ~ g6] [g6*3 [g6 g6] ~] [g6*4 g6] [g6*5] [[g6 g6] g6*3 [g6 g6]] [g6*6] [g6*3 ~ g6] [g6 ~ g6*3 ~] [g6*4 ~] [g6 g6 ~ ~] [g6 ~ ~ ~] [g6 ~ ~ ~]>\\\")\\n  .s(\\\"square\\\")\\n  .attack(.001)\\n  .release(.025)\\n  .hpf(2800)\\n  .gain(.18)\\n  .pan(\\\"\u003c.22 .78>\\\")\\n  .orbit(2)\\n$: note(\\\"\u003c[d2 ~ ~ ~] [~ d2 ~ ~] [d2 ~ ~ d2] [~ ~ d2 ~] [d2 ~ d2 ~] [d2 ~ ~ ~] [~ d2 ~ d2] [d2 ~ ~ d2] [~ ~ d2 ~] [d2 ~ d2 ~] [d2 ~ d2 d2] [d2 d2 ~ d2] [d2 ~ d2 d2] [d2 d2 d2 ~] [d2 ~ a1 ~] [d2 ~ c2 a1] [d2 a1 ~ d2] [d2 ~ ~ ~] [d1 ~ ~ ~] [d2 ~ ~ ~]>\\\")\\n  .s(\\\"triangle\\\")\\n  .attack(.002)\\n  .release(.1)\\n  .lpf(420)\\n  .gain(.5)\\n  .pan(.5)\\n  .orbit(3)\\n$: note(\\\"\u003c~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ ~ [[d3,f3,a3] ~ [c3,e3,g3] ~] [[d3,f3,a3,c4] [f3,a3,c4,e4] ~ [a2,c3,e3]] [[d3,f3,a3] ~ [c3,e3,g3] [a2,c3,e3]] [[c3,e3,g3] ~ [d3,f3,a3] ~] ~ ~>\\\")\\n  .s(\\\"sine\\\")\\n  .attack(.08)\\n  .release(.65)\\n  .lpf(1500)\\n  .room(.16)\\n  .gain(.28)\\n  .pan(.5)\\n  .orbit(4)\",\"bpm\":80,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.3333333333333333,\"cycles\":20,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    let inited = false;
+    async function ensureInit() {
+      if (inited) return;
+      await S.initStrudel({ autoplay: false });
+      await S.evaluate(CONFIG.code, false);
+      inited = true;
+      await buildTimeline();
+      console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        S.DEFAULT_MAX_POLYPHONY,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

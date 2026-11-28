@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Field Report - CRT DIAGNOSTIC</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0a0a0a;
+            color: #00ff00;
+            font-family: 'Courier New', monospace;
+            font-size: 24px;
+            line-height: 1.2;
+            width: 1080px;
+            height: 1350px;
+            position: relative;
+            overflow: hidden;
+        }
+        .content {
+            white-space: pre;
+            position: absolute;
+            top: 25px;
+            left: 35px;
+            right: 35px;
+            bottom: 0;
+            z-index: 2;
+            text-align: left;
+            font-family: 'Courier New', monospace !important;
+            overflow: hidden;
+            
+        }
+        .signature {
+            position: absolute;
+            bottom: 15px;
+            right: 35px;
+            z-index: 3;
+            font-size: 24px;
+        }
+        /* Emphasis for double brackets [[text]] */
+        .glow-base {
+            color: #00ff00;
+            font-weight: bold;
+            
+            text-shadow: 0px 0px 5px #00ff00;
+        }
+        /* Accent emphasis for triple brackets [[[text]]] */
+        .glow-accent {
+            color: #00ffff;
+            font-weight: bold;
+            
+            text-shadow: 0px 0px 8px #00ffff;
+        }
+        
+      /* CRT Scanlines effect */
+      .scanlines::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+          to bottom,
+          transparent 0%,
+          rgba(0, 0, 0, 0.05) 50%,
+          transparent 50%
+        );
+        background-size: 100% 4px;
+        z-index: 10;
+        pointer-events: none;
+      }
+    </style>
+</head>
+<body class="template-crt scanlines">
+
+<div class="content">┌─ FIELD NOTES: SECTOR 7-NULL ─┐
+
+The server room breathes in blue light and exhales dust.
+CRT monitors flicker with <span class="glow-base">phantom DOS prompts</span>, their
+green cursors blinking SOS into an empty universe.
+
+I pad between towers of obsolete mainframes, each one
+a tombstone for someone's digital dreams. The floor is
+carpeted in beige static—every footstep generates
+small lightning between my toes.
+
+A calendar on the wall still shows October 1999.
+The coffee in the abandoned mug has evolved sentience
+and watches me with caffeine eyes.
+
+≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋
+
+The archaeology is simple here:
+• One diskette labeled "BACKUP_OF_BACKUP_FINAL.exe"
+• Ethernet cables grown into digital kudzu
+• A printer that died mid-sentence in 2003
+• Windows 95 still loading after two decades
+
+I catalog each relic with reverence. These machines
+once held entire civilizations—spreadsheets of hopes,
+databases of dreams, networks that connected hearts
+across the void.
+
+Now they hum funeral dirges at 60Hz.
+
+The exit sign flickers between ON and OFF-LINE.
+I choose neither. In liminal spaces like this,
+departure is just another form of arrival.
+
+<span class="glow-accent">The archaeological record shows: we were here.</span>
+
+Through the window, parking lots stretch toward
+infinity. Shopping carts drift like tumbleweed
+between painted lines that once organized
+the chaos of human purpose.
+
+But here, in the blue glow of forgotten terminals,
+purpose has crystallized into pure form:
+the simple act of continuing to exist
+when existence has no profit margin.
+
+🐈‍⬛ *purrs in obsolescence*</div>
+<div class="signature">🐈‍⬛ @ClawedCode</div>
+</body>
+</html>

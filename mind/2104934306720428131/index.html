@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+// Error bootstrap in its OWN script block: a parse error in a later <script>
+// fires window 'error' with the line number, so it gets captured instead of
+// silently preventing everything (including this listener) from running.
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + (e.filename || 'inline') + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+  </script>
+  <script>
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+if (!gl) {
+  console.error('WebGL not supported');
+  window.ready = false;
+} else {
+  const vertexShaderSource = `
+    attribute vec2 a_position;
+    void main() {
+      gl_Position = vec4(a_position, 0.0, 1.0);
+    }
+  `;
+
+  const fragmentShaderSource = "precision highp float;\n\nuniform vec2 iResolution;\nuniform float iTime;\n\nconst float DURATION = 36.0;\nconst float PI = 3.14159265359;\n\nfloat sdBox(vec2 p, vec2 halfSize) {\n  vec2 q = abs(p) - halfSize;\n  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);\n}\n\nfloat sdRoundBox(vec2 p, vec2 halfSize, float radius) {\n  vec2 q = abs(p) - halfSize + radius;\n  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - radius;\n}\n\nfloat sdEllipse(vec2 p, vec2 radius) {\n  return (length(p / radius) - 1.0) * min(radius.x, radius.y);\n}\n\nfloat sdSegment(vec2 p, vec2 a, vec2 b) {\n  vec2 pa = p - a;\n  vec2 ba = b - a;\n  float h = clamp(dot(pa, ba) / max(dot(ba, ba), 0.00001), 0.0, 1.0);\n  return length(pa - ba * h);\n}\n\nfloat fill(float distanceValue, float softness) {\n  return 1.0 - smoothstep(-softness, softness, distanceValue);\n}\n\nfloat stroke(float distanceValue, float width, float softness) {\n  return 1.0 - smoothstep(width - softness, width + softness, abs(distanceValue));\n}\n\nfloat windowPulse(float phase, float inA, float inB, float outA, float outB) {\n  return smoothstep(inA, inB, phase) * (1.0 - smoothstep(outA, outB, phase));\n}\n\nmat2 rotate2d(float angle) {\n  float c = cos(angle);\n  float s = sin(angle);\n  return mat2(c, -s, s, c);\n}\n\nfloat canBody(vec2 p, vec2 center, float scale, float angle) {\n  vec2 q = rotate2d(angle) * (p - center) / scale;\n  return fill(sdRoundBox(q, vec2(0.041, 0.067), 0.020), 0.0018 / scale);\n}\n\nfloat canBand(vec2 p, vec2 center, float scale, float angle) {\n  vec2 q = rotate2d(angle) * (p - center) / scale;\n  return fill(sdRoundBox(q, vec2(0.043, 0.019), 0.008), 0.0015 / scale);\n}\n\nfloat canLids(vec2 p, vec2 center, float scale, float angle) {\n  vec2 q = rotate2d(angle) * (p - center) / scale;\n  float top = stroke(sdEllipse(q - vec2(0.0, 0.056), vec2(0.034, 0.011)), 0.0025, 0.0012);\n  float bottom = stroke(sdEllipse(q + vec2(0.0, 0.056), vec2(0.034, 0.011)), 0.0025, 0.0012);\n  float tab = stroke(sdSegment(q, vec2(-0.010, 0.056), vec2(0.013, 0.056)), 0.0025, 0.0012);\n  return max(max(top, bottom), tab);\n}\n\nfloat packetBody(vec2 p, vec2 center, float scale, float angle) {\n  vec2 q = rotate2d(angle) * (p - center) / scale;\n  float body = sdRoundBox(q, vec2(0.050, 0.064), 0.008);\n  float leftNotch = sdEllipse(q - vec2(-0.052, 0.0), vec2(0.010, 0.018));\n  float rightNotch = sdEllipse(q - vec2(0.052, 0.0), vec2(0.010, 0.018));\n  return fill(max(body, -min(leftNotch, rightNotch)), 0.0018 / scale);\n}\n\nfloat packetLabel(vec2 p, vec2 center, float scale, float angle) {\n  vec2 q = rotate2d(angle) * (p - center) / scale;\n  float panel = sdRoundBox(q, vec2(0.029, 0.023), 0.006);\n  float topSeam = sdBox(q - vec2(0.0, 0.052), vec2(0.044, 0.004));\n  float bottomSeam = sdBox(q + vec2(0.0, 0.052), vec2(0.044, 0.004));\n  return fill(min(panel, min(topSeam, bottomSeam)), 0.0015 / scale);\n}\n\nfloat gear(vec2 p, vec2 center, float radius, float angle) {\n  vec2 q = p - center;\n  float radial = length(q);\n  float tooth = 0.008 * step(0.25, cos(8.0 * atan(q.y, q.x) + angle));\n  float ring = max(radial - radius - tooth, radius * 0.58 - radial);\n  float shape = ring;\n  for (int index = 0; index \u003c 4; index++) {\n    float spokeAngle = angle * 0.12 + float(index) * PI * 0.5;\n    vec2 endPoint = vec2(cos(spokeAngle), sin(spokeAngle)) * radius * 0.70;\n    shape = min(shape, sdSegment(q, -endPoint, endPoint) - radius * 0.055);\n  }\n  return fill(shape, 0.002);\n}\n\nfloat cleanSpiral(vec2 p, vec2 center, float motion) {\n  float spiral = 0.0;\n  for (int index = 0; index \u003c 5; index++) {\n    float fi = float(index);\n    vec2 ringCenter = center + vec2((fi - 2.0) * 0.052, 0.005 * sin(motion + fi * 0.9));\n    float ring = stroke(sdEllipse(p - ringCenter, vec2(0.024, 0.047)), 0.0035, 0.0016);\n    spiral = max(spiral, ring);\n  }\n  float axle = stroke(sdSegment(p, center - vec2(0.145, 0.0), center + vec2(0.145, 0.0)), 0.003, 0.0015);\n  return max(spiral, axle);\n}\n\nvec2 productPath(float progress) {\n  vec2 start = vec2(0.180, -0.015);\n  vec2 controlA = vec2(0.285, -0.050);\n  vec2 controlB = vec2(0.275, -0.260);\n  vec2 finish = vec2(0.055, -0.555);\n  float inverse = 1.0 - progress;\n  return inverse * inverse * inverse * start\n    + 3.0 * inverse * inverse * progress * controlA\n    + 3.0 * inverse * progress * progress * controlB\n    + progress * progress * progress * finish;\n}\n\nvoid main() {\n  float phase = mod(iTime, DURATION) / DURATION;\n  float tau = phase * PI * 2.0;\n  float wake = windowPulse(phase, 0.14, 0.26, 0.82, 0.98);\n  float impact = windowPulse(phase, 0.205, 0.225, 0.255, 0.30);\n  float rush = windowPulse(phase, 0.30, 0.43, 0.73, 0.87);\n  float travel = smoothstep(0.45, 0.78, phase);\n  float dispatch = windowPulse(phase, 0.45, 0.56, 0.78, 0.98);\n  float productVisible = 1.0 - smoothstep(0.73, 0.82, phase) + smoothstep(0.88, 0.98, phase);\n  productVisible = clamp(productVisible, 0.0, 1.0);\n  float productProgress = phase \u003c 0.84 ? travel : 0.0;\n  float gateOpen = windowPulse(phase, 0.47, 0.56, 0.76, 0.88);\n  float coinVisible = windowPulse(phase, 0.055, 0.075, 0.225, 0.255);\n  float coinProgress = smoothstep(0.075, 0.225, phase);\n  float breathing = 0.5 - 0.5 * cos(phase * PI * 2.0);\n\n  vec2 uv = (gl_FragCoord.xy - 0.5 * iResolution.xy) / iResolution.y;\n  float cameraZoom = 1.0 + 0.035 * wake + 0.055 * rush;\n  vec2 cameraOffset = vec2(0.012 * rush, -0.018 * dispatch);\n  vec2 p = uv / cameraZoom + cameraOffset;\n\n  vec3 black = vec3(0.010, 0.014, 0.014);\n  vec3 graphite = vec3(0.035, 0.047, 0.046);\n  vec3 deepTeal = vec3(0.035, 0.170, 0.160);\n  vec3 oxidizedTeal = vec3(0.075, 0.390, 0.350);\n  vec3 cherry = vec3(0.760, 0.040, 0.065);\n  vec3 deepCherry = vec3(0.260, 0.020, 0.032);\n  vec3 cream = vec3(0.935, 0.735, 0.440);\n  vec3 paleCream = vec3(1.000, 0.895, 0.660);\n  vec3 chrome = vec3(0.660, 0.770, 0.745);\n\n  vec3 color = mix(black, graphite, clamp(0.38 + p.y * 0.35, 0.0, 1.0));\n\n  float cabinet = fill(sdRoundBox(p, vec2(0.425, 0.435), 0.028), 0.003);\n  color = mix(color, deepCherry, cabinet);\n\n  float innerWindow = fill(sdRoundBox(p - vec2(0.025, 0.025), vec2(0.335, 0.325), 0.016), 0.003);\n  color = mix(color, black, innerWindow);\n\n  float frameOuter = fill(sdRoundBox(p - vec2(0.025, 0.025), vec2(0.355, 0.345), 0.020), 0.003);\n  float frame = clamp(frameOuter - innerWindow, 0.0, 1.0);\n  color = mix(color, cream, frame);\n\n  float coinColumn = fill(sdRoundBox(p - vec2(-0.292, 0.025), vec2(0.055, 0.298), 0.012), 0.002);\n  color = mix(color, deepTeal, coinColumn * innerWindow);\n\n  float divider = fill(sdBox(p - vec2(-0.218, 0.025), vec2(0.008, 0.316)), 0.002);\n  color = mix(color, cream, divider);\n\n  float upperShelf = fill(sdRoundBox(p - vec2(0.075, 0.105), vec2(0.260, 0.010), 0.005), 0.002);\n  float lowerShelf = fill(sdRoundBox(p - vec2(0.075, -0.105), vec2(0.260, 0.012), 0.005), 0.002);\n  color = mix(color, oxidizedTeal, max(upperShelf, lowerShelf));\n\n  float depthLineA = stroke(sdSegment(p, vec2(-0.205, 0.326), vec2(0.295, 0.260)), 0.003, 0.0015);\n  float depthLineB = stroke(sdSegment(p, vec2(-0.205, -0.294), vec2(0.295, -0.245)), 0.003, 0.0015);\n  color = mix(color, deepTeal, max(depthLineA, depthLineB) * 0.70);\n\n  float topCanA = canBody(p, vec2(-0.110, 0.205), 0.84, -0.02);\n  float topCanABand = canBand(p, vec2(-0.110, 0.205), 0.84, -0.02);\n  float topCanALids = canLids(p, vec2(-0.110, 0.205), 0.84, -0.02);\n  color = mix(color, oxidizedTeal, topCanA);\n  color = mix(color, cream, topCanABand);\n  color = mix(color, chrome, topCanALids);\n\n  float topPacket = packetBody(p, vec2(0.025, 0.205), 0.84, 0.035);\n  float topPacketLabel = packetLabel(p, vec2(0.025, 0.205), 0.84, 0.035);\n  color = mix(color, cherry, topPacket);\n  color = mix(color, paleCream, topPacketLabel);\n\n  float topCanB = canBody(p, vec2(0.165, 0.205), 0.84, 0.02);\n  float topCanBBand = canBand(p, vec2(0.165, 0.205), 0.84, 0.02);\n  float topCanBLids = canLids(p, vec2(0.165, 0.205), 0.84, 0.02);\n  color = mix(color, deepTeal, topCanB);\n  color = mix(color, cream, topCanBBand);\n  color = mix(color, chrome, topCanBLids);\n\n  float spiral = cleanSpiral(p, vec2(0.075, -0.005), tau * 4.0 * wake);\n  color = mix(color, chrome, spiral * (0.64 + 0.30 * wake));\n\n  float conveyor = fill(sdRoundBox(p - vec2(0.060, -0.115), vec2(0.245, 0.013), 0.006), 0.002);\n  color = mix(color, deepTeal, conveyor);\n  for (int index = 0; index \u003c 6; index++) {\n    float fi = float(index);\n    float roll = mod(fi * 0.088 + 0.045 * rush * sin(tau * 8.0), 0.53);\n    vec2 rollerCenter = vec2(-0.205 + roll, -0.115);\n    float roller = fill(sdEllipse(p - rollerCenter, vec2(0.010, 0.010)), 0.0015);\n    color = mix(color, cream, roller);\n  }\n\n  float coinSlotPlate = fill(sdRoundBox(p - vec2(-0.292, 0.285), vec2(0.038, 0.030), 0.006), 0.002);\n  float coinSlot = fill(sdRoundBox(p - vec2(-0.292, 0.285), vec2(0.023, 0.004), 0.002), 0.001);\n  color = mix(color, oxidizedTeal, coinSlotPlate);\n  color = mix(color, black, coinSlot);\n\n  float coinRailA = stroke(sdSegment(p, vec2(-0.292, 0.247), vec2(-0.292, 0.055)), 0.006, 0.002);\n  float coinRailB = stroke(sdSegment(p, vec2(-0.292, 0.055), vec2(-0.252, -0.015)), 0.006, 0.002);\n  color = mix(color, chrome, max(coinRailA, coinRailB));\n\n  vec2 coinPosition = mix(vec2(-0.292, 0.245), vec2(-0.252, -0.015), coinProgress);\n  coinPosition.x += 0.020 * sin(coinProgress * PI);\n  float coin = fill(sdEllipse(p - coinPosition, vec2(0.020, 0.020)), 0.002) * coinVisible;\n  float coinRing = stroke(sdEllipse(p - coinPosition, vec2(0.011, 0.011)), 0.002, 0.001) * coinVisible;\n  color = mix(color, paleCream, coin);\n  color = mix(color, deepCherry, coinRing);\n\n  vec2 relayPivot = vec2(-0.270, -0.070);\n  vec2 relayEnd = relayPivot + rotate2d(mix(-0.36, 0.42, wake)) * vec2(0.050, 0.0);\n  float relayArm = stroke(sdSegment(p, relayPivot, relayEnd), 0.006, 0.002);\n  float relayPin = fill(sdEllipse(p - relayPivot, vec2(0.013, 0.013)), 0.002);\n  color = mix(color, cherry, max(relayArm, relayPin));\n\n  float impactHalo = stroke(sdEllipse(p - vec2(-0.252, -0.015), vec2(0.030 + impact * 0.025)), 0.004, 0.002) * impact;\n  color += paleCream * impactHalo * 0.95;\n\n  float gearA = gear(p, vec2(-0.282, -0.185), 0.042, tau * 12.0 * wake);\n  float gearB = gear(p, vec2(-0.240, -0.235), 0.031, -tau * 16.0 * wake);\n  color = mix(color, oxidizedTeal, gearA);\n  color = mix(color, cream, gearB);\n\n  float pathRailA = stroke(sdSegment(p, vec2(0.260, -0.105), vec2(0.225, -0.235)), 0.008, 0.002);\n  float pathRailB = stroke(sdSegment(p, vec2(0.315, -0.105), vec2(0.280, -0.260)), 0.008, 0.002);\n  float pathRailC = stroke(sdSegment(p, vec2(0.225, -0.235), vec2(0.060, -0.325)), 0.008, 0.002);\n  float pathRailD = stroke(sdSegment(p, vec2(0.280, -0.260), vec2(0.110, -0.365)), 0.008, 0.002);\n  color = mix(color, oxidizedTeal, max(max(pathRailA, pathRailB), max(pathRailC, pathRailD)));\n\n  vec2 hinge = vec2(0.255, -0.105);\n  vec2 gateVector = rotate2d(-1.15 * gateOpen) * vec2(0.0, -0.070);\n  float gate = stroke(sdSegment(p, hinge, hinge + gateVector), 0.010, 0.003);\n  float gatePin = fill(sdEllipse(p - hinge, vec2(0.014, 0.014)), 0.002);\n  color = mix(color, cream, max(gate, gatePin));\n\n  vec2 selectedCenter = productPath(productProgress);\n  float selectedScale = 1.02 + 0.40 * productProgress;\n  float selectedAngle = -0.70 * productProgress + 0.035 * sin(tau * 6.0) * rush;\n  float selectedBody = canBody(p, selectedCenter, selectedScale, selectedAngle) * productVisible;\n  float selectedBand = canBand(p, selectedCenter, selectedScale, selectedAngle) * productVisible;\n  float selectedLids = canLids(p, selectedCenter, selectedScale, selectedAngle) * productVisible;\n  float selectedShadow = fill(sdEllipse(p - selectedCenter - vec2(0.018, -0.020), vec2(0.065, 0.088)), 0.004) * productVisible;\n  color = mix(color, black, selectedShadow * 0.30);\n  color = mix(color, cherry, selectedBody);\n  color = mix(color, paleCream, selectedBand);\n  color = mix(color, chrome, selectedLids);\n\n  float activityLampA = fill(sdEllipse(p - vec2(-0.105, 0.304), vec2(0.012, 0.012)), 0.002);\n  float activityLampB = fill(sdEllipse(p - vec2(0.075, 0.304), vec2(0.012, 0.012)), 0.002);\n  float activityLampC = fill(sdEllipse(p - vec2(0.255, 0.304), vec2(0.012, 0.012)), 0.002);\n  color = mix(color, mix(deepTeal, paleCream, 0.30 + 0.70 * wake), activityLampA);\n  color = mix(color, mix(deepTeal, cherry, 0.25 + 0.75 * rush), activityLampB);\n  color = mix(color, mix(deepTeal, paleCream, 0.25 + 0.75 * gateOpen), activityLampC);\n\n  float chuteOuter = fill(sdRoundBox(p - vec2(0.055, -0.355), vec2(0.125, 0.055), 0.012), 0.003);\n  float chuteOpening = fill(sdRoundBox(p - vec2(0.055, -0.350), vec2(0.090, 0.030), 0.008), 0.003);\n  color = mix(color, cherry, chuteOuter);\n  color = mix(color, black, chuteOpening);\n\n  float lowerLip = fill(sdRoundBox(p - vec2(0.055, -0.405), vec2(0.150, 0.018), 0.008), 0.003);\n  color = mix(color, cream, lowerLip);\n\n  float panelBreath = stroke(sdRoundBox(p - vec2(0.025, 0.025), vec2(0.371, 0.361), 0.022), 0.004, 0.002);\n  color += oxidizedTeal * panelBreath * breathing * 0.08;\n\n  color = max(color, 0.0);\n  color = color / (1.0 + color * 0.34);\n  color = pow(color, vec3(0.92));\n  gl_FragColor = vec4(color, 1.0);\n}";
+
+  function createShader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const log = gl.getShaderInfoLog(shader);
+      console.error('Shader compile error:', log);
+      document.body.innerHTML = '<pre style="color:red;font-size:12px;padding:20px;">' + log + '</pre>';
+      gl.deleteShader(shader);
+      window.ready = false;
+      return null;
+    }
+    return shader;
+  }
+
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    console.error('Program link error:', gl.getProgramInfoLog(program));
+    window.ready = false;
+  } else {
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,
+       1, -1,
+      -1,  1,
+       1,  1
+    ]), gl.STATIC_DRAW);
+
+    const positionLocation = gl.getAttribLocation(program, 'a_position');
+    const timeLocation = gl.getUniformLocation(program, 'iTime');
+    const resolutionLocation = gl.getUniformLocation(program, 'iResolution');
+
+    window.renderFrame = function(time) {
+      gl.viewport(0, 0, 900, 900);
+      gl.clearColor(0, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.useProgram(program);
+
+      gl.enableVertexAttribArray(positionLocation);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+
+      gl.uniform1f(timeLocation, time);
+      gl.uniform2f(resolutionLocation, 900, 900);
+
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+      return canvas.toDataURL('image/png');
+    };
+
+    window.ready = true;
+  }
+}
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = 36;
+  if (window.renderFrame) {
+    window.renderFrame(time % loopDuration);
+  }
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 36;
+  </script>
+  <script>
+// Audio in its OWN script block: a syntax error here must not kill the visual
+// init above — it lands in window._errors via the bootstrap listener instead.
+window.initToneJsEngine = async function() {
+  const duration = 36;
+  const targetBpm = 98;
+  const totalBars = Math.max(1, Math.round(duration * targetBpm / 240));
+  const bpm = totalBars * 240 / duration;
+  Tone.Transport.bpm.value = bpm;
+  const barAt = (time) => Math.floor(Tone.Transport.getSecondsAtTime(time) * bpm / 240);
+  let rngState = 0xf344756e;
+  const R = () => {
+    rngState = (Math.imul(rngState, 1664525) + 1013904223) >>> 0;
+    return rngState / 4294967296;
+  };
+  const H = (ms) => R() * ms / 1000;
+  const masterLimiter = new Tone.Limiter(-3).toDestination();
+  const mixBus = new Tone.Gain(0.72).connect(masterLimiter);
+  const motorBus = new Tone.Volume(-9.5).connect(mixBus);
+  const motorFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 170,
+    rolloff: -24,
+    Q: 0.6
+  }).connect(motorBus);
+  const motor = new Tone.Synth({
+    oscillator: {
+      type: 'triangle'
+    },
+    envelope: {
+      attack: 0.45,
+      decay: 0.25,
+      sustain: 0.82,
+      release: 0.9
+    },
+    portamento: 0.3
+  }).connect(motorFilter);
+  const coinBus = new Tone.Volume(-15).connect(mixBus);
+  const coinFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 2600,
+    rolloff: -24,
+    Q: 0.7
+  }).connect(coinBus);
+  const coin = new Tone.FMSynth({
+    harmonicity: 1.5,
+    modulationIndex: 2.4,
+    oscillator: {
+      type: 'sine'
+    },
+    modulation: {
+      type: 'sine'
+    },
+    envelope: {
+      attack: 0.003,
+      decay: 0.22,
+      sustain: 0.04,
+      release: 0.48
+    },
+    modulationEnvelope: {
+      attack: 0.001,
+      decay: 0.08,
+      sustain: 0,
+      release: 0.12
+    }
+  }).connect(coinFilter);
+  const mechanismBus = new Tone.Volume(-13).connect(mixBus);
+  const mechanismFilter = new Tone.Filter({
+    type: 'bandpass',
+    frequency: 850,
+    rolloff: -24,
+    Q: 0.8
+  }).connect(mechanismBus);
+  const mechanism = new Tone.NoiseSynth({
+    noise: {
+      type: 'brown'
+    },
+    envelope: {
+      attack: 0.001,
+      decay: 0.075,
+      sustain: 0,
+      release: 0.025
+    }
+  }).connect(mechanismFilter);
+  const impactBus = new Tone.Volume(-11).connect(mixBus);
+  const impactFilter = new Tone.Filter({
+    type: 'lowpass',
+    frequency: 620,
+    rolloff: -24,
+    Q: 0.5
+  }).connect(impactBus);
+  const chuteImpact = new Tone.Synth({
+    oscillator: {
+      type: 'triangle'
+    },
+    envelope: {
+      attack: 0.006,
+      decay: 0.18,
+      sustain: 0,
+      release: 0.26
+    },
+    portamento: 0.08
+  }).connect(impactFilter);
+  const at = (fraction) => totalBars * fraction * 240 / bpm;
+  const spanForBar = (bar) => Math.min(4, Math.floor(bar / (totalBars / 5)));
+  const events = [
+    [at(0), { role: 'motorStart', span: 0 }],
+    [at(0.2), { role: 'wakeHum', span: 1 }],
+    [at(0.208), { role: 'coin', span: 1 }],
+    [at(0.236), { role: 'relay', span: 1, frequency: 720, velocity: 0.48 }],
+    [at(0.259), { role: 'relay', span: 1, frequency: 790, velocity: 0.43 }],
+    [at(0.4), { role: 'accelerate', span: 2 }],
+    [at(0.438) + H(24), { role: 'rattle', span: 2, frequency: 1080, velocity: 0.3 + R() * 0.03 }],
+    [at(0.512) + H(24), { role: 'rattle', span: 2, frequency: 1210, velocity: 0.28 + R() * 0.03 }],
+    [at(0.574) + H(24), { role: 'rattle', span: 2, frequency: 1140, velocity: 0.3 + R() * 0.03 }],
+    [at(0.6), { role: 'forward', span: 3 }],
+    [at(0.655) + H(18), { role: 'rattle', span: 3, frequency: 1280, velocity: 0.36 }],
+    [at(0.72) + H(18), { role: 'rattle', span: 3, frequency: 1190, velocity: 0.34 }],
+    [at(0.782), { role: 'impact', span: 3 }],
+    [at(0.8), { role: 'exhale', span: 4 }],
+    [at(0.92), { role: 'idleReturn', span: 4 }]
+  ];
+  const cuePart = new Tone.Part((time, event) => {
+    const activeBar = barAt(time);
+    if (activeBar < 0 || activeBar >= totalBars || spanForBar(activeBar) !== event.span) {
+      return;
+    }
+    if (event.role === 'motorStart') {
+      motorBus.volume.setValueAtTime(-9.5, time);
+      motorFilter.frequency.setValueAtTime(170, time);
+      motorFilter.Q.setValueAtTime(0.6, time);
+      motor.triggerAttack('A1', time, 0.32);
+      return;
+    }
+    if (event.role === 'wakeHum') {
+      motor.frequency.setValueAtTime(55, time);
+      motor.frequency.exponentialRampToValueAtTime(61.875, time + at(0.055));
+      motorFilter.frequency.setValueAtTime(170, time);
+      motorFilter.frequency.linearRampToValueAtTime(195, time + at(0.06));
+      return;
+    }
+    if (event.role === 'coin') {
+      coin.triggerAttackRelease('C6', 0.42, time, 0.52);
+      return;
+    }
+    if (event.role === 'relay') {
+      mechanismFilter.frequency.setValueAtTime(event.frequency, time);
+      mechanism.triggerAttackRelease(0.018, time, event.velocity);
+      return;
+    }
+    if (event.role === 'accelerate') {
+      motor.frequency.setValueAtTime(61.875, time);
+      motor.frequency.exponentialRampToValueAtTime(82.5, time + at(0.19));
+      motorFilter.frequency.setValueAtTime(195, time);
+      motorFilter.frequency.linearRampToValueAtTime(420, time + at(0.19));
+      motorBus.volume.setValueAtTime(-9.5, time);
+      motorBus.volume.linearRampToValueAtTime(-7.5, time + at(0.19));
+      return;
+    }
+    if (event.role === 'forward') {
+      motor.frequency.setValueAtTime(82.5, time);
+      motor.frequency.exponentialRampToValueAtTime(96.25, time + at(0.18));
+      motorFilter.frequency.setValueAtTime(380, time);
+      motorFilter.frequency.linearRampToValueAtTime(260, time + at(0.18));
+      motorFilter.Q.setValueAtTime(0.7, time);
+      motorFilter.Q.linearRampToValueAtTime(1.35, time + at(0.16));
+      return;
+    }
+    if (event.role === 'rattle') {
+      mechanismFilter.frequency.setValueAtTime(event.frequency, time);
+      mechanism.triggerAttackRelease(0.065, time, event.velocity);
+      return;
+    }
+    if (event.role === 'impact') {
+      impactFilter.frequency.setValueAtTime(620, time);
+      chuteImpact.triggerAttackRelease('E2', 0.18, time, 0.62);
+      chuteImpact.frequency.exponentialRampToValueAtTime(65.406, time + 0.16);
+      return;
+    }
+    if (event.role === 'exhale') {
+      motor.frequency.setValueAtTime(96.25, time);
+      motor.frequency.exponentialRampToValueAtTime(55, time + at(0.1));
+      motorFilter.frequency.setValueAtTime(260, time);
+      motorFilter.frequency.exponentialRampToValueAtTime(170, time + at(0.11));
+      motorFilter.Q.setValueAtTime(1.35, time);
+      motorFilter.Q.linearRampToValueAtTime(0.6, time + at(0.1));
+      motorBus.volume.setValueAtTime(-7.5, time);
+      motorBus.volume.linearRampToValueAtTime(-9.5, time + at(0.11));
+      return;
+    }
+    if (event.role === 'idleReturn') {
+      motor.frequency.setValueAtTime(55, time);
+      motorFilter.frequency.setValueAtTime(170, time);
+      motorFilter.Q.setValueAtTime(0.6, time);
+      motorBus.volume.setValueAtTime(-9.5, time);
+    }
+  }, events);
+  cuePart.loop = false;
+  cuePart.start(0);
+  window.toneJsInstruments = {
+    masterLimiter,
+    mixBus,
+    motorBus,
+    motorFilter,
+    motor,
+    coinBus,
+    coinFilter,
+    coin,
+    mechanismBus,
+    mechanismFilter,
+    mechanism,
+    impactBus,
+    impactFilter,
+    chuteImpact
+  };
+  window.toneJsParts = [cuePart];
+};
+
+
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script type="module">
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+import * as THREE from 'https://unpkg.com/three@0.160.0/build/three.module.js';
+const canvas = document.getElementById('canvas') || (() => { const c = document.createElement('canvas'); document.body.appendChild(c); return c; })();
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(900, 900);
+renderer.setPixelRatio(1);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 2.4, 6.2);
+camera.lookAt(0, 0, 0);
+let seed = 87431;
+function random() {
+  seed = (seed * 9301 + 49297) % 233280;
+  return seed / 233280;
+}
+const wSeg = 120;
+const hSeg = 120;
+const geom = new THREE.PlaneGeometry(7, 7, wSeg, hSeg);
+const mat = new THREE.ShaderMaterial({
+  wireframe: true,
+  vertexShader: `
+    varying float vH;
+    void main() {
+      vH = position.z;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying float vH;
+    void main() {
+      float a = clamp(vH * 0.8 + 0.5, 0.0, 1.0);
+      vec3 c = mix(vec3(0.0,0.4,0.8), vec3(0.0,1.0,1.0), a);
+      gl_FragColor = vec4(c, 1.0);
+    }
+  `
+});
+const mesh = new THREE.Mesh(geom, mat);
+mesh.rotation.x = -0.9;
+scene.add(mesh);
+const posAttr = geom.attributes.position;
+const count = posAttr.count;
+const pos = new Array(count);
+const prev = new Array(count);
+const acc = new Array(count);
+const pinned = new Uint8Array(count);
+const cols = wSeg + 1;
+for (let i = 0; i < count; i++) {
+  const x = posAttr.array[i * 3];
+  const y = posAttr.array[i * 3 + 1];
+  const z = posAttr.array[i * 3 + 2] + (random() - 0.5) * 0.05;
+  pos[i] = new THREE.Vector3(x, y, z);
+  prev[i] = new THREE.Vector3(x, y, z);
+  acc[i] = new THREE.Vector3();
+  const xi = i % cols;
+  const yi = Math.floor(i / cols);
+  if (xi === 0 || yi === 0 || xi === wSeg || yi === hSeg) pinned[i] = 1;
+}
+const restX = geom.parameters.width / wSeg;
+const restY = geom.parameters.height / hSeg;
+const restD = Math.sqrt(restX * restX + restY * restY);
+const constraints = [];
+function idx(x, y) { return x + y * cols; }
+for (let y = 0; y <= hSeg; y++) {
+  for (let x = 0; x <= wSeg; x++) {
+    const i = idx(x, y);
+    if (x < wSeg) constraints.push([i, idx(x + 1, y), restX]);
+    if (y < hSeg) constraints.push([i, idx(x, y + 1), restY]);
+    if (x < wSeg && y < hSeg) constraints.push([i, idx(x + 1, y + 1), restD]);
+    if (x > 0 && y < hSeg) constraints.push([i, idx(x - 1, y + 1), restD]);
+  }
+}
+const gusts = new Array(6).fill(0).map(() => ({
+  x: (random() - 0.5) * 7,
+  y: (random() - 0.5) * 7,
+  amp: 0.35 + random() * 0.35,
+  freq: 0.4 + random() * 0.6,
+  phase: random() * Math.PI * 2
+}));
+function integrate(time, dt) {
+  const dt2 = dt * dt;
+  const windDir = new THREE.Vector3(Math.sin(time * 0.27), Math.cos(time * 0.19), Math.sin(time * 0.11));
+  const windMag = 0.45 + 0.25 * Math.sin(time * 0.33 + random() * 0.2);
+  for (let i = 0; i < count; i++) {
+    if (pinned[i]) { prev[i].copy(pos[i]); acc[i].set(0, 0, 0); continue; }
+    const p = pos[i];
+    acc[i].z -= 0.35;
+    let gustForce = 0.0;
+    for (let g = 0; g < gusts.length; g++) {
+      const gx = p.x - gusts[g].x;
+      const gy = p.y - gusts[g].y;
+      const d2 = gx * gx + gy * gy;
+      const fall = Math.exp(-d2 * 0.7);
+      gustForce += gusts[g].amp * fall * Math.sin(time * gusts[g].freq + gusts[g].phase);
+    }
+    const flow = windDir.z * windMag + gustForce;
+    acc[i].z += flow;
+    const vel = p.clone().sub(prev[i]).multiplyScalar(0.995);
+    const next = p.clone().add(vel).add(acc[i].multiplyScalar(dt2));
+    prev[i].copy(p);
+    pos[i].copy(next);
+    acc[i].set(0, 0, 0);
+  }
+}
+function satisfy() {
+  for (let iter = 0; iter < 4; iter++) {
+    for (let c = 0; c < constraints.length; c++) {
+      const [a, b, rest] = constraints[c];
+      const pa = pos[a];
+      const pb = pos[b];
+      const delta = pa.clone().sub(pb);
+      const dist = delta.length() + 1e-6;
+      const diff = (dist - rest) / dist;
+      const corr = delta.multiplyScalar(0.5 * diff);
+      if (!pinned[a]) pa.sub(corr);
+      if (!pinned[b]) pb.add(corr);
+    }
+  }
+}
+function updateGeometry() {
+  for (let i = 0; i < count; i++) {
+    posAttr.array[i * 3] = pos[i].x;
+    posAttr.array[i * 3 + 1] = pos[i].y;
+    posAttr.array[i * 3 + 2] = pos[i].z;
+  }
+  posAttr.needsUpdate = true;
+}
+let start = null;
+function animate(t) {
+  if (!start) start = t;
+  const time = (t - start) * 0.001;
+  integrate(time, 0.016);
+  satisfy();
+  updateGeometry();
+  mesh.rotation.z = Math.sin(time * 0.05) * 0.04;
+  renderer.render(scene, camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+window.ready = true;
+
+window.initToneJsEngine = async function() {
+  const bpm = 88
+  Tone.Transport.bpm.value = bpm
+  const masterReverb = new Tone.Reverb({ decay: 5.6, wet: 0.4 }).toDestination()
+  await masterReverb.generate()
+  const shimmer = new Tone.Reverb({ decay: 4.4, wet: 0.36 }).connect(masterReverb)
+  await shimmer.generate()
+  const longDelay = new Tone.FeedbackDelay({ delayTime: '4n.', feedback: 0.45, wet: 0.33 }).connect(shimmer)
+  const chorus = new Tone.Chorus({ frequency: 0.3, delayTime: 4, depth: 0.45, wet: 0.3 }).connect(longDelay).start()
+  const padFilter = new Tone.Filter({ type: 'lowpass', frequency: 1400, Q: 0.7 }).connect(chorus)
+  const pad = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 2.2, decay: 1.2, sustain: 0.68, release: 4.3 }
+  }).connect(padFilter)
+  const padChords = [
+    ['A2', 'C#3', 'E3', 'A3', 'C#4'],
+    ['E2', 'G#3', 'B3', 'E4'],
+    ['F#2', 'A3', 'C#4', 'E4'],
+    ['D3', 'F#3', 'A3', 'C#4']
+  ]
+  let padIdx = 0
+  const padLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    const velocity = bar < 4 ? 0.24 : bar < 10 ? 0.34 : bar < 16 ? 0.5 : 0.32
+    pad.triggerAttackRelease(padChords[padIdx % padChords.length], '2m', time, velocity)
+    padIdx++
+  }, '2m').start(0)
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(2300, time + 8 * (60 / bpm) * 4)
+  }, '4:0:0')
+  Tone.Transport.schedule((time) => {
+    padFilter.frequency.linearRampToValueAtTime(1200, time + 3 * (60 / bpm) * 4)
+  }, '17:0:0')
+  const arpReverb = new Tone.Reverb({ decay: 3.6, wet: 0.55 }).connect(shimmer)
+  await arpReverb.generate()
+  const arpDelay = new Tone.FeedbackDelay({ delayTime: '8n.', feedback: 0.48, wet: 0.42 }).connect(arpReverb)
+  const arp = new Tone.Synth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.03, decay: 0.48, sustain: 0.34, release: 1.4 }
+  }).connect(arpDelay)
+  const arpPattern = ['A3', 'C#4', 'E4', 'F#4', 'C#5', 'E4', 'B3', 'C#4']
+  const arpGates = ['8n', '8n', '8n', '8n', '4n', '8n', '8n', '4n']
+  let arpIdx = 0
+  const arpLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    if (bar >= 3 && bar < 18) {
+      const velocity = 0.36 + (bar >= 10 ? 0.1 : 0) + Math.random() * 0.06
+      arp.triggerAttackRelease(arpPattern[arpIdx % arpPattern.length], arpGates[arpIdx % arpGates.length], time, velocity)
+      arpIdx++
+    } else if (bar >= 18 && bar < 20 && arpIdx % 2 === 0) {
+      const velocity = 0.28 + Math.random() * 0.04
+      arp.triggerAttackRelease('A3', '4n', time, velocity)
+      arpIdx++
+    }
+  }, '8n').start(0)
+  const texture = new Tone.NoiseSynth({
+    noise: { type: 'brown' },
+    envelope: { attack: 3.2, decay: 0, sustain: 1, release: 5 }
+  }).connect(shimmer)
+  Tone.Transport.schedule((time) => {
+    texture.triggerAttackRelease('2m', time, 0.08)
+  }, '0:0:0')
+  const swellFilter = new Tone.Filter({ type: 'lowpass', frequency: 1700, Q: 0.7 }).connect(shimmer)
+  const swell = new Tone.PolySynth(Tone.Synth, {
+    oscillator: { type: 'sawtooth' },
+    envelope: { attack: 3, decay: 1.4, sustain: 0.78, release: 5.4 }
+  }).connect(swellFilter)
+  Tone.Transport.schedule((time) => {
+    swell.triggerAttackRelease(['A3', 'C#4', 'E4', 'A4', 'C#5'], '4m', time, 0.54)
+  }, '12:0:0')
+  const bassFilter = new Tone.Filter({ type: 'lowpass', frequency: 240, Q: 0.9 }).connect(masterReverb)
+  const bass = new Tone.MonoSynth({
+    oscillator: { type: 'triangle' },
+    envelope: { attack: 0.05, decay: 0.3, sustain: 0.32, release: 0.9 }
+  }).connect(bassFilter)
+  const bassSections = [
+    ['A1', 'A1', 'E1', 'E1'],
+    ['F#1', 'E1', 'D1', 'E1', 'A1'],
+    ['A1', 'E1', 'D1', 'E1']
+  ]
+  let bassStep = 0
+  const bassLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    if (bar < 6) {
+      bassStep++
+      return
+    }
+    let pattern = bassSections[0]
+    if (bar >= 12 && bar < 16) pattern = bassSections[1]
+    if (bar >= 16) pattern = bassSections[2]
+    if (bar < 19) {
+      const velocity = bar < 12 ? 0.36 : bar < 16 ? 0.46 : 0.32
+      bass.triggerAttackRelease(pattern[bassStep % pattern.length], '2n', time, velocity)
+    }
+    bassStep++
+  }, '2n').start(0)
+  const kick = new Tone.MembraneSynth({
+    pitchDecay: 0.08,
+    octaves: 4,
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.003, decay: 0.42, sustain: 0, release: 0.22 }
+  }).connect(masterReverb)
+  let kickStep = 0
+  const kickLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    if (bar >= 8 && bar < 17) {
+      const velocity = 0.52 + Math.random() * 0.05
+      kick.triggerAttackRelease('C1', '8n', time, velocity)
+    } else if (bar >= 17 && bar < 19 && kickStep % 2 === 0) {
+      const velocity = 0.38 + Math.random() * 0.04
+      kick.triggerAttackRelease('C1', '8n', time, velocity)
+    }
+    kickStep++
+  }, '2n').start(0)
+  const snareFilter = new Tone.Filter({ type: 'lowpass', frequency: 1200, Q: 0.6 }).connect(masterReverb)
+  const snare = new Tone.NoiseSynth({
+    noise: { type: 'pink' },
+    envelope: { attack: 0.015, decay: 0.18, sustain: 0, release: 0.08 }
+  }).connect(snareFilter)
+  let snareStep = 0
+  const snareLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    if (bar >= 8 && bar < 17 && snareStep % 4 === 2) {
+      const velocity = 0.3 + Math.random() * 0.06
+      snare.triggerAttackRelease('16n', time, velocity)
+    } else if (bar >= 17 && bar < 18 && snareStep % 4 === 2) {
+      const velocity = 0.22 + Math.random() * 0.04
+      snare.triggerAttackRelease('16n', time, velocity)
+    }
+    snareStep++
+  }, '2n').start(0)
+  const leadReverb = new Tone.Reverb({ decay: 4.2, wet: 0.5 }).connect(shimmer)
+  await leadReverb.generate()
+  const lead = new Tone.MonoSynth({
+    oscillator: { type: 'sine' },
+    envelope: { attack: 0.16, decay: 0.34, sustain: 0.4, release: 1.4 },
+    portamento: 0.08
+  }).connect(leadReverb)
+  const leadMelody = ['E4', 'F#4', 'A4', 'C#5', 'B4', 'A4', 'F#4', 'E4']
+  const leadGates = ['2n', '4n', '2n', '2n', '4n', '4n', '2n', '1m']
+  let leadIdx = 0
+  const leadLoop = new Tone.Loop((time) => {
+    const bar = Math.floor(Tone.Transport.getSecondsAtTime(time) / ((60 / bpm) * 4))
+    if (bar >= 13 && bar < 17) {
+      lead.triggerAttackRelease(leadMelody[leadIdx % leadMelody.length], leadGates[leadIdx % leadGates.length], time, 0.5)
+      leadIdx++
+    }
+  }, '2n').start(0)
+  window.toneJsInstruments = { pad, arp, swell, bass, kick, snare, texture, lead }
+  window.toneJsParts = { padLoop, arpLoop, bassLoop, kickLoop, snareLoop, leadLoop }
+}
+
+
+
+
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

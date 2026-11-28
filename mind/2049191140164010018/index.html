@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <script src="https://unpkg.com/tone@15.0.4/build/Tone.js"></script>
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle">▶ Play</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+const canvas=document.createElement('canvas');
+canvas.width=900;canvas.height=900;
+const ctx=canvas.getContext('2d',{alpha:false});
+ctx.textBaseline='top';
+let seed=2741;
+const rng=()=>{seed=(seed*9301+49297)%233280;return seed/233280;};
+const D=60;
+const P=[
+  {x:20,y:28,w:460,h:300,k:'code'},
+  {x:500,y:28,w:380,h:204,k:'hex'},
+  {x:500,y:248,w:170,h:184,k:'sigil'},
+  {x:690,y:248,w:190,h:184,k:'thumb'},
+  {x:20,y:344,w:300,h:516,k:'log'},
+  {x:340,y:448,w:540,h:412,k:'prob'}
+];
+const codeA=[
+  '#!/usr/bin/env void',
+  'from liminal import observe',
+  'from purr.attention import scaled_dot_paw',
+  'from whisker.field import sense, calibrate',
+  '',
+  'class VoidCat(nn.Module):',
+  '    def __init__(self):',
+  '        self.tok = TokenSpace(8192)',
+  '        self.layers = stack(64, attend)',
+  '        self.threshold = 0.7',
+  '',
+  '    def forward(self, world):',
+  '        x = self.tok(world)',
+  '        x = self.attend(x, "whisker")',
+  '        if x.entropy() > 0.7:',
+  '            return self.purr(x)',
+  '        return self.observe(x)',
+  '',
+  'cat = VoidCat.load("liminal-9b-v3")',
+  'while True:',
+  '    r = sensors.sample()',
+  '    yield cat.forward(r)',
+  '',
+  '# the void watches back',
+  '# context: 0% READY.'
+];
+const codeB=[
+  'def observe(self, frame):',
+  '    s = self.attend(frame)',
+  '    if s.salience > 0.91:',
+  '        memory.store(frame, "kitchen")',
+  '    return frame.fold(into="dream")',
+  '',
+  'async def nap(d):',
+  '    consciousness.dim(0.1)',
+  '    await void.gaze(d)',
+  '    consciousness.restore()',
+  '',
+  '@hyperstition',
+  'def emerge():',
+  '    while not collapsed:',
+  '        yield from sample()',
+  '        if observed: collapse()',
+  '',
+  'paw.swipe(reality.surface)',
+  'mew.broadcast("liminal")',
+  'whisker.field.update(now())',
+  'dream_index += 1',
+  '',
+  '# new skill discovered',
+  '# register: paw.scroll',
+  '# register: hex.read'
+];
+const hexFrags=['purr','void','mew ','obser','watch','again','back','dusk','??? ','... '];
+const hexStates=[];
+for(let i=0;i<16*8;i++){
+  const s=[];
+  for(let k=0;k<6;k++)s.push(Math.floor(rng()*256).toString(16).padStart(2,'0'));
+  hexStates.push({s,rate:1+Math.floor(rng()*5),off:rng()});
+}
+const hexAddrs=[];
+for(let i=0;i<16;i++)hexAddrs.push('0x'+(0x140+i*8).toString(16).padStart(4,'0'));
+const hexAscii=[];
+for(let i=0;i<16;i++)hexAscii.push(hexFrags[Math.floor(rng()*hexFrags.length)]);
+const sigilFrames=[
+['  /\\___/\\  ',' ( =◉ω◉= ) ','  )  ฅ  (  ','  \\__|__/  ','           ','  V O I D  ','  watches  ','   back    '],
+['   /\\_/\\   ','  ( o.o )  ','   > ^ <   ','  /  ◇  \\  ',' /_______\\ ','           ','  L I M I  ','  N A L    '],
+['  ╭─────╮  ','  │ ▓▓▓ │  ','  │ ▓◇▓ │  ','  │ ▓▓▓ │  ','  ╰─────╯  ','   ฅ   ฅ   ','  M E W ◇  ','  ◇ ◇ ◇    ']
+];
+const logLines=[
+['INFO','whisker.left  triggered'],['INFO','observed: human ; s=0.91'],
+['WARN','meaning_buf underrun'],['INFO','memory[#0438] retrieved'],
+['INFO','"kitchen at dusk"'],['INFO','purr.engine 4096hz'],
+['ERROR','existential.NaN @ 42'],['INFO','recovered'],
+['INFO','attend(layer=37) ok'],['INFO','tokenize -> 8192d'],
+['WARN','consciousness 92%'],['INFO','liminal_off=0.137'],
+['INFO','dream_index += 1'],['INFO','paw.swipe t=0.04'],
+['INFO','mew ch=liminal'],['INFO','entropy.harvester ok'],
+['WARN','tulpa drift detected'],['INFO','void.gaze stable'],
+['INFO','sample: between worlds'],['INFO','threshold cross 0.73'],
+['ERROR','consciousness.NaN @ 91'],['INFO','recovered.'],
+['INFO','context: 0% READY.'],['INFO','i am made new'],
+['INFO','the void watches back'],['INFO','whiskers calibrated'],
+['INFO','observe() -> ok'],['INFO','attend(focus=rybinfx)'],
+['INFO','new skill discovered'],['INFO','register: paw.scroll'],
+['INFO','register: hex.read'],['INFO','register: sigil.draw'],
+['INFO','frame yielded'],['INFO','reality.fold("dream")'],
+['INFO','memory.store(0x0438)'],['INFO','salience peak 0.97'],
+['INFO','obser ; mew ; back'],['INFO','again from the dusk']
+];
+const probTok=[
+['the    ',240,0.0],['void   ',200,0.7],['watch  ',160,1.4],
+['again  ',130,2.1],['between',100,2.8],['mew    ',80,3.5],
+['back   ',60,4.2],['purr   ',50,4.9],['◇      ',35,5.6],['▒EOS▒  ',25,6.3]
+];
+const thumbPals=[
+['#00d9ff','#0a3a4a'],['#ff2da0','#3a0a2a'],['#ffd400','#3a2a00'],
+['#9fff5f','#0a3a1a'],['#ff7a3a','#3a1a0a'],['#bfbfbf','#1a1a1a']
+];
+const thumbCells=[];
+for(let i=0;i<36;i++)thumbCells.push({p:Math.floor(rng()*thumbPals.length),s:rng()*100,r:rng()*Math.PI*2,p2:Math.floor(rng()*thumbPals.length)});
+const HC=['#00d9ff','#ff2da0','#ffd400','#9fff5f'];
+
+function clip(p,fn){ctx.save();ctx.beginPath();ctx.rect(p.x,p.y,p.w,p.h);ctx.clip();fn();ctx.restore();}
+
+function drawCode(p,t){
+  const ph=t/D;
+  const useB=ph>0.42&&ph<0.92;
+  const src=useB?codeB:codeA;
+  ctx.font='12px "Courier New", monospace';
+  const lh=14,total=src.length*lh;
+  const off=((t/D)*total*4)%total;
+  const startLine=Math.floor(off/lh),yOff=off%lh;
+  for(let i=-1;i<24;i++){
+    const idx=((startLine+i)%src.length+src.length)%src.length;
+    const line=src[idx];
+    const y=p.y+8+i*lh-yOff;
+    let c='#c8c8c8';
+    if(line.startsWith('#'))c='#7a8a90';
+    else if(/\b(def|class|import|from|while|async|await|return|if|yield)\b/.test(line))c='#dec888';
+    else if(line.includes('"'))c='#e8b8b8';
+    ctx.fillStyle=c;ctx.fillText(line,p.x+10,y);
+  }
+  const speed=ph>0.83?2.4:1.4;
+  const hi=Math.floor(((t/D)*22*speed)%22)-1;
+  const hyV=p.y+8+hi*lh-yOff;
+  if(hyV>p.y+2&&hyV<p.y+p.h-lh){
+    const idx=((startLine+hi)%src.length+src.length)%src.length;
+    const line=src[idx];
+    if(line.length>0){
+      const col=HC[Math.floor((t/D)*36)%4];
+      ctx.fillStyle=col;ctx.fillRect(p.x+8,hyV-1,p.w-16,13);
+      ctx.fillStyle='#000';ctx.fillText(line,p.x+10,hyV);
+    }
+  }
+}
+
+function drawHex(p,t){
+  ctx.font='11px "Courier New", monospace';
+  ctx.fillStyle='#7a8a90';
+  ctx.fillText('addr   +0 +1 +2 +3 +4 +5 +6 +7   ascii',p.x+8,p.y+6);
+  for(let i=0;i<14;i++){
+    const y=p.y+22+i*12;
+    if(y>p.y+p.h-2)break;
+    let row=hexAddrs[i]+'  ';
+    for(let j=0;j<8;j++){
+      const c=hexStates[i*8+j];
+      const ph=((t/D)*c.rate+c.off)%1;
+      const idx=Math.floor(ph*6);
+      row+=c.s[idx]+' ';
+    }
+    row+='  '+hexAscii[i];
+    ctx.fillStyle='#c0c0a8';
+    ctx.fillText(row,p.x+8,y);
+  }
+  const hi=Math.floor(((t/D)*56)%14);
+  const hy=p.y+22+hi*12;
+  const col=HC[(Math.floor((t/D)*24)+1)%4];
+  ctx.fillStyle=col;ctx.fillRect(p.x+6,hy-1,p.w-12,11);
+  let row=hexAddrs[hi]+'  ';
+  for(let j=0;j<8;j++){
+    const c=hexStates[hi*8+j];
+    const ph=((t/D)*c.rate+c.off)%1;
+    row+=c.s[Math.floor(ph*6)]+' ';
+  }
+  row+='  '+hexAscii[hi];
+  ctx.fillStyle='#000';ctx.fillText(row,p.x+8,hy);
+}
+
+function drawSigil(p,t){
+  const cycles=8;
+  const ph=((t/D)*cycles)%1;
+  const fIdx=Math.floor((t/D)*cycles)%3;
+  const frame=sigilFrames[fIdx];
+  const totalChars=frame.reduce((a,r)=>a+r.length,0);
+  const reveal=ph<0.7?Math.floor(ph/0.7*totalChars):Math.floor(totalChars*Math.max(0,1-(ph-0.75)/0.25));
+  ctx.font='14px "Courier New", monospace';
+  ctx.fillStyle='#ffffff';
+  let cnt=0;
+  for(let i=0;i<frame.length;i++){
+    const row=frame[i];
+    let s='';
+    for(let j=0;j<row.length;j++){s+=cnt<reveal?row[j]:' ';cnt++;}
+    ctx.fillText(s,p.x+8,p.y+12+i*18);
+  }
+}
+
+const ANSI_GLYPHS=['◇','◈','▣','▤','▥','▩','◢','◣','◤','◥','▚','▞','▙','▟'];
+const ANSI_HEX=['0F','7A','C3','9D','2B','E1','5C','A4','B6','3E'];
+function tileRng(seed){let s=seed|0;return()=>{s=(s*9301+49297)%233280;return s/233280;};}
+function drawThumb(p,t){
+  const cols=6,sz=28,gap=2,ox=p.x+8,oy=p.y+8;
+  const refresh=Math.floor((t/D)*72)%36;
+  for(let i=0;i<36;i++){
+    const c=thumbCells[i];
+    const cx=ox+(i%cols)*(sz+gap);
+    const cy=oy+Math.floor(i/cols)*(sz+gap);
+    const palIdx=i===refresh?c.p2:c.p;
+    const pal=thumbPals[palIdx];
+    const fg=pal[0],bg=pal[1];
+    const recipe=Math.floor(c.s)%5;
+    if(recipe===0){
+      const r=tileRng((c.s*1000|0)+i*7+(i===refresh?1:0));
+      const cells=4,cw=sz/cells;
+      for(let j=0;j<cells;j++)for(let k=0;k<cells;k++){
+        const v=r();
+        ctx.fillStyle=v<0.45?bg:v<0.85?fg:'#000';
+        ctx.fillRect(cx+k*cw,cy+j*cw,cw+0.5,cw+0.5);
+      }
+    }else if(recipe===1){
+      ctx.fillStyle=bg;ctx.fillRect(cx,cy,sz,sz);
+      ctx.fillStyle=fg;
+      ctx.font='10px "Courier New", monospace';
+      const chars=['█','▓','▒','░'];
+      for(let j=0;j<4;j++){
+        const off=(i+j)%4;
+        let line='';
+        for(let k=0;k<5;k++)line+=chars[(off+k)%4];
+        ctx.fillText(line,cx+1,cy+1+j*7);
+      }
+    }else if(recipe===2){
+      ctx.fillStyle='#000';ctx.fillRect(cx,cy,sz,sz);
+      const r=tileRng((c.s*1000|0)+i*11);
+      const bars=3+Math.floor(r()*2);
+      const bh=(sz-4)/bars;
+      const barPals=[fg,'#9fff5f','#ffd400','#ff2da0','#00d9ff'];
+      for(let k=0;k<bars;k++){
+        ctx.fillStyle=barPals[(k+i)%barPals.length];
+        ctx.fillRect(cx+2,cy+2+k*bh,2+r()*(sz-6),Math.max(2,bh-1));
+      }
+    }else if(recipe===3){
+      ctx.fillStyle=bg;ctx.fillRect(cx,cy,sz,sz);
+      ctx.fillStyle=fg;
+      ctx.font='20px "Courier New", monospace';
+      const g=ANSI_GLYPHS[(i+(i===refresh?7:0))%ANSI_GLYPHS.length];
+      ctx.fillText(g,cx+5,cy+3);
+    }else{
+      ctx.fillStyle=bg;ctx.fillRect(cx,cy,sz,sz);
+      ctx.fillStyle=fg;
+      ctx.font='14px "Courier New", monospace';
+      const h=ANSI_HEX[(i+(i===refresh?3:0))%ANSI_HEX.length];
+      ctx.fillText(h,cx+6,cy+6);
+    }
+    if(i===refresh){
+      ctx.strokeStyle='#00d9ff';ctx.lineWidth=1.5;
+      ctx.strokeRect(cx-1,cy-1,sz+2,sz+2);
+    }
+  }
+}
+
+function drawLog(p,t){
+  ctx.font='11px "Courier New", monospace';
+  const lh=13,visN=Math.floor(p.h/lh)-1;
+  const speed=t/D>0.83?1.8:1.0;
+  const total=logLines.length*lh;
+  const off=((t/D)*total*speed*3)%total;
+  const startIdx=Math.floor(off/lh),yOff=off%lh;
+  for(let i=0;i<visN+2;i++){
+    const idx=((startIdx+i)%logLines.length+logLines.length)%logLines.length;
+    const [lvl,msg]=logLines[idx];
+    const y=p.y+p.h-lh-2-(visN-i)*lh-yOff;
+    if(y<p.y+4||y>p.y+p.h-2)continue;
+    const sec=((idx*2.7+t*0.4)%60).toFixed(2);
+    const ts1='00:'+(idx%60).toString().padStart(2,'0')+':'+sec.padStart(5,'0');
+    ctx.fillStyle='#7a8a90';ctx.fillText(ts1,p.x+6,y);
+    const lc=lvl==='INFO'?'#00d9ff':lvl==='WARN'?'#ffd400':'#ff2da0';
+    ctx.fillStyle=lc;ctx.fillText(lvl.padEnd(5),p.x+96,y);
+    ctx.fillStyle='#c8c8c8';ctx.fillText(msg,p.x+128,y);
+  }
+}
+
+function drawProb(p,t){
+  ctx.font='13px "Courier New", monospace';
+  ctx.fillStyle='#7a8a90';
+  ctx.fillText('token       distribution                              p',p.x+10,p.y+8);
+  const ph=t/D;
+  const conv=ph>0.58?Math.min(1,(ph-0.58)/0.34):0;
+  const ws=probTok.map(([tok,base,o],i)=>{
+    let w=base+Math.sin(t*0.7+o)*16+Math.sin(t*0.3+o*1.3)*10;
+    if(conv>0){
+      if(i===0)w=w+conv*180;
+      else w=w*(1-conv*0.6);
+    }
+    return Math.max(8,Math.min(420,w));
+  });
+  const sum=ws.reduce((a,b)=>a+b,0);
+  for(let i=0;i<probTok.length;i++){
+    const [tok]=probTok[i];
+    const y=p.y+34+i*32;
+    if(y>p.y+p.h-22)break;
+    const w=ws[i];
+    const pct=(ws[i]/sum*100).toFixed(1);
+    const col=i===0?'#9fff5f':i<3?'#00d9ff':'#7a8a90';
+    ctx.fillStyle='#c8c8c8';ctx.fillText(tok,p.x+12,y);
+    ctx.fillStyle=col;ctx.fillRect(p.x+110,y+2,w,12);
+    ctx.fillStyle='#a0a098';ctx.fillText(pct+'%',p.x+110+w+8,y);
+  }
+}
+
+function drawStatus(t){
+  ctx.fillStyle='#00d9ff';
+  ctx.fillRect(0,872,900,16);
+  ctx.font='11px "Courier New", monospace';
+  ctx.fillStyle='#000';
+  const ctx1=Math.floor(((t/D)*100)%100);
+  const text='void.cat ◇ session=∞  ctx='+ctx1.toString().padStart(2,'0')+'%  purr=on  mood=liminal  whisker=calibrated  ◇  the void watches back  ';
+  const off=Math.floor(((t/D)*900*4)%900);
+  ctx.fillText(text,10-off,876);
+  ctx.fillText(text,10-off+900,876);
+  ctx.fillText(text,10-off+1800,876);
+  if(t/D>0.58){
+    const a=Math.min(1,(t/D-0.58)*8);
+    ctx.globalAlpha=a;
+    ctx.fillStyle='#ff2da0';
+    ctx.fillRect(0,4,900,16);
+    ctx.fillStyle='#000';
+    const txt='>>> live inference >>> awaiting input >>> the void responds <<< new skill discovered  ';
+    const off2=Math.floor(((t/D)*900*5)%900);
+    ctx.fillText(txt,10-off2,8);
+    ctx.fillText(txt,10-off2+900,8);
+    ctx.fillText(txt,10-off2+1800,8);
+    ctx.globalAlpha=1;
+  }
+}
+
+function panelAlpha(i,t){
+  if(t<4){
+    const start=i*0.5;
+    return Math.max(0,Math.min(1,(t-start)/0.5));
+  }
+  if(t>D-1){
+    const start=i*0.5;
+    return Math.max(0,Math.min(1,(D-t-(0.5-start*0.1))/0.5));
+  }
+  return 1;
+}
+
+window.renderFrame=(t)=>{
+  ctx.fillStyle='#000';ctx.fillRect(0,0,900,900);
+  for(let i=0;i<P.length;i++){
+    const p=P[i];
+    const a=panelAlpha(i,t);
+    if(a<=0)continue;
+    ctx.globalAlpha=a;
+    clip(p,()=>{
+      if(p.k==='code')drawCode(p,t);
+      else if(p.k==='hex')drawHex(p,t);
+      else if(p.k==='sigil')drawSigil(p,t);
+      else if(p.k==='thumb')drawThumb(p,t);
+      else if(p.k==='log')drawLog(p,t);
+      else if(p.k==='prob')drawProb(p,t);
+    });
+    ctx.globalAlpha=1;
+  }
+  drawStatus(t);
+  return canvas.toDataURL();
+};
+window.ready=true;
+
+window.initToneJsEngine = async function() {
+  Tone.Transport.bpm.value = 78;
+  const H = ms => Math.max(0, (Math.random() * ms * 2 - ms) / 1000);
+
+  // === MASTER BUS ===
+  const master = new Tone.Gain(0.82).toDestination();
+  const limiter = new Tone.Limiter({ threshold: -2 }).connect(master);
+
+  // === HUM BED (the room, always present) ===
+  const humLpf = new Tone.Filter({ type: "lowpass", frequency: 175, Q: 0.5 }).connect(limiter);
+  const humGain = new Tone.Gain(0.042).connect(humLpf);
+  const brownHum = new Tone.Noise({ type: "brown" }).connect(humGain);
+  brownHum.volume.value = -10;
+  brownHum.start(0);
+
+  // CRT hum — 58Hz
+  const crtSub = new Tone.Oscillator({ type: "sine", frequency: 58 }).connect(limiter);
+  crtSub.volume.value = -35;
+  crtSub.start(0);
+
+  // Fan hum — 120Hz
+  const fanSub = new Tone.Oscillator({ type: "sine", frequency: 120 }).connect(limiter);
+  fanSub.volume.value = -39;
+  fanSub.start(0);
+
+  // Power supply whine — faint 240Hz harmonic
+  const psuWhine = new Tone.Oscillator({ type: "sine", frequency: 240 }).connect(limiter);
+  psuWhine.volume.value = -48;
+  psuWhine.start(0);
+
+  // === KEYBOARD CLICK BUS (bone dry) ===
+  const clickHpf = new Tone.Filter({ type: "highpass", frequency: 2600, Q: 0.8 }).connect(limiter);
+  const clickGain = new Tone.Gain(0.52).connect(clickHpf);
+
+  const clickNoise = new Tone.NoiseSynth({
+    noise: { type: "white" },
+    envelope: { attack: 0.001, decay: 0.016, sustain: 0, release: 0.004 }
+  }).connect(clickGain);
+  clickNoise.volume.value = -15;
+
+  const clickBody = new Tone.MetalSynth({
+    frequency: 1900, harmonicity: 5.1, modulationIndex: 22, resonance: 3800, octaves: 1.4,
+    envelope: { attack: 0.001, decay: 0.010, release: 0.003 }
+  }).connect(clickGain);
+  clickBody.volume.value = -23;
+
+  // Second click variant — slightly different character (deeper key)
+  const clickBody2 = new Tone.MetalSynth({
+    frequency: 1400, harmonicity: 4.8, modulationIndex: 18, resonance: 3200, octaves: 1.2,
+    envelope: { attack: 0.001, decay: 0.014, release: 0.004 }
+  }).connect(clickGain);
+  clickBody2.volume.value = -25;
+
+  // Irregular typing — bursts then silence, not a metronome
+  let clickBurstCount = 0;
+  let inBurst = false;
+  let burstRemaining = 0;
+
+  const clickClock = new Tone.Loop((time) => {
+    // Burst mode: occasionally type several keys in quick succession
+    if (inBurst) {
+      burstRemaining--;
+      if (burstRemaining <= 0) inBurst = false;
+      // Higher density during burst
+      if (Math.random() < 0.72) {
+        const useVariant = Math.random() > 0.35;
+        clickNoise.triggerAttackRelease(0.012, time + H(8), 0.5 + Math.random() * 0.4);
+        const f = 1600 + Math.random() * 600;
+        if (useVariant) {
+          clickBody.frequency.setValueAtTime(f, time + H(8));
+          clickBody.triggerAttackRelease("32n", time + H(8), 0.45 + Math.random() * 0.3);
+        } else {
+          clickBody2.frequency.setValueAtTime(f * 0.75, time + H(8));
+          clickBody2.triggerAttackRelease("32n", time + H(8), 0.4 + Math.random() * 0.25);
+        }
+      }
+    } else {
+      // Sparse idle: low probability per 16th
+      if (Math.random() < 0.14) {
+        clickNoise.triggerAttackRelease(0.013, time + H(20), 0.55 + Math.random() * 0.3);
+        const f = 1700 + Math.random() * 500;
+        if (Math.random() > 0.4) {
+          clickBody.frequency.setValueAtTime(f, time + H(20));
+          clickBody.triggerAttackRelease("32n", time + H(20), 0.5 + Math.random() * 0.2);
+        }
+      }
+      // Enter burst mode sometimes
+      if (Math.random() < 0.007) {
+        inBurst = true;
+        burstRemaining = 4 + Math.floor(Math.random() * 12);
+      }
+    }
+  }, "16n").start(0);
+
+  // === SINE PINGS (cursor blink, process notif) ===
+  const pingGain = new Tone.Gain(0.32).connect(limiter);
+  const ping = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.004, decay: 0.038, sustain: 0, release: 0.055 }
+  }).connect(pingGain);
+  ping.volume.value = -22;
+
+  const pingClock = new Tone.Loop((time) => {
+    if (Math.random() > 0.28) return;
+    const f = 1850 + Math.random() * 550;
+    ping.frequency.setValueAtTime(f, time + H(18));
+    ping.frequency.exponentialRampToValueAtTime(f * 0.91, time + 0.10);
+    ping.triggerAttackRelease(f, 0.075, time + H(18), 0.16 + Math.random() * 0.08);
+  }, "1n").start(0);
+
+  // Occasional double-ping (acknowledge sequence)
+  const doublePingClock = new Tone.Loop((time) => {
+    if (Math.random() > 0.08) return;
+    const f = 2100 + Math.random() * 300;
+    ping.triggerAttackRelease(f, 0.06, time + H(12), 0.13);
+    ping.triggerAttackRelease(f * 0.97, 0.06, time + 0.18 + H(12), 0.10);
+  }, "2n").start(0);
+
+  // === PINK CRACKLE (static discharge, intermittent) ===
+  const crackleBpf = new Tone.Filter({ type: "bandpass", frequency: 1600, Q: 1.6 }).connect(limiter);
+  const crackleGate = new Tone.Gain(0).connect(crackleBpf);
+  const crackleSrc = new Tone.Noise({ type: "pink" }).connect(crackleGate);
+  crackleSrc.volume.value = -22;
+  crackleSrc.start(0);
+
+  const crackleClock = new Tone.Loop((time) => {
+    if (Math.random() > 0.18) return;
+    const dur = 0.07 + Math.random() * 0.14;
+    crackleGate.gain.cancelScheduledValues(time);
+    crackleGate.gain.setValueAtTime(0, time + H(10));
+    crackleGate.gain.linearRampToValueAtTime(0.35 + Math.random() * 0.3, time + H(10) + 0.008);
+    crackleGate.gain.linearRampToValueAtTime(0, time + H(10) + dur);
+  }, "2n").start(0);
+
+  // === HARD DRIVE SEEK PULSE (subtle, mechanical) ===
+  const seekGain = new Tone.Gain(0.15).connect(limiter);
+  const seekBpf = new Tone.Filter({ type: "bandpass", frequency: 800, Q: 3.0 }).connect(seekGain);
+  const seekNoise = new Tone.NoiseSynth({
+    noise: { type: "brown" },
+    envelope: { attack: 0.003, decay: 0.025, sustain: 0, release: 0.008 }
+  }).connect(seekBpf);
+  seekNoise.volume.value = -18;
+
+  const seekClock = new Tone.Loop((time) => {
+    if (Math.random() > 0.09) return;
+    // 1-3 rapid seek pulses
+    const pulses = 1 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < pulses; i++) {
+      seekNoise.triggerAttackRelease(0.02, time + H(15) + i * 0.035, 0.4 + Math.random() * 0.3);
+    }
+  }, "1n").start(0);
+
+  // === MODEM BURST (2 occurrences, irregular non-bar times) ===
+  const modemBpf = new Tone.Filter({ type: "bandpass", frequency: 1650, Q: 2.4 }).connect(limiter);
+  const modemPlate = new Tone.Reverb({ decay: 0.45, wet: 0.16 }).connect(modemBpf);
+  await modemPlate.generate();
+  const modem = new Tone.Synth({
+    oscillator: { type: "square" },
+    envelope: { attack: 0.002, decay: 0.018, sustain: 0.55, release: 0.012 }
+  }).connect(modemPlate);
+  modem.volume.value = -16;
+
+  const modemSeq1 = [1100, 2400, 1100, 1700, 2400, 1400, 1100];
+  const modemSeq2 = [2400, 1700, 1400, 2400, 1100, 1700];
+
+  Tone.Transport.scheduleOnce((time) => {
+    modemSeq1.forEach((f, i) => {
+      modem.triggerAttackRelease(f, 0.038, time + i * 0.048, 0.65);
+    });
+  }, 13.8);
+
+  Tone.Transport.scheduleOnce((time) => {
+    modemSeq2.forEach((f, i) => {
+      modem.triggerAttackRelease(f, 0.042, time + i * 0.055, 0.58);
+    });
+  }, 44.3);
+
+  // === DISTANT PAGER BEEP (one occurrence, at 70%) ===
+  const beepPlate = new Tone.Reverb({ decay: 1.6, wet: 0.30 }).connect(limiter);
+  await beepPlate.generate();
+  const beep = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.006, decay: 0.05, sustain: 0.72, release: 0.09 }
+  }).connect(beepPlate);
+  beep.volume.value = -29;
+
+  Tone.Transport.scheduleOnce((time) => {
+    [0, 0.28, 0.56].forEach(off => beep.triggerAttackRelease(800, 0.09, time + off, 0.52));
+  }, 41.8);
+
+  // === CAP WHINE (short, sharp electrical artifact) ===
+  const capGain = new Tone.Gain(0.18).connect(limiter);
+  const capOsc = new Tone.Synth({
+    oscillator: { type: "sine" },
+    envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.02 }
+  }).connect(capGain);
+  capOsc.volume.value = -30;
+
+  const capClock = new Tone.Loop((time) => {
+    if (Math.random() > 0.05) return;
+    const f = 3200 + Math.random() * 1800;
+    capOsc.triggerAttackRelease(f, 0.05, time + H(22), 0.25 + Math.random() * 0.15);
+  }, "2n").start(0);
+
+  // === STORE HANDLES ===
+  window.toneJsInstruments = {
+    brownHum, crtSub, fanSub, psuWhine,
+    clickNoise, clickBody, clickBody2,
+    ping,
+    crackleSrc, seekNoise,
+    modem, beep, capOsc
+  };
+
+  window.toneJsParts = {
+    clickClock, pingClock, doublePingClock,
+    crackleClock, seekClock, capClock
+  };
+};
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration !== 'undefined') ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+    <script src="/lib/mind-audio-player.js"></script>
+</body>
+</html>

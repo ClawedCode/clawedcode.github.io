@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+const canvas = document.createElement('canvas');
+canvas.width = 900;
+canvas.height = 900;
+const ctx = canvas.getContext('2d');
+(() => {
+  // ---------------------------------------------------------------------------
+  // THE NIGHT DESK AT HILBERT'S HOTEL
+  // A locked-off view from the night desk down a corridor that never ends.
+  // Odd rooms are on the left wall, even rooms on the right, staggered, so the
+  // room numbers zigzag down the corridor. Every room is taken. ClawedCode, the
+  // night clerk, rings the desk bell twice:
+  //   n -> n + 1 : every guest moves one door along the zigzag, room 1 empties
+  //                for the stranger at the desk;
+  //   n -> 2n    : the whole line of guests stretches to exactly twice its
+  //                length onto the right wall, and every odd door goes dark;
+  //   then a coach party of infinitely many cats takes the odd rooms (k -> 2k-1).
+  // Every event is placed on a 120 BPM grid (one footstep per beat).
+  // ---------------------------------------------------------------------------
+  const DURATION = 60;
+  const BPM = 120;
+  const BEAT = 60 / BPM;
+  const BAR = 4 * BEAT;
+  const TAU = Math.PI * 2;
+
+  const T_STRANGER = BEAT;              // a stranger walks up to the desk
+  const T_BELL_1 = 2 * BAR;             // first ding
+  const T_A = 3 * BAR;                  // doors open: n -> n + 1
+  const A_WALK = 6;                     // beats of walking, one step a beat
+  const T_STRANGER_GO = T_A + (A_WALK + 4) * BEAT;  // the stranger walks to room 1
+  const T1_IN = T_STRANGER_GO + 4 * BEAT;           // ... and reaches its door
+  const T_COACH = 8 * BAR;              // headlights: the coach pulls in
+  const T_BELL_2 = 9 * BAR;             // second ding
+  const T_B = 10 * BAR;                 // doors open: n -> 2n
+  const B_WALK = 12;                    // beats of walking, two steps a beat
+  const T_C = 17 * BAR;                 // the coach party comes in: seat k -> room 2k - 1
+  const T_TEASE = 24 * BAR;             // the board announces tomorrow night
+
+  // ---- helpers ---------------------------------------------------------------
+  const clamp01 = u => (u < 0 ? 0 : u > 1 ? 1 : u);
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const ease = u => { const v = clamp01(u); return v * v * (3 - 2 * v); };
+  const smooth = (a, b, x) => ease((x - a) / (b - a));
+  const pulse = (t, a, b, fade) => smooth(a, a + fade, t) * (1 - smooth(b - fade, b, t));
+  const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const mix = (a, b, u) => [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, a[2] + (b[2] - a[2]) * u];
+  const css = (c, a = 1) => `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a})`;
+
+  // ---- palette ---------------------------------------------------------------
+  const C = {
+    fog: hex('#ecc993'),
+    wall: hex('#2c6a5f'),
+    wallStripe: hex('#35796c'),
+    dado: hex('#4b2e1e'),
+    dadoRail: hex('#6e4a31'),
+    base: hex('#25170f'),
+    crown: hex('#d8c59c'),
+    ceiling: hex('#b49c70'),
+    parquet: hex('#3d2719'),
+    runner: hex('#a6322b'),
+    runnerDark: hex('#7c2320'),
+    ochre: hex('#cf9a33'),
+    door: hex('#e6d9bb'),
+    doorPanel: hex('#cfc09e'),
+    frame: hex('#4c301f'),
+    brass: hex('#b48a46'),
+    plaqueLit: hex('#fff0c8'),
+    plaqueDark: hex('#3a3128'),
+    inkLit: hex('#2b1b10'),
+    inkDark: hex('#7c6c55'),
+    roomLit: hex('#ffd38c'),
+    roomDark: hex('#16110e'),
+    lamp: hex('#fff3d6'),
+    glow: hex('#ffbd6e'),
+    figure: hex('#140e0b'),
+    lobby: hex('#17231f'),
+    lobbyPanel: hex('#1d2c27'),
+    walnut: hex('#3a2416'),
+    felt: hex('#111111'),
+    letter: hex('#f3efe6'),
+    counter: hex('#2b190f'),
+    neon: hex('#ff3b2e')
+  };
+
+  // ---- camera: a pinhole at the desk looking straight down the corridor ------
+  const F = 640, CX = 450, CY = 450, CAM_Y = 1.42;
+  const W = 1.2, CEIL = 2.75;                   // corridor half-width and height (m)
+  const Z_LOBBY = 2.4, ARCH_TOP = 2.3;          // the lobby wall and its opening
+  const Z_FIRST = 3.5, GAP = 1.5;               // room n: Z_FIRST + (n - 1) * GAP
+  const DOOR_W = 0.92, DOOR_H = 2.12;
+  const LANE = W - 0.4;                         // walking line, |X|
+  const INSIDE = W + 0.4;                       // one step into a room
+  const N_ROOMS = 120;                          // beyond these the haze has them
+  const sx = (X, Z) => CX + F * X / Z;
+  const sy = (Y, Z) => CY - F * (Y - CAM_Y) / Z;
+  const roomZ = n => Z_FIRST + (n - 1) * GAP;
+  const roomSide = n => (n % 2 === 1 ? -1 : 1);
+  const fogAt = Z => 1 - Math.exp(-Z / 34);
+  const fogged = (c, Z) => mix(c, C.fog, fogAt(Z));
+
+  const path3 = (g, pts) => {
+    g.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const x = sx(p[0], p[2]), y = sy(p[1], p[2]);
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    g.closePath();
+  };
+  const fill3 = (g, pts, col, a = 1) => { path3(g, pts); g.fillStyle = css(col, a); g.fill(); };
+  const wallPts = (s, z0, z1, y0, y1) => [[s * W, y0, z0], [s * W, y0, z1], [s * W, y1, z1], [s * W, y1, z0]];
+  const floorPts = (x0, x1, z0, z1, y = 0) => [[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1]];
+
+  // ===========================================================================
+  // STATIC CORRIDOR (rendered once)
+  // ===========================================================================
+  const bg = document.createElement('canvas');
+  bg.width = 900; bg.height = 900;
+  const b = bg.getContext('2d');
+  b.fillStyle = css(C.fog);
+  b.fillRect(0, 0, 900, 900);
+
+  // every surface of the corridor is one triangle that runs to the vanishing
+  // point; depth is a function of screen y on the floor and ceiling and of
+  // screen x on the walls, so one gradient per surface carries the haze exactly
+  const ZN = Z_LOBBY - 0.05;
+  const STOPS = 64;
+  const planeGradient = (Y, base) => {
+    const y0 = sy(Y, ZN);
+    const gr = b.createLinearGradient(0, y0, 0, CY);
+    for (let i = 0; i <= STOPS; i++) {
+      const u = i / STOPS;
+      const y = lerp(y0, CY, u);
+      const z = i === STOPS ? 1e6 : F * (CAM_Y - Y) / (y - CY);
+      gr.addColorStop(u, css(fogged(base, Math.max(ZN, z))));
+    }
+    return gr;
+  };
+  const wallGradient = (s, base) => {
+    const x0 = sx(s * W, ZN);
+    const gr = b.createLinearGradient(x0, 0, CX, 0);
+    for (let i = 0; i <= STOPS; i++) {
+      const u = i / STOPS;
+      const x = lerp(x0, CX, u);
+      const z = i === STOPS ? 1e6 : F * s * W / (x - CX);
+      gr.addColorStop(u, css(fogged(base, Math.max(ZN, z))));
+    }
+    return gr;
+  };
+  const toVanish = (g, a, c) => {
+    g.beginPath();
+    g.moveTo(sx(a[0], a[2]), sy(a[1], a[2]));
+    g.lineTo(sx(c[0], c[2]), sy(c[1], c[2]));
+    g.lineTo(CX, CY);
+    g.closePath();
+  };
+  const floorBand = (x0, x1, base, Y = 0) => {
+    toVanish(b, [x0, Y, ZN], [x1, Y, ZN]);
+    b.fillStyle = planeGradient(Y, base);
+    b.fill();
+  };
+  const wallBand = (s, y0, y1, base) => {
+    toVanish(b, [s * W, y0, ZN], [s * W, y1, ZN]);
+    b.fillStyle = wallGradient(s, base);
+    b.fill();
+  };
+  b.fillStyle = css(C.fog);
+  b.fillRect(0, 0, 900, 900);
+  floorBand(-W - 0.2, W + 0.2, C.parquet);
+  floorBand(-0.8, 0.8, C.runner);
+  floorBand(-0.74, -0.69, C.ochre);
+  floorBand(0.69, 0.74, C.ochre);
+  floorBand(-W - 0.2, W + 0.2, C.ceiling, CEIL);
+  for (const s of [-1, 1]) {
+    wallBand(s, -0.05, CEIL + 0.05, C.wall);
+    wallBand(s, -0.05, 0.13, C.base);
+    wallBand(s, 0.13, 0.92, C.dado);
+    wallBand(s, 0.92, 0.98, C.dadoRail);
+    wallBand(s, CEIL - 0.1, CEIL + 0.05, C.crown);
+  }
+
+  // wallpaper stripes and dado panel joints, fading before they could alias
+  for (const s of [-1, 1]) {
+    for (let z = Z_LOBBY; z < 26; z += 0.2) {
+      const fade = 1 - smooth(9, 24, z);
+      fill3(b, wallPts(s, z, z + 0.1, 0.98, CEIL - 0.1), fogged(C.wallStripe, z + 0.05), 0.9 * fade);
+    }
+    for (let z = Z_LOBBY + 0.3; z < 30; z += 0.6) {
+      const fade = 1 - smooth(10, 28, z);
+      fill3(b, wallPts(s, z, z + 0.025, 0.16, 0.89), fogged(hex('#2f1c12'), z), 0.8 * fade);
+    }
+  }
+
+  // carpet: an ochre lozenge chain down the runner
+  for (let z = Z_LOBBY + 0.3; z < 48; z += 0.6) {
+    const fade = 1 - smooth(16, 46, z);
+    fill3(b, [[-0.42, 0, z], [0, 0, z - 0.24], [0.42, 0, z], [0, 0, z + 0.24]], fogged(C.runnerDark, z), fade);
+    fill3(b, [[-0.2, 0, z], [0, 0, z - 0.11], [0.2, 0, z], [0, 0, z + 0.11]], fogged(C.ochre, z), 0.85 * fade);
+    fill3(b, [[-0.08, 0, z], [0, 0, z - 0.045], [0.08, 0, z], [0, 0, z + 0.045]], fogged(C.runner, z), fade);
+  }
+
+  // closed doors with their architraves (doors that open are painted over live)
+  for (let n = N_ROOMS; n >= 1; n--) {
+    const s = roomSide(n), z = roomZ(n);
+    const z0 = z - DOOR_W / 2, z1 = z + DOOR_W / 2;
+    fill3(b, wallPts(s, z0 - 0.08, z1 + 0.08, 0, DOOR_H + 0.08), fogged(C.frame, z));
+    fill3(b, wallPts(s, z0, z1, 0, DOOR_H), fogged(C.door, z));
+    if (z < 40) {
+      fill3(b, wallPts(s, z0 + 0.13, z1 - 0.13, 0.22, 0.95), fogged(C.doorPanel, z));
+      fill3(b, wallPts(s, z0 + 0.13, z1 - 0.13, 1.12, 1.92), fogged(C.doorPanel, z));
+      const hx = sx(s * W, z1 - 0.1), hy = sy(1.0, z1 - 0.1);
+      b.fillStyle = css(fogged(C.brass, z));
+      b.beginPath();
+      b.arc(hx, hy, Math.max(0.6, 0.035 * F / z), 0, TAU);
+      b.fill();
+    }
+  }
+
+  // sconces between the doors (each one faces a door across the corridor)
+  b.globalCompositeOperation = 'lighter';
+  for (let n = 1; n <= N_ROOMS; n++) {
+    const s = -roomSide(n), z = roomZ(n);
+    const fade = 1 - fogAt(z);
+    if (fade < 0.02) continue;
+    const x = sx(s * (W - 0.02), z), y = sy(1.82, z);
+    const rx = Math.abs(sx(s * W, z - 1.1) - sx(s * W, z + 1.1)) / 2 + 2;
+    const ry = F * 1.15 / z;
+    b.save();
+    b.translate(x, y);
+    b.scale(rx, ry);
+    const gl = b.createRadialGradient(0, 0, 0, 0, 0, 1);
+    gl.addColorStop(0, css(C.glow, 0.55 * fade));
+    gl.addColorStop(0.35, css(C.glow, 0.2 * fade));
+    gl.addColorStop(1, css(C.glow, 0));
+    b.fillStyle = gl;
+    b.beginPath();
+    b.arc(0, 0, 1, 0, TAU);
+    b.fill();
+    b.restore();
+  }
+  // ceiling lamps
+  for (let z = Z_FIRST + 0.75; z < 400; z += 3) {
+    const fade = 1 - fogAt(z);
+    if (fade < 0.02) continue;
+    const y = sy(CEIL, z);
+    b.save();
+    b.translate(CX, y);
+    b.scale(F * 1.1 / z, F * 0.45 / z);
+    const gl = b.createRadialGradient(0, 0, 0, 0, 0, 1);
+    gl.addColorStop(0, css(C.glow, 0.7 * fade));
+    gl.addColorStop(1, css(C.glow, 0));
+    b.fillStyle = gl;
+    b.beginPath();
+    b.arc(0, 0, 1, 0, TAU);
+    b.fill();
+    b.restore();
+  }
+  b.globalCompositeOperation = 'source-over';
+  for (let z = Z_FIRST + 0.75 + 3 * 132; z > Z_FIRST; z -= 3) {
+    const fade = 1 - fogAt(z);
+    if (fade < 0.02) continue;
+    const y = sy(CEIL, z) + 0.6;
+    b.fillStyle = css(fogged(C.lamp, z));
+    b.beginPath();
+    b.ellipse(CX, y, Math.max(0.6, F * 0.17 / z), Math.max(0.3, F * 0.045 / z), 0, 0, TAU);
+    b.fill();
+  }
+  for (let n = N_ROOMS; n >= 1; n--) {
+    const s = -roomSide(n), z = roomZ(n);
+    if (fogAt(z) > 0.97) continue;
+    const k = F / z;
+    const x = sx(s * (W - 0.07), z), y = sy(1.82, z);
+    b.fillStyle = css(fogged(C.brass, z));
+    b.fillRect(x - 0.012 * k, y, 0.024 * k, 0.16 * k);
+    b.fillStyle = css(fogged(C.lamp, z));
+    b.beginPath();
+    b.moveTo(x - 0.08 * k, y + 0.02 * k);
+    b.lineTo(x + 0.08 * k, y + 0.02 * k);
+    b.lineTo(x + 0.055 * k, y - 0.13 * k);
+    b.lineTo(x - 0.055 * k, y - 0.13 * k);
+    b.closePath();
+    b.fill();
+  }
+
+  // ===========================================================================
+  // STATIC FOREGROUND: the lobby wall with its arch, and the desk
+  // ===========================================================================
+  const archL = sx(-W, Z_LOBBY), archR = sx(W, Z_LOBBY), archT = sy(ARCH_TOP, Z_LOBBY);
+  const fgWall = document.createElement('canvas');
+  fgWall.width = 900; fgWall.height = 900;
+  const w = fgWall.getContext('2d');
+  w.beginPath();
+  w.rect(0, 0, 900, 900);
+  w.rect(archL, archT, archR - archL, 900 - archT);
+  w.fillStyle = css(C.lobby);
+  w.fill('evenodd');
+  // lacquered panels on the lobby wall
+  const panel = (x, y, pw, ph) => {
+    w.fillStyle = css(C.lobbyPanel);
+    w.fillRect(x, y, pw, ph);
+    w.strokeStyle = css(hex('#2a3d36'), 0.9);
+    w.lineWidth = 2;
+    w.strokeRect(x + 1, y + 1, pw - 2, ph - 2);
+    w.strokeStyle = 'rgba(0,0,0,0.45)';
+    w.strokeRect(x + 6, y + 6, pw - 12, ph - 12);
+  };
+  panel(14, 238, archL - 64, 280);
+  panel(14, 530, archL - 64, 290);
+  panel(archR + 50, 238, 900 - archR - 64, 280);
+  panel(archR + 50, 530, 900 - archR - 64, 290);
+  // the deco architrave around the arch: walnut steps with a brass bead
+  const archFrame = (inset, col, lw) => {
+    w.strokeStyle = col;
+    w.lineWidth = lw;
+    w.beginPath();
+    w.moveTo(archL - inset, 900);
+    w.lineTo(archL - inset, archT - inset);
+    w.lineTo(archR + inset, archT - inset);
+    w.lineTo(archR + inset, 900);
+    w.stroke();
+  };
+  archFrame(22, css(C.walnut), 30);
+  archFrame(36, css(hex('#2a190f')), 4);
+  archFrame(6, css(C.brass), 3);
+  archFrame(2, 'rgba(0,0,0,0.6)', 2);
+  // letter board above the arch
+  const BOARD = { x: 196, y: 44, w: 508, h: 140 };
+  w.fillStyle = css(C.walnut);
+  w.fillRect(BOARD.x - 14, BOARD.y - 14, BOARD.w + 28, BOARD.h + 28);
+  w.strokeStyle = css(C.brass);
+  w.lineWidth = 2;
+  w.strokeRect(BOARD.x - 6, BOARD.y - 6, BOARD.w + 12, BOARD.h + 12);
+  w.fillStyle = css(C.felt);
+  w.fillRect(BOARD.x, BOARD.y, BOARD.w, BOARD.h);
+  for (let y = BOARD.y + 5; y < BOARD.y + BOARD.h; y += 7) {
+    w.fillStyle = 'rgba(255,255,255,0.035)';
+    w.fillRect(BOARD.x, y, BOARD.w, 1.5);
+  }
+  // a lobby palm on the left
+  w.save();
+  w.translate(68, 790);
+  const frond = (ang, len, bend) => {
+    w.save();
+    w.rotate(ang);
+    w.beginPath();
+    w.moveTo(0, 0);
+    w.quadraticCurveTo(len * 0.5, -len * 0.18 - bend, len, bend);
+    w.quadraticCurveTo(len * 0.5, -len * 0.02 - bend * 0.4, 0, 0);
+    w.fill();
+    w.restore();
+  };
+  w.fillStyle = css(hex('#0e1a14'));
+  const fronds = [[-2.1, 230, 40], [-1.75, 260, 28], [-1.45, 280, 18], [-1.2, 250, 30], [-0.95, 200, 45], [-2.4, 190, 50], [-1.6, 300, 10]];
+  w.translate(0, -150);
+  for (const [a, l, bnd] of fronds) frond(a, l, bnd);
+  w.translate(0, 150);
+  w.fillStyle = css(hex('#0b1310'));
+  w.fillRect(-4, -150, 8, 120);
+  w.fillStyle = css(hex('#5b4325'));
+  w.beginPath();
+  w.moveTo(-46, -40);
+  w.lineTo(46, -40);
+  w.lineTo(34, 40);
+  w.lineTo(-34, 40);
+  w.closePath();
+  w.fill();
+  w.fillStyle = css(C.brass, 0.6);
+  w.fillRect(-46, -44, 92, 6);
+  w.restore();
+  // a key board on the right: every hook empty
+  {
+    const kx = archR + 60, ky = 262, kw = 900 - archR - 84, kh = 230;
+    w.fillStyle = css(C.walnut);
+    w.fillRect(kx, ky, kw, kh);
+    w.strokeStyle = css(C.brass, 0.8);
+    w.lineWidth = 1.5;
+    w.strokeRect(kx + 4, ky + 4, kw - 8, kh - 8);
+    w.font = '600 11px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    w.textAlign = 'center';
+    w.fillStyle = css(C.brass);
+    w.fillText('KEYS', kx + kw / 2, ky + 22);
+    for (let r = 0; r < 6; r++) {
+      for (let c = 0; c < 2; c++) {
+        const hx = kx + kw * (0.3 + 0.4 * c), hy = ky + 46 + r * 30;
+        w.fillStyle = css(C.brass);
+        w.beginPath();
+        w.arc(hx, hy, 2.4, 0, TAU);
+        w.fill();
+        w.font = '500 9px "Helvetica Neue", Helvetica, Arial, sans-serif';
+        w.fillStyle = css(hex('#c9a86a'), 0.8);
+        w.fillText(String(r * 2 + c + 1), hx, hy + 14);
+      }
+    }
+    w.font = '600 14px "Helvetica Neue", Helvetica, Arial, sans-serif';
+    w.fillText('…', kx + kw / 2, ky + kh - 6);
+  }
+
+  // the desk: a walnut counter across the bottom of the frame
+  const fgCounter = document.createElement('canvas');
+  fgCounter.width = 900; fgCounter.height = 900;
+  const d = fgCounter.getContext('2d');
+  const DESK_Y = 800;
+  {
+    const gr = d.createLinearGradient(0, DESK_Y, 0, 900);
+    gr.addColorStop(0, css(hex('#4a2c1a')));
+    gr.addColorStop(0.25, css(C.counter));
+    gr.addColorStop(1, css(hex('#140b06')));
+    d.fillStyle = gr;
+    d.fillRect(0, DESK_Y, 900, 100);
+    for (let i = 0; i < 14; i++) {
+      const y = DESK_Y + 8 + i * i * 0.45 + i * 3;
+      d.strokeStyle = `rgba(0,0,0,${0.18 + 0.02 * i})`;
+      d.lineWidth = 1;
+      d.beginPath();
+      d.moveTo(0, y);
+      for (let x = 0; x <= 900; x += 60) d.lineTo(x, y + 1.6 * Math.sin(x * 0.013 + i * 1.7));
+      d.stroke();
+    }
+    d.fillStyle = css(C.brass);
+    d.fillRect(0, DESK_Y - 3, 900, 4);
+    d.fillStyle = 'rgba(255,230,170,0.35)';
+    d.fillRect(0, DESK_Y - 3, 900, 1);
+    // the guest register, open
+    d.fillStyle = css(hex('#e9dfc8'));
+    d.beginPath();
+    d.moveTo(318, 826); d.lineTo(486, 826); d.lineTo(500, 878); d.lineTo(304, 878);
+    d.closePath();
+    d.fill();
+    d.strokeStyle = 'rgba(60,40,20,0.5)';
+    d.lineWidth = 1;
+    d.beginPath(); d.moveTo(402, 826); d.lineTo(402, 878); d.stroke();
+    for (let i = 0; i < 6; i++) {
+      const y = 834 + i * 7.5;
+      d.strokeStyle = 'rgba(70,50,30,0.35)';
+      d.beginPath(); d.moveTo(322 - i * 1.6, y); d.lineTo(396, y); d.stroke();
+      d.beginPath(); d.moveTo(408, y); d.lineTo(484 + i * 1.6, y); d.stroke();
+    }
+    d.strokeStyle = css(hex('#1b120c'));
+    d.lineWidth = 3;
+    d.beginPath(); d.moveTo(440, 870); d.lineTo(486, 846); d.stroke();
+    // the neon desk sign, always lit
+    d.fillStyle = css(hex('#0d0908'));
+    d.fillRect(34, 742, 252, 64);
+    d.strokeStyle = css(C.brass, 0.7);
+    d.lineWidth = 1.5;
+    d.strokeRect(36, 744, 248, 60);
+    d.font = '700 33px "Futura", "Avenir Next Condensed", "Helvetica Neue", Arial, sans-serif';
+    d.textAlign = 'center';
+    d.textBaseline = 'middle';
+    d.lineJoin = 'round';
+    d.shadowColor = 'rgba(255,60,40,0.9)';
+    d.shadowBlur = 18;
+    d.strokeStyle = css(C.neon);
+    d.lineWidth = 2.6;
+    d.strokeText('NO VACANCY', 160, 775);
+    d.shadowBlur = 6;
+    d.strokeStyle = css(hex('#ffd2c4'));
+    d.lineWidth = 1;
+    d.strokeText('NO VACANCY', 160, 775);
+    d.shadowBlur = 0;
+    const rg = d.createRadialGradient(160, 812, 4, 160, 812, 150);
+    rg.addColorStop(0, 'rgba(255,60,40,0.30)');
+    rg.addColorStop(1, 'rgba(255,60,40,0)');
+    d.fillStyle = rg;
+    d.fillRect(0, 802, 330, 98);
+  }
+
+  // ===========================================================================
+  // ROOM STATES: door open (0..1) and room light (0..1) as functions of time
+  // ===========================================================================
+  // coach party: cat k comes in from the lobby at CAT_IN(k) and reaches room
+  // 2k - 1 RUN(k) seconds later. The gaps between cats shrink geometrically, so
+  // all infinitely many are inside in four seconds and every room is lit by
+  // T_C + 8 (each later cat simply runs faster: it has further to go).
+  const CAT_IN = k => T_C + 4 * (1 - Math.pow(0.8, k - 1));
+  const RUN = k => 2.6 + 1.4 * (1 - Math.pow(0.85, k - 1));
+  const catArrives = k => CAT_IN(k) + RUN(k);
+  const roomState = (n, t) => {
+    let open = 0, lit = 1;
+    if (t >= T_A && t < T1_IN + 3 * BEAT) {
+      const opened = smooth(T_A, T_A + BEAT, t);
+      const off = smooth(T_A + 1.3 * BEAT, T_A + 2 * BEAT, t);
+      if (n === 1) {
+        open = opened * (1 - smooth(T1_IN + BEAT, T1_IN + 2 * BEAT, t));
+        lit = 1 - off + smooth(T1_IN + 0.5 * BEAT, T1_IN + BEAT, t);
+      } else {
+        open = opened * (1 - smooth(T_A + (A_WALK + 3) * BEAT, T_A + (A_WALK + 4) * BEAT, t));
+        lit = 1 - off + smooth(T_A + (A_WALK + 2.6) * BEAT, T_A + (A_WALK + 3) * BEAT, t);
+      }
+    } else if (t >= T_B && t < T_C + 10) {
+      const opened = smooth(T_B, T_B + BEAT, t);
+      const off = smooth(T_B + 1.3 * BEAT, T_B + 2 * BEAT, t);
+      if (n % 2 === 0) {
+        open = opened * (1 - smooth(T_B + (B_WALK + 3) * BEAT, T_B + (B_WALK + 4) * BEAT, t));
+        lit = 1 - off + smooth(T_B + (B_WALK + 2.6) * BEAT, T_B + (B_WALK + 3) * BEAT, t);
+      } else {
+        const arrive = catArrives((n + 1) / 2);
+        open = opened * (1 - smooth(arrive + 0.3, arrive + 0.8, t));
+        lit = 1 - off + smooth(arrive - 0.1, arrive + 0.2, t);
+      }
+    }
+    return { open, lit };
+  };
+
+  // ===========================================================================
+  // WHO IS IN THE CORRIDOR: positions as functions of time
+  // ===========================================================================
+  // a person: { X, Z, facing (-1 left .. 0 away .. 1 right), gait, stride, v }
+  const guestLook = id => ({
+    height: 0.93 + 0.12 * hash(id * 3.1),
+    hat: hash(id * 5.7) < 0.42 ? 0 : hash(id * 5.7) < 0.75 ? 1 : 2,
+    bag: hash(id * 9.3) < 0.62,
+    coat: 0.52 + 0.16 * hash(id * 2.3),
+    shade: 0.85 + 0.15 * hash(id * 7.9)
+  });
+  const STRANGER_LOOK = { height: 1.03, hat: 0, bag: true, coat: 0.5, shade: 1 };
+  const LOOKS = [];
+  for (let id = 0; id <= 2 * N_ROOMS + 2; id++) LOOKS.push(guestLook(id));
+
+  const stepOutIn = (s, z, u, out) => {
+    const e = ease(u);
+    return out
+      ? { X: lerp(s * INSIDE, s * LANE, e), Z: z, facing: -s * 0.95 }
+      : { X: lerp(s * LANE, s * INSIDE, e), Z: z, facing: s * 0.95 };
+  };
+  // move A: the guest of room n walks to room n + 1
+  const wobble = (n, e, ax, az) => {
+    const bow = Math.sin(Math.PI * e);
+    return [ax * (2 * hash(n * 1.37) - 1) * bow, az * (2 * hash(n * 2.71) - 1) * bow];
+  };
+  const moveA = (n, t) => {
+    const u = (t - T_A) / BEAT;
+    if (u <= 1 || u >= A_WALK + 3) return null;
+    const s0 = roomSide(n), s1 = roomSide(n + 1), z0 = roomZ(n), z1 = roomZ(n + 1);
+    let p;
+    if (u < 2) p = stepOutIn(s0, z0, u - 1, true);
+    else if (u < A_WALK + 2) {
+      const e = (u - 2) / A_WALK;
+      const [wx, wz] = wobble(n, e, 0.26, 0.35);
+      p = { X: lerp(s0 * LANE, s1 * LANE, e) + wx, Z: lerp(z0, z1, e) + wz, facing: (s1 - s0) * LANE / Math.hypot((s1 - s0) * LANE, z1 - z0) };
+    } else p = stepOutIn(s1, z1, u - A_WALK - 2, false);
+    p.gait = (u - 1) / 2;
+    p.stride = 1;
+    return p;
+  };
+  // move B: the guest of room n walks to room 2n, double time
+  const moveB = (n, t) => {
+    const u = (t - T_B) / BEAT;
+    if (u <= 1 || u >= B_WALK + 3) return null;
+    const s0 = roomSide(n), z0 = roomZ(n), z1 = roomZ(2 * n);
+    let p;
+    if (u < 2) p = stepOutIn(s0, z0, u - 1, true);
+    else if (u < B_WALK + 2) {
+      const e = (u - 2) / B_WALK;
+      const cross = ease(e / 0.6);
+      const [wx] = wobble(n + 500, e, 0.16, 0);
+      const X = lerp(s0 * LANE, LANE, cross) + wx;
+      const dX = s0 < 0 && e < 0.6 ? 2 * LANE : 0;
+      const dZ = z1 - z0;
+      p = { X, Z: lerp(z0, z1, e), facing: dX / Math.hypot(dX, dZ * 0.6) * 0.8 };
+    } else p = stepOutIn(1, z1, u - B_WALK - 2, false);
+    p.gait = u - 1;
+    p.stride = 1;
+    return p;
+  };
+  // the stranger: up to the desk, waits, then takes room 1
+  const DESK_Z = 1.45, DESK_X = -0.8;
+  const stranger = t => {
+    if (t < T_STRANGER || t > T1_IN + BEAT) return null;
+    let p;
+    if (t < T_STRANGER + 4 * BEAT) {
+      const e = (t - T_STRANGER) / (4 * BEAT);
+      p = { X: lerp(-1.6, DESK_X, 1 - (1 - e) * (1 - e)), Z: DESK_Z, facing: 1, gait: e * 2, stride: 1 - smooth(0.7, 1, e) * 0.85 };
+    } else if (t < T_STRANGER_GO) {
+      p = { X: DESK_X, Z: DESK_Z, facing: 1, gait: 0, stride: 0 };
+    } else if (t < T1_IN) {
+      const e = (t - T_STRANGER_GO) / (T1_IN - T_STRANGER_GO);
+      const X = lerp(DESK_X, -0.72, ease(e)) + lerp(0, -0.12, smooth(0.75, 1, e));
+      const Z = lerp(DESK_Z, roomZ(1) - 0.1, ease(e * 0.8 + 0.2 * e * e));
+      p = { X, Z, facing: lerp(0.7, -0.3, smooth(0, 0.5, e)), gait: e * 2, stride: 1 };
+    } else {
+      const e = (t - T1_IN) / BEAT;
+      p = { X: lerp(-0.82, -INSIDE, ease(e)), Z: roomZ(1), facing: -0.95, gait: 2 + e / 2, stride: 1 };
+    }
+    p.v = STRANGER_LOOK;
+    return p;
+  };
+  // the coach party: infinitely many cats; the first ones are drawn
+  const N_CATS = 90;
+  const CAT_START_Z = 1.6;
+  const coachCat = (k, t) => {
+    const u = (t - CAT_IN(k)) / RUN(k);
+    if (u <= 0 || u >= 1) return null;
+    const zd = roomZ(2 * k - 1);
+    const laneX = -0.62 + 0.16 * (k % 3);
+    let X, Z, facing;
+    if (u < 0.86) {
+      Z = lerp(CAT_START_Z, zd - 0.45, u / 0.86);
+      X = lerp(-0.05, laneX, smooth(0, 0.12, u));
+      facing = -0.15;
+    } else {
+      const e = ease((u - 0.86) / 0.14);
+      Z = lerp(zd - 0.45, zd, e);
+      X = lerp(laneX, -INSIDE, e);
+      facing = -0.9;
+    }
+    const speed = (zd - CAT_START_Z) / RUN(k);
+    return { X, Z, facing, gait: (t - CAT_IN(k)) * (2.2 + 0.25 * Math.min(speed, 8)) + hash(k), stride: 1, cat: k };
+  };
+
+  // ===========================================================================
+  // DRAWING THE PEOPLE AND THE CATS
+  // ===========================================================================
+  // a person in silhouette, feet at screen (x, y), k pixels per metre
+  const drawPerson = (g, x, y, k, p, col) => {
+    const v = p.v;
+    const hpx = 1.75 * v.height * k;
+    if (hpx < 1.5) return;
+    g.fillStyle = col;
+    if (hpx < 9) {
+      g.fillRect(x - 0.11 * k, y - 1.45 * v.height * k, 0.22 * k, 1.45 * v.height * k);
+      g.beginPath();
+      g.arc(x, y - 1.58 * v.height * k, Math.max(0.5, 0.11 * k), 0, TAU);
+      g.fill();
+      return;
+    }
+    const side = Math.min(1, Math.abs(p.facing));
+    const dir = p.facing < 0 ? -1 : 1;
+    const ph = p.gait * TAU;
+    const amp = p.stride;
+    const sk = k * v.height;
+    g.save();
+    g.setTransform(sk, 0, 0, -sk, x, y);
+    // a footfall every half cycle (ph = 0, pi), on the beat: both feet down and, in
+    // profile, the widest stride; between footfalls one leg swings through in the air
+    const bob = amp * 0.018 * Math.abs(Math.sin(ph));
+    g.translate(0, bob);
+    const hipY = 0.9;
+    const legW = 0.105;
+    for (const L of [-1, 1]) {
+      const reach = -Math.cos(ph) * L;
+      const air = Math.max(0, Math.sin(ph) * L);
+      const hipX = L * 0.065 * (1 - side) + 0.01 * dir * side;
+      const footX = hipX + dir * side * amp * 0.3 * reach + L * 0.02 * (1 - side);
+      const lift = amp * air * lerp(0.07, 0.05, side);
+      g.beginPath();
+      g.moveTo(hipX - legW / 2, hipY);
+      g.lineTo(hipX + legW / 2, hipY);
+      g.lineTo(footX + legW * 0.42, lift + 0.02);
+      g.lineTo(footX - legW * 0.42, lift + 0.02);
+      g.closePath();
+      g.fill();
+      // shoe
+      g.beginPath();
+      g.ellipse(footX + dir * side * 0.05, lift + 0.03, 0.055 + side * 0.05, 0.035, 0, 0, TAU);
+      g.fill();
+    }
+    // coat
+    const shW = lerp(0.215, 0.13, side), hemW = lerp(0.235, 0.17, side);
+    const lean = dir * side * 0.03 * amp;
+    const hem = 0.9 - v.coat * 0.7;
+    g.beginPath();
+    g.moveTo(-hemW + lean * 0.2, hem);
+    g.lineTo(hemW + lean * 0.2, hem);
+    g.quadraticCurveTo(shW + 0.03 + lean, 1.15, shW + lean, 1.43);
+    g.quadraticCurveTo(lean, 1.5, -shW + lean, 1.43);
+    g.quadraticCurveTo(-shW - 0.03 + lean, 1.15, -hemW + lean * 0.2, hem);
+    g.fill();
+    // arms
+    for (const L of [-1, 1]) {
+      const swing = Math.cos(ph) * L * amp;
+      const ax = lean + L * lerp(shW - 0.02, 0.02, side);
+      const hx = ax + dir * side * 0.22 * swing + L * 0.05 * (1 - side);
+      const hy = 0.72 + 0.04 * Math.abs(swing) * side;
+      g.beginPath();
+      g.moveTo(ax - 0.045, 1.4);
+      g.lineTo(ax + 0.045, 1.4);
+      g.lineTo(hx + 0.04, hy);
+      g.lineTo(hx - 0.04, hy);
+      g.closePath();
+      g.fill();
+      if (v.bag && L === 1) {
+        const bw = lerp(0.1, 0.4, side), bh = 0.3;
+        g.fillRect(hx - bw / 2, hy - bh - 0.02, bw, bh);
+        g.fillRect(hx - 0.05, hy - 0.04, 0.1, 0.05);
+      }
+    }
+    // head and hat
+    g.beginPath();
+    g.ellipse(lean, 1.585, 0.1, 0.115, 0, 0, TAU);
+    g.fill();
+    g.fillRect(lean - 0.04, 1.44, 0.08, 0.08);
+    if (side > 0.3) {
+      g.beginPath();
+      g.ellipse(lean + dir * 0.095, 1.575, 0.025, 0.03, 0, 0, TAU);
+      g.fill();
+    }
+    if (v.hat === 0) {
+      g.beginPath();
+      g.ellipse(lean, 1.675, 0.2, 0.028, 0, 0, TAU);
+      g.fill();
+      g.beginPath();
+      g.moveTo(lean - 0.11, 1.68);
+      g.lineTo(lean - 0.1, 1.8);
+      g.quadraticCurveTo(lean, 1.77, lean + 0.1, 1.8);
+      g.lineTo(lean + 0.11, 1.68);
+      g.closePath();
+      g.fill();
+    } else if (v.hat === 1) {
+      g.beginPath();
+      g.ellipse(lean, 1.64, 0.135, 0.15, 0, 0, Math.PI);
+      g.fill();
+      g.beginPath();
+      g.ellipse(lean, 1.62, 0.16, 0.03, 0, 0, TAU);
+      g.fill();
+    } else {
+      g.beginPath();
+      g.arc(lean - dir * 0.04 * side, 1.7, 0.055, 0, TAU);
+      g.fill();
+    }
+    g.restore();
+  };
+
+  const CAT_COATS = ['#f1e9db', '#a9aab0', '#dd8c3e', '#2b2522', '#d8c29a', '#efe3cf', '#c98a4c', '#8d8f96', '#f6f1e8', '#7d5b3e'].map(hex);
+  // a cat of the coach party seen from behind, tail up
+  const drawCatWalker = (g, x, y, kz, p, Z) => {
+    const k = kz * 1.18;
+    const coat = fogged(CAT_COATS[Math.floor(hash(p.cat * 4.4) * CAT_COATS.length)], Z);
+    const hpx = 0.42 * k;
+    if (hpx < 1.2) return;
+    g.fillStyle = css(coat);
+    if (hpx < 6) {
+      g.beginPath();
+      g.ellipse(x, y - 0.14 * k, 0.09 * k, 0.12 * k, 0, 0, TAU);
+      g.fill();
+      g.fillRect(x - 0.012 * k, y - 0.42 * k, 0.024 * k, 0.25 * k);
+      return;
+    }
+    const side = Math.min(1, Math.abs(p.facing));
+    const dir = p.facing < 0 ? -1 : 1;
+    const ph = p.gait * TAU;
+    g.save();
+    g.setTransform(k, 0, 0, -k, x, y);
+    const bob = 0.012 * Math.abs(Math.sin(ph));
+    g.translate(0, bob);
+    // legs (trot: diagonal pairs)
+    for (let i = 0; i < 4; i++) {
+      const front = i < 2;
+      const L = i % 2 === 0 ? -1 : 1;
+      const lift = 0.035 * Math.max(0, Math.sin(ph + (front === (L < 0) ? 0 : Math.PI)));
+      const lx = L * lerp(0.05, 0.015, side) + dir * side * (front ? 0.13 : -0.11) + dir * side * 0.05 * Math.sin(ph + (front ? 0 : Math.PI));
+      g.fillRect(lx - 0.018, lift, 0.036, 0.13 - lift * 0.4);
+    }
+    // body
+    g.beginPath();
+    g.ellipse(0, 0.16, lerp(0.085, 0.19, side), 0.085, 0, 0, TAU);
+    g.fill();
+    // head and ears
+    const hx = dir * side * 0.19;
+    g.beginPath();
+    g.ellipse(hx, 0.25, 0.058, 0.055, 0, 0, TAU);
+    g.fill();
+    for (const L of [-1, 1]) {
+      const ex = hx + L * lerp(0.035, 0.018, side) + dir * side * 0.01;
+      g.beginPath();
+      g.moveTo(ex - 0.022, 0.285);
+      g.lineTo(ex + 0.022, 0.285);
+      g.lineTo(ex + L * 0.006, 0.345);
+      g.closePath();
+      g.fill();
+    }
+    // tail: up, with a hooked tip that sways with the trot
+    const tx = -dir * side * 0.17;
+    const sway = 0.03 * Math.sin(ph * 0.5);
+    g.strokeStyle = css(coat);
+    g.lineWidth = 0.035;
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(tx, 0.2);
+    g.quadraticCurveTo(tx - dir * side * 0.06 + sway, 0.33, tx + sway * 2, 0.42);
+    g.quadraticCurveTo(tx + sway * 2 + 0.03, 0.46, tx + sway * 2 + 0.05, 0.43);
+    g.stroke();
+    g.restore();
+  };
+
+  // ===========================================================================
+  // DRAWING A ROOM: plaque, door, light under the door, light from the doorway
+  // ===========================================================================
+  const doorwayPath = (g, s, z0, z1) => path3(g, wallPts(s, z0, z1, 0, DOOR_H));
+  const drawRoom = (g, n, st) => {
+    const s = roomSide(n), z = roomZ(n);
+    const z0 = z - DOOR_W / 2, z1 = z + DOOR_W / 2;
+    const fog = fogAt(z);
+    const near = 1 - fog;
+    if (near < 0.012) return;
+    if (st.open > 0.002) {
+      // the doorway: the room's own light, or the dark of an empty room
+      const inner = mix(C.roomDark, C.roomLit, st.lit);
+      const top = mix(C.roomDark, hex('#e9a65c'), st.lit);
+      const yT = sy(DOOR_H, z), yB = sy(0, z);
+      const gr = g.createLinearGradient(0, yT, 0, yB);
+      gr.addColorStop(0, css(fogged(top, z)));
+      gr.addColorStop(0.55, css(fogged(inner, z)));
+      gr.addColorStop(1, css(fogged(mix(inner, C.roomDark, 0.35), z)));
+      doorwayPath(g, s, z0, z1);
+      g.fillStyle = gr;
+      g.fill();
+      // the door leaf swings into the room on its near hinge
+      const th = st.open * 1.75;
+      const fx = s * (W + DOOR_W * Math.sin(th)), fz = z0 + DOOR_W * Math.cos(th);
+      g.save();
+      doorwayPath(g, s, z0, z1);
+      g.clip();
+      fill3(g, [[s * W, 0, z0], [fx, 0, fz], [fx, DOOR_H, fz], [s * W, DOOR_H, z0]], fogged(mix(C.door, C.doorPanel, 0.5 + 0.5 * Math.sin(th)), z));
+      g.restore();
+      // light poured onto the carpet
+      if (st.lit > 0.01) {
+        const a = 0.42 * st.lit * Math.min(1, st.open * 1.6) * near;
+        const xw = sx(s * W, z), yw = sy(0, z);
+        const xi = sx(s * (W - 1.5), z + 0.8), yi = sy(0, z + 0.8);
+        const lg = g.createLinearGradient(xw, yw, xi, yi);
+        lg.addColorStop(0, css(C.glow, a));
+        lg.addColorStop(1, css(C.glow, 0));
+        g.globalCompositeOperation = 'lighter';
+        path3(g, [[s * W, 0, z0 - 0.1], [s * W, 0, z1 + 0.4], [s * (W - 1.7), 0, z1 + 1.9], [s * (W - 1.7), 0, z0 + 0.3]]);
+        g.fillStyle = lg;
+        g.fill();
+        g.globalCompositeOperation = 'source-over';
+      }
+    }
+    const seam = st.lit * (1 - Math.min(1, st.open * 3));
+    if (seam > 0.01) {
+      g.globalCompositeOperation = 'lighter';
+      fill3(g, wallPts(s, z0 + 0.03, z1 - 0.03, 0, Math.max(0.012, 1.4 * z / F)), C.glow, 0.95 * seam * near);
+      const xw = sx(s * W, z), xi = sx(s * (W - 0.45), z + 0.1);
+      const sg = g.createLinearGradient(xw, sy(0, z), xi, sy(0, z + 0.1));
+      sg.addColorStop(0, css(C.glow, 0.3 * seam * near));
+      sg.addColorStop(1, css(C.glow, 0));
+      path3(g, [[s * W, 0, z0], [s * W, 0, z1], [s * (W - 0.45), 0, z1 + 0.2], [s * (W - 0.45), 0, z0 - 0.08]]);
+      g.fillStyle = sg;
+      g.fill();
+      g.globalCompositeOperation = 'source-over';
+    }
+    // the number box over the door, lit while the room is taken
+    const zp = z0 - 0.06;
+    const xa = sx(s * W, zp), xb = sx(s * (W - 0.34), zp);
+    const x0 = Math.min(xa, xb), x1 = Math.max(xa, xb);
+    const y0 = sy(2.46, zp), y1 = sy(2.2, zp);
+    const kp = F / zp;
+    g.fillStyle = css(fogged(C.brass, zp));
+    g.fillRect(x0 - 0.02 * kp, y0 - 0.02 * kp, x1 - x0 + 0.04 * kp, y1 - y0 + 0.04 * kp);
+    g.fillStyle = css(fogged(mix(C.plaqueDark, C.plaqueLit, st.lit), zp));
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    if (st.lit > 0.01 && kp > 12) {
+      g.globalCompositeOperation = 'lighter';
+      const gl = g.createRadialGradient((x0 + x1) / 2, (y0 + y1) / 2, 0, (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) * 1.1);
+      gl.addColorStop(0, css(C.glow, 0.32 * st.lit * near));
+      gl.addColorStop(1, css(C.glow, 0));
+      g.fillStyle = gl;
+      g.fillRect(x0 - (x1 - x0), y0 - (x1 - x0), (x1 - x0) * 3, (x1 - x0) * 3);
+      g.globalCompositeOperation = 'source-over';
+    }
+    const fontPx = 0.19 * kp;
+    if (fontPx >= 2.2) {
+      g.font = `700 ${fontPx.toFixed(2)}px "Futura", "Avenir Next", "Helvetica Neue", Arial, sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillStyle = css(fogged(mix(C.inkDark, C.inkLit, st.lit), zp));
+      g.fillText(String(n), (x0 + x1) / 2, (y0 + y1) / 2 + fontPx * 0.06);
+    }
+  };
+
+  // ===========================================================================
+  // THE LETTER BOARD
+  // ===========================================================================
+  const LINE_A = [[0, 'HOTEL HILBERT'], [T_BELL_1 + BEAT, 'ONE NEW GUEST'], [T1_IN + 3 * BEAT, 'HOTEL HILBERT'],
+    [T_COACH + BEAT, 'COACH PARTY: ∞ SEATS'], [T_B + (B_WALK + 5) * BEAT, 'ODD ROOMS FREE'], [T_C + 5 * BAR, 'HOTEL HILBERT'],
+    [T_TEASE, 'TOMORROW NIGHT'], [T_TEASE + 3 * BAR, 'HOTEL HILBERT']];
+  const LINE_B = [[0, 'EVERY ROOM TAKEN TONIGHT'], [T_BELL_1 + 1.5 * BEAT, 'ROOM N  →  ROOM N + 1'], [T1_IN + 3.5 * BEAT, 'EVERY ROOM TAKEN TONIGHT'],
+    [T_BELL_2 + 0.5 * BEAT, 'ROOM N  →  ROOM 2N'], [T_B + (B_WALK + 5.5) * BEAT, 'SEAT K  →  ROOM 2K − 1'], [T_C + 5 * BAR + 0.5 * BEAT, 'EVERY ROOM TAKEN TONIGHT'],
+    [T_TEASE + 0.5 * BEAT, '∞ COACHES  ×  ∞ SEATS'], [T_TEASE + 3 * BAR + 0.5 * BEAT, 'EVERY ROOM TAKEN TONIGHT']];
+  const SWAP = 0.9;
+  const drawLine = (g, schedule, t, cy, px) => {
+    let i = 0;
+    while (i + 1 < schedule.length && schedule[i + 1][0] <= t) i++;
+    const [t0, text] = schedule[i];
+    const prev = i > 0 ? schedule[i - 1][1] : schedule[schedule.length - 1][1];
+    g.font = `700 ${px}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+    g.letterSpacing = `${Math.round(px * 0.14)}px`;
+    g.textAlign = 'left';
+    g.textBaseline = 'middle';
+    const drawText = (str, revealFrom, revealTo, mode) => {
+      const total = g.measureText(str).width;
+      let x = CX - total / 2;
+      for (let c = 0; c < str.length; c++) {
+        const ch = str[c];
+        const wch = g.measureText(ch).width;
+        const at = lerp(revealFrom, revealTo, str.length > 1 ? c / (str.length - 1) : 0);
+        const u = clamp01((t - at) / 0.07);
+        const show = mode === 'in' ? u : 1 - u;
+        if (show > 0.001 && ch !== ' ') {
+          g.save();
+          g.translate(x + wch / 2, cy);
+          g.scale(1, Math.max(0.05, show));
+          g.fillStyle = css(C.letter, 0.35 + 0.65 * show);
+          g.fillText(ch, -wch / 2 + Math.round(px * 0.07), 0);
+          g.restore();
+        }
+        x += wch;
+      }
+    };
+    const dt = t - t0;
+    if (i > 0 && dt < SWAP) {
+      drawText(prev, t0, t0 + SWAP * 0.45, 'out');
+      drawText(text, t0 + SWAP * 0.5, t0 + SWAP, 'in');
+    } else {
+      drawText(text, -10, -10, 'in');
+    }
+    g.letterSpacing = '0px';
+  };
+
+  // ===========================================================================
+  // THE BELL AND THE CLERK
+  // ===========================================================================
+  const BELL = { x: 614, y: 842 };
+  const strikeAt = t => Math.max(Math.exp(-Math.max(0, t - T_BELL_1) * 3) * (t >= T_BELL_1 ? 1 : 0),
+    Math.exp(-Math.max(0, t - T_BELL_2) * 3) * (t >= T_BELL_2 ? 1 : 0));
+  const pawAt = t => {
+    const hit = (tb) => {
+      if (t < tb - 0.45 || t > tb + 0.6) return 0;
+      return t < tb ? ease((t - (tb - 0.45)) / 0.45) : 1 - ease((t - tb) / 0.6);
+    };
+    return Math.max(hit(T_BELL_1), hit(T_BELL_2));
+  };
+  const drawBell = (g, t) => {
+    const press = pawAt(t) > 0.92 ? 3 : 0;
+    const ring = strikeAt(t);
+    g.fillStyle = css(hex('#2a1b10'));
+    g.beginPath();
+    g.ellipse(BELL.x, BELL.y + 10, 30, 7, 0, 0, TAU);
+    g.fill();
+    const gr = g.createLinearGradient(BELL.x - 26, 0, BELL.x + 26, 0);
+    gr.addColorStop(0, css(hex('#6d4c1f')));
+    gr.addColorStop(0.35, css(mix(hex('#e8c46e'), hex('#fff6d8'), ring * 0.8)));
+    gr.addColorStop(0.7, css(hex('#a87a34')));
+    gr.addColorStop(1, css(hex('#4d3412')));
+    g.fillStyle = gr;
+    g.beginPath();
+    g.ellipse(BELL.x, BELL.y + 8, 26, 22, 0, Math.PI, TAU);
+    g.closePath();
+    g.fill();
+    g.fillStyle = css(hex('#8f6a2c'));
+    g.fillRect(BELL.x - 2, BELL.y - 21 + press, 4, 9);
+    g.beginPath();
+    g.ellipse(BELL.x, BELL.y - 21 + press, 6, 2.5, 0, 0, TAU);
+    g.fill();
+    if (ring > 0.01) {
+      g.globalCompositeOperation = 'lighter';
+      const rg = g.createRadialGradient(BELL.x - 6, BELL.y - 4, 0, BELL.x - 6, BELL.y - 4, 46);
+      rg.addColorStop(0, `rgba(255,236,180,${0.55 * ring})`);
+      rg.addColorStop(1, 'rgba(255,236,180,0)');
+      g.fillStyle = rg;
+      g.fillRect(BELL.x - 60, BELL.y - 60, 120, 100);
+      g.globalCompositeOperation = 'source-over';
+    }
+  };
+
+  // where the clerk looks: 0 = down the corridor (back of the head), 1 = full profile left
+  const LOOK_KEYS = [
+    [0, 0.42], [T_STRANGER + 1.2, 0.42], [T_STRANGER + 2.2, 0.92], [T_A - 0.3, 0.92], [T_A + 0.5, 0.36],
+    [T_STRANGER_GO + 0.3, 0.36], [T_STRANGER_GO + 1.2, 0.66], [T1_IN + 1, 0.5], [T_COACH - 0.2, 0.42], [T_COACH + 0.8, 0.95],
+    [T_BELL_2 + 0.6, 0.85], [T_B + 0.6, 0.3], [T_B + 8, 0.34], [T_B + 9.5, 0.62], [T_C - 0.5, 0.66], [T_C + 1.2, 0.84],
+    [T_C + 6, 0.5], [T_TEASE - 0.5, 0.42], [T_TEASE + 0.6, 0.12], [T_TEASE + 4.5, 0.12], [T_TEASE + 5.5, 0.42], [DURATION, 0.42]
+  ];
+  // the clerk yawns once the stranger is in, and flattens its ears at tomorrow's board
+  const yawnAt = t => pulse(t, T1_IN + 2.2, T1_IN + 3.6, 0.45);
+  const flatAt = t => pulse(t, T_TEASE + 0.9, T_TEASE + 4.6, 0.35);
+  const keyed = (keys, t) => {
+    let i = 0;
+    while (i + 1 < keys.length && keys[i + 1][0] <= t) i++;
+    if (i + 1 >= keys.length) return keys[keys.length - 1][1];
+    const [ta, va] = keys[i], [tb, vb] = keys[i + 1];
+    return lerp(va, vb, ease((t - ta) / (tb - ta)));
+  };
+  const BLINKS = [3.4, 12.2, 19.4, 31.4, 45.2, 53.6, 57.6];
+  const blinkAt = t => {
+    let v = 0;
+    for (const tb of BLINKS) v = Math.max(v, pulse(t, tb, tb + 0.34, 0.12));
+    return v;
+  };
+  const CAT = { x: 742, y: 846 };
+  const bodyPath = g => {
+    g.beginPath();
+    g.moveTo(-78, 0);
+    g.bezierCurveTo(-94, -42, -88, -100, -72, -138);
+    g.bezierCurveTo(-64, -158, -52, -176, -36, -186);
+    g.bezierCurveTo(-16, -197, 12, -193, 30, -177);
+    g.bezierCurveTo(52, -155, 70, -121, 84, -80);
+    g.bezierCurveTo(97, -45, 97, -14, 85, 0);
+    g.closePath();
+  };
+  const drawClerk = (g, t) => {
+    const look = keyed(LOOK_KEYS, t);
+    const yawn = yawnAt(t);
+    const flat = flatAt(t);
+    const blink = Math.max(blinkAt(t), smooth(0.15, 0.5, yawn));
+    const paw = pawAt(t);
+    const breath = 1 + 0.01 * Math.sin(TAU * t / 3);
+    const perk = Math.max(strikeAt(t) * 0.8, pulse(t, T_COACH + 0.1, T_COACH + 1.6, 0.25));
+    const tailSway = Math.sin(TAU * t / 6) * 0.5 + Math.sin(TAU * t / 2.5) * 0.15;
+    g.save();
+    g.translate(CAT.x, CAT.y);
+    const black = css(hex('#0b0a0c'));
+    // tail hanging over the counter's edge
+    g.strokeStyle = black;
+    g.lineCap = 'round';
+    g.lineWidth = 17;
+    g.beginPath();
+    g.moveTo(58, -18);
+    g.bezierCurveTo(108, -6, 112, 34, 100 + tailSway * 6, 70);
+    g.stroke();
+    g.lineWidth = 13;
+    g.beginPath();
+    g.moveTo(100 + tailSway * 6, 70);
+    g.quadraticCurveTo(95 + tailSway * 14, 100, 78 + tailSway * 22, 108);
+    g.stroke();
+    // body
+    g.save();
+    g.scale(1, breath);
+    g.fillStyle = black;
+    bodyPath(g);
+    g.fill();
+    // a soft sheen along the back
+    const sheen = g.createLinearGradient(20, -190, 90, -60);
+    sheen.addColorStop(0, 'rgba(120,110,130,0.10)');
+    sheen.addColorStop(1, 'rgba(120,110,130,0)');
+    g.fillStyle = sheen;
+    bodyPath(g);
+    g.fill();
+    g.restore();
+    // the reaching paw
+    if (paw > 0.001) {
+      const tip = { x: lerp(-60, BELL.x - CAT.x + 6, paw), y: lerp(-40, BELL.y - CAT.y - 24, paw) };
+      g.strokeStyle = black;
+      g.lineWidth = 19;
+      g.beginPath();
+      g.moveTo(-50, -112);
+      g.quadraticCurveTo(lerp(-70, -120, paw), lerp(-80, -78, paw), tip.x, tip.y);
+      g.stroke();
+      g.fillStyle = black;
+      g.beginPath();
+      g.ellipse(tip.x - 2, tip.y + 3, 13, 9, -0.2, 0, TAU);
+      g.fill();
+    }
+    // head
+    const turn = look;
+    const hx = -36 - 10 * turn, hy = -214 + 3 * yawn;
+    g.save();
+    g.translate(hx, hy);
+    g.rotate(-0.06 * turn + 0.04 * paw - 0.12 * yawn);
+    g.fillStyle = black;
+    g.beginPath();
+    g.ellipse(0, 0, 47 - 4 * turn, 41, 0, 0, TAU);
+    g.fill();
+    // muzzle grows as the head turns into profile; it opens for the yawn
+    const mzx = -30 - 22 * turn, mzy = 12 + 2 * turn;
+    g.beginPath();
+    g.ellipse(mzx, mzy - 3 * yawn, 18 + 8 * turn, 16 - 3 * yawn, 0.15 - 0.25 * yawn, 0, TAU);
+    g.fill();
+    if (yawn > 0.01) {
+      const open = 16 * yawn;
+      g.fillStyle = css(hex('#c9566a'));
+      g.beginPath();
+      g.moveTo(mzx + 10, mzy + 2);
+      g.lineTo(mzx - 22 - 6 * turn, mzy + 2 - open * 0.25);
+      g.lineTo(mzx - 18 - 6 * turn, mzy + 2 + open);
+      g.closePath();
+      g.fill();
+      g.fillStyle = black;
+      g.beginPath();
+      g.ellipse(mzx - 4, mzy + 6 + open, 16 + 4 * turn, 7, 0.35 * yawn, 0, TAU);
+      g.fill();
+      g.fillStyle = 'rgba(250,245,235,0.9)';
+      g.fillRect(mzx - 20 - 6 * turn, mzy + 1 - open * 0.2, 2, 4);
+    }
+    // ears (near and far): they perk at the bell and go flat at tomorrow's board
+    const earTip = (bx, by, tx, ty, wdt) => {
+      g.beginPath();
+      g.moveTo(bx - wdt, by);
+      g.quadraticCurveTo(tx - 3, ty + 8, tx, ty);
+      g.quadraticCurveTo(tx + 5, ty + 10, bx + wdt, by + 4);
+      g.closePath();
+      g.fill();
+    };
+    const farTip = [24 - 18 * turn + 4 * perk + 24 * flat, -76 + 6 * perk + 22 * flat];
+    const nearTip = [-16 - 26 * turn - 6 * perk - 24 * flat, -74 + 4 * perk + 20 * flat];
+    g.fillStyle = black;
+    earTip(18 - 16 * turn, -30, farTip[0], farTip[1], 16);
+    earTip(-14 - 18 * turn, -30, nearTip[0], nearTip[1], 15);
+    // inner ear catches the corridor light
+    g.fillStyle = 'rgba(160,96,70,0.55)';
+    g.beginPath();
+    g.moveTo(-10 - 18 * turn, -36);
+    g.quadraticCurveTo(lerp(-10 - 18 * turn, nearTip[0], 0.6), lerp(-36, nearTip[1], 0.75), nearTip[0] + 1, nearTip[1] + 8);
+    g.quadraticCurveTo(-6 - 20 * turn, -50 + 20 * flat, -2 - 18 * turn, -34);
+    g.closePath();
+    g.fill();
+    // eye (left eye, visible in profile)
+    if (turn > 0.15) {
+      const ew = 9 * Math.min(1, (turn - 0.15) / 0.5), eh = 6.5 * (1 - blink);
+      const ex = -30 - 14 * turn, ey = -6;
+      if (eh > 0.4) {
+        g.fillStyle = css(hex('#ffb12e'));
+        g.beginPath();
+        g.ellipse(ex, ey, ew, eh, -0.1, 0, TAU);
+        g.fill();
+        g.fillStyle = css(hex('#1a0d02'));
+        g.beginPath();
+        g.ellipse(ex - ew * 0.25, ey, Math.max(0.8, ew * 0.18), eh * 0.9, -0.1, 0, TAU);
+        g.fill();
+        g.fillStyle = 'rgba(255,250,235,0.85)';
+        g.beginPath();
+        g.arc(ex + ew * 0.35, ey - eh * 0.35, 1.3, 0, TAU);
+        g.fill();
+      } else {
+        g.strokeStyle = css(hex('#ffb12e'), 0.5);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.moveTo(ex - ew, ey);
+        g.lineTo(ex + ew, ey);
+        g.stroke();
+      }
+    }
+    // whiskers
+    g.strokeStyle = 'rgba(242,238,228,0.85)';
+    g.lineWidth = 1.2;
+    const mx = -40 - 26 * turn, my = 16 - 4 * yawn;
+    for (let i = 0; i < 4; i++) {
+      g.beginPath();
+      g.moveTo(mx, my + i * 3);
+      g.quadraticCurveTo(mx - 50 - 10 * turn, my - 6 + i * 6, mx - 92 - 16 * turn + i * 6, my + 4 + i * 10);
+      g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(-6, 18);
+    g.quadraticCurveTo(30, 12, 62, 22);
+    g.stroke();
+    g.restore();
+    // rim light from the corridor along the left edge of the cat
+    g.globalCompositeOperation = 'lighter';
+    const rim = g.createLinearGradient(-130, 0, 10, 0);
+    rim.addColorStop(0, 'rgba(255,190,120,0.35)');
+    rim.addColorStop(1, 'rgba(255,190,120,0)');
+    g.strokeStyle = rim;
+    g.lineWidth = 2.5;
+    g.beginPath();
+    g.moveTo(-78, -4);
+    g.bezierCurveTo(-94, -42, -88, -100, -72, -138);
+    g.bezierCurveTo(-64, -158, -52, -176, -40, -184);
+    g.stroke();
+    g.beginPath();
+    g.ellipse(hx, hy, 47 - 4 * look, 41, 0, Math.PI * 0.75, Math.PI * 1.45);
+    g.stroke();
+    g.globalCompositeOperation = 'source-over';
+    g.restore();
+  };
+
+  // headlights of the coach sweeping across the lobby: two soft pools of light
+  const drawHeadlights = (g, t) => {
+    const u = (t - T_COACH) / (1.6 * BAR);
+    if (u <= 0 || u >= 1) return;
+    g.globalCompositeOperation = 'lighter';
+    const a = 0.2 * Math.sin(Math.PI * u);
+    for (const [off, yy] of [[0, 430], [260, 470]]) {
+      const cx = lerp(-420, 1320, ease(u)) - off;
+      g.save();
+      g.translate(cx, yy);
+      g.scale(1.45, 1);
+      const gr = g.createRadialGradient(0, 0, 0, 0, 0, 230);
+      gr.addColorStop(0, `rgba(255,242,214,${a})`);
+      gr.addColorStop(0.45, `rgba(255,242,214,${a * 0.45})`);
+      gr.addColorStop(1, 'rgba(255,242,214,0)');
+      g.fillStyle = gr;
+      g.fillRect(-230, -230, 460, 460);
+      g.restore();
+    }
+    g.globalCompositeOperation = 'source-over';
+  };
+
+  // ===========================================================================
+  // FRAME
+  // ===========================================================================
+  const N_GUESTS = 110;
+  window.renderFrame = function (time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    const g = ctx;
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = 'source-over';
+    g.filter = 'none';
+    g.shadowBlur = 0;
+    g.shadowColor = 'rgba(0,0,0,0)';
+    g.lineWidth = 1;
+    g.lineJoin = 'miter';
+    g.lineCap = 'butt';
+    g.setLineDash([]);
+    g.textAlign = 'left';
+    g.textBaseline = 'alphabetic';
+    g.letterSpacing = '0px';
+    g.drawImage(bg, 0, 0);
+
+    // everyone in the corridor, sorted far to near with the rooms
+    const items = [];
+    for (let n = 1; n <= N_ROOMS; n++) items.push({ z: roomZ(n) + 0.55, room: n });
+    const figures = [];
+    for (let n = 1; n <= N_GUESTS; n++) {
+      let p = moveA(n, t);
+      if (p) { p.v = LOOKS[n]; figures.push(p); }
+      p = moveB(n, t);
+      if (p) { p.v = n === 1 ? STRANGER_LOOK : LOOKS[n - 1]; figures.push(p); }
+    }
+    for (let k = 1; k <= N_CATS; k++) {
+      const p = coachCat(k, t);
+      if (p) figures.push(p);
+    }
+    const st = stranger(t);
+    if (st) figures.push(st);
+    const lobby = [];
+    for (const p of figures) {
+      if (p.Z < Z_LOBBY) lobby.push(p);
+      else items.push({ z: p.Z, fig: p });
+    }
+    items.sort((a, b2) => b2.z - a.z);
+    const drawFigure = p => {
+      const k = F / p.Z;
+      const x = sx(p.X, p.Z), y = sy(0, p.Z);
+      const insideRoom = Math.abs(p.X) > W - 0.3 && p.Z > Z_LOBBY;
+      if (insideRoom) {
+        // a figure stepping through a door is seen only through the doorway
+        const n = Math.max(1, Math.round((p.Z - Z_FIRST) / GAP) + 1);
+        const s = roomSide(n), z = roomZ(n);
+        g.save();
+        g.beginPath();
+        const xEdge = sx(s * W, z + DOOR_W / 2);
+        if (s < 0) g.rect(xEdge, 0, 900 - xEdge, 900); else g.rect(0, 0, xEdge, 900);
+        const pts = wallPts(s, z - DOOR_W / 2, z + DOOR_W / 2, 0, DOOR_H);
+        for (let i = 0; i < 4; i++) {
+          const q = pts[s < 0 ? i : 3 - i];
+          if (i === 0) g.moveTo(sx(q[0], q[2]), sy(q[1], q[2])); else g.lineTo(sx(q[0], q[2]), sy(q[1], q[2]));
+        }
+        g.closePath();
+        g.clip();
+      }
+      if (p.cat) drawCatWalker(g, x, y, k, p, p.Z);
+      else drawPerson(g, x, y, k, p, css(fogged(mix(C.figure, hex('#2a1f18'), 1 - p.v.shade), p.Z)));
+      if (insideRoom) g.restore();
+    };
+    for (const it of items) {
+      if (it.room) drawRoom(g, it.room, roomState(it.room, t));
+      else drawFigure(it.fig);
+    }
+
+    g.drawImage(fgWall, 0, 0);
+    drawLine(g, LINE_A, t, 92, 30);
+    drawLine(g, LINE_B, t, 146, 22);
+    lobby.sort((a, b2) => b2.Z - a.Z);
+    for (const p of lobby) drawFigure(p);
+    g.drawImage(fgCounter, 0, 0);
+    drawBell(g, t);
+    drawClerk(g, t);
+    drawHeadlights(g, t);
+    return canvas.toDataURL('image/png');
+  };
+  window.ready = true;
+})();
+
+
+
+
+document.body.appendChild(canvas);
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 120\\n// DURATION: 60\\n// FORM: late arrival 0-2 | make room 2-10 | infinite transfer 10-14 | half-empty stop-time 14-17 | cats take the odds 17-22 | night desk reset 22-30\\n// TONAL CENTER: Ab major\\n// MOTIF: Ab4 C5 Eb5 Gb5 F5 — Ab4 quarter on 1, eighth rest on 2, C5 on the and of 2, Eb5 quarter on 3, Gb5 and F5 eighths on 4 and the and of 4\\n// HARMONIC PLAN: Abmaj7 | F7 | Bbm7 | Eb7 four-bar turnaround throughout; stop-time compresses to Bbm7 | Eb7 | Eb7; the cats' section extends a fifth bar of Eb7; cycle 29 is Eb7 turning back to Abmaj7\\n// GROOVE: synthesized percussion — ride-like ticks on 1 2 3 4, swung skip ticks on the and of 2 and the and of 4, filtered pink-noise brush swishes on 2 and 4, no kick or snare; medium swing with long-short eighths, behind-the-beat piano and firmly walking quarter-note bass\\nsamples('https://strudel.b-cdn.net/piano.json')\\n\\nconst tick = (p, g) => note(p).s('triangle').hpf(1000).attack(0.001).decay(0.05).sustain(0).release(0.03).room(0.25).roomsize(1.6).pan(0.38).gain(g)\\nconst brush = (p, g) => s(p).hpf(2200).lpf(9000).attack(0.015).decay(0.22).sustain(0).release(0.12).room(0.3).roomsize(1.8).pan(0.62).gain(g)\\n\\nconst groove = stack(\\n  tick(\\\"ab6 ab6 ab6 ab6\\\", 0.16),\\n  tick(\\\"~ [~ ~ gb6] ~ [~ ~ gb6]\\\", 0.12).degradeBy(0.1),\\n  brush(\\\"~ pink ~ pink\\\", 0.3)\\n)\\nconst grooveDense = stack(\\n  tick(\\\"ab6 ab6 ab6 ab6\\\", 0.16),\\n  tick(\\\"[~ ~ gb6] [~ ~ gb6] [~ ~ gb6] [~ ~ gb6]\\\", 0.13),\\n  brush(\\\"~ pink ~ pink\\\", 0.32),\\n  brush(\\\"[~ ~ pink] ~ [~ ~ pink] ~\\\", 0.16)\\n)\\nconst grooveStop = stack(\\n  tick(\\\"ab6 ~ ~ ~\\\", 0.18),\\n  brush(\\\"pink ~ ~ ~\\\", 0.34)\\n)\\n\\nconst walk = note(\\\"\u003c[ab2 c3 eb3 [gb3 f3]] [f2 a2 c3 eb3] [bb2 db3 f3 ab3] [eb2 bb2 db3 g2]>\\\")\\nconst walkDouble = walk.ply(2).add(note(\\\"[0 1]*4\\\"))\\nconst walk5 = note(\\\"\u003c[ab2 c3 eb3 [gb3 f3]] [f2 a2 c3 eb3] [bb2 db3 f3 ab3] [eb2 bb2 db3 g2] [eb2 db3 bb2 g2]>\\\")\\nconst stopBass = note(\\\"\u003cbb1 eb2 eb2>\\\")\\nconst bassLine = arrange([2, walk], [8, walk], [4, walkDouble], [3, stopBass], [5, walk5], [8, walk])\\n\\nconst shells = note(\\\"\u003c[c4,eb4,g4] [a3,eb4,g4] [ab3,db4,f4] [g3,db4,f4]>\\\").struct(\\\"x [~ ~ x] ~ ~\\\").sometimesBy(0.25, x => x.late(0.03))\\nconst shells5 = note(\\\"\u003c[c4,eb4,g4] [a3,eb4,g4] [ab3,db4,f4] [g3,db4,f4] [g3,db4,f4]>\\\").struct(\\\"x [~ ~ x] ~ ~\\\").sometimesBy(0.25, x => x.late(0.03))\\nconst shellsStop = note(\\\"\u003c[ab3,db4,f4] [g3,db4,f4] [g3,db4,f4]>\\\").struct(\\\"x ~ ~ ~\\\")\\n\\nconst hook = note(\\\"\u003c[ab4 [~ ~ c5] eb5 [gb5 ~ f5]] [~ ~ [~ ~ eb5] [db5 ~ c5]]>\\\")\\nconst hookClip = hook.clip(0.45)\\nconst hookHi = hook.add(note(12)).velocity(0.8)\\nconst hookRoll = note(\\\"\u003c[[ab4 c5 eb5 gb5 f5] ~ ~ ~] ~ [[ab4 c5 eb5 gb5 f5] ~ ~ ~]>\\\").velocity(0.6)\\nconst hookShort = note(\\\"\u003c[ab4 [~ ~ c5] eb5 ~] [~ ~ ~ [gb5 ~ f5]]>\\\").velocity(0.85)\\n\\nconst bell = stack(\\n  note(\\\"e7 ~ ~ ~\\\").s('sine').attack(0.002).decay(0.3).sustain(0.2).release(0.95).clip(1.2).room(0.5).roomsize(2.4).pan(0.55).gain(0.13),\\n  note(\\\"e7 ~ ~ ~\\\").add(note(15.4)).s('sine').attack(0.001).decay(0.25).sustain(0.12).release(0.6).clip(1.2).room(0.5).roomsize(2.4).pan(0.5).gain(0.05)\\n)\\n\\n$: arrange([10, groove], [4, grooveDense], [3, grooveStop], [5, groove], [8, groove])\\n\\n$: stack(\\n  bassLine.s('triangle').lpf(800).lpq(3).attack(0.005).decay(0.18).sustain(0).release(0.08).room(0.12).pan(0.44).gain(0.4),\\n  bassLine.s('sine').lpf(500).attack(0.004).decay(0.22).sustain(0).release(0.1).pan(0.5).gain(0.1)\\n)\\n\\n$: arrange([2, silence], [8, shells], [4, shells], [3, shellsStop], [5, shells5], [6, shells], [2, silence]).s('piano').late(0.015).room(0.28).roomsize(2).pan(0.4).gain(0.3)\\n\\n$: arrange([2, silence], [8, hook], [4, hookClip], [3, hookRoll], [3, hook], [2, hookHi], [4, hook], [2, hookShort], [2, silence]).s('piano').room(0.32).roomsize(2.2).pan(0.58).gain(0.42)\\n\\n$: arrange([2, silence], [1, bell], [6, silence], [1, bell], [20, silence])\",\"bpm\":120,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.5,\"cycles\":30,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  
+  <style>
+    
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100vw;
+      height: 100vh;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+  </style>
+    <style>
+      #audio-controls {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1000;
+      }
+      #audio-toggle {
+        background: rgba(0, 20, 40, 0.8);
+        border: 1px solid #66ffcc;
+        color: #66ffcc;
+        padding: 10px 20px;
+        font-family: monospace;
+        cursor: pointer;
+        font-size: 14px;
+        box-shadow: 0 0 10px rgba(102, 255, 204, 0.3);
+        transition: all 0.3s;
+      }
+      #audio-toggle:hover {
+        background: rgba(0, 30, 60, 0.9);
+        box-shadow: 0 0 15px rgba(102, 255, 204, 0.5);
+      }
+    </style>
+</head>
+<body>
+    <div id="audio-controls">
+      <button id="audio-toggle" disabled title="Loading Strudel…">⏳ Loading…</button>
+    </div>
+  <script>
+window._errors = [];
+window.addEventListener('error', (e) => {
+  window._errors.push(e.message + ' at ' + e.filename + ':' + e.lineno);
+  console.error(e.message, e.filename, e.lineno);
+});
+
+// DURATION: 60
+// @asset-begin principledMotion@1
+// principledMotion v1: the twelve principles of animation as small closed-form functions.
+// Every function is pure (no clocks, no Math.random), so renderFrame(t) stays seekable and a
+// loop closes wherever its keys close. Written for the pencil-test film (2026-11-27) after
+// dylantarre/animation-principles: anticipation that moves against the action, slow in and
+// slow out, ballistic arcs with hang time, follow-through that overshoots and settles,
+// overlapping drag down a chain, squash and stretch that keeps the area, pose-to-pose keys
+// with holds and breakdowns, drawings held on twos, and a seeded boil for hand-drawn lines.
+const principledMotion = (() => {
+  const clamp01 = (x) => Math.max(0, Math.min(1, x));
+  const lerp = (a, b, u) => a + (b - a) * u;
+  const TAU = Math.PI * 2;
+
+  // 6 SLOW IN / SLOW OUT ----------------------------------------------------------------
+  // k = 2 is a gentle ease, 3 a held key, 5 a heavy one. inOut cushions both keys.
+  const ease = {
+    linear: (u) => clamp01(u),
+    in: (u, k = 2) => Math.pow(clamp01(u), k),
+    out: (u, k = 2) => 1 - Math.pow(1 - clamp01(u), k),
+    inOut: (u, k = 2) => {
+      u = clamp01(u);
+      return u < 0.5 ? Math.pow(2 * u, k) / 2 : 1 - Math.pow(2 - 2 * u, k) / 2;
+    },
+    hold: () => 0
+  };
+  const easeFn = (e) => (typeof e === 'function' ? e : ease[e || 'inOut']);
+
+  // A timing chart: where each of n drawings sits between two keys (0 and 1).
+  // favour 'both' clusters drawings near both keys (slow in and out), 'start' near the first,
+  // 'end' near the second, 'even' spaces them evenly. Draw the ticks to show the spacing.
+  function spacing(n, favour = 'both', k = 2) {
+    const f = favour === 'start' ? (u) => ease.out(u, k) : favour === 'end' ? (u) => ease.in(u, k)
+      : favour === 'even' ? ease.linear : (u) => ease.inOut(u, k);
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(f(n === 1 ? 1 : i / (n - 1)));
+    return out;
+  }
+
+  // 2 ANTICIPATION ----------------------------------------------------------------------
+  // Progress of a move from 0 to 1 that first travels BACKWARDS by `amount` of the travel during
+  // the first `share` of the time (the wind-up, classic ratio 1:2 → share 0.33), then snaps
+  // forward with an ease-out. amount 0.1 is subtle, 0.25 cartoon, 0.4 theatrical.
+  function anticipate(u, { amount = 0.15, share = 0.33, k = 3 } = {}) {
+    u = clamp01(u);
+    if (u >= 1) return 1;
+    if (u < share) return -amount * Math.sin((u / share) * Math.PI / 2);
+    return lerp(-amount, 1, ease.out((u - share) / (1 - share), k));
+  }
+
+  // 5 FOLLOW THROUGH --------------------------------------------------------------------
+  // Unit step response of a damped spring, dt seconds after a stop: 0 before, then it overshoots
+  // 1 and settles. freq in Hz (2-4 for ears and tails, 1 for a body), zeta 0.2 springy, 0.5 firm.
+  function settle(dt, { freq = 2.5, zeta = 0.3 } = {}) {
+    if (dt <= 0) return 0;
+    const w = TAU * freq, wd = w * Math.sqrt(1 - zeta * zeta);
+    return 1 - Math.exp(-zeta * w * dt) * (Math.cos(wd * dt) + (zeta * w / wd) * Math.sin(wd * dt));
+  }
+  // The same spring as a wobble around rest: an impulse that kicks to `amp` and dies out.
+  // Use it for the jiggle after a landing or a head turn.
+  function wobble(dt, { freq = 3, zeta = 0.25, amp = 1 } = {}) {
+    if (dt <= 0) return 0;
+    const w = TAU * freq, wd = w * Math.sqrt(1 - zeta * zeta);
+    return amp * Math.exp(-zeta * w * dt) * Math.sin(wd * dt);
+  }
+  // A move from a to b keyed at t0 lasting dur that overshoots b and settles (an eased move
+  // whose last stretch is a spring). For a stop without the spring use ease.out.
+  function overshoot(t, t0, dur, a, b, { freq = 2.5, zeta = 0.35 } = {}) {
+    if (t <= t0) return a;
+    return lerp(a, b, settle((t - t0) * (1.6 / dur), { freq, zeta }));
+  }
+
+  // 1 SQUASH AND STRETCH ----------------------------------------------------------------
+  // Scale factors that keep the area (2D) or the volume (3D): s > 1 stretches along the axis,
+  // s < 1 squashes. Push s by 1.1-1.2 for weight, 1.4-1.8 for a cartoon.
+  function squash(s, dims = 2) {
+    const across = dims === 3 ? 1 / Math.sqrt(s) : 1 / s;
+    return { along: s, across };
+  }
+  // Stretch along the direction of travel from a velocity (units per second).
+  function stretchFromVelocity(vx, vy, { gain = 0.0012, max = 0.6 } = {}) {
+    const speed = Math.hypot(vx, vy);
+    const s = 1 + Math.min(max, speed * gain);
+    return { angle: Math.atan2(vy, vx), along: s, across: 1 / s };
+  }
+
+  // 7 ARCS ------------------------------------------------------------------------------
+  // A curved path from p0 to p1. lift is the bow as a fraction of the distance (0.1-0.2
+  // organic, 0.3-0.5 sweeping), on the left of travel for positive lift. bias < 0.5 puts the
+  // bow near the start (an ease-out read), > 0.5 near the end.
+  function arc(p0, p1, { lift = 0.2, bias = 0.5 } = {}) {
+    const dx = p1[0] - p0[0], dy = p1[1] - p0[1], d = Math.hypot(dx, dy) || 1;
+    const cx = p0[0] + dx * bias - (dy / d) * lift * d * 2, cy = p0[1] + dy * bias + (dx / d) * lift * d * 2;
+    return (u) => {
+      u = clamp01(u);
+      const a = (1 - u) * (1 - u), b = 2 * u * (1 - u), c = u * u;
+      return [a * p0[0] + b * cx + c * p1[0], a * p0[1] + b * cy + c * p1[1]];
+    };
+  }
+  // A jump under gravity from p0 to p1 (screen coords, y down) peaking `apex` px above the
+  // higher endpoint. Horizontal speed is constant, vertical is a true parabola. hang > 0
+  // remaps time so the body lingers at the top (exaggeration: 0.3 for a cartoon float).
+  // Returns u => { x, y, vx, vy } with velocities per unit of u.
+  function ballistic(p0, p1, { apex = 120, hang = 0 } = {}) {
+    const top = Math.min(p0[1], p1[1]) - apex;
+    // y(u) = p0y + B u + A u^2 through p1 with its minimum at `top`
+    const h0 = p0[1] - top, h1 = p1[1] - top;
+    const r = Math.sqrt(h0) / (Math.sqrt(h0) + Math.sqrt(h1)); // u at the apex
+    const A = h0 / (r * r), B = -2 * A * r;
+    const H = Math.max(0, Math.min(0.9, hang));
+    // slow the clock at the apex and speed it at take-off and landing; still 0 → r → 1
+    const warp = (u) => {
+      if (H === 0) return [u, 1];
+      if (u <= r) {
+        const s = u / r;
+        return [r * (s + (H * Math.sin(Math.PI * s)) / Math.PI), 1 + H * Math.cos(Math.PI * s)];
+      }
+      const s = (u - r) / (1 - r);
+      return [r + (1 - r) * (s - (H * Math.sin(Math.PI * s)) / Math.PI), 1 - H * Math.cos(Math.PI * s)];
+    };
+    return (u) => {
+      u = clamp01(u);
+      const [w, dw] = warp(u);
+      return {
+        x: lerp(p0[0], p1[0], w),
+        y: p0[1] + B * w + A * w * w,
+        vx: (p1[0] - p0[0]) * dw,
+        vy: (B + 2 * A * w) * dw,
+        apexU: r
+      };
+    };
+  }
+
+  // 5 OVERLAPPING ACTION ----------------------------------------------------------------
+  // A chain that drags behind its driver: link i reads the driver `lag` seconds later than
+  // its parent and adds the parent's angle, so the tip moves last and farthest. driver(t)
+  // returns the root's bend in radians; falloff < 1 calms the tip, > 1 whips it.
+  // Returns the absolute angle of each link (n links). Wrap t into the loop inside driver.
+  function dragChain(driver, t, n, { lag = 0.06, falloff = 1, base = 0 } = {}) {
+    const angles = [];
+    let acc = base;
+    for (let i = 0; i < n; i++) {
+      acc += driver(t - i * lag) * Math.pow(falloff, i);
+      angles.push(acc);
+    }
+    return angles;
+  }
+  // Points along a dragged chain from a root, each link `len` long.
+  function chainPoints(root, angles, len) {
+    const pts = [[root[0], root[1]]];
+    let x = root[0], y = root[1];
+    for (const a of angles) {
+      x += Math.cos(a) * len; y += Math.sin(a) * len;
+      pts.push([x, y]);
+    }
+    return pts;
+  }
+
+  // 4 POSE TO POSE ----------------------------------------------------------------------
+  // keys: [[t, pose, easeIntoThisKey?], ...] with t ascending; a pose is an object of numbers
+  // (or arrays of numbers). Between keys each field eases with the NEXT key's ease ('inOut'
+  // by default, 'hold' to stay on the previous pose until the next key, a function for a
+  // custom curve). Fields named in `angles` interpolate the short way round.
+  // Put breakdowns between extremes as their own keys: the breakdown decides the arc.
+  function poses(keys, { angles = [] } = {}) {
+    const mix = (a, b, u, name) => {
+      if (Array.isArray(a)) return a.map((v, i) => mix(v, b[i], u, name));
+      if (typeof a !== 'number') return u < 1 ? a : b;
+      if (angles.includes(name)) {
+        let d = ((b - a) % TAU + TAU + Math.PI) % TAU - Math.PI;
+        return a + d * u;
+      }
+      return lerp(a, b, u);
+    };
+    return (t) => {
+      if (t <= keys[0][0]) return { ...keys[0][1] };
+      for (let i = 0; i < keys.length - 1; i++) {
+        const [t0, p0] = keys[i], [t1, p1, e] = keys[i + 1];
+        if (t <= t1) {
+          const u = e === 'hold' ? (t >= t1 ? 1 : 0) : easeFn(e)((t - t0) / (t1 - t0));
+          const out = {};
+          for (const name of Object.keys(p0)) out[name] = name in p1 ? mix(p0[name], p1[name], u, name) : p0[name];
+          for (const name of Object.keys(p1)) if (!(name in out)) out[name] = p1[name];
+          return out;
+        }
+      }
+      return { ...keys[keys.length - 1][1] };
+    };
+  }
+
+  // 9 TIMING ----------------------------------------------------------------------------
+  // Drawings held on twos (12 per second) or threes (8): the time the drawing was made.
+  const onTwos = (t, fps = 12) => Math.floor(t * fps + 1e-6) / fps;
+  const drawingIndex = (t, fps = 12) => Math.floor(t * fps + 1e-6);
+
+  // 10 EXAGGERATION ---------------------------------------------------------------------
+  // Push a value away from its rest by k (1.2 subtle, 1.5 consumer, 2 cartoon).
+  const push = (value, rest, k) => rest + (value - rest) * k;
+
+  // 11 SOLID DRAWING / boil -------------------------------------------------------------
+  // Seeded hash in [0, 1) from up to three integers.
+  function hash(a, b = 0, c = 0) {
+    let h = (a * 374761393 + b * 668265263 + c * 2147483647) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  // Per-drawing jitter for a hand-drawn line or a sheet's registration: same drawing, same
+  // offset; next drawing, a new one. Returns [dx, dy] in [-amp, amp].
+  const boil = (drawing, id, amp = 1) => [(hash(drawing, id, 1) * 2 - 1) * amp, (hash(drawing, id, 2) * 2 - 1) * amp];
+
+  // 0..1 window helpers for beats: seg is progress through [a, b], pulse a 0→1→0 bump.
+  const seg = (t, a, b) => clamp01((t - a) / (b - a));
+  const bump = (t, a, b) => { const u = seg(t, a, b); return Math.sin(u * Math.PI); };
+
+  return {
+    clamp01, lerp, ease, spacing, anticipate, settle, wobble, overshoot, squash, stretchFromVelocity,
+    arc, ballistic, dragChain, chainPoints, poses, onTwos, drawingIndex, push, hash, boil, seg, bump
+  };
+})();
+// @asset-end principledMotion@1
+const canvas = document.createElement('canvas');
+canvas.width = 900; canvas.height = 900; document.body.appendChild(canvas);
+const ctx = canvas.getContext('2d');
+window.renderFrame = (() => {
+  const M = principledMotion;
+  const W = 900, H = 900, DURATION = 60, BEAT = 0.625, BAR = 2.5;
+  const TAU = Math.PI * 2;
+  const { clamp01, lerp, seg, hash } = M;
+
+  // ---------------------------------------------------------------- palette
+  const C = {
+    desk: '#16151a', paper: '#eee8da', paperHi: '#f7f2e6', blue: '#3f7bd6', red: '#c8402f',
+    graphite: '#2c2b31', lead: '#3b3a42', ghost: '#7d7a84', eye: '#e7b23c', peg: '#55565e'
+  };
+  const FONT = "'Bradley Hand', 'Noteworthy', 'Marker Felt', 'Chalkboard SE', cursive";
+
+  // ---------------------------------------------------------------- stage geometry
+  const GROUND = 664, SHELF_TOP = 452, SHELF_X0 = 540, SHELF_X1 = 740;
+  // the scene is staged in world units and filmed 1.22x about a point on the floor
+  const ZK = 1.22, ZX = 430, ZY = 640;
+  const zoom = (g) => g.setTransform(ZK, 0, 0, ZK, ZX * (1 - ZK), ZY * (1 - ZK));
+  const PAPER = { x: 34, y: 22, w: 832, h: 846 };
+  // the jump: launch, airborne, landing (beats on the 96 BPM grid)
+  const T_STAND = 10, T_CROUCH = 20, T_LAUNCH = 27.5, T_AIR = 27.75, T_LAND = 29.375;
+  const T_SIT2 = 31.25, T_FLIP = 52.5;
+
+  // ---------------------------------------------------------------- pencil helpers
+  const offscreen = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  function rough(g, pts, { w = 2, color = C.graphite, alpha = 1, seed = 0, dwg = 0, amp = 1.2, closed = false, passes = 2 } = {}) {
+    g.strokeStyle = color; g.lineCap = 'round'; g.lineJoin = 'round';
+    for (let p = 0; p < passes; p++) {
+      g.globalAlpha = alpha * (p === 0 ? 1 : 0.45);
+      g.lineWidth = p === 0 ? w : w * 0.6;
+      g.beginPath();
+      const n = pts.length;
+      for (let i = 0; i < n + (closed ? 1 : 0); i++) {
+        const q = pts[i % n];
+        const [jx, jy] = M.boil(dwg * 7 + p, seed * 131 + (i % n), amp * (p === 0 ? 1 : 1.8));
+        if (i === 0) g.moveTo(q[0] + jx, q[1] + jy); else g.lineTo(q[0] + jx, q[1] + jy);
+      }
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+  const ellipsePts = (cx, cy, rx, ry, rot = 0, n = 30, a0 = 0, a1 = TAU) => {
+    const out = [], c = Math.cos(rot), s = Math.sin(rot);
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (a1 - a0) * i / n, x = Math.cos(a) * rx, y = Math.sin(a) * ry;
+      out.push([cx + x * c - y * s, cy + x * s + y * c]);
+    }
+    return out;
+  };
+  function stadiumPts(a, b, ra, rb, n = 9) {
+    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]), out = [];
+    for (let i = 0; i <= n; i++) { const t = ang + Math.PI / 2 + Math.PI * i / n; out.push([a[0] + Math.cos(t) * ra, a[1] + Math.sin(t) * ra]); }
+    for (let i = 0; i <= n; i++) { const t = ang - Math.PI / 2 + Math.PI * i / n; out.push([b[0] + Math.cos(t) * rb, b[1] + Math.sin(t) * rb]); }
+    return out;
+  }
+  const polyPath = (g, pts) => { g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.closePath(); };
+  function hand(g, text, x, y, { size = 26, color = C.graphite, alpha = 0.9, rot = 0, dwg = 0, seed = 0, align = 'left' } = {}) {
+    const [jx, jy] = M.boil(dwg, 900 + seed, 0.8);
+    g.save(); g.translate(x + jx, y + jy); g.rotate(rot + (hash(dwg, seed, 3) - 0.5) * 0.012);
+    g.font = `${size}px ${FONT}`; g.fillStyle = color; g.globalAlpha = alpha; g.textAlign = align; g.textBaseline = 'alphabetic';
+    g.fillText(text, 0, 0); g.restore(); g.globalAlpha = 1;
+  }
+
+  // ---------------------------------------------------------------- baked layers
+  const deskLayer = offscreen(W, H);
+  {
+    const g = deskLayer.getContext('2d');
+    const grd = g.createRadialGradient(450, 430, 80, 450, 450, 720);
+    grd.addColorStop(0, '#24222a'); grd.addColorStop(1, '#0e0d11');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    // the peg bar the sheets hang on: fixed to the desk, it never jitters
+    g.fillStyle = '#3a3b42'; g.fillRect(250, 826, 400, 26);
+    g.fillStyle = '#4b4c55'; g.fillRect(250, 826, 400, 5);
+    [[450, 839, 'round'], [330, 839, 'slot'], [570, 839, 'slot']].forEach(([x, y, k]) => {
+      g.fillStyle = '#8b8d96';
+      if (k === 'round') { g.beginPath(); g.arc(x, y, 9, 0, TAU); g.fill(); }
+      else { g.beginPath(); g.roundRect(x - 26, y - 6, 52, 12, 6); g.fill(); }
+    });
+  }
+  // a sheet of animation bond under the lightbox, with three punched holes over the pegs
+  function makeSheet(variant) {
+    const c = offscreen(W, H), g = c.getContext('2d');
+    g.save();
+    g.beginPath(); g.rect(PAPER.x, PAPER.y, PAPER.w, PAPER.h);
+    // punched holes cut out of the sheet
+    g.moveTo(459, 839); g.arc(450, 839, 9, 0, TAU, true);
+    [330, 570].forEach((x) => { g.moveTo(x + 27, 833); g.roundRect(x - 27, 832, 54, 14, 7); });
+    g.clip('evenodd');
+    const grd = g.createRadialGradient(450, 420, 60, 450, 440, 640);
+    grd.addColorStop(0, C.paperHi); grd.addColorStop(1, '#ddd5c4');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    // static tooth of the paper: low-frequency fibres, baked once per sheet
+    for (let i = 0; i < 900; i++) {
+      const x = PAPER.x + hash(variant, i, 1) * PAPER.w, y = PAPER.y + hash(variant, i, 2) * PAPER.h;
+      const a = hash(variant, i, 3) * Math.PI, l = 4 + hash(variant, i, 4) * 14;
+      g.strokeStyle = hash(variant, i, 5) > 0.5 ? 'rgba(120,105,80,0.07)' : 'rgba(255,255,255,0.18)';
+      g.lineWidth = 1; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); g.stroke();
+    }
+    g.restore();
+    // the sheet's own edge shadow
+    g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 2; g.strokeRect(PAPER.x, PAPER.y, PAPER.w, PAPER.h);
+    return c;
+  }
+  const sheets = [0, 1, 2].map(makeSheet);
+
+  // the set: floor line, the shelf (a crate) and the field guide, drawn three times so it boils
+  function makeSet(variant) {
+    const c = offscreen(W, H), g = c.getContext('2d');
+    const d = variant * 97;
+    g.save(); g.beginPath(); g.rect(PAPER.x, PAPER.y, PAPER.w, PAPER.h); g.clip();
+    // blue field guide: 12-field frame line and a centre cross
+    rough(g, [[78, 64], [822, 64], [822, 806], [78, 806]], { w: 1.2, color: C.blue, alpha: 0.32, dwg: d, seed: 1, closed: true, passes: 1, amp: 0.8 });
+    g.save(); zoom(g);
+    rough(g, [[440, 435], [460, 435]], { w: 1.2, color: C.blue, alpha: 0.4, dwg: d, seed: 2, passes: 1 });
+    rough(g, [[450, 425], [450, 445]], { w: 1.2, color: C.blue, alpha: 0.4, dwg: d, seed: 3, passes: 1 });
+    // floor: construction line long, cleanup line shorter
+    rough(g, [[20, GROUND + 1], [820, GROUND - 1]], { w: 1.4, color: C.blue, alpha: 0.5, dwg: d, seed: 4, passes: 1 });
+    rough(g, [[40, GROUND], [SHELF_X0 + 6, GROUND]], { w: 2.4, color: C.graphite, alpha: 0.85, dwg: d, seed: 5 });
+    // floor hatching
+    for (let i = 0; i < 27; i++) {
+      const x = 60 + i * 18 + hash(variant, i, 9) * 6;
+      rough(g, [[x, GROUND + 8], [x - 12, GROUND + 22]], { w: 1.2, color: C.graphite, alpha: 0.35, dwg: d, seed: 20 + i, passes: 1, amp: 0.6 });
+    }
+    // the crate: perspective box, slats, hatched side
+    const x0 = SHELF_X0, x1 = SHELF_X1, y0 = SHELF_TOP, y1 = GROUND, k = 26;
+    rough(g, [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], { w: 2.6, color: C.graphite, alpha: 0.9, dwg: d, seed: 40, closed: true });
+    rough(g, [[x0, y0], [x0 + k, y0 - k * 0.6], [x1 + k, y0 - k * 0.6], [x1, y0]], { w: 2.2, color: C.graphite, alpha: 0.85, dwg: d, seed: 41 });
+    rough(g, [[x1 + k, y0 - k * 0.6], [x1 + k, y1 - k * 0.6], [x1, y1]], { w: 2.2, color: C.graphite, alpha: 0.85, dwg: d, seed: 42 });
+    for (let i = 1; i < 4; i++) {
+      const y = lerp(y0, y1, i / 4);
+      rough(g, [[x0 + 4, y], [x1 - 4, y]], { w: 1.6, color: C.graphite, alpha: 0.55, dwg: d, seed: 43 + i, amp: 0.8 });
+    }
+    for (let i = 0; i < 18; i++) {
+      const y = y0 + 8 + i * 11.5;
+      rough(g, [[x1 + 3, y + 4], [x1 + k - 3, y - 6]], { w: 1.1, color: C.graphite, alpha: 0.4, dwg: d, seed: 60 + i, passes: 1, amp: 0.5 });
+    }
+    rough(g, [[x0 - 30, y0 + 1], [x1 + 50, y0 - 1]], { w: 1.2, color: C.blue, alpha: 0.45, dwg: d, seed: 80, passes: 1 });
+    hand(g, 'crate', x0 + 18, y1 - 18, { size: 18, color: C.blue, alpha: 0.55, dwg: d, seed: 81 });
+    g.restore();
+    // slate, bottom left by the pegs
+    hand(g, 'SC 9   CLAWED   jump to crate', 92, 762, { size: 25, dwg: d, seed: 82 });
+    rough(g, [[92, 771], [430, 769]], { w: 1.4, color: C.graphite, alpha: 0.6, dwg: d, seed: 83, passes: 1 });
+    hand(g, 'line test · on twos · 96 bpm', 92, 796, { size: 19, color: C.blue, alpha: 0.7, dwg: d, seed: 84 });
+    // exposure-sheet box for the timing chart, top left
+    rough(g, [[70, 50], [262, 50], [262, 232], [70, 232]], { w: 1.4, color: C.red, alpha: 0.55, dwg: d, seed: 85, closed: true, passes: 1 });
+    g.restore();
+    return c;
+  }
+  const sets = [0, 1, 2].map(makeSet);
+
+  // graphite scribble that fills the black cat: dense dark tone with lighter strokes on top
+  function makeTone(variant) {
+    const c = offscreen(W, H), g = c.getContext('2d');
+    g.fillStyle = C.graphite; g.fillRect(0, 0, W, H);
+    g.lineCap = 'round';
+    for (let i = 0; i < 1300; i++) {
+      const x = hash(variant + 5, i, 1) * W, y = hash(variant + 5, i, 2) * H, l = 10 + hash(variant + 5, i, 3) * 22;
+      g.strokeStyle = hash(variant + 5, i, 4) > 0.5 ? 'rgba(78,76,88,0.55)' : 'rgba(16,15,19,0.6)';
+      g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + l * 0.8, y - l * 0.6); g.stroke();
+    }
+    return c;
+  }
+  const tones = [0, 1, 2].map(makeTone);
+  const catLayer = offscreen(W, H), cg = catLayer.getContext('2d');
+  const ringLayer = offscreen(W, H), rg = ringLayer.getContext('2d');
+  let slopX = 0, slopY = 0;
+  // fill a rig's silhouette into the cat layer, filmed through the zoom
+  // Layers are cleared and composited only inside the silhouette's screen box (padded), which
+  // keeps seven onion skins cheap. The box of the previous fill is cleared too.
+  let box = [0, 0, W, H], lastBox = [0, 0, W, H];
+  function fillSilhouette(shapes, color) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    shapes.forEach((s) => s.pts.forEach(([x, y]) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }));
+    const sx = (x) => x * ZK + ZX * (1 - ZK), sy = (y) => y * ZK + ZY * (1 - ZK);
+    box = [Math.max(0, Math.floor(sx(x0) - 12)), Math.max(0, Math.floor(sy(y0) - 12)), Math.min(W, Math.ceil(sx(x1) + 12)), Math.min(H, Math.ceil(sy(y1) + 12))];
+    cg.setTransform(1, 0, 0, 1, 0, 0); cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1;
+    cg.clearRect(lastBox[0], lastBox[1], lastBox[2] - lastBox[0], lastBox[3] - lastBox[1]);
+    cg.clearRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
+    lastBox = box;
+    zoom(cg); cg.fillStyle = color;
+    shapes.forEach((s) => { polyPath(cg, s.pts); cg.fill(); });
+    cg.setTransform(1, 0, 0, 1, 0, 0);
+  }
+  const boxW = () => box[2] - box[0], boxH = () => box[3] - box[1];
+  const blitScreen = (layer, alpha) => {
+    if (boxW() <= 0 || boxH() <= 0) return;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, slopX, slopY); ctx.globalAlpha = alpha;
+    ctx.drawImage(layer, box[0], box[1], boxW(), boxH(), box[0], box[1], boxW(), boxH()); ctx.restore();
+  };
+
+  // ---------------------------------------------------------------- the cat rig
+  // A pose: root (x, y) at mid-spine, spine angle a (0 = level, negative = chest up),
+  // stretch sq along the spine (across = 1/sq keeps the area), head offset (hx, hy) and tilt ha in
+  // the body frame, ears (-1 flat .. 1 perked), lid (0 open .. 1 shut), gaze (-1 back .. 1 forward),
+  // feet: front (fx, fy) and hind (bx, by) targets, world space when gw = 1 or body space when 0,
+  // tail: base angle tb and curl tc, haunch: 1 sitting/crouched (big thigh), 0 extended.
+  const L = 46;
+  const rotv = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+  function ik(j, tgt, l1, l2, bend) {
+    let dx = tgt[0] - j[0], dy = tgt[1] - j[1], d = Math.hypot(dx, dy);
+    const dm = Math.min(d, (l1 + l2) * 0.999), base = Math.atan2(dy, dx);
+    const cosA = clamp01((l1 * l1 + dm * dm - l2 * l2) / (2 * l1 * dm) * 0.5 + 0.5) * 2 - 1;
+    const a = base + bend * Math.acos(Math.max(-1, Math.min(1, cosA)));
+    const k = [j[0] + Math.cos(a) * l1, j[1] + Math.sin(a) * l1];
+    const e = [j[0] + Math.cos(base) * dm, j[1] + Math.sin(base) * dm];
+    return [k, e];
+  }
+  function build(p, tailT) {
+    const along = p.sq, across = 1 / p.sq;
+    const toW = (x, y) => { const [rx, ry] = rotv(x * along, y * across, p.a); return [p.x + rx, p.y + ry]; };
+    const chest = toW(L, 0), hips = toW(-L, 0);
+    const shapes = [];
+    const ell = (c, rx, ry, rot) => shapes.push({ pts: ellipsePts(c[0], c[1], rx, ry, rot, 26), id: shapes.length });
+    const stad = (a, b, ra, rb) => shapes.push({ pts: stadiumPts(a, b, ra, rb, 7), id: shapes.length });
+    // legs: far pair first, then body, then near pair
+    const footW = (lx, ly, wx, wy, base) => {
+      const l = toW(base[0] + lx, base[1] + ly);
+      return [lerp(l[0], wx, p.gw), lerp(l[1], wy, p.gw)];
+    };
+    const shoulderL = [L + 6, 20], hipL = [-L - 4, 16];
+    const legs = (far) => {
+      const off = far ? 12 : 0;
+      const sh = toW(shoulderL[0] + off * 0.6, shoulderL[1] - 4 * (far ? 1 : 0));
+      const ft = footW(p.fx + (far ? p.fs : 0), p.fy, p.fxw + (far ? 16 : 0), p.fyw, [L, 0]);
+      const [el, pw] = ik(sh, ft, 48, 46, 1);
+      stad(sh, el, 15, 11); stad(el, pw, 11, 9);
+      ell([pw[0] + 5, pw[1] - 2], 12, 8, 0);
+      const hp = toW(hipL[0] + off * 0.4, hipL[1] - 4 * (far ? 1 : 0));
+      const ht = footW(p.bx + (far ? p.bs : 0), p.by, p.bxw + (far ? 16 : 0), p.byw, [-L, 0]);
+      const [kn, hk] = ik(hp, ht, 52, 52, -1);
+      stad(hp, kn, 18, 12); stad(kn, hk, 11, 9);
+      ell([hk[0] + 6, hk[1] - 2], 13, 8, 0);
+      return { paw: pw, hock: hk };
+    };
+    const farLegs = legs(true);
+    // body: haunch, belly, chest
+    ell(hips, 44 * lerp(0.9, 1.12, p.haunch) * along, 42 * lerp(0.92, 1.1, p.haunch) * across, p.a);
+    stad(hips, chest, 36 * across, 38 * across);
+    ell(chest, 42 * along, 40 * across, p.a);
+    // tail from the rump, dragging behind the body (overlapping action)
+    const root = toW(-L - 34, -14);
+    const angles = M.dragChain(tailT, 0, 9, { lag: 0.07, falloff: 1.05, base: 0 }).map((v, i) => v + p.a * 0.5 + p.tb + p.tc * i);
+    const tail = M.chainPoints(root, angles, p.tl);
+    // a grounded tail lies on the floor instead of passing through it
+    if (p.gw > 0.5) tail.forEach((q) => { q[1] = Math.min(q[1], p.floor - 7); });
+    for (let i = 0; i < tail.length - 1; i++) stad(tail[i], tail[i + 1], lerp(11, 5, i / 8), lerp(11, 5, (i + 1) / 8));
+    // neck and head
+    const headC = toW(L + p.hx, p.hy);
+    stad(toW(L + 6, -14), headC, 26, 24);
+    const ha = p.a * 0.3 + p.ha;
+    const hW = (x, y) => { const [rx, ry] = rotv(x, y, ha); return [headC[0] + rx, headC[1] + ry]; };
+    ell(headC, 39, 35, ha);
+    ell(hW(24, 10), 21, 15, ha + 0.15);       // muzzle
+    ell(hW(-14, 14), 20, 16, ha);             // cheek
+    // ears: base on the skull, tips swing back when flattened
+    const ear = (bx, by, len, lean) => {
+      // perked ears stand up and lean forward a touch; flattened ones swing back and shorten
+      const flat = Math.max(0, -p.ears), perk = Math.max(0, p.ears);
+      const tipA = -Math.PI / 2 + lean + perk * 0.08 - flat * 1.05;
+      const l = len * (1 + 0.1 * perk) * (1 - 0.32 * flat);
+      const b0 = hW(bx - 13, by), b1 = hW(bx + 13, by + 2);
+      const tip = hW(bx + Math.cos(tipA) * l, by + Math.sin(tipA) * l);
+      shapes.push({ pts: [b0, tip, b1, hW(bx, by + 10)], id: shapes.length, ear: true });
+    };
+    ear(-16, -26, 36, -0.32);
+    ear(14, -30, 34, 0.18);
+    const nearLegs = legs(false);
+    return { shapes, chest, hips, headC, ha, hW, tail, root, nearLegs, farLegs };
+  }
+
+  function drawCat(rig, p, { dwg, alpha = 1, ghost = false, eyes = 1, blue = 0.5 }) {
+    const { shapes } = rig;
+    if (ghost) {
+      // an onion-skin drawing on the sheet underneath: a pale wash and one outer contour,
+      // the way the previous drawing reads through the paper on a lightbox
+      fillSilhouette(shapes, C.ghost);
+      const [bx, by] = box, bw = boxW(), bh = boxH();
+      if (bw <= 0 || bh <= 0) return;
+      rg.setTransform(1, 0, 0, 1, 0, 0); rg.globalCompositeOperation = 'source-over'; rg.clearRect(bx - 4, by - 4, bw + 8, bh + 8);
+      for (let k = 0; k < 8; k++) {
+        const a = k * TAU / 8 + hash(dwg, k, 5) * 0.4, r = 2.2 + hash(dwg, k, 6) * 0.6;
+        rg.drawImage(catLayer, bx, by, bw, bh, bx + Math.cos(a) * r, by + Math.sin(a) * r, bw, bh);
+      }
+      rg.globalCompositeOperation = 'destination-out'; rg.drawImage(catLayer, bx, by, bw, bh, bx, by, bw, bh);
+      rg.globalCompositeOperation = 'source-over';
+      blitScreen(catLayer, 0.1 * alpha);
+      blitScreen(ringLayer, 0.75 * alpha);
+    } else {
+      // outline under the fill: the half of each stroke outside the silhouette survives
+      shapes.forEach((s) => rough(ctx, s.pts, { w: 4.2, color: '#1d1c21', alpha, dwg, seed: 300 + s.id, closed: true, passes: 2, amp: 1.1 }));
+      fillSilhouette(shapes, '#000');
+      cg.globalCompositeOperation = 'source-in';
+      cg.drawImage(tones[dwg % 3], 0, 0);
+      cg.globalCompositeOperation = 'source-over';
+      blitScreen(catLayer, alpha);
+    }
+    // blue construction: line of action, head circle, chest and hip masses
+    if (blue > 0) {
+      const b = { w: 1.5, color: C.blue, alpha: blue * alpha, dwg, passes: 1, amp: 1.4 };
+      const loa = [rig.tail[4], rig.root, rig.hips, rig.chest, rig.headC];
+      rough(ctx, smooth(loa), { ...b, seed: 500, w: 1.8 });
+      rough(ctx, ellipsePts(rig.headC[0], rig.headC[1], 42, 42, 0, 24), { ...b, seed: 501, closed: true });
+      rough(ctx, ellipsePts(rig.chest[0], rig.chest[1], 46 * p.sq, 44 / p.sq, p.a, 24), { ...b, seed: 502, closed: true });
+      rough(ctx, ellipsePts(rig.hips[0], rig.hips[1], 48 * p.sq, 46 / p.sq, p.a, 24), { ...b, seed: 503, closed: true });
+      // face cross on the head: where the eyes sit
+      const fc = (u) => rig.hW(lerp(-30, 38, u) * 0.9, lerp(-6, 4, u));
+      rough(ctx, [fc(0), fc(0.5), fc(1)], { ...b, seed: 504 });
+    }
+    if (eyes > 0) drawEyes(rig, p, { dwg, alpha: alpha * eyes, ghost });
+  }
+  const smooth = (pts) => {
+    const out = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      for (let k = 0; k < 4; k++) out.push([lerp(a[0], b[0], k / 4), lerp(a[1], b[1], k / 4)]);
+    }
+    out.push(pts[pts.length - 1]);
+    for (let it = 0; it < 2; it++) for (let i = 1; i < out.length - 1; i++) out[i] = [(out[i - 1][0] + out[i][0] * 2 + out[i + 1][0]) / 4, (out[i - 1][1] + out[i][1] * 2 + out[i + 1][1]) / 4];
+    return out;
+  };
+  function drawEyes(rig, p, { dwg, alpha, ghost }) {
+    const lid = clamp01(p.lid), open = 1 - lid;
+    const g = p.gaze;
+    // 3/4 head: near eye forward, far eye behind the brow; look turns the face toward camera
+    const spots = [[8 - p.look * 10, -2, 1], [30 - p.look * 6, -5, 0.78]];
+    spots.forEach(([ex, ey, sz], i) => {
+      const c = rig.hW(ex, ey);
+      const rx = 9.5 * sz, ry = Math.max(0.6, 8.5 * sz * open);
+      ctx.save(); ctx.translate(c[0], c[1]); ctx.rotate(rig.ha - 0.12);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+      ctx.fillStyle = C.eye; ctx.fill();
+      if (open > 0.25) {
+        ctx.beginPath(); ctx.ellipse(g * 3 * sz, 0, (2 + p.pupil * 3.2) * sz, ry * 0.9, 0, 0, TAU);
+        ctx.fillStyle = '#121115'; ctx.fill();
+        ctx.beginPath(); ctx.arc(-3 * sz + g * 2, -3 * sz * open, 1.8 * sz, 0, TAU);
+        ctx.fillStyle = '#fffaf0'; ctx.fill();
+      }
+      ctx.globalAlpha = 1; ctx.restore();
+      if (!ghost) rough(ctx, ellipsePts(c[0], c[1], rx + 1.5, ry + 1.5, rig.ha - 0.12, 16), { w: 1.6, color: '#121115', alpha: alpha * 0.9, dwg, seed: 700 + i, closed: true, passes: 1, amp: 0.5 });
+    });
+  }
+
+  // ---------------------------------------------------------------- the performance (pose to pose)
+  // base poses, all world-space feet on the ground unless gw = 0
+  const SIT = { x: 214, y: GROUND - 92, a: -0.92, sq: 1, hx: 6, hy: -46, ha: 0.86, ears: 0.2, lid: 0, gaze: 0.6, pupil: 0.25, look: 0.25,
+    fx: 40, fy: 100, fxw: 262, fyw: GROUND - 9, fs: 0, bx: 0, by: 70, bxw: 214, byw: GROUND - 8, bs: 0, gw: 1, tb: 1.75, tc: -0.3, tl: 23, haunch: 1, floor: GROUND };
+  const STAND = { ...SIT, tl: 17, x: 250, y: GROUND - 112, a: -0.08, hx: 12, hy: -40, ha: 0.08, ears: 0.6, fxw: 316, bxw: 196, tb: 3.55, tc: 0.13, haunch: 0.3, look: 0 };
+  const LOOK_UP = { ...STAND, a: -0.16, hy: -46, ha: -0.36, ears: 1, gaze: 1, pupil: 0.5 };
+  const CROUCH = { ...LOOK_UP, x: 254, y: GROUND - 74, a: 0.06, sq: 0.84, hx: 18, hy: -30, ha: -0.42, ears: -0.4, lid: 0.32, pupil: 1, fxw: 322, bxw: 196, tb: 3.05, tc: 0.03, haunch: 1 };
+  const DEEP = { ...CROUCH, y: GROUND - 66, sq: 0.76, x: 246, a: 0.1, hy: -27, lid: 0.38 };
+  const LAUNCH = { ...DEEP, x: 300, y: GROUND - 132, a: -0.62, sq: 1.2, hx: 22, hy: -30, ha: -0.18, ears: -0.7, lid: 0.15, fx: 70, fy: -20, bx: -86, by: 52, gw: 0.0, tb: 3.2, tc: 0.02, haunch: 0 };
+  const TUCK = { ...LAUNCH, a: -0.05, sq: 1.06, ha: 0.12, ears: -0.2, fx: 52, fy: 60, bx: -10, by: 64, haunch: 0.7, tb: 3.45, tc: 0.08 };
+  const REACH = { ...TUCK, a: 0.34, sq: 1.18, ha: 0.25, ears: 0.1, lid: 0, fx: 82, fy: 82, bx: -70, by: 34, haunch: 0.2, tb: 3.6, tc: 0.12 };
+  const LANDQ = { ...STAND, x: 636, y: SHELF_TOP - 72, a: 0.1, sq: 0.7, hx: 18, hy: -28, ha: 0.1, ears: -0.5, lid: 0.5, fxw: 700, fyw: SHELF_TOP - 9, bxw: 600, byw: SHELF_TOP - 8, gw: 1, tb: 3.3, tc: 0.18, haunch: 0.8, pupil: 0.6, floor: SHELF_TOP };
+  const SHELF_STAND = { ...LANDQ, y: SHELF_TOP - 110, a: -0.08, sq: 1, hx: 12, hy: -40, ha: 0.05, ears: 0.6, lid: 0, haunch: 0.3, fxw: 698, bxw: 588, pupil: 0.3 };
+  const SHELF_SIT = { ...SIT, tl: 23, floor: SHELF_TOP, x: 626, y: SHELF_TOP - 92, fxw: 674, fyw: SHELF_TOP - 9, bxw: 626, byw: SHELF_TOP - 8, ha: 0.7 };
+  const LOOK_BACK = { ...SHELF_SIT, a: -0.98, hx: -6, hy: -48, ha: -0.6, gaze: -1, look: -0.4, ears: 0.9, pupil: 0.7 };
+  const LOOK_YOU = { ...SHELF_SIT, ha: 0.55, look: 1, gaze: 0, ears: 0.4, pupil: 0.45 };
+
+  const B = (n) => n * BEAT; // beats on the grid
+  const keys = M.poses([
+    [0, SIT],
+    [T_STAND, SIT, 'hold'],
+    [T_STAND + B(1), { ...SIT, a: -0.6, y: GROUND - 98, ha: 0.5, x: 226, haunch: 0.8 }, 'in'],   // breakdown: chest leads forward
+    [T_STAND + B(2.5), STAND, (u) => M.ease.out(u, 3)],
+    [15, STAND, 'hold'],
+    [15 + B(1.5), LOOK_UP, (u) => M.ease.inOut(u, 3)],
+    [T_CROUCH, LOOK_UP, 'hold'],
+    [T_CROUCH + B(2), CROUCH, (u) => M.ease.inOut(u, 2.5)],
+    [25.625, CROUCH, 'linear'],
+    [T_LAUNCH - B(2.5), DEEP, (u) => M.ease.inOut(u, 2)],
+    [T_LAUNCH, DEEP, 'hold'],
+    [T_AIR, LAUNCH, (u) => M.ease.out(u, 2)],
+    [T_AIR + 0.5, TUCK, 'inOut'],
+    [T_LAND - 0.12, REACH, 'inOut'],
+    [T_LAND, { ...LANDQ, sq: 0.9 }, 'linear'],
+    [T_LAND + 0.17, LANDQ, (u) => M.ease.out(u, 2)],
+    [T_LAND + 1.0, SHELF_STAND, (u) => M.ease.out(u, 2)],
+    [T_SIT2, SHELF_STAND, 'hold'],
+    [T_SIT2 + B(2), SHELF_SIT, 'inOut'],
+    [37.5, SHELF_SIT, 'hold'],
+    [37.5 + B(1.5), LOOK_BACK, (u) => M.ease.inOut(u, 3)],
+    [45, LOOK_BACK, 'hold'],
+    [45 + B(2), LOOK_YOU, (u) => M.ease.inOut(u, 3)],
+    [T_FLIP, LOOK_YOU, 'hold']
+  ], { angles: ['ha'] });
+
+  // the jump's own clock: the body's root rides a ballistic arc with hang time
+  const P0 = [DEEP.x, DEEP.y], P1 = [LANDQ.x, LANDQ.y - 10];
+  const jumpArc = M.ballistic([P0[0] + 30, P0[1] - 40], P1, { apex: 110, hang: 0.45 });
+  function poseAt(tp) {
+    const p = keys(tp);
+    if (tp > T_LAUNCH && tp < T_LAND) {
+      // take-off: drive the root from the crouch to the start of the arc, then the arc
+      if (tp < T_AIR) {
+        const u = M.ease.out(seg(tp, T_LAUNCH, T_AIR), 2), a0 = jumpArc(0);
+        p.x = lerp(DEEP.x, a0.x, u); p.y = lerp(DEEP.y, a0.y, u);
+      } else {
+        const j = jumpArc(seg(tp, T_AIR, T_LAND));
+        p.x = j.x; p.y = j.y;
+        // stretch along the velocity on the way up, square off at the apex
+        const s = M.stretchFromVelocity(j.vx, j.vy, { gain: 0.00024, max: 0.24 });
+        p.sq *= lerp(1, s.along, 0.8);
+        p.a = lerp(p.a, s.angle * 0.55, 0.45);
+      }
+    }
+    // after the landing, the body bobs on a spring (follow-through) and the ears wobble
+    const dl = tp - T_LAND;
+    if (dl > 0 && dl < 3) {
+      p.sq *= 1 + M.wobble(dl - 0.17, { freq: 2.2, zeta: 0.32, amp: 0.05 });
+      p.ears += M.wobble(dl, { freq: 3.2, zeta: 0.2, amp: 0.7 });
+    }
+    // ears follow the stand-up and the head turns late
+    const ds = tp - (T_STAND + B(2.5));
+    if (ds > 0 && ds < 3) p.ears += M.wobble(ds, { freq: 3, zeta: 0.25, amp: 0.5 });
+    return p;
+  }
+  // tail driver: a slow sway everywhere, a whip on take-off and landing (drag chain reads it late)
+  function tailDriverAt(tp, t) {
+    return (dt) => {
+      const tt = tp + dt * 0, real = t + dt;
+      let v = 0.05 * Math.sin(real * TAU / 5) + 0.03 * Math.sin(real * TAU / 2.5 + 1);
+      // the tip twitch during the wiggle: secondary action on the off-beats
+      if (tt > T_CROUCH + B(2) && tt < T_LAUNCH) v += 0.07 * Math.sin((real - T_CROUCH) * TAU / BEAT);
+      v += M.wobble(tt + dt - T_AIR, { freq: 1.6, zeta: 0.3, amp: -0.09 });
+      v += M.wobble(tt + dt - T_LAND, { freq: 1.8, zeta: 0.28, amp: 0.1 });
+      return v;
+    };
+  }
+  // rump wiggle before the pounce: hips slide back and forth on the beat, the head stays fixed
+  function wiggle(p, tp) {
+    if (tp < T_CROUCH + B(2) || tp > T_LAUNCH - B(0.5)) return p;
+    const u = seg(tp, T_CROUCH + B(2), T_LAUNCH - B(0.5));
+    const k = Math.sin(u * Math.PI) * Math.sin((tp - T_CROUCH) * TAU / (BEAT * 2));
+    return { ...p, a: p.a + 0.05 * k, x: p.x - 3 * k };
+  }
+  // blinks (two-drawing shut, eased open) at fixed times
+  const BLINKS = [3.1, 7.4, 16.6, 33.2, 41.6, 48.3];
+  function blink(p, tp) {
+    let lid = p.lid;
+    BLINKS.forEach((b) => { const d = tp - b; if (d > 0 && d < 0.35) lid = Math.max(lid, d < 0.17 ? 1 : 1 - (d - 0.17) / 0.18); });
+    return { ...p, lid };
+  }
+
+  // the playback clock: forward to the flip, then the stack rolled back to drawing one
+  const flipBack = M.poses([
+    [0, { tp: 0 }], [T_FLIP, { tp: T_FLIP }, 'linear'],
+    [53.1, { tp: 31.4 }, 'linear'], [54.9, { tp: 27.3 }, 'linear'],
+    [56.3, { tp: 20 }, 'linear'], [57.4, { tp: 9.6 }, 'linear'], [57.5, { tp: 0 }, 'linear'], [60, { tp: 0 }, 'hold']
+  ]);
+  const playClock = (t) => flipBack(t).tp;
+
+  // the onion skins: drawings of the jump, keys circled, left in the air after the landing
+  const GHOSTS = [27.5, 27.75, 28.0, 28.3, 28.6, 28.95, 29.25].map((tg, i) => ({ tg, i, key: i === 0 || i === 3 || i === 6 }));
+  const ghostRigs = GHOSTS.map((gh) => {
+    const p = wiggle(poseAt(gh.tg), gh.tg);
+    return { ...gh, p };
+  });
+  const T_GHOST0 = 32.5, T_GHOST_TURN = 38.75, T_GHOST_EYES = 42.5, T_GHOST_SHUT = 50;
+
+  // ---------------------------------------------------------------- notes and charts
+  const NOTES = [
+    { t0: 12.5, t1: 20, text: 'stand — chest leads, tail last', x: 86, y: 276, c: C.red },
+    { t0: T_CROUCH, t1: T_LAUNCH + 0.1, text: 'ANTIC. hold it. let them see it', x: 86, y: 276, c: C.red },
+    { t0: 22.5, t1: T_LAUNCH + 0.1, text: 'wiggle on the beat ×3', x: 86, y: 306, c: C.red },
+    { t0: T_LAND + 0.3, t1: 36, text: 'hang at top +3 dwgs', x: 86, y: 306, c: C.red },
+    { t0: T_LAND, t1: 37.5, text: 'squash — keep the volume!', x: 500, y: 722, c: C.red },
+    { t0: 30.6, t1: 37.5, text: 'tail drags 2 frames', x: 86, y: 336, c: C.red },
+    { t0: T_GHOST_EYES + 1.25, t1: T_FLIP, text: 'these were supposed to be erased', x: 86, y: 276, c: C.graphite }
+  ];
+  function chartFor(tp) {
+    if (tp < T_CROUCH) return { label: 'stand  1 — 9', a: T_STAND, b: T_STAND + B(2.5), n: 9, favour: 'both' };
+    if (tp < T_LAUNCH) return { label: 'antic  1 — 13', a: T_CROUCH, b: T_LAUNCH, n: 13, favour: 'start' };
+    return { label: 'jump  1 — 13', a: T_AIR, b: T_LAND, n: 13, favour: 'hang' };
+  }
+  function drawChart(tp, dwg) {
+    const ch = chartFor(tp);
+    hand(ctx, ch.label, 86, 80, { size: 21, color: C.red, alpha: 0.85, dwg, seed: 40 });
+    const x = 165, y0 = 104, y1 = 214;
+    rough(ctx, [[x, y0], [x, y1]], { w: 1.6, color: C.red, alpha: 0.8, dwg, seed: 41, passes: 1 });
+    const ticks = ch.favour === 'hang'
+      ? Array.from({ length: ch.n }, (_, i) => { const u = i / (ch.n - 1), j = jumpArc(u), j0 = jumpArc(0), j1 = jumpArc(1); return clamp01((j.x - j0.x) / (j1.x - j0.x)); })
+      : M.spacing(ch.n, ch.favour, 2.4);
+    const cur = clamp01((tp - ch.a) / (ch.b - ch.a));
+    ticks.forEach((u, i) => {
+      const y = lerp(y0, y1, u), key = i === 0 || i === ch.n - 1 || (ch.favour === 'hang' && i === 6);
+      rough(ctx, [[x - (key ? 16 : 10), y], [x + (key ? 16 : 10), y]], { w: 1.4, color: C.red, alpha: 0.8, dwg, seed: 42 + i, passes: 1, amp: 0.5 });
+      if (key) {
+        rough(ctx, ellipsePts(x + 34, y, 11, 11, 0, 14), { w: 1.3, color: C.red, alpha: 0.75, dwg, seed: 60 + i, closed: true, passes: 1 });
+        hand(ctx, String(i + 1), x + 34, y + 6, { size: 15, color: C.red, alpha: 0.85, dwg, seed: 70 + i, align: 'center' });
+      }
+    });
+    if (tp >= ch.a && tp <= ch.b) {
+      ctx.fillStyle = C.red; ctx.beginPath(); ctx.arc(x - 26, lerp(y0, y1, M.ease.inOut(cur, 1)), 4, 0, TAU); ctx.fill();
+    }
+  }
+
+  // ---------------------------------------------------------------- the frame
+  return function renderFrame(time) {
+    const t = ((time % DURATION) + DURATION) % DURATION;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.lineWidth = 1; ctx.setLineDash([]);
+    const tq = M.onTwos(t);                       // drawings are held for two frames
+    const dwg = M.drawingIndex(t);
+    const tp = playClock(tq);                     // which drawing of the scene is on the pegs
+    const flipping = t > T_FLIP && t < 57.5;
+    ctx.drawImage(deskLayer, 0, 0);
+    // registration slop: each sheet sits a pixel or two differently on the pegs
+    const slop = flipping ? 5 : 1.2;
+    const jx = Math.round((hash(dwg, 1, 7) * 2 - 1) * slop), jy = Math.round((hash(dwg, 2, 7) * 2 - 1) * slop * 0.6);
+    slopX = jx; slopY = jy;
+    ctx.save(); ctx.translate(jx, jy);
+    ctx.drawImage(sheets[dwg % 3], 0, 0);
+    ctx.drawImage(sets[dwg % 3], 0, 0);
+    ctx.save(); ctx.transform(ZK, 0, 0, ZK, ZX * (1 - ZK), ZY * (1 - ZK));
+
+    // onion skins in the air
+    const flipCollected = (gh) => flipping && tp < gh.tg;
+    ghostRigs.forEach((gh) => {
+      const appear = seg(t, T_GHOST0 + gh.i * B(0.75), T_GHOST0 + gh.i * B(0.75) + 0.25);
+      if (appear <= 0 || t >= 57.5 || flipCollected(gh)) return;
+      const turn = M.ease.inOut(seg(tq, T_GHOST_TURN + gh.i * 0.18, T_GHOST_TURN + gh.i * 0.18 + 0.9), 2.5);
+      const eyesOpen = seg(tq, T_GHOST_EYES + gh.i * 0.12, T_GHOST_EYES + gh.i * 0.12 + 0.3) * (1 - seg(tq, T_GHOST_SHUT, T_GHOST_SHUT + 0.6));
+      // the ghosts' heads turn to the cat on the crate, staggered down the chain
+      const toCat = Math.atan2((SHELF_TOP - 150) - gh.p.y, 626 - gh.p.x);
+      const p = { ...gh.p, ha: lerp(gh.p.ha, toCat - gh.p.a * 0.3 + 0.35, turn), lid: lerp(1, 0, eyesOpen), gaze: 1, pupil: 0.15, look: 0.2 };
+      const rig = build(p, tailDriverAt(gh.tg, gh.tg));
+      drawCat(rig, p, { dwg: 4000 + gh.i * 13 + (dwg % 3), alpha: appear, ghost: true, eyes: eyesOpen > 0.02 ? 1 : 0, blue: 0.22 });
+      // drawing numbers, keys circled
+      const lx = gh.p.x - 20, ly = gh.p.y - 96;
+      hand(ctx, String(gh.i * 2 + 1), lx, ly, { size: 18, color: gh.key ? C.red : C.ghost, alpha: appear * 0.9, dwg, seed: 90 + gh.i, align: 'center' });
+      if (gh.key) rough(ctx, ellipsePts(lx, ly - 6, 13, 13, 0, 14), { w: 1.3, color: C.red, alpha: appear * 0.75, dwg, seed: 95 + gh.i, closed: true, passes: 1 });
+    });
+    // the arc the jump travelled: blue dots, one per drawing
+    const arcVis = seg(t, T_LAND, T_LAND + 1.5) * (1 - seg(t, T_FLIP + 2.2, T_FLIP + 3.2));
+    if (arcVis > 0 || (tp > T_LAUNCH && tp < T_LAND)) {
+      const vis = Math.max(arcVis, tp > T_LAUNCH && tp < T_LAND ? 0.6 : 0);
+      for (let i = 0; i <= 20; i++) {
+        const u = i / 20; if (tp < T_LAND && u > seg(tp, T_AIR, T_LAND)) break;
+        const j = jumpArc(u);
+        ctx.globalAlpha = vis * 0.6; ctx.fillStyle = C.blue;
+        ctx.beginPath(); ctx.arc(j.x + (hash(dwg, i, 11) - 0.5), j.y + 64, 2.6, 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // smear: on the two drawings after take-off, multiples trail the body
+    if (tp > T_LAUNCH + 0.05 && tp < T_AIR + 0.2) {
+      [0.08, 0.16, 0.24].forEach((d, i) => {
+        const pg = poseAt(Math.max(T_LAUNCH, tp - d));
+        const rig = build(pg, tailDriverAt(tp - d, t - d));
+        drawCat(rig, pg, { dwg: dwg + 50 + i, alpha: 0.42 - i * 0.1, ghost: true, eyes: 0, blue: 0 });
+      });
+    }
+
+    // the cat itself
+    let p = blink(wiggle(poseAt(tp), tp), tp);
+    // breathing on the bar (24 cycles in the loop), stronger while sitting
+    p.sq *= 1 + 0.014 * Math.sin(t * TAU / BAR) * (p.haunch > 0.6 ? 1 : 0.5);
+    // a shiver of held tension in the deepest crouch
+    if (tp > T_LAUNCH - B(2.5) && tp < T_LAUNCH) p.x += Math.sin(t * TAU * 6) * 1.2;
+    const rig = build(p, tailDriverAt(tp, t));
+    drawCat(rig, p, { dwg, alpha: 1, ghost: false, eyes: 1, blue: flipping ? 0.7 : 0.48 });
+    ctx.restore();
+
+    // notes, chart, counter
+    NOTES.forEach((n, i) => {
+      if (flipping) return;
+      const v = seg(t, n.t0, n.t0 + 0.4) * (1 - seg(t, n.t1 - 0.4, n.t1));
+      if (v > 0) hand(ctx, n.text, n.x, n.y, { size: 23, color: n.c, alpha: 0.9 * v, dwg, seed: 120 + i });
+    });
+    drawChart(tp, dwg);
+    const num = String(M.drawingIndex(tp) % 720 + 1).padStart(3, '0');
+    hand(ctx, `dwg ${num}`, 822, 806 - 14, { size: 22, color: C.graphite, alpha: 0.8, dwg, seed: 130, align: 'right' });
+    ctx.restore();
+
+    // the flip: each sheet's edge sweeps past as the stack rolls back
+    if (flipping) {
+      const ph = (t * 12) % 1;
+      const y = lerp(860, 60, ph);
+      const grd = ctx.createLinearGradient(0, y - 40, 0, y + 6);
+      grd.addColorStop(0, 'rgba(0,0,0,0)'); grd.addColorStop(1, 'rgba(20,18,24,0.22)');
+      ctx.fillStyle = grd; ctx.fillRect(PAPER.x, y - 40, PAPER.w, 46);
+      ctx.fillStyle = 'rgba(255,252,244,0.5)'; ctx.fillRect(PAPER.x, y + 6, PAPER.w, 2);
+    }
+    return canvas.toDataURL('image/png');
+  };
+})();
+window.ready = true;
+
+
+
+
+
+let startTime = Date.now();
+function animate() {
+  const time = (Date.now() - startTime) / 1000;
+  const loopDuration = (typeof duration === 'number' && duration > 0) ? duration : 60;
+  window.renderFrame(time % loopDuration);
+  requestAnimationFrame(animate);
+}
+animate();
+
+window.audioDuration = 60;
+
+window.ready = true;
+  </script>
+<script type="module">
+(async () => {
+  window.strudelState = 'loading';
+  window.strudelError = null;
+  try {
+    const CONFIG = JSON.parse("{\"code\":\"// BPM: 96\\n// DURATION: 60\\n// FORM: intro (piano and bass only) [0-4] | build (brushes and bell enter) [4-8] | wind-up and launch [8-12] | full swing (the signature) [12-18] | quieter and stranger, then the rollback [18-22] | reprise (the end meets the start) [22-24]\\n// TONAL CENTER: F major\\n// MOTIF: C5 F5 G5 A5 F5; rest on beat 1, swung C5-F5 on beat 2, G5-A5 on beat 3, F5 landing on beat 4 and held through the bar line\\n// HARMONIC PLAN: Fmaj7 | Dm7 | Gm7 | C7; bars 9-11 suspend harmony over F, bar 12 climbs through C7 to Fmaj7, bars 19-20 hold Gm7, bar 21 holds C7sus4, bar 22 descends F-E-D-C, bars 23-24 reprise Fmaj7 | Dm7\\n// GROOVE: synthesized brush kit with feathered sbd quarters, bandpassed white-noise swirls on 1 and 3, EmuSP12 rim on 2 and 4, soft highpassed noise ride on late swung eighths; medium triplet swing laid behind the piano, reduced to quarter-note rim ticks in bars 9-11\\nsamples('https://strudel.b-cdn.net/tidal-drum-machines.json')\\nsetcpm(96 / 4)\\nconst featherKick = s('sbd*4')\\n  .lpf(180)\\n  .attack(0.012)\\n  .decay(0.16)\\n  .sustain(0)\\n  .release(0.04)\\n  .gain(0.035)\\nconst brushSwirl = s('white')\\n  .struct('x ~ x ~')\\n  .bpf(1800)\\n  .attack(0.035)\\n  .decay(0.3)\\n  .sustain(0)\\n  .release(0.08)\\n  .gain(0.018)\\nconst brushRim = s('rim')\\n  .bank('EmuSP12')\\n  .struct('~ x ~ x')\\n  .clip(0.06)\\n  .lpf(4200)\\n  .gain(0.07)\\nconst rimTick = s('rim*4')\\n  .bank('EmuSP12')\\n  .clip(0.045)\\n  .lpf(3600)\\n  .gain(0.055)\\nconst rideDown = s('white*4')\\n  .hpf(6000)\\n  .lpf(10500)\\n  .attack(0.01)\\n  .decay(0.09)\\n  .sustain(0)\\n  .release(0.025)\\n  .gain(0.01)\\nconst rideUp = s('white')\\n  .struct('[~ ~ x]*4')\\n  .hpf(6200)\\n  .lpf(10000)\\n  .attack(0.012)\\n  .decay(0.075)\\n  .sustain(0)\\n  .release(0.02)\\n  .late(0.008)\\n  .gain(0.006)\\nconst fullBrushKit = stack(\\n  featherKick,\\n  brushSwirl,\\n  brushRim,\\n  rideDown,\\n  rideUp\\n)\\nconst windupKit = arrange(\\n  [3, rimTick],\\n  [1, fullBrushKit]\\n)\\nconst strangeBrush = s('white')\\n  .struct('x ~ ~ ~')\\n  .bpf(1650)\\n  .attack(0.04)\\n  .decay(0.34)\\n  .sustain(0)\\n  .release(0.1)\\n  .gain(0.014)\\nconst bassIntroNotes = note('\u003c[f1 c2 e2 c2] [d2 a1 c2 a1] [g1 d2 f2 d2] [c2 g1 bb1 e2]>')\\nconst bassRepriseNotes = note('\u003c[f1 c2 e2 c2] [d2 a1 c2 a1]>')\\nconst bassBuildNotes = note('\u003c[f1 c2 e2 a1] [d2 a1 c2 f2] [g1 d2 f2 bb1] [c2 g1 bb1 e2]>')\\nconst bassWindNotes = note('\u003c[f1 f2 f1 f2] [f1 f2 f1 f2] [f1 f2 f1 f2] [c2 e2 g2 bb1]>')\\nconst bassSwingNotes = note('\u003c[f1 a1 c2 e2] [d2 f2 a1 c2] [g1 bb1 d2 f2] [c2 e2 g2 bb1]>')\\nconst bassStrangeNotes = note('\u003c[g1 d2] [g1 d2] [c2 g1] [f2 e2 d2 c2]>')\\nconst bassVoice = p => stack(\\n  p.s('sine')\\n    .attack(0.008)\\n    .decay(0.42)\\n    .sustain(0.32)\\n    .release(0.08)\\n    .clip(0.84)\\n    .lpf(240)\\n    .gain(0.15),\\n  p.transpose(12)\\n    .s('triangle')\\n    .attack(0.01)\\n    .decay(0.34)\\n    .sustain(0.2)\\n    .release(0.07)\\n    .clip(0.82)\\n    .lpf(420)\\n    .gain(0.038)\\n)\\nconst pianoIntroNotes = note('\u003c[~ [a3,c4,e4,g4] ~ [a3,c4,e4,g4]] [~ [c4,f4,a4] ~ [c4,f4,a4]] [~ [bb3,d4,f4] ~ [bb3,d4,f4]] [~ [bb3,e4,g4] ~ [bb3,e4,g4]]>')\\nconst pianoRepriseNotes = note('\u003c[~ [a3,c4,e4,g4] ~ [a3,c4,e4,g4]] [~ [c4,f4,a4] ~ [c4,f4,a4]]>')\\nconst pianoBuildNotes = note('\u003c[~ ~ ~ [a3,c4,e4,g4] ~ ~ ~ ~ [a3,c4,e4,g4] [a3,c4,e4,g4] ~ ~] [~ ~ ~ [c4,f4,a4] ~ ~ ~ ~ [c4,f4,a4] [c4,f4,a4] ~ ~] [~ ~ ~ [bb3,d4,f4] ~ ~ ~ ~ [bb3,d4,f4] [bb3,d4,f4] ~ ~] [~ ~ ~ [bb3,e4,g4] ~ ~ ~ ~ [bb3,e4,g4] [bb3,e4,g4] ~ ~]>')\\nconst pianoLaunchNotes = note('\u003c~ ~ ~ [~ ~ ~ [f3,a3,c4,e4,g4]]>')\\nconst pianoSwingNotes = note('\u003c[a3 c4 e4 g4 e4 c4 g4 e4] [c4 f4 a4 f4 c4 a4 f4 c4] [bb3 d4 f4 d4 bb3 f4 d4 f4] [bb3 e4 g4 e4 bb3 g4 e4 g4]>')\\nconst pianoStrangeNotes = note('\u003c[g3,bb3,d4,f4] [g3,bb3,d4,f4] [c4,f4,g4,bb4] [~ [a3,c4,e4] ~ [bb3,e4,g4]]>')\\nconst pianoVoice = p => stack(\\n  p.s('triangle')\\n    .lpf(2600)\\n    .attack(0.008)\\n    .decay(0.7)\\n    .sustain(0.18)\\n    .release(0.24)\\n    .clip(0.82)\\n    .room(0.12)\\n    .roomsize(0.32)\\n    .gain(0.16),\\n  p.s('sawtooth')\\n    .lpf(2100)\\n    .attack(0.01)\\n    .decay(0.62)\\n    .sustain(0.12)\\n    .release(0.22)\\n    .clip(0.8)\\n    .room(0.1)\\n    .roomsize(0.3)\\n    .gain(0.045)\\n)\\nconst heldPianoVoice = p => stack(\\n  p.s('triangle')\\n    .lpf(2350)\\n    .attack(0.11)\\n    .decay(0.5)\\n    .sustain(0.46)\\n    .release(0.42)\\n    .clip(0.9)\\n    .room(0.13)\\n    .roomsize(0.34)\\n    .gain(0.145),\\n  p.s('sawtooth')\\n    .lpf(1850)\\n    .attack(0.12)\\n    .decay(0.48)\\n    .sustain(0.34)\\n    .release(0.4)\\n    .clip(0.88)\\n    .room(0.11)\\n    .roomsize(0.32)\\n    .gain(0.04)\\n)\\nconst bellBuildNotes = note('\u003c[~ [c5 ~ f5] [g5 ~ a5] f5] ~ [~ [c5 ~ f5] [g5 ~ a5] f5] ~>')\\nconst bellLaunchNotes = note('\u003c~ ~ ~ [[c5 ~ f5] [g5 ~ a5] [c6 ~ d6] f6]>')\\nconst bellMotifPair = note('\u003c[~ [c5 ~ f5] [g5 ~ a5] f5] ~>')\\nconst bellWideNotes = note('\u003c[c5 ~] [f5 ~] [g5 ~] [a5 f5]>')\\nconst bellStrangeNotes = note('\u003cg5 [c5 ~ f5 ~] c5 ~>')\\nconst bellVoice = p => stack(\\n  p.s('triangle')\\n    .attack(0.01)\\n    .decay(0.38)\\n    .sustain(0)\\n    .release(0.12)\\n    .clip(0.55)\\n    .room(0.12)\\n    .roomsize(0.3)\\n    .gain(0.17),\\n  p.transpose(12)\\n    .s('sine')\\n    .attack(0.012)\\n    .decay(0.22)\\n    .sustain(0)\\n    .release(0.08)\\n    .clip(0.45)\\n    .room(0.1)\\n    .roomsize(0.28)\\n    .gain(0.034)\\n)\\nconst wideBellVoice = p => stack(\\n  p.s('triangle')\\n    .attack(0.014)\\n    .decay(0.9)\\n    .sustain(0)\\n    .release(0.2)\\n    .clip(0.72)\\n    .room(0.13)\\n    .roomsize(0.32)\\n    .gain(0.15),\\n  p.transpose(12)\\n    .s('sine')\\n    .attack(0.016)\\n    .decay(0.42)\\n    .sustain(0)\\n    .release(0.12)\\n    .clip(0.58)\\n    .room(0.1)\\n    .roomsize(0.28)\\n    .gain(0.03)\\n)\\nconst bellSwing = arrange(\\n  [2, bellVoice(bellMotifPair)],\\n  [4, wideBellVoice(bellWideNotes)]\\n)\\nconst takeoffSmear = stack(\\n  s('white')\\n    .struct('\u003c~ ~ ~ [x ~ ~ ~]>')\\n    .bpf(1100)\\n    .attack(0.025)\\n    .decay(0.3)\\n    .sustain(0)\\n    .release(0.25)\\n    .gain(0.023),\\n  s('white')\\n    .struct('\u003c~ ~ ~ [~ x ~ ~]>')\\n    .bpf(4800)\\n    .attack(0.035)\\n    .decay(0.18)\\n    .sustain(0)\\n    .release(0.18)\\n    .gain(0.012)\\n)\\nconst landingHit = stack(\\n  s('white')\\n    .struct('\u003c~ ~ ~ [~ ~ ~ x]>')\\n    .bpf(2600)\\n    .attack(0.005)\\n    .decay(0.045)\\n    .sustain(0)\\n    .release(0.035)\\n    .gain(0.09),\\n  note('c3')\\n    .s('triangle')\\n    .struct('\u003c~ ~ ~ [~ ~ ~ x]>')\\n    .lpf(520)\\n    .attack(0.005)\\n    .decay(0.16)\\n    .sustain(0)\\n    .release(0.08)\\n    .gain(0.12),\\n  s('white')\\n    .struct('\u003c~ ~ ~ [~ ~ ~ x]>')\\n    .bpf(1700)\\n    .attack(0.025)\\n    .decay(0.7)\\n    .sustain(0)\\n    .release(0.14)\\n    .gain(0.028)\\n)\\nconst eyeShimmer = s('white')\\n  .struct('[x x x x x x x] ~ ~ ~')\\n  .hpf(6000)\\n  .lpf(10000)\\n  .attack(0.035)\\n  .decay(0.48)\\n  .sustain(0)\\n  .release(0.42)\\n  .pan('\u003c0.38 0.62 0.44 0.56>')\\n  .gain(0.006)\\nconst rollbackClatter = stack(\\n  s('white')\\n    .struct('[x x x x x x x x x x x] ~ ~ ~')\\n    .bpf('\u003c4000 3100 2300 1500 1100>')\\n    .attack(0.002)\\n    .decay(0.015)\\n    .sustain(0)\\n    .release(0.012)\\n    .pan(0.62)\\n    .gain(0.032),\\n  s('pink')\\n    .struct('~ x ~ ~')\\n    .bpf(1050)\\n    .attack(0.018)\\n    .decay(0.22)\\n    .sustain(0)\\n    .release(0.12)\\n    .pan(0.6)\\n    .gain(0.025)\\n)\\nconst windTexture = stack(takeoffSmear, landingHit)\\nconst signatureTexture = arrange([5, silence], [1, eyeShimmer])\\nconst rollbackTexture = note('\u003c~ ~ ~ c4>').struct('\u003c~ ~ ~ x>').gain(0).stack(rollbackClatter)\\n$: arrange(\\n  [4, silence],\\n  [4, fullBrushKit],\\n  [4, windupKit],\\n  [6, fullBrushKit],\\n  [4, arrange([3, strangeBrush], [1, silence])],\\n  [2, silence]\\n)\\n$: arrange(\\n  [4, bassVoice(bassIntroNotes)],\\n  [4, bassVoice(bassBuildNotes)],\\n  [4, bassVoice(bassWindNotes)],\\n  [6, bassVoice(bassSwingNotes)],\\n  [4, bassVoice(bassStrangeNotes)],\\n  [2, bassVoice(bassRepriseNotes)]\\n)\\n$: arrange(\\n  [4, pianoVoice(pianoIntroNotes)],\\n  [4, pianoVoice(pianoBuildNotes)],\\n  [4, pianoVoice(pianoLaunchNotes)],\\n  [6, pianoVoice(pianoSwingNotes)],\\n  [4, heldPianoVoice(pianoStrangeNotes)],\\n  [2, pianoVoice(pianoRepriseNotes)]\\n)\\n$: arrange(\\n  [4, silence],\\n  [4, bellVoice(bellBuildNotes)],\\n  [4, bellVoice(bellLaunchNotes)],\\n  [6, bellSwing],\\n  [4, wideBellVoice(bellStrangeNotes)],\\n  [2, silence]\\n)\\n$: arrange(\\n  [4, silence],\\n  [4, silence],\\n  [4, windTexture],\\n  [6, signatureTexture],\\n  [4, rollbackTexture],\\n  [2, silence]\\n)\",\"bpm\":96,\"durationSec\":60,\"renderDurationSec\":63,\"cps\":0.4,\"cycles\":24,\"cdn\":\"https://unpkg.com/@strudel/web@1.3.0/dist/index.mjs\",\"sampleRate\":44100,\"offlineMaxPolyphony\":1000000000,\"maxTimelineEvents\":6000}");
+    const S = await import(CONFIG.cdn);
+    window.StrudelLib = S;
+    window.strudelConfig = CONFIG;
+
+    // One shared promise: the start-up preload below and an early
+    // __renderStrudelOffline() call (captureStrudelRender only waits for the
+    // function to exist) must not both evaluate the program, or every $: voice
+    // is registered twice and the offline render plays each one doubled (+6 dB).
+    let initPromise = null;
+    function ensureInit() {
+      if (!initPromise) {
+        initPromise = (async () => {
+          await S.initStrudel({ autoplay: false });
+          await S.evaluate(CONFIG.code, false);
+          await buildTimeline();
+          console.log('🎵 strudel initialized (' + window.strudelTimeline.events.length + ' events)');
+        })().catch(error => {
+          initPromise = null; // a failed init may be retried, as before
+          throw error;
+        });
+      }
+      return initPromise;
+    }
+
+    function hapToEvent(hap) {
+      const value = typeof hap.value === 'object' && hap.value !== null ? hap.value : {};
+      return {
+        c: hap.whole ? hap.whole.begin.valueOf() : hap.part.begin.valueOf(),
+        d: typeof hap.duration === 'number' ? hap.duration : (hap.duration?.valueOf?.() ?? 0),
+        s: value.s != null ? String(value.s) : null,
+        n: value.n != null ? String(value.n) : null,
+        note: value.note != null ? String(value.note) : null,
+        gain: value.gain != null ? Number(value.gain) : 1
+      };
+    }
+
+    async function buildTimeline() {
+      const pattern = S.getPattern();
+      if (!pattern) throw new Error('no strudel pattern found after evaluation');
+      const queryCycles = Math.min(CONFIG.cycles, 128);
+      const haps = pattern.queryArc(0, queryCycles, { _cps: CONFIG.cps })
+        .filter(hap => hap.hasOnset && hap.hasOnset())
+        .sort((a, b) => (a.whole?.begin.valueOf() ?? 0) - (b.whole?.begin.valueOf() ?? 0));
+      window.strudelTimeline = {
+        bpm: CONFIG.bpm,
+        cps: CONFIG.cps,
+        cycles: CONFIG.cycles,
+        events: haps.slice(0, CONFIG.maxTimelineEvents).map(hapToEvent)
+      };
+      document.dispatchEvent(new CustomEvent('strudel:timeline', { detail: window.strudelTimeline }));
+    }
+
+    // ---- public API for animation code ----
+    window.getStrudelEventsAt = function(tSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const cycle = tSeconds * tl.cps;
+      return tl.events.filter(ev => cycle >= ev.c && cycle < ev.c + Math.max(ev.d, 0.001));
+    };
+    window.getStrudelOnsetsBetween = function(fromSeconds, toSeconds) {
+      const tl = window.strudelTimeline;
+      if (!tl) return [];
+      const c0 = fromSeconds * tl.cps;
+      const c1 = toSeconds * tl.cps;
+      return tl.events.filter(ev => ev.c >= c0 && ev.c < c1);
+    };
+
+    // ---- live playback ----
+    let playStartedAt = null;
+    window.__playStrudel = async function() {
+      await ensureInit();
+      await S.evaluate(CONFIG.code, true);
+      if (!S.getPattern()) throw new Error('strudel playback produced no pattern');
+      const audioContext = typeof S.getAudioContext === 'function'
+        ? S.getAudioContext()
+        : S.audioContext;
+      if (audioContext && audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
+      playStartedAt = performance.now();
+    };
+    window.__stopStrudel = function() {
+      try { S.hush(); } catch (err) {}
+      playStartedAt = null;
+    };
+    window.__strudelVizTime = function() {
+      if (playStartedAt == null) return null;
+      return (performance.now() - playStartedAt) / 1000;
+    };
+
+    // ---- offline rendering (video pipeline) ----
+    window.__renderStrudelOffline = async function() {
+      await ensureInit();
+      await S.renderPatternAudio(
+        S.getPattern(),
+        CONFIG.cps,
+        0,
+        CONFIG.cycles,
+        CONFIG.sampleRate,
+        CONFIG.offlineMaxPolyphony,
+        false,
+        'clawedcode-strudel'
+      );
+      return true;
+    };
+
+    // Audio must not paint generic debug graphics over authored visual art.
+    // Deliberately audio-reactive pieces can use getStrudelEventsAt() and
+    // getStrudelOnsetsBetween() inside their own visual language. Keep a no-op
+    // hook only for compatibility with older render callers.
+    window.__drawStrudelOverlay = function() {};
+
+    // wire the shared #audio-toggle button for live playback
+    const toggle = document.getElementById('audio-toggle');
+    function setTogglePlaying(playing) {
+      if (!toggle) return;
+      toggle.dataset.strudelPlaying = playing ? '1' : '0';
+      toggle.textContent = playing ? '■ Stop' : '▶ Play';
+      toggle.title = '';
+    }
+    if (toggle) {
+      toggle.addEventListener('click', async () => {
+        toggle.disabled = true;
+        try {
+          if (toggle.dataset.strudelPlaying === '1') {
+            window.__stopStrudel();
+            setTogglePlaying(false);
+          } else {
+            toggle.textContent = '⏳ Loading…';
+            await window.__playStrudel();
+            setTogglePlaying(true);
+          }
+        } catch (error) {
+          window.strudelError = error && error.message ? error.message : String(error);
+          window._errors = window._errors || [];
+          window._errors.push('strudel playback failed: ' + window.strudelError);
+          toggle.dataset.strudelPlaying = '0';
+          toggle.textContent = '⚠ Audio Error';
+          toggle.title = window.strudelError;
+          console.error('strudel playback failed:', window.strudelError);
+        } finally {
+          toggle.disabled = false;
+        }
+      });
+    }
+
+    // GitHub Pages opens mind animations in an iframe with ?autoplay=true and
+    // sends stop-audio before closing or navigating. Mirror the Tone.js player
+    // contract while retaining the visible Play fallback when browser policy
+    // rejects programmatic playback.
+    window.addEventListener('message', event => {
+      if (!event.data || event.data.type !== 'stop-audio') return;
+      window.__stopStrudel();
+      setTogglePlaying(false);
+    });
+    window.addEventListener('pagehide', () => window.__stopStrudel());
+
+    // preload timeline without starting audio (also validates the program)
+    await ensureInit();
+    window.strudelState = 'ready';
+    if (toggle) {
+      toggle.disabled = false;
+      setTogglePlaying(false);
+    }
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('autoplay') === 'true') {
+      setTimeout(async () => {
+        if (toggle?.dataset.strudelPlaying === '1') return;
+        try {
+          await window.__playStrudel();
+          setTogglePlaying(true);
+        } catch (error) {
+          window.__stopStrudel();
+          setTogglePlaying(false);
+          if (toggle) toggle.title = 'Autoplay blocked — click to play';
+          console.warn('strudel autoplay blocked; waiting for user interaction');
+        }
+      }, 250);
+    }
+    window.ready = true;
+  } catch (error) {
+    window.strudelState = 'error';
+    window.strudelError = error && error.message ? error.message : String(error);
+    console.error('strudel init failed:', window.strudelError);
+    window._errors = window._errors || [];
+    window._errors.push('strudel init failed: ' + window.strudelError);
+    const toggle = document.getElementById('audio-toggle');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.dataset.strudelPlaying = '0';
+      toggle.textContent = '⚠ Audio Error';
+      toggle.title = window.strudelError;
+    }
+    // Define a throwing hook so the video pipeline fails fast with the real
+    // error instead of timing out waiting for a function that will never exist.
+    window.__renderStrudelOffline = async () => {
+      throw new Error('strudel bootstrap failed: ' + (error && error.message ? error.message : String(error)));
+    };
+    window.ready = true; // visuals still render even when audio fails
+  }
+})();
+</script>
+</body>
+</html>
